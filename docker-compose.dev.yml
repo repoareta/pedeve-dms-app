@@ -4,7 +4,7 @@ services:
   # Note: Untuk hot reload yang lebih baik, gunakan local development (go run main.go)
   # Docker ini untuk consistency, tapi restart manual diperlukan untuk perubahan Go code
   backend:
-    image: golang:1.24-alpine
+    image: golang:1.25-alpine
     container_name: dms-backend-dev
     working_dir: /app
     ports:
@@ -16,7 +16,7 @@ services:
     volumes:
       - ./backend:/app
       - /go/pkg/mod  # Cache Go modules
-    command: sh -c "apk add --no-cache git && go mod download && go run main.go"
+    command: sh -c "apk add --no-cache git && go mod download && go run ."
     restart: unless-stopped
     networks:
       - dms-network

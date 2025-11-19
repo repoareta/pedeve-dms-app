@@ -1,9 +1,8 @@
-version: '3.8'
 
 services:
   # Backend API (Go) - Development mode with hot reload
   backend:
-    image: golang:1.23-alpine
+    image: golang:1.24-alpine
     container_name: dms-backend-dev
     working_dir: /app
     ports:

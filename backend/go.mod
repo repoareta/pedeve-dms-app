@@ -2,6 +2,8 @@ module github.com/Fajarriswandi/dms-app/backend
 
 go 1.24.0
 
+toolchain go1.24.10
+
 require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/ajg/form v1.5.1 // indirect

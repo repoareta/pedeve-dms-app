@@ -27,7 +27,9 @@ docker-compose up --build
 **Akses:**
 - Frontend: http://localhost:5173 (dev) atau http://localhost:3000 (prod)
 - Backend API: http://localhost:8080
+- **Swagger UI**: http://localhost:8080/swagger/index.html
 - Health Check: http://localhost:8080/health
+- API Base: http://localhost:8080/api/v1
 
 #### Option 2: Local Development (Lebih cepat untuk development)
 
@@ -70,6 +72,9 @@ cd backend
 go run main.go          # Run server
 go test ./...           # Run tests
 golangci-lint run       # Lint code
+
+# Generate Swagger docs (setelah update annotations)
+go run github.com/swaggo/swag/cmd/swag@latest init
 ```
 
 ### Frontend
@@ -132,13 +137,45 @@ git push origin v1.0.0
 #    - Push images ke registry
 ```
 
-## 🔍 Health Check
+## 🔍 API Documentation
+
+### Swagger UI
+Akses dokumentasi API lengkap di: **http://localhost:8080/swagger/index.html**
+
+Swagger UI menyediakan:
+- ✅ Dokumentasi semua endpoint
+- ✅ Test API langsung dari browser
+- ✅ Request/Response examples
+- ✅ Schema definitions
+
+### Health Check
 
 ```bash
 # Backend health check
 curl http://localhost:8080/health
 
-# Expected response: OK
+# Expected response: {"status": "OK", "service": "dms-backend"}
+```
+
+### API Endpoints
+
+**Documents API:**
+- `GET /api/v1/documents` - Get all documents
+- `GET /api/v1/documents/{id}` - Get document by ID
+- `POST /api/v1/documents` - Create new document
+- `PUT /api/v1/documents/{id}` - Update document
+- `DELETE /api/v1/documents/{id}` - Delete document
+
+**Test dengan curl:**
+```bash
+# Get all documents
+curl http://localhost:8080/api/v1/documents
+
+# Get single document
+curl http://localhost:8080/api/v1/documents/1
+
+# Health check
+curl http://localhost:8080/health
 ```
 
 ## 📦 Port Configuration
@@ -175,10 +212,11 @@ docker-compose up --build
 ## 📚 Tech Stack
 
 - **Frontend**: Vue 3, TypeScript, Vite, Pinia, Vue Router
-- **Backend**: Go 1.23, Standard Library
+- **Backend**: Go 1.23, Chi Router, Swagger/OpenAPI
 - **Container**: Docker, Docker Compose
 - **CI/CD**: GitHub Actions
 - **Security**: Trivy Scanner
+- **API Docs**: Swagger UI
 
 ## 🤝 Contributing
 

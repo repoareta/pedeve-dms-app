@@ -1,0 +1,216 @@
+basePath: /api/v1
+definitions:
+  main.Document:
+    properties:
+      content:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: Document Management System Backend API
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: DMS Backend API
+  version: "1.0"
+paths:
+  /:
+    get:
+      consumes:
+      - application/json
+      description: Returns API information
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Root endpoint
+      tags:
+      - General
+  /api/v1:
+    get:
+      consumes:
+      - application/json
+      description: Returns API version and endpoints
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: API Information
+      tags:
+      - General
+  /api/v1/documents:
+    get:
+      consumes:
+      - application/json
+      description: Returns a list of all documents
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/main.Document'
+            type: array
+      summary: Get all documents
+      tags:
+      - Documents
+    post:
+      consumes:
+      - application/json
+      description: Creates a new document
+      parameters:
+      - description: Document object
+        in: body
+        name: document
+        required: true
+        schema:
+          $ref: '#/definitions/main.Document'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/main.Document'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create document
+      tags:
+      - Documents
+  /api/v1/documents/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Deletes a document by ID
+      parameters:
+      - description: Document ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete document
+      tags:
+      - Documents
+    get:
+      consumes:
+      - application/json
+      description: Returns a single document by ID
+      parameters:
+      - description: Document ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Document'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get document by ID
+      tags:
+      - Documents
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing document
+      parameters:
+      - description: Document ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Document object
+        in: body
+        name: document
+        required: true
+        schema:
+          $ref: '#/definitions/main.Document'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.Document'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update document
+      tags:
+      - Documents
+  /health:
+    get:
+      consumes:
+      - application/json
+      description: Returns health status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health check
+      tags:
+      - General
+securityDefinitions:
+  BasicAuth:
+    type: basic
+swagger: "2.0"

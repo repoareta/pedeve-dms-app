@@ -1,6 +1,8 @@
 
 services:
-  # Backend API (Go) - Development mode with hot reload
+  # Backend API (Go) - Development mode
+  # Note: Untuk hot reload yang lebih baik, gunakan local development (go run main.go)
+  # Docker ini untuk consistency, tapi restart manual diperlukan untuk perubahan Go code
   backend:
     image: golang:1.24-alpine
     container_name: dms-backend-dev
@@ -10,6 +12,7 @@ services:
     environment:
       - PORT=8080
       - ENV=development
+      - CGO_ENABLED=0
     volumes:
       - ./backend:/app
       - /go/pkg/mod  # Cache Go modules

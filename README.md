@@ -14,15 +14,23 @@ Aplikasi Document Management System dengan stack:
 
 ### Development Setup
 
-#### Option 1: Docker Compose (Recommended untuk pertama kali)
+#### 🚀 Quick Start - Satu Perintah untuk Semua
 
 ```bash
-# Development mode dengan hot reload
-docker-compose -f docker-compose.dev.yml up --build
+# Cara termudah - run semua service dengan hot reload
+make dev
 
-# Atau production mode
-docker-compose up --build
+# Atau menggunakan script
+./dev.sh
+
+# Atau manual
+docker-compose -f docker-compose.dev.yml up --build
 ```
+
+**Hot Reload:**
+- ✅ Backend: Auto-reload saat file `.go` berubah (menggunakan Air)
+- ✅ Frontend: Auto-reload saat file Vue/TS berubah (Vite HMR)
+- ✅ Tidak perlu down/up manual - cukup save file dan refresh browser!
 
 **Akses:**
 - Frontend: http://localhost:5173 (dev) atau http://localhost:3000 (prod)
@@ -66,10 +74,28 @@ dms-app/
 
 ## 🔧 Development Commands
 
-### Backend
+### Quick Commands (Makefile)
+
+```bash
+make dev           # Start all services dengan hot reload
+make up            # Start services in background
+make down          # Stop all services
+make restart       # Restart services
+make logs          # View all logs
+make logs-backend  # View backend logs only
+make logs-frontend # View frontend logs only
+make status        # Check service status
+make clean         # Clean everything
+make rebuild       # Rebuild and restart
+make help          # Show all commands
+```
+
+### Manual Commands
+
+**Backend:**
 ```bash
 cd backend
-go run main.go          # Run server
+go run main.go          # Run server (local, tanpa Docker)
 go test ./...           # Run tests
 golangci-lint run       # Lint code
 
@@ -77,10 +103,10 @@ golangci-lint run       # Lint code
 go run github.com/swaggo/swag/cmd/swag@latest init
 ```
 
-### Frontend
+**Frontend:**
 ```bash
 cd frontend
-npm run dev             # Development server
+npm run dev             # Development server (local, tanpa Docker)
 npm run build           # Build for production
 npm run lint            # Lint code
 npm run test:unit       # Run tests
@@ -89,23 +115,30 @@ npm run test:unit       # Run tests
 ## 🐳 Docker Commands
 
 ```bash
-# Build images
-docker-compose build
+# Development (dengan hot reload)
+make dev                    # Start dengan hot reload
+docker-compose -f docker-compose.dev.yml up --build
 
-# Start services
-docker-compose up
-
-# Start in background
-docker-compose up -d
-
-# Stop services
-docker-compose down
-
-# View logs
-docker-compose logs -f
-
-# Rebuild and restart
+# Production
 docker-compose up --build
+
+# Background
+make up                     # Start in background
+docker-compose -f docker-compose.dev.yml up -d
+
+# Stop
+make down                   # Stop services
+docker-compose -f docker-compose.dev.yml down
+
+# Logs
+make logs                   # View all logs
+make logs-backend           # Backend only
+make logs-frontend          # Frontend only
+docker-compose -f docker-compose.dev.yml logs -f
+
+# Status
+make status                 # Check status
+docker-compose -f docker-compose.dev.yml ps
 ```
 
 ## 🚢 CI/CD

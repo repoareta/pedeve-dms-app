@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -12,6 +13,12 @@ import (
 )
 
 var DB *gorm.DB
+
+// GenerateUUID generates a new UUID string
+func GenerateUUID() string {
+	return uuid.New().String()
+}
+
 
 // InitDB initializes database connection
 func InitDB() {

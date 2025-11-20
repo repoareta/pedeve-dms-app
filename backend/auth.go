@@ -32,12 +32,12 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate input
-	if req.Username == "" || req.Email == "" || req.Password == "" {
+	// Validate and sanitize input
+	if err := ValidateRegisterInput(&req); err != nil {
 		render.Status(r, http.StatusBadRequest)
 		render.JSON(w, r, ErrorResponse{
 			Error:   "validation_error",
-			Message: "Username, email, and password are required",
+			Message: err.Error(),
 		})
 		return
 	}
@@ -105,6 +105,7 @@ func Register(w http.ResponseWriter, r *http.Request) {
 			ID:        userModel.ID,
 			Username:  userModel.Username,
 			Email:     userModel.Email,
+			Role:      userModel.Role,
 			CreatedAt: userModel.CreatedAt,
 			UpdatedAt: userModel.UpdatedAt,
 		},
@@ -132,19 +133,23 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate input
-	if req.Username == "" || req.Password == "" {
+	// Validate and sanitize input
+	if err := ValidateLoginInput(&req); err != nil {
 		render.Status(r, http.StatusBadRequest)
 		render.JSON(w, r, ErrorResponse{
 			Error:   "validation_error",
-			Message: "Username and password are required",
+			Message: err.Error(),
 		})
 		return
 	}
 
-	// Find user in database
+	// Get client IP and User Agent for audit logging
+	ipAddress := getClientIP(r)
+	userAgent := r.UserAgent()
+
+	// Find user in database (can login with username or email)
 	var userModel UserModel
-	result := DB.Where("username = ?", req.Username).First(&userModel)
+	result := DB.Where("username = ? OR email = ?", req.Username, req.Username).First(&userModel)
 	if result.Error == gorm.ErrRecordNotFound {
 		render.Status(r, http.StatusUnauthorized)
 		render.JSON(w, r, ErrorResponse{
@@ -156,6 +161,11 @@ func Login(w http.ResponseWriter, r *http.Request) {
 
 	// Check password
 	if !CheckPasswordHash(req.Password, userModel.Password) {
+		// Log failed login attempt
+		LogAction(userModel.ID, userModel.Username, ActionFailedLogin, ResourceAuth, "", ipAddress, userAgent, StatusFailure, map[string]interface{}{
+			"reason": "invalid_password",
+		})
+
 		render.Status(r, http.StatusUnauthorized)
 		render.JSON(w, r, ErrorResponse{
 			Error:   "invalid_credentials",
@@ -163,6 +173,12 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// TODO: Check if 2FA is enabled and require 2FA code if enabled
+	// For now, we skip 2FA check but it's ready to be integrated
+
+	// Log successful login
+	LogAction(userModel.ID, userModel.Username, ActionLogin, ResourceAuth, "", ipAddress, userAgent, StatusSuccess, nil)
 
 	// Generate JWT token
 	token, err := GenerateJWT(userModel.ID, userModel.Username)
@@ -183,6 +199,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 			ID:        userModel.ID,
 			Username:  userModel.Username,
 			Email:     userModel.Email,
+			Role:      userModel.Role,
 			CreatedAt: userModel.CreatedAt,
 			UpdatedAt: userModel.UpdatedAt,
 		},
@@ -201,8 +218,8 @@ func Login(w http.ResponseWriter, r *http.Request) {
 // @Router       /api/v1/auth/profile [get]
 func GetProfile(w http.ResponseWriter, r *http.Request) {
 	// Get user from context (set by JWT middleware)
-	userID := r.Context().Value("userID").(string)
-	_ = r.Context().Value("username").(string) // Available but not needed for lookup
+	userID := r.Context().Value(contextKeyUserID).(string)
+	_ = r.Context().Value(contextKeyUsername).(string) // Available but not needed for lookup
 
 	// Find user in database
 	var userModel UserModel
@@ -222,8 +239,8 @@ func GetProfile(w http.ResponseWriter, r *http.Request) {
 		ID:        userModel.ID,
 		Username:  userModel.Username,
 		Email:     userModel.Email,
+		Role:      userModel.Role,
 		CreatedAt: userModel.CreatedAt,
 		UpdatedAt: userModel.UpdatedAt,
 	})
 }
-

@@ -7,6 +7,7 @@ type User struct {
 	ID        string    `json:"id"`
 	Username  string    `json:"username"`
 	Email     string    `json:"email"`
+	Role      string    `json:"role"`
 	Password  string    `json:"-"` // Don't include password in JSON
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -14,7 +15,7 @@ type User struct {
 
 // LoginRequest represents login request payload
 type LoginRequest struct {
-	Username string `json:"username" example:"admin"`
+	Username string `json:"username" example:"admin"` // Can be username or email
 	Password string `json:"password" example:"password123"`
 }
 

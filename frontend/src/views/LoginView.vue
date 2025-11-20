@@ -2,197 +2,106 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { message } from 'ant-design-vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
-const username = ref('')
+const email = ref('')
 const password = ref('')
-const showPassword = ref(false)
+const loading = ref(false)
 
 const handleLogin = async () => {
   try {
-    await authStore.login(username.value, password.value)
-    router.push('/')
-  } catch (error) {
-    // Error already handled in store
+    loading.value = true
+    await authStore.login(email.value, password.value)
+    message.success('Login berhasil!')
+    // Wait a bit before redirect to ensure state is saved
+    setTimeout(() => {
+      router.push('/dashboard')
+    }, 100)
+  } catch (error: any) {
+    console.error('Login error:', error)
+    // Extract error message from various possible locations
+    const errorMessage = 
+      error?.response?.data?.message || 
+      error?.response?.data?.Message || 
+      authStore.error || 
+      error?.message || 
+      'Email atau password salah'
+    
+    message.error({
+      content: errorMessage,
+      duration: 5,
+    })
+  } finally {
+    loading.value = false
   }
 }
 </script>
 
 <template>
-  <div class="login-container">
-    <div class="login-card">
-      <h1>Login</h1>
-      <form @submit.prevent="handleLogin">
-        <div class="form-group">
-          <label for="username">Username</label>
-          <input
-            id="username"
-            v-model="username"
-            type="text"
-            required
-            placeholder="Enter your username"
-            :disabled="authStore.loading"
-          />
+  <div class="login-page">
+    <!-- Left Side - Login Form -->
+    <div class="login-left">
+      <div class="login-content">
+        <!-- Logo -->
+        <div class="logo-container">
+          <img src="/logo.png" alt="Pertamina Logo" class="logo-image" />
         </div>
 
-        <div class="form-group">
-          <label for="password">Password</label>
-          <div class="password-input">
-            <input
-              id="password"
-              v-model="password"
-              :type="showPassword ? 'text' : 'password'"
-              required
-              placeholder="Enter your password"
-              :disabled="authStore.loading"
-            />
-            <button
-              type="button"
-              class="toggle-password"
-              @click="showPassword = !showPassword"
-            >
-              {{ showPassword ? '👁️' : '👁️‍🗨️' }}
-            </button>
-          </div>
+        <!-- Login Form -->
+        <div class="login-form-container">
+          <h2 class="login-title">Login</h2>
+          <p class="login-subtitle">Login to your account</p>
+
+          <a-form 
+            :model="{ email, password }" 
+            @finish="handleLogin" 
+            layout="vertical" 
+            class="login-form"
+            :validate-trigger="['submit']"
+          >
+             <a-form-item 
+               label="Email" 
+               name="email"
+               :rules="[
+                 { required: true, message: 'Email wajib diisi' },
+                 { type: 'email', message: 'Email tidak valid', trigger: 'blur' }
+               ]">
+               <a-input 
+                 v-model:value="email" 
+                 placeholder="mail@example.com" 
+                 size="large" 
+                 autocomplete="email"
+                 :disabled="loading" />
+             </a-form-item>
+
+             <a-form-item 
+               label="Password" 
+               name="password"
+               :rules="[{ required: true, message: 'Password wajib diisi', trigger: 'blur' }]">
+               <a-input-password 
+                 v-model:value="password" 
+                 placeholder="Min. 8 Character" 
+                 size="large"
+                 autocomplete="current-password"
+                 :disabled="loading" />
+             </a-form-item>
+
+            <a-form-item>
+              <a-button type="primary" html-type="submit" block size="large" :loading="loading" class="login-button">
+                Login
+              </a-button>
+            </a-form-item>
+          </a-form>
         </div>
-
-        <div v-if="authStore.error" class="error-message">
-          {{ authStore.error }}
-        </div>
-
-        <button type="submit" class="btn-primary" :disabled="authStore.loading">
-          {{ authStore.loading ? 'Logging in...' : 'Login' }}
-        </button>
-      </form>
-
-      <div class="register-link">
-        <p>Don't have an account? <router-link to="/register">Register here</router-link></p>
       </div>
+    </div>
+
+    <!-- Right Side - Image -->
+    <div class="login-right">
+      <img src="/imgLogin.png" alt="Login Background" class="login-image" />
     </div>
   </div>
 </template>
-
-<style scoped>
-.login-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  padding: 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.login-card {
-  background: white;
-  padding: 40px;
-  border-radius: 12px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-  width: 100%;
-  max-width: 400px;
-}
-
-h1 {
-  text-align: center;
-  margin-bottom: 30px;
-  color: #333;
-  font-size: 28px;
-}
-
-.form-group {
-  margin-bottom: 20px;
-}
-
-label {
-  display: block;
-  margin-bottom: 8px;
-  color: #555;
-  font-weight: 500;
-}
-
-input {
-  width: 100%;
-  padding: 12px;
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
-  font-size: 16px;
-  transition: border-color 0.3s;
-  box-sizing: border-box;
-}
-
-input:focus {
-  outline: none;
-  border-color: #667eea;
-}
-
-input:disabled {
-  background-color: #f5f5f5;
-  cursor: not-allowed;
-}
-
-.password-input {
-  position: relative;
-}
-
-.toggle-password {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 20px;
-  padding: 5px;
-}
-
-.error-message {
-  background-color: #fee;
-  color: #c33;
-  padding: 12px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  font-size: 14px;
-}
-
-.btn-primary {
-  width: 100%;
-  padding: 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.register-link {
-  margin-top: 20px;
-  text-align: center;
-  color: #666;
-}
-
-.register-link a {
-  color: #667eea;
-  text-decoration: none;
-  font-weight: 500;
-}
-
-.register-link a:hover {
-  text-decoration: underline;
-}
-</style>
-

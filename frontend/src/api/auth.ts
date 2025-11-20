@@ -1,7 +1,7 @@
 import apiClient from './client'
 
 export interface LoginRequest {
-  username: string
+  username: string // Can be username or email
   password: string
 }
 
@@ -15,6 +15,7 @@ export interface User {
   id: string
   username: string
   email: string
+  role: string
   created_at: string
   updated_at: string
 }

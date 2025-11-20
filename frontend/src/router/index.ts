@@ -8,7 +8,12 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: HomeView,
+      redirect: '/dashboard',
+    },
+    {
+      path: '/dashboard',
+      name: 'dashboard',
+      component: () => import('../views/DashboardView.vue'),
       meta: { requiresAuth: true },
     },
     {
@@ -28,6 +33,11 @@ const router = createRouter({
       name: 'about',
       component: () => import('../views/AboutView.vue'),
     },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('../views/NotFoundView.vue'),
+    },
   ],
 })
 
@@ -43,11 +53,22 @@ router.beforeEach((to, from, next) => {
 
   // Check if route requires guest (not authenticated)
   if (to.meta.requiresGuest && authStore.isAuthenticated) {
-    next({ name: 'home' })
+    next({ name: 'dashboard' })
     return
   }
 
   next()
+})
+
+// Handle navigation errors
+router.onError((error) => {
+  console.error('Router error:', error)
+  // Fallback to dashboard if there's an error
+  if (error.message.includes('Failed to fetch dynamically imported module')) {
+    router.push('/dashboard').catch(() => {
+      window.location.href = '/dashboard'
+    })
+  }
 })
 
 export default router

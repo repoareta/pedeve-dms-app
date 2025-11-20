@@ -10,12 +10,13 @@ Aplikasi Document Management System dengan stack:
 ### Prerequisites
 - Docker & Docker Compose
 - Node.js 20+ (untuk development frontend)
-- Go 1.23+ (untuk development backend)
+- Go 1.25+ (untuk development backend)
 
 ### Development Setup
 
 #### 🚀 Quick Start - Satu Perintah untuk Semua
 
+**Dengan SQLite (Default):**
 ```bash
 # Cara termudah - run semua service dengan hot reload
 make dev
@@ -25,6 +26,15 @@ make dev
 
 # Atau manual
 docker-compose -f docker-compose.dev.yml up --build
+```
+
+**Dengan PostgreSQL:**
+```bash
+# Gunakan file docker-compose khusus PostgreSQL
+docker-compose -f docker-compose.postgres.yml up --build
+
+# Atau set DATABASE_URL di docker-compose.dev.yml
+# Lihat panduan lengkap di POSTGRESQL_MIGRATION.md
 ```
 
 **Hot Reload:**

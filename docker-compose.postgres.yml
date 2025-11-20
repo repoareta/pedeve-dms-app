@@ -1,3 +1,8 @@
+# Docker Compose untuk Development dengan PostgreSQL
+# Gunakan file ini jika ingin menggunakan PostgreSQL sebagai database
+# 
+# Cara menggunakan:
+# docker-compose -f docker-compose.postgres.yml up --build
 
 services:
   # PostgreSQL Database
@@ -5,7 +10,7 @@ services:
     image: postgres:16-alpine
     container_name: dms-postgres-dev
     environment:
-      - POSTGRES_USER=postgres
+      - POSTGRES_USER=dms_user
       - POSTGRES_PASSWORD=dms_password
       - POSTGRES_DB=db_dms_pedeve
     ports:
@@ -16,14 +21,12 @@ services:
       - dms-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U dms_user"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Backend API (Go) - Development mode
-  # Note: Untuk hot reload yang lebih baik, gunakan local development (go run main.go)
-  # Docker ini untuk consistency, tapi restart manual diperlukan untuk perubahan Go code
+  # Backend API (Go) - Development mode dengan PostgreSQL
   backend:
     image: golang:1.25-alpine
     container_name: dms-backend-dev
@@ -67,7 +70,7 @@ services:
       - dms-network
 
 volumes:
-  postgres_data:  # Volume untuk PostgreSQL data persistence
+  postgres_data:
 
 networks:
   dms-network:

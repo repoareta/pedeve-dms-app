@@ -39,7 +39,8 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(SecurityHeadersMiddleware) // Security headers
+	r.Use(SecurityHeadersMiddleware)               // Security headers
+	r.Use(RateLimitMiddleware(generalRateLimiter)) // General rate limiting
 
 	// CORS with security improvements
 	r.Use(cors.Handler(cors.Options{
@@ -59,9 +60,12 @@ func main() {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/", apiInfoHandler)
 
-		// Authentication routes (public)
-		r.Post("/auth/register", Register)
-		r.Post("/auth/login", Login)
+		// Authentication routes (public) - with rate limiting
+		r.Group(func(r chi.Router) {
+			r.Use(AuthRateLimitMiddleware)
+			r.Post("/auth/register", Register)
+			r.Post("/auth/login", Login)
+		})
 
 		// Protected routes (require JWT)
 		r.Group(func(r chi.Router) {
@@ -92,6 +96,12 @@ func main() {
 
 	// Initialize database
 	InitDB()
+
+	// Initialize audit logger
+	InitAuditLogger()
+
+	// Seed superadmin user
+	SeedSuperAdmin()
 
 	log.Printf("Server starting on port :%s", port)
 	log.Printf("Swagger UI available at http://localhost:%s/swagger/index.html", port)

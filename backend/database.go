@@ -46,7 +46,7 @@ func InitDB() {
 	}
 
 	// Auto migrate schema
-	err = DB.AutoMigrate(&User{})
+	err = DB.AutoMigrate(&UserModel{}, &TwoFactorAuth{}, &AuditLog{})
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
@@ -59,6 +59,7 @@ type UserModel struct {
 	ID        string    `gorm:"primaryKey" json:"id"`
 	Username  string    `gorm:"uniqueIndex;not null" json:"username"`
 	Email     string    `gorm:"uniqueIndex;not null" json:"email"`
+	Role      string    `gorm:"default:'user'" json:"role"`
 	Password  string    `gorm:"not null" json:"-"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

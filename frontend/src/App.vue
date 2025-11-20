@@ -1,39 +1,44 @@
 <script setup lang="ts">
-import { RouterLink, RouterView, useRouter } from 'vue-router'
+import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import { computed } from 'vue'
+import { ConfigProvider } from 'ant-design-vue'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const user = computed(() => authStore.user)
 
+// Hide navigation on auth pages (login, register)
+const isAuthPage = computed(() => {
+  return route.name === 'login' || route.name === 'register'
+})
+
 const handleLogout = () => {
   authStore.logout()
   router.push('/login')
 }
+
+const theme = {
+  token: {
+    colorPrimary: '#035CAB',
+    colorSuccess: '#52c41a',
+    colorWarning: '#faad14',
+    colorError: '#DB241B',
+    colorInfo: '#035CAB',
+    colorText: '#333333',
+    colorTextSecondary: '#666666',
+    borderRadius: 6,
+  },
+}
 </script>
 
 <template>
-  <header>
-    <div class="wrapper">
-      <nav>
-        <RouterLink to="/">Home</RouterLink>
-        <RouterLink to="/about">About</RouterLink>
-        <div v-if="isAuthenticated" class="auth-section">
-          <span class="user-info">Welcome, {{ user?.username }}</span>
-          <button @click="handleLogout" class="logout-btn">Logout</button>
-        </div>
-        <div v-else class="auth-section">
-          <RouterLink to="/login">Login</RouterLink>
-          <RouterLink to="/register">Register</RouterLink>
-        </div>
-      </nav>
-    </div>
-  </header>
-
-  <RouterView />
+  <ConfigProvider :theme="theme">
+    <RouterView />
+  </ConfigProvider>
 </template>
 
 <style scoped>

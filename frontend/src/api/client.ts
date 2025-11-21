@@ -1,12 +1,12 @@
 import axios from 'axios'
 
-// Ensure baseURL always ends with /api/v1
+// Pastikan baseURL selalu diakhiri dengan /api/v1
 const getBaseURL = () => {
   const envURL = import.meta.env.VITE_API_URL
   if (envURL) {
-    // Remove trailing slash if exists
+    // Hapus trailing slash jika ada
     const cleanURL = envURL.replace(/\/$/, '')
-    // Ensure /api/v1 is appended
+    // Pastikan /api/v1 ditambahkan
     return cleanURL.endsWith('/api/v1') ? cleanURL : `${cleanURL}/api/v1`
   }
   return 'http://localhost:8080/api/v1'
@@ -14,15 +14,15 @@ const getBaseURL = () => {
 
 const API_BASE_URL = getBaseURL()
 
-// Debug log (remove in production)
+// Debug log (hapus di production)
 if (import.meta.env.DEV) {
   console.log('[API Client] Base URL:', API_BASE_URL)
 }
 
-// CSRF token storage
+// Penyimpanan token CSRF
 let csrfToken: string | null = null
 
-// Function to get CSRF token from backend
+// Fungsi untuk mengambil token CSRF dari backend
 export const getCSRFToken = async (): Promise<string | null> => {
   try {
     const response = await axios.get<{ csrf_token: string }>(`${API_BASE_URL}/csrf-token`)
@@ -34,7 +34,7 @@ export const getCSRFToken = async (): Promise<string | null> => {
   }
 }
 
-// Initialize CSRF token on module load (optional)
+// Inisialisasi token CSRF saat module load (opsional)
 // getCSRFToken()
 
 // Create axios instance
@@ -43,22 +43,20 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // Enable cookies
+  withCredentials: true, // Aktifkan cookies
 })
 
-// Request interceptor to add JWT token and CSRF token
+// Request interceptor untuk menambahkan token JWT dan token CSRF
 apiClient.interceptors.request.use(
   async (config) => {
-    // Add JWT token
-    const token = localStorage.getItem('auth_token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-
-    // Add CSRF token for state-changing methods (POST, PUT, DELETE, PATCH)
+    // Token JWT sekarang di httpOnly cookie, jadi tidak perlu menambahkan Authorization header secara manual
+    // Browser akan otomatis mengirim cookie dengan credentials
+    // Fallback: masih support Authorization header untuk kompatibilitas ke belakang
+    
+    // Tambahkan token CSRF untuk method yang mengubah state (POST, PUT, DELETE, PATCH)
     const stateChangingMethods = ['POST', 'PUT', 'DELETE', 'PATCH']
     if (config.method && stateChangingMethods.includes(config.method.toUpperCase())) {
-      // Get CSRF token if not available
+      // Ambil token CSRF jika belum tersedia
       if (!csrfToken) {
         await getCSRFToken()
       }
@@ -74,15 +72,15 @@ apiClient.interceptors.request.use(
   }
 )
 
-// Response interceptor to handle errors
+// Response interceptor untuk menangani error
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // Handle CSRF token errors
+    // Tangani error token CSRF
     if (error.response?.status === 403) {
       const errorCode = error.response?.data?.error
       if (errorCode === 'csrf_token_missing' || errorCode === 'csrf_token_invalid') {
-        // Get new CSRF token and retry request
+        // Ambil token CSRF baru dan coba request lagi
         const newToken = await getCSRFToken()
         if (newToken && error.config) {
           error.config.headers['X-CSRF-Token'] = newToken
@@ -92,21 +90,28 @@ apiClient.interceptors.response.use(
     }
 
     if (error.response?.status === 401) {
-      // Check if this is a login/register endpoint - don't redirect in that case
+      // Cek apakah ini endpoint login/register/logout - jangan redirect dalam kasus ini
       const url = error.config?.url || ''
-      const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register')
+      const isAuthEndpoint = url.includes('/auth/login') || 
+                             url.includes('/auth/register') ||
+                             url.includes('/auth/logout')
       
-      if (!isAuthEndpoint) {
-        // Unauthorized - clear token and redirect to login (only for protected endpoints)
-        localStorage.removeItem('auth_token')
+      // Cek apakah kita di halaman guest (login/register)
+      const isGuestPage = window.location.pathname === '/login' || 
+                          window.location.pathname === '/register'
+      
+      if (!isAuthEndpoint && !isGuestPage) {
+        // Unauthorized di halaman yang dilindungi - hapus state lokal dan redirect
         localStorage.removeItem('auth_user')
-        csrfToken = null // Clear CSRF token
-        // Only redirect if not already on login page
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login'
-        }
+        csrfToken = null // Hapus token CSRF
+        window.location.href = '/login'
+      } else if (isGuestPage && url.includes('/auth/profile')) {
+        // Di halaman guest dan pengecekan profile gagal - hapus state secara diam-diam
+        // Jangan redirect atau panggil logout (user sudah di halaman login)
+        localStorage.removeItem('auth_user')
+        csrfToken = null
       }
-      // For auth endpoints, let the error pass through so LoginView can handle it
+      // Untuk endpoint auth atau halaman guest, biarkan error diteruskan
     }
     return Promise.reject(error)
   }

@@ -12,7 +12,7 @@ const authStore = useAuthStore()
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const user = computed(() => authStore.user)
 
-// Hide navigation on auth pages (login, register)
+// Sembunyikan navigasi di halaman auth (login, register)
 const isAuthPage = computed(() => {
   return route.name === 'login' || route.name === 'register'
 })
@@ -22,7 +22,7 @@ const handleLogout = () => {
   router.push('/login')
 }
 
-// Initialize CSRF token on app mount
+// Inisialisasi token CSRF saat app mount
 onMounted(async () => {
   await getCSRFToken()
 })

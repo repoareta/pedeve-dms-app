@@ -53,23 +53,23 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
 
-  // If route requires authentication, validate token with backend
+  // Jika route memerlukan autentikasi, validasi token dengan backend
   if (to.meta.requiresAuth) {
-    // Check if token exists in store/localStorage
+    // Cek apakah token ada di store/localStorage
     if (!authStore.isAuthenticated) {
       next({ name: 'login', query: { redirect: to.fullPath } })
       return
     }
 
-    // Validate token with backend (verify it's still valid)
-    // Only validate if we haven't already validated recently (to avoid too many API calls)
+    // Validasi token dengan backend (verifikasi apakah masih valid)
+    // Hanya validasi jika belum divalidasi baru-baru ini (untuk menghindari terlalu banyak API calls)
     try {
       await authStore.fetchProfile()
-      // Token is valid, allow access
+      // Token valid, izinkan akses
       next()
       return
     } catch (error: any) {
-      // Token is invalid or expired (401/403) - clear auth and redirect to login
+      // Token tidak valid atau expired (401/403) - hapus auth dan redirect ke login
       console.error('Token validation failed:', error)
       authStore.logout()
       next({ name: 'login', query: { redirect: to.fullPath } })
@@ -77,36 +77,55 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
-  // Check if route requires guest (not authenticated)
-  if (to.meta.requiresGuest && authStore.isAuthenticated) {
-    // Validate token before redirecting away from guest routes
-    try {
-      await authStore.fetchProfile()
-      // Token is valid, redirect to dashboard
-      next({ name: 'dashboard' })
-      return
-    } catch (error: any) {
-      // Token is invalid, allow access to guest route
-      authStore.logout()
-      next()
-      return
+  // Cek apakah route memerlukan guest (tidak terautentikasi)
+  if (to.meta.requiresGuest) {
+    // Cek apakah info user ada di localStorage
+    const hasUserInStorage = localStorage.getItem('auth_user') !== null
+    
+    if (hasUserInStorage) {
+      // Info user ada - validasi apakah cookie masih valid
+      // Tapi jangan blokir akses jika validasi gagal (cookie mungkin sudah expired)
+      try {
+        // Coba validasi dengan backend (diam-diam)
+        await authStore.fetchProfile()
+        // Cookie valid, redirect ke dashboard
+        next({ name: 'dashboard' })
+        return
+      } catch (error: any) {
+        // Cookie tidak valid atau hilang - hapus state lokal secara diam-diam
+        // Jangan panggil logout API karena cookie tidak ada atau sudah dihapus
+        // Manipulasi store langsung untuk menghindari memicu side effects
+        const store = useAuthStore()
+        store.$patch({
+          user: null,
+          token: null,
+        })
+        localStorage.removeItem('auth_user')
+        // Izinkan akses ke route guest (user sudah logout)
+        next()
+        return
+      }
     }
+    
+    // Tidak ada info user di storage, izinkan akses ke route guest tanpa API calls
+    next()
+    return
   }
 
   next()
 })
 
-// Set document title based on route
+// Set judul dokumen berdasarkan route
 router.afterEach((to) => {
   const appName = 'Pedeve App'
   const pageTitle = (to.meta.title as string) || 'Pedeve App'
   document.title = pageTitle === appName ? appName : `${pageTitle} - ${appName}`
 })
 
-// Handle navigation errors
+// Tangani error navigasi
 router.onError((error) => {
   console.error('Router error:', error)
-  // Fallback to dashboard if there's an error
+  // Fallback ke dashboard jika ada error
   if (error.message.includes('Failed to fetch dynamically imported module')) {
     router.push('/dashboard').catch(() => {
       window.location.href = '/dashboard'

@@ -11,7 +11,7 @@ export interface AuditLog {
   user_agent: string
   details: string
   status: string
-  log_type: string // "user_action" or "technical_error"
+  log_type: string // "user_action" atau "technical_error"
   created_at: string
 }
 
@@ -30,6 +30,19 @@ export interface AuditLogsParams {
   resource?: string
   status?: string
   logType?: string // "user_action" or "technical_error"
+}
+
+export interface AuditLogStats {
+  total_records: number
+  user_action_count: number
+  technical_error_count: number
+  oldest_record_date?: string
+  newest_record_date?: string
+  estimated_size_mb: number
+  retention_policy?: {
+    user_action_days: number
+    technical_error_days: number
+  }
 }
 
 export const auditApi = {
@@ -59,6 +72,10 @@ export const auditApi = {
     const url = queryString ? `/audit-logs?${queryString}` : '/audit-logs'
     
     const response = await apiClient.get<AuditLogsResponse>(url)
+    return response.data
+  },
+  getAuditLogStats: async (): Promise<AuditLogStats> => {
+    const response = await apiClient.get<AuditLogStats>('/audit-logs/stats')
     return response.data
   },
 }

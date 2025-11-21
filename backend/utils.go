@@ -11,37 +11,37 @@ import (
 
 var jwtSecret = []byte(getJWTSecret())
 
-// getJWTSecret retrieves JWT secret from environment or uses default
+// getJWTSecret mengambil secret JWT dari environment atau menggunakan default
 func getJWTSecret() string {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		secret = "your-secret-key-change-in-production-min-32-chars" // Default, should be changed in production
+		secret = "your-secret-key-change-in-production-min-32-chars" // Default, harus diubah di production
 	}
 	return secret
 }
 
-// HashPassword hashes a password using bcrypt
+// HashPassword menghash password menggunakan bcrypt
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	return string(bytes), err
 }
 
-// CheckPasswordHash compares password with hash
+// CheckPasswordHash membandingkan password dengan hash
 func CheckPasswordHash(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
 }
 
-// Claims represents JWT claims
+// Claims merepresentasikan JWT claims
 type Claims struct {
 	UserID   string `json:"user_id"`
 	Username string `json:"username"`
 	jwt.RegisteredClaims
 }
 
-// GenerateJWT generates a JWT token for a user
+// GenerateJWT menghasilkan token JWT untuk user
 func GenerateJWT(userID, username string) (string, error) {
-	expirationTime := time.Now().Add(24 * time.Hour) // Token expires in 24 hours
+	expirationTime := time.Now().Add(24 * time.Hour) // Token expired dalam 24 jam
 
 	claims := &Claims{
 		UserID:   userID,
@@ -63,7 +63,7 @@ func GenerateJWT(userID, username string) (string, error) {
 	return tokenString, nil
 }
 
-// ValidateJWT validates a JWT token and returns claims
+// ValidateJWT memvalidasi token JWT dan mengembalikan claims
 func ValidateJWT(tokenString string) (*Claims, error) {
 	claims := &Claims{}
 

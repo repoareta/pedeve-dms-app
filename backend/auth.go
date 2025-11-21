@@ -42,7 +42,7 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user already exists
+	// Cek apakah user sudah ada
 	var existingUser UserModel
 	result := DB.Where("username = ? OR email = ?", req.Username, req.Email).First(&existingUser)
 	if result.Error == nil {
@@ -65,7 +65,7 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create user
+	// Buat user baru
 	now := time.Now()
 	userModel := &UserModel{
 		ID:        uuid.New().String(),
@@ -76,7 +76,7 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt: now,
 	}
 
-	// Save to database
+	// Simpan ke database
 	if err := DB.Create(userModel).Error; err != nil {
 		render.Status(r, http.StatusInternalServerError)
 		render.JSON(w, r, ErrorResponse{
@@ -97,7 +97,10 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return response
+	// Set cookie aman dengan token JWT (httpOnly cookie untuk keamanan yang lebih baik)
+	SetSecureCookie(w, authTokenCookie, token)
+
+	// Kembalikan response
 	render.Status(r, http.StatusCreated)
 	render.JSON(w, r, AuthResponse{
 		Token: token,
@@ -143,11 +146,11 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get client IP and User Agent for audit logging
+	// Ambil IP client dan User Agent untuk audit logging
 	ipAddress := getClientIP(r)
 	userAgent := r.UserAgent()
 
-	// Find user in database (can login with username or email)
+	// Cari user di database (bisa login dengan username atau email)
 	var userModel UserModel
 	result := DB.Where("username = ? OR email = ?", req.Username, req.Username).First(&userModel)
 	if result.Error == gorm.ErrRecordNotFound {
@@ -159,9 +162,9 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check password
+	// Cek password
 	if !CheckPasswordHash(req.Password, userModel.Password) {
-		// Log failed login attempt
+		// Log percobaan login yang gagal
 		LogAction(userModel.ID, userModel.Username, ActionFailedLogin, ResourceAuth, "", ipAddress, userAgent, StatusFailure, map[string]interface{}{
 			"reason": "invalid_password",
 		})
@@ -174,15 +177,15 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if 2FA is enabled
+	// Cek apakah 2FA diaktifkan
 	var twoFA TwoFactorAuth
 	result2FA := DB.Where("user_id = ? AND enabled = ?", userModel.ID, true).First(&twoFA)
 	is2FAEnabled := result2FA.Error == nil
 
-	// If 2FA is enabled, verify the code
+	// Jika 2FA diaktifkan, verifikasi kode
 	if is2FAEnabled {
 		if req.Code == "" {
-			// 2FA required but no code provided
+			// 2FA diperlukan tapi kode tidak diberikan
 			render.Status(r, http.StatusOK)
 			render.JSON(w, r, map[string]interface{}{
 				"requires_2fa": true,
@@ -191,10 +194,10 @@ func Login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Verify 2FA code
+		// Verifikasi kode 2FA
 		valid, err := Verify2FALogin(userModel.ID, req.Code)
 		if err != nil || !valid {
-			// Log failed 2FA attempt
+			// Log percobaan 2FA yang gagal
 			LogAction(userModel.ID, userModel.Username, ActionFailedLogin, ResourceAuth, "", ipAddress, userAgent, StatusFailure, map[string]interface{}{
 				"reason": "invalid_2fa_code",
 			})
@@ -208,7 +211,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Log successful login
+	// Log login yang berhasil
 	LogAction(userModel.ID, userModel.Username, ActionLogin, ResourceAuth, "", ipAddress, userAgent, StatusSuccess, nil)
 
 	// Generate JWT token
@@ -222,11 +225,10 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set secure cookie with JWT token (optional, for enhanced security)
-	// Note: Frontend masih bisa menggunakan localStorage sebagai fallback
-	// SetSecureCookie(w, authTokenCookie, token)
+	// Set cookie aman dengan token JWT (httpOnly cookie untuk keamanan yang lebih baik)
+	SetSecureCookie(w, authTokenCookie, token)
 
-	// Return response
+	// Kembalikan response
 	render.Status(r, http.StatusOK)
 	render.JSON(w, r, AuthResponse{
 		Token: token,
@@ -252,11 +254,11 @@ func Login(w http.ResponseWriter, r *http.Request) {
 // @Failure      401  {object}  ErrorResponse
 // @Router       /api/v1/auth/profile [get]
 func GetProfile(w http.ResponseWriter, r *http.Request) {
-	// Get user from context (set by JWT middleware)
+	// Ambil user dari context (diset oleh JWT middleware)
 	userID := r.Context().Value(contextKeyUserID).(string)
-	_ = r.Context().Value(contextKeyUsername).(string) // Available but not needed for lookup
+	_ = r.Context().Value(contextKeyUsername).(string) // Tersedia tapi tidak diperlukan untuk lookup
 
-	// Find user in database
+	// Cari user di database
 	var userModel UserModel
 	result := DB.First(&userModel, "id = ?", userID)
 	if result.Error == gorm.ErrRecordNotFound {
@@ -268,7 +270,7 @@ func GetProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return user (without password)
+	// Return user (tanpa password)
 	render.Status(r, http.StatusOK)
 	render.JSON(w, r, User{
 		ID:        userModel.ID,
@@ -277,5 +279,41 @@ func GetProfile(w http.ResponseWriter, r *http.Request) {
 		Role:      userModel.Role,
 		CreatedAt: userModel.CreatedAt,
 		UpdatedAt: userModel.UpdatedAt,
+	})
+}
+
+// Logout handles user logout
+// @Summary      User logout
+// @Description  Logout user and clear authentication cookie
+// @Tags         Authentication
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  map[string]string
+// @Failure      401  {object}  ErrorResponse
+// @Router       /api/v1/auth/logout [post]
+func Logout(w http.ResponseWriter, r *http.Request) {
+	// Ambil info user dari context untuk audit logging
+	userIDValue := r.Context().Value(contextKeyUserID)
+	usernameValue := r.Context().Value(contextKeyUsername)
+
+	if userIDValue != nil && usernameValue != nil {
+		userID := userIDValue.(string)
+		username := usernameValue.(string)
+
+		// Ambil alamat IP dan user agent untuk audit log
+		ipAddress := getClientIP(r)
+		userAgent := r.UserAgent()
+
+		// Log aksi logout
+		LogAction(userID, username, ActionLogout, ResourceAuth, "", ipAddress, userAgent, StatusSuccess, nil)
+	}
+
+	// Hapus cookie aman
+	DeleteSecureCookie(w, authTokenCookie)
+
+	render.Status(r, http.StatusOK)
+	render.JSON(w, r, map[string]string{
+		"message": "Logged out successfully",
 	})
 }

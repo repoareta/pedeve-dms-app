@@ -7,10 +7,10 @@ import (
 
 const (
 	authTokenCookie = "auth_token"
-	cookieMaxAge    = 24 * 60 * 60 // 24 hours in seconds
+	cookieMaxAge    = 24 * 60 * 60 // 24 jam dalam detik
 )
 
-// SetSecureCookie sets a secure cookie with proper flags
+// SetSecureCookie mengatur cookie aman dengan flag yang sesuai
 func SetSecureCookie(w http.ResponseWriter, name, value string) {
 	isHTTPS := os.Getenv("ENV") == "production" || 
 	           os.Getenv("HTTPS") == "true" ||
@@ -21,13 +21,13 @@ func SetSecureCookie(w http.ResponseWriter, name, value string) {
 		Value:    value,
 		Path:     "/",
 		MaxAge:   cookieMaxAge,
-		HttpOnly: true,              // Prevent XSS attacks
-		Secure:   isHTTPS,           // Only send over HTTPS in production
-		SameSite: http.SameSiteStrictMode, // CSRF protection
+		HttpOnly: true,              // Cegah serangan XSS
+		Secure:   isHTTPS,           // Hanya kirim melalui HTTPS di production
+		SameSite: http.SameSiteStrictMode, // Perlindungan CSRF
 	})
 }
 
-// GetSecureCookie gets a secure cookie value
+// GetSecureCookie mengambil nilai cookie aman
 func GetSecureCookie(r *http.Request, name string) (string, error) {
 	cookie, err := r.Cookie(name)
 	if err != nil {
@@ -36,7 +36,7 @@ func GetSecureCookie(r *http.Request, name string) (string, error) {
 	return cookie.Value, nil
 }
 
-// DeleteSecureCookie deletes a secure cookie
+// DeleteSecureCookie menghapus cookie aman
 func DeleteSecureCookie(w http.ResponseWriter, name string) {
 	isHTTPS := os.Getenv("ENV") == "production" || 
 	           os.Getenv("HTTPS") == "true" ||
@@ -46,7 +46,7 @@ func DeleteSecureCookie(w http.ResponseWriter, name string) {
 		Name:     name,
 		Value:    "",
 		Path:     "/",
-		MaxAge:   -1, // Delete cookie
+		MaxAge:   -1, // Hapus cookie
 		HttpOnly: true,
 		Secure:   isHTTPS,
 		SameSite: http.SameSiteStrictMode,

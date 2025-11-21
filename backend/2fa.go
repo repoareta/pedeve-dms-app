@@ -16,23 +16,23 @@ import (
 	"gorm.io/gorm"
 )
 
-// TwoFactorAuth represents 2FA settings for a user
+// TwoFactorAuth merepresentasikan pengaturan 2FA untuk user
 type TwoFactorAuth struct {
 	ID          string    `gorm:"primaryKey" json:"id"`
 	UserID      string    `gorm:"uniqueIndex;not null" json:"user_id"`
-	Secret      string    `gorm:"not null" json:"-"` // TOTP secret
+	Secret      string    `gorm:"not null" json:"-"` // Secret TOTP
 	Enabled     bool      `gorm:"default:false" json:"enabled"`
-	BackupCodes string    `gorm:"type:text" json:"-"` // JSON array of backup codes
+	BackupCodes string    `gorm:"type:text" json:"-"` // Array JSON dari backup codes
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// TableName specifies the table name for TwoFactorAuth
+// TableName menentukan nama tabel untuk TwoFactorAuth
 func (TwoFactorAuth) TableName() string {
 	return "two_factor_auths"
 }
 
-// Generate2FASecret generates a new TOTP secret for a user
+// Generate2FASecret menghasilkan secret TOTP baru untuk user
 // @Summary      Generate 2FA secret
 // @Description  Generate a new TOTP secret and QR code for 2FA setup
 // @Tags         Authentication
@@ -43,7 +43,7 @@ func (TwoFactorAuth) TableName() string {
 // @Failure      401  {object}  ErrorResponse
 // @Router       /api/v1/auth/2fa/generate [post]
 func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
-	// Get user from context
+	// Ambil user dari context
 	userIDValue := r.Context().Value(contextKeyUserID)
 	usernameValue := r.Context().Value(contextKeyUsername)
 
@@ -81,7 +81,7 @@ func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Generating 2FA secret for user: %s (ID: %s)", username, userID)
 
-	// Generate TOTP key
+	// Generate kunci TOTP
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      "Pedeve Apps",
 		AccountName: username,
@@ -101,7 +101,7 @@ func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("TOTP key generated successfully, secret: %s", key.Secret())
 
-	// Save or update 2FA record
+	// Simpan atau update record 2FA
 	var twoFA TwoFactorAuth
 	result := DB.Where("user_id = ?", userID).First(&twoFA)
 	if result.Error == gorm.ErrRecordNotFound {
@@ -144,7 +144,7 @@ func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
 		log.Printf("2FA record updated successfully")
 	}
 
-	// Generate QR code image
+	// Generate gambar QR code
 	var buf bytes.Buffer
 	img, err := key.Image(200, 200)
 	if err != nil {
@@ -169,7 +169,7 @@ func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("QR code generated successfully, size: %d bytes", buf.Len())
 
-	// Return secret and QR code
+	// Kembalikan secret dan QR code
 	render.Status(r, http.StatusOK)
 	render.JSON(w, r, map[string]interface{}{
 		"secret":  key.Secret(),
@@ -179,7 +179,7 @@ func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Verify2FA verifies a TOTP code and enables 2FA
+// Verify2FA memverifikasi kode TOTP dan mengaktifkan 2FA
 // @Summary      Verify and enable 2FA
 // @Description  Verify TOTP code and enable 2FA for user
 // @Tags         Authentication
@@ -206,7 +206,7 @@ func Verify2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get user's 2FA secret
+	// Ambil secret 2FA user
 	var twoFA TwoFactorAuth
 	result := DB.Where("user_id = ?", userID).First(&twoFA)
 	if result.Error == gorm.ErrRecordNotFound {
@@ -218,7 +218,7 @@ func Verify2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify TOTP code
+	// Verifikasi kode TOTP
 	valid := totp.Validate(req.Code, twoFA.Secret)
 	if !valid {
 		render.Status(r, http.StatusUnauthorized)
@@ -229,13 +229,13 @@ func Verify2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Enable 2FA and generate backup codes
+	// Aktifkan 2FA dan generate backup codes
 	backupCodesJSON := generateBackupCodes()
 	twoFA.Enabled = true
 	twoFA.BackupCodes = backupCodesJSON
 	DB.Save(&twoFA)
 
-	// Parse backup codes to return as array
+	// Parse backup codes untuk dikembalikan sebagai array
 	var backupCodesArray []string
 	if err := json.Unmarshal([]byte(backupCodesJSON), &backupCodesArray); err != nil {
 		backupCodesArray = []string{}
@@ -248,7 +248,7 @@ func Verify2FA(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Verify2FALogin verifies 2FA code during login
+// Verify2FALogin memverifikasi kode 2FA saat login
 func Verify2FALogin(userID, code string) (bool, error) {
 	var twoFA TwoFactorAuth
 	result := DB.Where("user_id = ? AND enabled = ?", userID, true).First(&twoFA)
@@ -256,13 +256,13 @@ func Verify2FALogin(userID, code string) (bool, error) {
 		return false, fmt.Errorf("2FA not enabled")
 	}
 
-	// Try TOTP code first
+	// Coba kode TOTP terlebih dahulu
 	valid := totp.Validate(code, twoFA.Secret)
 	if valid {
 		return true, nil
 	}
 
-	// Try backup codes
+	// Coba backup codes
 	if verifyBackupCode(code, twoFA.BackupCodes) {
 		return true, nil
 	}
@@ -270,7 +270,7 @@ func Verify2FALogin(userID, code string) (bool, error) {
 	return false, fmt.Errorf("invalid code")
 }
 
-// generateBackupCodes generates backup codes for 2FA
+// generateBackupCodes menghasilkan backup codes untuk 2FA
 func generateBackupCodes() string {
 	codes := make([]string, 10)
 	for i := range codes {
@@ -280,7 +280,7 @@ func generateBackupCodes() string {
 	return string(jsonData)
 }
 
-// verifyBackupCode verifies if a code is a valid backup code
+// verifyBackupCode memverifikasi apakah kode adalah backup code yang valid
 func verifyBackupCode(code, backupCodesJSON string) bool {
 	var codes []string
 	if err := json.Unmarshal([]byte(backupCodesJSON), &codes); err != nil {
@@ -289,9 +289,9 @@ func verifyBackupCode(code, backupCodesJSON string) bool {
 
 	for i, backupCode := range codes {
 		if backupCode == code {
-			// Remove used backup code
+			// Hapus backup code yang sudah digunakan
 			codes = append(codes[:i], codes[i+1:]...)
-			// TODO: Update database with new backup codes
+			// TODO: Update database dengan backup codes baru
 			// DB.Model(&TwoFactorAuth{}).Where("user_id = ?", userID).Update("backup_codes", json.Marshal(codes))
 			return true
 		}
@@ -299,7 +299,7 @@ func verifyBackupCode(code, backupCodesJSON string) bool {
 	return false
 }
 
-// Get2FAStatus returns 2FA status for current user
+// Get2FAStatus mengembalikan status 2FA untuk user saat ini
 // @Summary      Get 2FA status
 // @Description  Get current user's 2FA status
 // @Tags         Authentication
@@ -359,7 +359,7 @@ func Get2FAStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Disable2FA disables 2FA for current user
+// Disable2FA menonaktifkan 2FA untuk user saat ini
 // @Summary      Disable 2FA
 // @Description  Disable 2FA for current user
 // @Tags         Authentication
@@ -406,14 +406,14 @@ func Disable2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get IP address and user agent for audit log
+	// Ambil alamat IP dan user agent untuk audit log
 	ipAddress := r.RemoteAddr
 	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
 		ipAddress = forwarded
 	}
 	userAgent := r.UserAgent()
 
-	// Find existing 2FA record
+	// Cari record 2FA yang ada
 	var twoFA TwoFactorAuth
 	result := DB.Where("user_id = ?", userID).First(&twoFA)
 
@@ -436,7 +436,7 @@ func Disable2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Disable 2FA
+	// Nonaktifkan 2FA
 	twoFA.Enabled = false
 	if err := DB.Save(&twoFA).Error; err != nil {
 		log.Printf("Error disabling 2FA: %v", err)
@@ -448,7 +448,7 @@ func Disable2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Log action
+	// Log aksi
 	LogAction(userID, username, "disable_2fa", "auth", "", ipAddress, userAgent, "success", nil)
 
 	render.Status(r, http.StatusOK)

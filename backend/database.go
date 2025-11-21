@@ -14,21 +14,21 @@ import (
 
 var DB *gorm.DB
 
-// GenerateUUID generates a new UUID string
+// GenerateUUID menghasilkan string UUID baru
 func GenerateUUID() string {
 	return uuid.New().String()
 }
 
 
-// InitDB initializes database connection
+// InitDB menginisialisasi koneksi database
 func InitDB() {
 	var err error
 	var dialector gorm.Dialector
 
-	// Get database URL from environment
+	// Ambil URL database dari environment
 	dbURL := os.Getenv("DATABASE_URL")
 
-	// Use SQLite for development if DATABASE_URL not set
+	// Gunakan SQLite untuk development jika DATABASE_URL tidak diset
 	if dbURL == "" {
 		log.Println("Using SQLite database (development)")
 		dialector = sqlite.Open("dms.db")
@@ -37,7 +37,7 @@ func InitDB() {
 		dialector = postgres.Open(dbURL)
 	}
 
-	// Open database connection
+	// Buka koneksi database
 	DB, err = gorm.Open(dialector, &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	})
@@ -54,7 +54,7 @@ func InitDB() {
 	log.Println("Database connected and migrated successfully")
 }
 
-// User model for database
+// Model User untuk database
 type UserModel struct {
 	ID        string    `gorm:"primaryKey" json:"id"`
 	Username  string    `gorm:"uniqueIndex;not null" json:"username"`
@@ -65,7 +65,7 @@ type UserModel struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// TableName specifies the table name for UserModel
+// TableName menentukan nama tabel untuk UserModel
 func (UserModel) TableName() string {
 	return "users"
 }

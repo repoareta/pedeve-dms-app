@@ -1,7 +1,7 @@
 import apiClient from './client'
 
 export interface LoginRequest {
-  username: string // Can be username or email
+  username: string // Bisa username atau email
   password: string
 }
 
@@ -61,6 +61,11 @@ export const authApi = {
 
   getProfile: async (): Promise<User> => {
     const response = await apiClient.get<User>('/auth/profile')
+    return response.data
+  },
+
+  logout: async (): Promise<{ message: string }> => {
+    const response = await apiClient.post<{ message: string }>('/auth/logout', {})
     return response.data
   },
 

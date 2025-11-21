@@ -19,14 +19,14 @@ const handleLogin = async () => {
     loading.value = true
     const response = await authStore.login(email.value, password.value)
     
-    // Check if 2FA is required
+    // Cek apakah 2FA diperlukan
     if (response.requires_2fa) {
       requires2FA.value = true
       message.info(response.message || 'Masukkan kode 2FA dari authenticator app Anda')
       return
     }
     
-    // Normal login success
+    // Login sukses normal
     message.success('Login berhasil!')
     setTimeout(() => {
       router.push('/dashboard')
@@ -34,14 +34,14 @@ const handleLogin = async () => {
   } catch (error: any) {
     console.error('Login error:', error)
     
-    // Check if error is because 2FA is required
+    // Cek apakah error karena 2FA diperlukan
     if (error?.response?.status === 200 && error?.response?.data?.requires_2fa) {
       requires2FA.value = true
       message.info('Masukkan kode 2FA dari authenticator app Anda')
       return
     }
     
-    // Extract error message from various possible locations
+    // Ekstrak pesan error dari berbagai lokasi yang mungkin
     const errorMessage = 
       error?.response?.data?.message || 
       error?.response?.data?.Message || 
@@ -93,7 +93,7 @@ const handleBackToLogin = () => {
   requires2FA.value = false
   twoFACode.value = ''
   password.value = ''
-  // Clear any existing auth state when going back to login
+  // Hapus state auth yang ada saat kembali ke login
   authStore.logout()
 }
 </script>

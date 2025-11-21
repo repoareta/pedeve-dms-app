@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -10,38 +11,38 @@ import (
 	"gorm.io/gorm"
 )
 
-// AuditLog represents an audit log entry
+// AuditLog merepresentasikan entry audit log
 type AuditLog struct {
 	ID         string    `gorm:"primaryKey" json:"id"`
-	UserID     string    `gorm:"index" json:"user_id"`           // Optional for system errors
-	Username   string    `gorm:"index" json:"username"`          // Optional for system errors
-	Action     string    `gorm:"index;not null" json:"action"`   // e.g., "login", "create_document", "system_error"
-	Resource   string    `gorm:"index" json:"resource"`          // e.g., "user", "document", "system"
-	ResourceID string    `gorm:"index" json:"resource_id"`       // ID of the affected resource
+	UserID     string    `gorm:"index" json:"user_id"`           // Opsional untuk system errors
+	Username   string    `gorm:"index" json:"username"`          // Opsional untuk system errors
+	Action     string    `gorm:"index;not null" json:"action"`   // contoh: "login", "create_document", "system_error"
+	Resource   string    `gorm:"index" json:"resource"`          // contoh: "user", "document", "system"
+	ResourceID string    `gorm:"index" json:"resource_id"`       // ID dari resource yang terpengaruh
 	IPAddress  string    `json:"ip_address"`
 	UserAgent  string    `json:"user_agent"`
-	Details    string    `gorm:"type:text" json:"details"`       // JSON string with additional details
+	Details    string    `gorm:"type:text" json:"details"`       // String JSON dengan detail tambahan (bisa besar untuk stack trace)
 	Status     string    `gorm:"index" json:"status"`            // "success", "failure", "error"
-	LogType    string    `gorm:"index;default:'user_action'" json:"log_type"` // "user_action" or "technical_error"
-	CreatedAt  time.Time `json:"created_at"`
+	LogType    string    `gorm:"index;default:'user_action'" json:"log_type"` // "user_action" atau "technical_error"
+	CreatedAt  time.Time `gorm:"index" json:"created_at"`        // Index untuk cleanup dan query berdasarkan waktu
 }
 
-// TableName specifies the table name for AuditLog
+// TableName menentukan nama tabel untuk AuditLog
 func (AuditLog) TableName() string {
 	return "audit_logs"
 }
 
-// AuditLogger handles audit logging
+// AuditLogger menangani audit logging
 type AuditLogger struct {
 	db *gorm.DB
 }
 
-// NewAuditLogger creates a new audit logger
+// NewAuditLogger membuat audit logger baru
 func NewAuditLogger(db *gorm.DB) *AuditLogger {
 	return &AuditLogger{db: db}
 }
 
-// Log creates an audit log entry
+// Log membuat entry audit log
 func (al *AuditLogger) Log(userID, username, action, resource, resourceID, ipAddress, userAgent, status string, details map[string]interface{}) error {
 	detailsJSON := ""
 	if details != nil {
@@ -51,7 +52,7 @@ func (al *AuditLogger) Log(userID, username, action, resource, resourceID, ipAdd
 		}
 	}
 
-	// Determine log type based on action
+	// Tentukan tipe log berdasarkan aksi
 	logType := LogTypeUserAction
 	if action == "system_error" || action == "database_error" || action == "validation_error" || action == "panic" {
 		logType = LogTypeTechnicalError
@@ -75,17 +76,33 @@ func (al *AuditLogger) Log(userID, username, action, resource, resourceID, ipAdd
 	return al.db.Create(&auditLog).Error
 }
 
-// Global audit logger instance
+// Instance audit logger global
 var auditLogger *AuditLogger
 
-// InitAuditLogger initializes the audit logger
+// InitAuditLogger menginisialisasi audit logger
 func InitAuditLogger() {
 	auditLogger = NewAuditLogger(DB)
-	// Auto migrate audit log table
-	DB.AutoMigrate(&AuditLog{})
+	// Auto migrate tabel audit log
+	if err := DB.AutoMigrate(&AuditLog{}); err != nil {
+		log.Printf("Error migrating audit log table: %v", err)
+		return
+	}
+
+	// Buat composite index untuk performa cleanup query (created_at + log_type)
+	// Index ini akan mempercepat query cleanup yang sering memfilter berdasarkan waktu dan tipe log
+	if DB.Migrator().HasIndex(&AuditLog{}, "idx_audit_logs_created_at_log_type") {
+		// Index sudah ada, skip
+	} else {
+		if err := DB.Exec("CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at_log_type ON audit_logs(created_at, log_type)").Error; err != nil {
+			log.Printf("Warning: Failed to create composite index for audit logs: %v", err)
+			// Tidak fatal, lanjutkan saja
+		} else {
+			log.Println("Composite index created for audit logs (created_at, log_type)")
+		}
+	}
 }
 
-// LogAction is a helper function to log actions
+// LogAction adalah fungsi helper untuk mencatat aksi
 func LogAction(userID, username, action, resource, resourceID, ipAddress, userAgent, status string, details map[string]interface{}) {
 	if auditLogger != nil {
 		go func() {
@@ -94,7 +111,7 @@ func LogAction(userID, username, action, resource, resourceID, ipAddress, userAg
 	}
 }
 
-// GetAuditLogs retrieves audit logs with filters
+// GetAuditLogs mengambil audit logs dengan filter
 func GetAuditLogs(userID, action, resource, status, logType string, limit, offset int) ([]AuditLog, int64, error) {
 	var logs []AuditLog
 	var total int64
@@ -117,15 +134,15 @@ func GetAuditLogs(userID, action, resource, status, logType string, limit, offse
 		query = query.Where("log_type = ?", logType)
 	}
 
-	// Get total count
+	// Ambil total count
 	query.Count(&total)
 
-	// Get logs with pagination
+	// Ambil logs dengan pagination
 	err := query.Order("created_at DESC").Limit(limit).Offset(offset).Find(&logs).Error
 	return logs, total, err
 }
 
-// GetAuditLogsHandler handles GET request for audit logs
+// GetAuditLogsHandler menangani request GET untuk audit logs
 // @Summary      Get audit logs
 // @Description  Get audit logs with pagination and filters
 // @Tags         Audit
@@ -141,7 +158,7 @@ func GetAuditLogs(userID, action, resource, status, logType string, limit, offse
 // @Failure      401       {object}  ErrorResponse
 // @Router       /api/v1/audit-logs [get]
 func GetAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
-	// Get current user from context
+	// Ambil user saat ini dari context
 	userIDValue := r.Context().Value(contextKeyUserID)
 	if userIDValue == nil {
 		render.Status(r, http.StatusUnauthorized)
@@ -154,13 +171,13 @@ func GetAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
 
 	currentUserID := userIDValue.(string)
 
-	// Parse query parameters
+	// Parse parameter query
 	page := 1
 	pageSize := 10
 	action := r.URL.Query().Get("action")
 	resource := r.URL.Query().Get("resource")
 	status := r.URL.Query().Get("status")
-	logType := r.URL.Query().Get("logType") // Filter by log type: "user_action" or "technical_error"
+	logType := r.URL.Query().Get("logType") // Filter berdasarkan tipe log: "user_action" atau "technical_error"
 
 	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
 		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
@@ -174,7 +191,7 @@ func GetAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get user from database to check role
+	// Ambil user dari database untuk cek role
 	var currentUser UserModel
 	if err := DB.First(&currentUser, "id = ?", currentUserID).Error; err != nil {
 		render.Status(r, http.StatusNotFound)
@@ -185,17 +202,17 @@ func GetAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Regular users can only see their own audit logs
+	// User reguler hanya bisa lihat audit logs mereka sendiri
 	filterUserID := currentUserID
 	if currentUser.Role == "admin" || currentUser.Role == "superadmin" {
-		// Admins can see all logs, don't filter by userID
+		// Admin bisa lihat semua logs, jangan filter berdasarkan userID
 		filterUserID = ""
 	}
 
-	// Calculate offset
+	// Hitung offset
 	offset := (page - 1) * pageSize
 
-	// Get audit logs
+	// Ambil audit logs
 	logs, total, err := GetAuditLogs(filterUserID, action, resource, status, logType, pageSize, offset)
 	if err != nil {
 		render.Status(r, http.StatusInternalServerError)
@@ -206,7 +223,7 @@ func GetAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return response
+	// Kembalikan response
 	render.Status(r, http.StatusOK)
 	render.JSON(w, r, map[string]interface{}{
 		"data":      logs,
@@ -217,7 +234,7 @@ func GetAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Common audit action types
+// Tipe aksi audit umum
 const (
 	ActionLogin        = "login"
 	ActionLogout       = "logout"
@@ -235,14 +252,14 @@ const (
 	ActionPasswordReset = "password_reset"
 )
 
-// Common resource types
+// Tipe resource umum
 const (
 	ResourceUser     = "user"
 	ResourceDocument = "document"
 	ResourceAuth     = "auth"
 )
 
-// Common status values
+// Nilai status umum
 const (
 	StatusSuccess = "success"
 	StatusFailure = "failure"

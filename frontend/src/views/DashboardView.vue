@@ -28,12 +28,12 @@ const handleLogout = () => {
 }
 
 const handleExportPDF = () => {
-  // TODO: Implement PDF export
+  // TODO: Implementasi export PDF
   console.log('Export PDF')
 }
 
 const handleExportExcel = () => {
-  // TODO: Implement Excel export
+  // TODO: Implementasi export Excel
   console.log('Export Excel')
 }
 </script>

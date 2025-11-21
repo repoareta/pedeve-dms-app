@@ -3,7 +3,9 @@ import { ref, computed } from 'vue'
 import { authApi, type User } from '../api/auth'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string | null>(localStorage.getItem('auth_token'))
+  // Token sekarang di httpOnly cookie, jadi tidak disimpan di localStorage
+  // Pertahankan token ref untuk kompatibilitas ke belakang (tapi tidak digunakan untuk API calls)
+  const token = ref<string | null>(null)
   const user = ref<User | null>(() => {
     const stored = localStorage.getItem('auth_user')
     return stored ? JSON.parse(stored) : null
@@ -11,30 +13,30 @@ export const useAuthStore = defineStore('auth', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  const isAuthenticated = computed(() => !!token.value && !!user.value)
+  // Cek status autentikasi - token ada di httpOnly cookie, jadi cek user saja
+  const isAuthenticated = computed(() => !!user.value)
 
-  // Login (can use username or email)
+  // Login (bisa gunakan username atau email)
   const login = async (usernameOrEmail: string, password: string) => {
     loading.value = true
     error.value = null
     try {
       const response = await authApi.login({ username: usernameOrEmail, password })
       
-      // If 2FA is required, don't store token/user - return response without saving
+      // Jika 2FA diperlukan, jangan simpan token/user - return response tanpa menyimpan
       if (response.requires_2fa) {
-        // Clear any existing token/user when 2FA is required
+        // Hapus token/user yang ada ketika 2FA diperlukan
         token.value = null
         user.value = null
-        localStorage.removeItem('auth_token')
         localStorage.removeItem('auth_user')
         return response
       }
       
-      // Only store token/user if login is fully successful (no 2FA required)
+      // Hanya simpan info user untuk UI state (token sekarang di httpOnly cookie)
       if (response.token && response.user) {
-        token.value = response.token
+        token.value = response.token // Simpan untuk UI state, tapi tidak digunakan untuk API calls
         user.value = response.user
-        localStorage.setItem('auth_token', response.token)
+        // Jangan simpan token di localStorage lagi (sudah di httpOnly cookie)
         localStorage.setItem('auth_user', JSON.stringify(response.user))
       }
       
@@ -53,9 +55,10 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
     try {
       const response = await authApi.register({ username, email, password })
-      token.value = response.token
+      // Token disimpan di httpOnly cookie oleh backend, frontend hanya simpan info user
+      token.value = response.token // Simpan untuk UI state, tapi tidak digunakan untuk API calls
       user.value = response.user
-      localStorage.setItem('auth_token', response.token)
+      // Jangan simpan token di localStorage lagi (sudah di httpOnly cookie)
       localStorage.setItem('auth_user', JSON.stringify(response.user))
       return response
     } catch (err: any) {
@@ -67,11 +70,28 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // Logout
-  const logout = () => {
-    token.value = null
-    user.value = null
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('auth_user')
+  const logout = async () => {
+    try {
+      // Hanya panggil logout endpoint jika user terautentikasi (punya cookie)
+      // Cek apakah user ada sebelum memanggil API
+      if (user.value) {
+        await authApi.logout()
+      }
+    } catch (error) {
+      // Lanjutkan dengan pembersihan lokal meskipun API call gagal
+      // Jangan log error jika status 401 (user sudah logout)
+      if (error && typeof error === 'object' && 'response' in error) {
+        const status = (error as any).response?.status
+        if (status !== 401) {
+          console.error('Logout API error:', error)
+        }
+      }
+    } finally {
+      // Hapus state lokal (token ada di cookie, jadi hapus localStorage)
+      token.value = null
+      user.value = null
+      localStorage.removeItem('auth_user')
+    }
   }
 
   // Get profile
@@ -97,9 +117,10 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
     try {
       const response = await authApi.loginWith2FA({ username: usernameOrEmail, password, code })
-      token.value = response.token
+      // Token disimpan di httpOnly cookie oleh backend, frontend hanya simpan info user
+      token.value = response.token // Simpan untuk UI state, tapi tidak digunakan untuk API calls
       user.value = response.user
-      localStorage.setItem('auth_token', response.token)
+      // Jangan simpan token di localStorage lagi (sudah di httpOnly cookie)
       localStorage.setItem('auth_user', JSON.stringify(response.user))
       return response
     } catch (err: any) {

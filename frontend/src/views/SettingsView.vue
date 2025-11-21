@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, h } from 'vue'
+import { ref, onMounted, onUnmounted, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { message } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { Icon as IconifyIcon } from '@iconify/vue'
-import { auditApi, type AuditLog, type AuditLogsParams } from '../api/audit'
+import { auditApi, type AuditLog, type AuditLogsParams, type AuditLogStats } from '../api/audit'
 import type { TableColumnsType } from 'ant-design-vue'
 
 const router = useRouter()
@@ -22,6 +22,8 @@ const backupCodes = ref<string[]>([])
 // Audit logs
 const auditLogs = ref<AuditLog[]>([])
 const auditLoading = ref(false)
+const auditStats = ref<AuditLogStats | null>(null)
+const auditStatsLoading = ref(false)
 const auditPagination = ref({
   current: 1,
   pageSize: 10,
@@ -35,6 +37,7 @@ const auditFilters = ref({
 })
 const selectedAuditLog = ref<AuditLog | null>(null)
 const detailModalVisible = ref(false)
+let auditStatsInterval: number | null = null
 
 const handleLogout = () => {
   authStore.logout()
@@ -161,7 +164,29 @@ const handleDisable2FA = async () => {
   }
 }
 
-// Audit logs functions
+// Fungsi fetch audit stats
+const fetchAuditStats = async () => {
+  try {
+    auditStatsLoading.value = true
+    const stats = await auditApi.getAuditLogStats()
+    auditStats.value = stats
+  } catch (error: any) {
+    console.error('Failed to fetch audit stats:', error)
+    // Set default values jika error
+    if (!auditStats.value) {
+      auditStats.value = {
+        total_records: 0,
+        user_action_count: 0,
+        technical_error_count: 0,
+        estimated_size_mb: 0,
+      }
+    }
+  } finally {
+    auditStatsLoading.value = false
+  }
+}
+
+// Fungsi audit logs
 const fetchAuditLogs = async (page: number = 1, pageSize: number = 10) => {
   try {
     auditLoading.value = true
@@ -181,6 +206,7 @@ const fetchAuditLogs = async (page: number = 1, pageSize: number = 10) => {
       pageSize: response.pageSize,
       total: response.total,
     }
+    // Tidak refresh stats otomatis saat fetch logs, hanya saat user klik refresh atau auto-refresh interval
   } catch (error: any) {
     console.error('Failed to fetch audit logs:', error)
     message.error('Gagal mengambil audit logs')
@@ -336,6 +362,21 @@ const parseDetails = (detailsJson: string) => {
 onMounted(() => {
   check2FAStatus()
   fetchAuditLogs()
+  fetchAuditStats()
+  
+  // Auto-refresh stats cards saja setiap 30 detik (hanya untuk audit stats, bukan seluruh halaman)
+  // Interval akan dihentikan otomatis saat user keluar dari halaman (onUnmounted)
+  auditStatsInterval = window.setInterval(() => {
+    fetchAuditStats()
+  }, 30000) // 30 detik - hanya refresh stats cards
+})
+
+onUnmounted(() => {
+  // Clear interval saat komponen di-unmount
+  if (auditStatsInterval !== null) {
+    clearInterval(auditStatsInterval)
+    auditStatsInterval = null
+  }
 })
 </script>
 
@@ -575,6 +616,90 @@ onMounted(() => {
                   Refresh
                 </a-button>
               </a-space>
+            </div>
+
+            <!-- Summary Stats Cards -->
+            <div class="audit-stats-cards" style="margin-bottom: 24px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h4 style="margin: 0;">Audit Log Statistics</h4>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <a-spin v-if="auditStatsLoading" size="small" />
+                  <span v-if="auditStatsLoading" style="font-size: 12px; color: #8c8c8c;">Refreshing...</span>
+                  <a-button 
+                    size="small" 
+                    type="text" 
+                    @click="fetchAuditStats"
+                    :loading="auditStatsLoading"
+                    style="padding: 0 8px;"
+                  >
+                    <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
+                    Refresh Stats
+                  </a-button>
+                </div>
+              </div>
+              <a-row :gutter="[16, 16]">
+                <a-col :xs="24" :sm="12" :md="6">
+                  <a-card :loading="auditStatsLoading" size="small">
+                    <a-statistic
+                      title="Total Records"
+                      :value="auditStats?.total_records || 0"
+                      :value-style="{ color: '#1890ff' }"
+                    >
+                      <template #prefix>
+                        <IconifyIcon icon="mdi:database" width="20" />
+                      </template>
+                    </a-statistic>
+                  </a-card>
+                </a-col>
+                <a-col :xs="24" :sm="12" :md="6">
+                  <a-card :loading="auditStatsLoading" size="small">
+                    <a-statistic
+                      title="User Actions"
+                      :value="auditStats?.user_action_count || 0"
+                      :value-style="{ color: '#52c41a' }"
+                    >
+                      <template #prefix>
+                        <IconifyIcon icon="mdi:account-check" width="20" />
+                      </template>
+                    </a-statistic>
+                  </a-card>
+                </a-col>
+                <a-col :xs="24" :sm="12" :md="6">
+                  <a-card :loading="auditStatsLoading" size="small">
+                    <a-statistic
+                      title="Technical Errors"
+                      :value="auditStats?.technical_error_count || 0"
+                      :value-style="{ color: '#ff4d4f' }"
+                    >
+                      <template #prefix>
+                        <IconifyIcon icon="mdi:alert-circle" width="20" />
+                      </template>
+                    </a-statistic>
+                  </a-card>
+                </a-col>
+                <a-col :xs="24" :sm="12" :md="6">
+                  <a-card :loading="auditStatsLoading" size="small">
+                    <a-statistic
+                      title="Estimated Size"
+                      :value="auditStats ? auditStats.estimated_size_mb.toFixed(2) : '0.00'"
+                      suffix="MB"
+                      :value-style="{ color: '#722ed1' }"
+                    >
+                      <template #prefix>
+                        <IconifyIcon icon="mdi:harddisk" width="20" />
+                      </template>
+                    </a-statistic>
+                    <div style="margin-top: 8px; font-size: 12px; color: #8c8c8c;">
+                      <span v-if="auditStats?.retention_policy">
+                        Retention: {{ auditStats.retention_policy.user_action_days }}d / {{ auditStats.retention_policy.technical_error_days }}d
+                      </span>
+                    </div>
+                  </a-card>
+                </a-col>
+              </a-row>
+              <div style="margin-top: 12px; font-size: 12px; color: #8c8c8c; text-align: center;">
+                Stats akan auto-refresh setiap 30 detik
+              </div>
             </div>
 
             <!-- Table -->

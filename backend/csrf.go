@@ -21,7 +21,7 @@ const (
 	csrfTokenCleanupInterval = 1 * time.Hour
 )
 
-// GenerateCSRFToken generates a new CSRF token
+// GenerateCSRFToken menghasilkan token CSRF baru
 func GenerateCSRFToken() (string, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
@@ -30,14 +30,14 @@ func GenerateCSRFToken() (string, error) {
 	return base64.URLEncoding.EncodeToString(tokenBytes), nil
 }
 
-// StoreCSRFToken stores a CSRF token with expiry
+// StoreCSRFToken menyimpan token CSRF dengan masa kedaluwarsa
 func StoreCSRFToken(token string) {
 	csrfMutex.Lock()
 	defer csrfMutex.Unlock()
 	csrfTokens[token] = time.Now().Add(csrfTokenExpiry)
 }
 
-// ValidateCSRFToken validates a CSRF token
+// ValidateCSRFToken memvalidasi token CSRF
 func ValidateCSRFToken(token string) bool {
 	if token == "" {
 		return false
@@ -52,7 +52,7 @@ func ValidateCSRFToken(token string) bool {
 	}
 
 	if time.Now().After(expiry) {
-		// Token expired, remove it
+		// Token expired, hapus
 		csrfMutex.RUnlock()
 		csrfMutex.Lock()
 		delete(csrfTokens, token)
@@ -64,7 +64,7 @@ func ValidateCSRFToken(token string) bool {
 	return true
 }
 
-// CleanupExpiredCSRFTokens removes expired CSRF tokens
+// CleanupExpiredCSRFTokens menghapus token CSRF yang expired
 func CleanupExpiredCSRFTokens() {
 	csrfMutex.Lock()
 	defer csrfMutex.Unlock()
@@ -77,7 +77,7 @@ func CleanupExpiredCSRFTokens() {
 	}
 }
 
-// StartCSRFTokenCleanup starts background cleanup of expired tokens
+// StartCSRFTokenCleanup memulai cleanup background untuk token yang expired
 func StartCSRFTokenCleanup() {
 	go func() {
 		ticker := time.NewTicker(csrfTokenCleanupInterval)
@@ -88,16 +88,16 @@ func StartCSRFTokenCleanup() {
 	}()
 }
 
-// CSRFMiddleware validates CSRF token for state-changing requests
+// CSRFMiddleware memvalidasi token CSRF untuk request yang mengubah state
 func CSRFMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Skip CSRF check for safe methods (GET, HEAD, OPTIONS)
+		// Skip pengecekan CSRF untuk method yang aman (GET, HEAD, OPTIONS)
 		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// Get CSRF token from header
+		// Ambil token CSRF dari header
 		csrfToken := r.Header.Get(csrfTokenHeader)
 		if csrfToken == "" {
 			render.Status(r, http.StatusForbidden)
@@ -108,7 +108,7 @@ func CSRFMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Validate CSRF token
+		// Validasi token CSRF
 		if !ValidateCSRFToken(csrfToken) {
 			render.Status(r, http.StatusForbidden)
 			render.JSON(w, r, ErrorResponse{
@@ -122,7 +122,7 @@ func CSRFMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// GetCSRFTokenHandler returns a CSRF token
+// GetCSRFTokenHandler mengembalikan token CSRF
 // @Summary      Get CSRF token
 // @Description  Get a new CSRF token for form submissions
 // @Tags         Security
@@ -141,7 +141,7 @@ func GetCSRFTokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Store token
+	// Simpan token
 	StoreCSRFToken(token)
 
 	// Set cookie with CSRF token (optional, untuk double submit cookie pattern)
@@ -152,7 +152,7 @@ func GetCSRFTokenHandler(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   int(csrfTokenExpiry.Seconds()),
 		HttpOnly: true,
-		Secure:   isHTTPS, // Only set Secure flag if HTTPS
+		Secure:   isHTTPS, // Hanya set flag Secure jika HTTPS
 		SameSite: http.SameSiteStrictMode,
 	})
 

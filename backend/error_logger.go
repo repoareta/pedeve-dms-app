@@ -15,16 +15,16 @@ const (
 	LogTypeTechnicalError = "technical_error"
 )
 
-// LogTechnicalError logs a technical error to audit log
+// LogTechnicalError mencatat error teknis ke audit log
 func LogTechnicalError(err error, r *http.Request, details map[string]interface{}) {
 	if err == nil {
 		return
 	}
 
-	// Get stack trace
+	// Ambil stack trace
 	stackTrace := string(debug.Stack())
 
-	// Build error details
+	// Buat detail error
 	errorDetails := map[string]interface{}{
 		"error":       err.Error(),
 		"stack_trace": stackTrace,
@@ -33,12 +33,12 @@ func LogTechnicalError(err error, r *http.Request, details map[string]interface{
 		"query":       r.URL.RawQuery,
 	}
 
-	// Merge with additional details if provided
+	// Gabungkan dengan detail tambahan jika diberikan
 	for k, v := range details {
 		errorDetails[k] = v
 	}
 
-	// Get user info if available (might be nil for unauthenticated errors)
+	// Ambil info user jika tersedia (mungkin nil untuk error yang tidak terautentikasi)
 	userID := ""
 	username := "system"
 	if userIDCtx := r.Context().Value(contextKeyUserID); userIDCtx != nil {
@@ -48,21 +48,21 @@ func LogTechnicalError(err error, r *http.Request, details map[string]interface{
 		username = usernameCtx.(string)
 	}
 
-	// Get IP address and user agent
+	// Ambil alamat IP dan user agent
 	ipAddress := r.RemoteAddr
 	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
 		ipAddress = forwarded
 	}
 	userAgent := r.UserAgent()
 
-	// Log to audit log asynchronously
+	// Log ke audit log secara asinkron
 	LogActionAsync(userID, username, "system_error", "system", "", ipAddress, userAgent, "error", errorDetails)
 }
 
-// LogActionAsync is a helper that logs action asynchronously with log type
+// LogActionAsync adalah helper yang mencatat aksi secara asinkron dengan tipe log
 func LogActionAsync(userID, username, action, resource, resourceID, ipAddress, userAgent, status string, details map[string]interface{}) {
 	go func() {
-		// Determine log type based on action
+		// Tentukan tipe log berdasarkan aksi
 		logType := LogTypeUserAction
 		if action == "system_error" || action == "database_error" || action == "validation_error" {
 			logType = LogTypeTechnicalError
@@ -91,23 +91,23 @@ func LogActionAsync(userID, username, action, resource, resourceID, ipAddress, u
 			CreatedAt:  time.Now(),
 		}
 
-		// Log asynchronously (non-blocking)
+		// Log secara asinkron (non-blocking)
 		_ = DB.Create(&auditLog).Error
 	}()
 }
 
-// ErrorHandlerMiddleware logs technical errors to audit log
+// ErrorHandlerMiddleware mencatat error teknis ke audit log
 func ErrorHandlerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Capture the response
+		// Tangkap response
 		ww := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
-		// Call next handler
+		// Panggil handler berikutnya
 		next.ServeHTTP(ww, r)
 
-		// Log errors (4xx and 5xx status codes)
+		// Log error (kode status 4xx dan 5xx)
 		if ww.statusCode >= 400 {
-			// Extract error message from response body if possible
+			// Ekstrak pesan error dari response body jika memungkinkan
 			details := map[string]interface{}{
 				"status_code": ww.statusCode,
 			}
@@ -119,13 +119,13 @@ func ErrorHandlerMiddleware(next http.Handler) http.Handler {
 				errMsg = "Client error: " + fmt.Sprint(ww.statusCode)
 			}
 
-			// Log technical error
+			// Log error teknis
 			LogTechnicalError(fmt.Errorf("%s", errMsg), r, details)
 		}
 	})
 }
 
-// responseWriter wraps http.ResponseWriter to capture status code
+// responseWriter membungkus http.ResponseWriter untuk menangkap kode status
 type responseWriter struct {
 	http.ResponseWriter
 	statusCode int
@@ -136,19 +136,19 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-// RecoverMiddleware logs panics to audit log
+// RecoverMiddleware mencatat panic ke audit log
 func RecoverMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				// Log panic to audit log
+				// Log panic ke audit log
 				panicErr := fmt.Errorf("panic: %v", err)
 				details := map[string]interface{}{
 					"type": "panic",
 				}
 				LogTechnicalError(panicErr, r, details)
 
-				// Return error response
+				// Kembalikan response error
 				render.Status(r, http.StatusInternalServerError)
 				render.JSON(w, r, ErrorResponse{
 					Error:   "internal_server_error",

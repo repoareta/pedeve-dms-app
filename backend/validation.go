@@ -12,21 +12,21 @@ import (
 
 var sanitizer = bluemonday.UGCPolicy()
 
-// SanitizeString sanitizes a string input
+// SanitizeString membersihkan input string
 func SanitizeString(input string) string {
 	// Trim whitespace
 	trimmed := strings.TrimSpace(input)
 
-	// Remove HTML tags
+	// Hapus tag HTML
 	cleaned := sanitizer.Sanitize(trimmed)
 
-	// Escape HTML entities
+	// Escape entity HTML
 	escaped := html.EscapeString(cleaned)
 
 	return escaped
 }
 
-// SanitizeEmail sanitizes and validates email
+// SanitizeEmail membersihkan dan memvalidasi email
 func SanitizeEmail(email string) (string, error) {
 	sanitized := strings.TrimSpace(strings.ToLower(email))
 
@@ -37,12 +37,12 @@ func SanitizeEmail(email string) (string, error) {
 	return sanitized, nil
 }
 
-// SanitizeUsername sanitizes and validates username
+// SanitizeUsername membersihkan dan memvalidasi username
 func SanitizeUsername(username string) (string, error) {
-	// Trim and convert to lowercase
+	// Trim dan konversi ke lowercase
 	sanitized := strings.TrimSpace(strings.ToLower(username))
 
-	// Validate length
+	// Validasi panjang
 	if len(sanitized) < 3 {
 		return "", fmt.Errorf("username must be at least 3 characters")
 	}
@@ -50,7 +50,7 @@ func SanitizeUsername(username string) (string, error) {
 		return "", fmt.Errorf("username must be less than 50 characters")
 	}
 
-	// Validate format: alphanumeric and underscore only
+	// Validasi format: hanya alphanumeric dan underscore
 	matched, _ := regexp.MatchString(`^[a-z0-9_]+$`, sanitized)
 	if !matched {
 		return "", fmt.Errorf("username can only contain lowercase letters, numbers, and underscores")
@@ -59,7 +59,7 @@ func SanitizeUsername(username string) (string, error) {
 	return sanitized, nil
 }
 
-// SanitizePassword validates password strength
+// SanitizePassword memvalidasi kekuatan password
 func SanitizePassword(password string) error {
 	if len(password) < 8 {
 		return fmt.Errorf("password must be at least 8 characters")
@@ -69,7 +69,7 @@ func SanitizePassword(password string) error {
 		return fmt.Errorf("password must be less than 128 characters")
 	}
 
-	// Check for at least one letter and one number
+	// Cek minimal satu huruf dan satu angka
 	hasLetter := regexp.MustCompile(`[a-zA-Z]`).MatchString(password)
 	hasNumber := regexp.MustCompile(`[0-9]`).MatchString(password)
 
@@ -84,23 +84,23 @@ func SanitizePassword(password string) error {
 	return nil
 }
 
-// ValidateInput validates and sanitizes RegisterRequest
+// ValidateInput memvalidasi dan membersihkan RegisterRequest
 func ValidateRegisterInput(req *RegisterRequest) error {
-	// Sanitize username
+	// Bersihkan username
 	username, err := SanitizeUsername(req.Username)
 	if err != nil {
 		return fmt.Errorf("username: %v", err)
 	}
 	req.Username = username
 
-	// Sanitize email
+	// Bersihkan email
 	email, err := SanitizeEmail(req.Email)
 	if err != nil {
 		return fmt.Errorf("email: %v", err)
 	}
 	req.Email = email
 
-	// Validate password
+	// Validasi password
 	if err := SanitizePassword(req.Password); err != nil {
 		return fmt.Errorf("password: %v", err)
 	}
@@ -108,13 +108,13 @@ func ValidateRegisterInput(req *RegisterRequest) error {
 	return nil
 }
 
-// ValidateLoginInput validates and sanitizes LoginRequest
+// ValidateLoginInput memvalidasi dan membersihkan LoginRequest
 func ValidateLoginInput(req *LoginRequest) error {
 	// Trim whitespace
 	req.Username = strings.TrimSpace(req.Username)
 	req.Password = strings.TrimSpace(req.Password)
 
-	// Check if empty
+	// Cek apakah kosong
 	if req.Username == "" {
 		return fmt.Errorf("username cannot be empty")
 	}
@@ -123,14 +123,14 @@ func ValidateLoginInput(req *LoginRequest) error {
 		return fmt.Errorf("password cannot be empty")
 	}
 
-	// If username looks like email, validate email format
+	// Jika username terlihat seperti email, validasi format email
 	if strings.Contains(req.Username, "@") {
 		if !govalidator.IsEmail(req.Username) {
 			return fmt.Errorf("invalid email format")
 		}
 		req.Username = strings.ToLower(req.Username)
 	} else {
-		// Validate username format
+		// Validasi format username
 		if len(req.Username) < 3 {
 			return fmt.Errorf("username must be at least 3 characters")
 		}
@@ -139,9 +139,9 @@ func ValidateLoginInput(req *LoginRequest) error {
 	return nil
 }
 
-// SanitizeSQLInput sanitizes input to prevent SQL injection (additional layer)
+// SanitizeSQLInput membersihkan input untuk mencegah SQL injection (lapisan tambahan)
 func SanitizeSQLInput(input string) string {
-	// Remove SQL injection patterns
+	// Hapus pola SQL injection
 	dangerous := []string{
 		"'", "\"", ";", "--", "/*", "*/", "xp_", "sp_",
 		"DROP", "DELETE", "INSERT", "UPDATE", "SELECT",

@@ -36,14 +36,14 @@ func main() {
 
 	// Middleware
 	r.Use(middleware.Logger)
-	r.Use(RecoverMiddleware)                       // Custom recover middleware with error logging
+	r.Use(RecoverMiddleware)                       // Custom recover middleware dengan error logging
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(SecurityHeadersMiddleware)               // Security headers
-	r.Use(ErrorHandlerMiddleware)                  // Log technical errors to audit log
-	r.Use(RateLimitMiddleware(generalRateLimiter)) // General rate limiting
+	r.Use(SecurityHeadersMiddleware)               // Header keamanan
+	r.Use(ErrorHandlerMiddleware)                  // Log error teknis ke audit log
+	r.Use(RateLimitMiddleware(generalRateLimiter)) // Rate limiting umum
 
-	// CORS with security improvements
+	// CORS dengan peningkatan keamanan
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:5173", "http://localhost:3000"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
@@ -61,36 +61,38 @@ func main() {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/", apiInfoHandler)
 
-		// CSRF token endpoint (public, no auth required)
+		// Endpoint token CSRF (public, tidak perlu auth)
 		r.Get("/csrf-token", GetCSRFTokenHandler)
 
-		// Authentication routes (public) - with rate limiting
+		// Route autentikasi (public) - dengan rate limiting
 		r.Group(func(r chi.Router) {
 			r.Use(AuthRateLimitMiddleware)
 			r.Post("/auth/register", Register)
 			r.Post("/auth/login", Login)
 		})
 
-		// Protected routes (require JWT)
+		// Route yang dilindungi (memerlukan JWT)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTAuthMiddleware)
-			r.Use(CSRFMiddleware) // CSRF protection for state-changing methods
+			r.Use(CSRFMiddleware) // Perlindungan CSRF untuk method yang mengubah state
 			r.Get("/auth/profile", GetProfile)
+			r.Post("/auth/logout", Logout)
 			
-			// 2FA routes
+			// Route 2FA
 			r.Post("/auth/2fa/generate", Generate2FASecret)
 			r.Post("/auth/2fa/verify", Verify2FA)
 			r.Post("/auth/2fa/disable", Disable2FA)
 			r.Get("/auth/2fa/status", Get2FAStatus)
 			
-			// Audit logs route
+			// Route audit logs
 			r.Get("/audit-logs", GetAuditLogsHandler)
+			r.Get("/audit-logs/stats", GetAuditLogStatsHandler)
 		})
 
-		// Documents routes (protected)
+		// Route documents (dilindungi)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTAuthMiddleware)
-			r.Use(CSRFMiddleware) // CSRF protection for state-changing methods
+			r.Use(CSRFMiddleware) // Perlindungan CSRF untuk method yang mengubah state
 			r.Get("/documents", getDocumentsHandler)
 			r.Get("/documents/{id}", getDocumentHandler)
 			r.Post("/documents", createDocumentHandler)
@@ -109,16 +111,19 @@ func main() {
 		port = "8080"
 	}
 
-	// Initialize database
+	// Inisialisasi database
 	InitDB()
 
-	// Initialize audit logger
+	// Inisialisasi audit logger
 	InitAuditLogger()
 
-	// Start CSRF token cleanup
+	// Mulai cleanup token CSRF
 	StartCSRFTokenCleanup()
 
-	// Seed superadmin user
+	// Mulai cleanup audit logs (retention policy)
+	StartAuditLogCleanup()
+
+	// Seed user superadmin
 	SeedSuperAdmin()
 
 	log.Printf("Server starting on port :%s", port)
@@ -179,7 +184,7 @@ func apiInfoHandler(w http.ResponseWriter, r *http.Request) {
 	}`))
 }
 
-// Document represents a document
+// Document merepresentasikan sebuah document
 type Document struct {
 	ID          string `json:"id"`
 	Title       string `json:"title"`

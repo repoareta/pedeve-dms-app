@@ -93,6 +93,8 @@ const handleBackToLogin = () => {
   requires2FA.value = false
   twoFACode.value = ''
   password.value = ''
+  // Clear any existing auth state when going back to login
+  authStore.logout()
 }
 </script>
 

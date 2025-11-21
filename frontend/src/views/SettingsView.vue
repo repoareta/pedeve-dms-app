@@ -31,6 +31,7 @@ const auditFilters = ref({
   action: undefined as string | undefined,
   resource: undefined as string | undefined,
   status: undefined as string | undefined,
+  logType: undefined as string | undefined, // "user_action" or "technical_error"
 })
 const selectedAuditLog = ref<AuditLog | null>(null)
 const detailModalVisible = ref(false)
@@ -137,6 +138,29 @@ const handleDone = () => {
   backupCodes.value = []
 }
 
+const handleDisable2FA = async () => {
+  try {
+    loading.value = true
+    await authStore.disable2FA()
+    is2FAEnabled.value = false
+    setupStep.value = 'idle'
+    message.success('2FA berhasil dinonaktifkan')
+  } catch (error: any) {
+    const errorMessage = 
+      error?.response?.data?.message || 
+      error?.response?.data?.Message ||
+      error?.message ||
+      authStore.error ||
+      'Gagal menonaktifkan 2FA'
+    message.error({
+      content: errorMessage,
+      duration: 5,
+    })
+  } finally {
+    loading.value = false
+  }
+}
+
 // Audit logs functions
 const fetchAuditLogs = async (page: number = 1, pageSize: number = 10) => {
   try {
@@ -147,6 +171,7 @@ const fetchAuditLogs = async (page: number = 1, pageSize: number = 10) => {
       action: auditFilters.value.action,
       resource: auditFilters.value.resource,
       status: auditFilters.value.status,
+      logType: auditFilters.value.logType,
     }
     
     const response = await auditApi.getAuditLogs(params)
@@ -220,6 +245,10 @@ const getActionLabel = (action: string) => {
     disable_2fa: 'Disable 2FA',
     failed_login: 'Failed Login',
     password_reset: 'Password Reset',
+    system_error: 'System Error',
+    database_error: 'Database Error',
+    validation_error: 'Validation Error',
+    panic: 'Panic',
   }
   return labels[action] || action
 }
@@ -258,6 +287,23 @@ const auditColumns: TableColumnsType = [
     width: 100,
     customRender: ({ text }: { text: string }) => {
       return h('a-tag', { color: getStatusColor(text) }, { default: () => text.toUpperCase() })
+    },
+  },
+  {
+    title: 'Type',
+    dataIndex: 'log_type',
+    key: 'log_type',
+    width: 120,
+    customRender: ({ text }: { text: string }) => {
+      const typeLabels: Record<string, string> = {
+        user_action: 'User Action',
+        technical_error: 'Technical Error',
+      }
+      const typeColors: Record<string, string> = {
+        user_action: 'blue',
+        technical_error: 'red',
+      }
+      return h('a-tag', { color: typeColors[text] || 'default' }, { default: () => typeLabels[text] || text })
     },
   },
   {
@@ -432,7 +478,20 @@ onMounted(() => {
                 description="Two-Factor Authentication sudah aktif untuk akun Anda. Pastikan Anda memiliki akses ke authenticator app saat login."
                 type="success"
                 show-icon
+                style="margin-bottom: 16px;"
               />
+              <a-popconfirm
+                title="Apakah Anda yakin ingin menonaktifkan 2FA?"
+                description="Akun Anda akan menjadi kurang aman setelah 2FA dinonaktifkan."
+                ok-text="Ya, Nonaktifkan"
+                cancel-text="Batal"
+                @confirm="handleDisable2FA"
+              >
+                <a-button type="default" danger size="large" :loading="loading">
+                  <IconifyIcon icon="mdi:shield-off" width="18" style="margin-right: 8px;" />
+                  Disable 2FA
+                </a-button>
+              </a-popconfirm>
             </div>
           </div>
         </a-card>
@@ -498,6 +557,17 @@ onMounted(() => {
                   <a-select-option value="success">Success</a-select-option>
                   <a-select-option value="failure">Failure</a-select-option>
                   <a-select-option value="error">Error</a-select-option>
+                </a-select>
+
+                <a-select
+                  v-model:value="auditFilters.logType"
+                  placeholder="Filter by Type"
+                  allow-clear
+                  style="width: 180px"
+                  @change="handleFilterChange"
+                >
+                  <a-select-option value="user_action">User Actions</a-select-option>
+                  <a-select-option value="technical_error">Technical Errors</a-select-option>
                 </a-select>
 
                 <a-button @click="handleFilterChange">

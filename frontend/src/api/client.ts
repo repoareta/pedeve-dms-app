@@ -19,21 +19,54 @@ if (import.meta.env.DEV) {
   console.log('[API Client] Base URL:', API_BASE_URL)
 }
 
+// CSRF token storage
+let csrfToken: string | null = null
+
+// Function to get CSRF token from backend
+export const getCSRFToken = async (): Promise<string | null> => {
+  try {
+    const response = await axios.get<{ csrf_token: string }>(`${API_BASE_URL}/csrf-token`)
+    csrfToken = response.data.csrf_token
+    return csrfToken
+  } catch (error) {
+    console.error('Failed to get CSRF token:', error)
+    return null
+  }
+}
+
+// Initialize CSRF token on module load (optional)
+// getCSRFToken()
+
 // Create axios instance
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Enable cookies
 })
 
-// Request interceptor to add JWT token
+// Request interceptor to add JWT token and CSRF token
 apiClient.interceptors.request.use(
-  (config) => {
+  async (config) => {
+    // Add JWT token
     const token = localStorage.getItem('auth_token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+
+    // Add CSRF token for state-changing methods (POST, PUT, DELETE, PATCH)
+    const stateChangingMethods = ['POST', 'PUT', 'DELETE', 'PATCH']
+    if (config.method && stateChangingMethods.includes(config.method.toUpperCase())) {
+      // Get CSRF token if not available
+      if (!csrfToken) {
+        await getCSRFToken()
+      }
+      if (csrfToken) {
+        config.headers['X-CSRF-Token'] = csrfToken
+      }
+    }
+
     return config
   },
   (error) => {
@@ -44,7 +77,20 @@ apiClient.interceptors.request.use(
 // Response interceptor to handle errors
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    // Handle CSRF token errors
+    if (error.response?.status === 403) {
+      const errorCode = error.response?.data?.error
+      if (errorCode === 'csrf_token_missing' || errorCode === 'csrf_token_invalid') {
+        // Get new CSRF token and retry request
+        const newToken = await getCSRFToken()
+        if (newToken && error.config) {
+          error.config.headers['X-CSRF-Token'] = newToken
+          return apiClient.request(error.config)
+        }
+      }
+    }
+
     if (error.response?.status === 401) {
       // Check if this is a login/register endpoint - don't redirect in that case
       const url = error.config?.url || ''
@@ -54,6 +100,7 @@ apiClient.interceptors.response.use(
         // Unauthorized - clear token and redirect to login (only for protected endpoints)
         localStorage.removeItem('auth_token')
         localStorage.removeItem('auth_user')
+        csrfToken = null // Clear CSRF token
         // Only redirect if not already on login page
         if (window.location.pathname !== '/login') {
           window.location.href = '/login'

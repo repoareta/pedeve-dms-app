@@ -222,6 +222,10 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Set secure cookie with JWT token (optional, for enhanced security)
+	// Note: Frontend masih bisa menggunakan localStorage sebagai fallback
+	// SetSecureCookie(w, authTokenCookie, token)
+
 	// Return response
 	render.Status(r, http.StatusOK)
 	render.JSON(w, r, AuthResponse{

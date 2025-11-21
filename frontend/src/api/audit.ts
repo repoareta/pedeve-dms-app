@@ -11,6 +11,7 @@ export interface AuditLog {
   user_agent: string
   details: string
   status: string
+  log_type: string // "user_action" or "technical_error"
   created_at: string
 }
 
@@ -28,6 +29,7 @@ export interface AuditLogsParams {
   action?: string
   resource?: string
   status?: string
+  logType?: string // "user_action" or "technical_error"
 }
 
 export const auditApi = {
@@ -48,6 +50,9 @@ export const auditApi = {
     }
     if (params?.status) {
       queryParams.append('status', params.status)
+    }
+    if (params?.logType) {
+      queryParams.append('logType', params.logType)
     }
 
     const queryString = queryParams.toString()

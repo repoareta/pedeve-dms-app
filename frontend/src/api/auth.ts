@@ -79,5 +79,10 @@ export const authApi = {
     const response = await apiClient.get<TwoFAStatus>('/auth/2fa/status')
     return response.data
   },
+
+  disable2FA: async (): Promise<TwoFAVerifyResponse> => {
+    const response = await apiClient.post<TwoFAVerifyResponse>('/auth/2fa/disable', {})
+    return response.data
+  },
 }
 

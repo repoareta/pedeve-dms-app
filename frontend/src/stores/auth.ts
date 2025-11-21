@@ -19,10 +19,25 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
     try {
       const response = await authApi.login({ username: usernameOrEmail, password })
-      token.value = response.token
-      user.value = response.user
-      localStorage.setItem('auth_token', response.token)
-      localStorage.setItem('auth_user', JSON.stringify(response.user))
+      
+      // If 2FA is required, don't store token/user - return response without saving
+      if (response.requires_2fa) {
+        // Clear any existing token/user when 2FA is required
+        token.value = null
+        user.value = null
+        localStorage.removeItem('auth_token')
+        localStorage.removeItem('auth_user')
+        return response
+      }
+      
+      // Only store token/user if login is fully successful (no 2FA required)
+      if (response.token && response.user) {
+        token.value = response.token
+        user.value = response.user
+        localStorage.setItem('auth_token', response.token)
+        localStorage.setItem('auth_user', JSON.stringify(response.user))
+      }
+      
       return response
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Login failed'
@@ -138,6 +153,20 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  const disable2FA = async () => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await authApi.disable2FA()
+      return response
+    } catch (err: any) {
+      error.value = err.response?.data?.message || 'Failed to disable 2FA'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     token,
     user,
@@ -152,6 +181,7 @@ export const useAuthStore = defineStore('auth', () => {
     generate2FA,
     verify2FA,
     get2FAStatus,
+    disable2FA,
   }
 })
 

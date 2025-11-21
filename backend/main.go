@@ -12,9 +12,9 @@ import (
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
-// @title           DMS Backend API
+// @title           Pedeve App Backend API
 // @version         1.0
-// @description     Document Management System Backend API
+// @description     Pedeve App Backend API
 // @termsOfService  http://swagger.io/terms/
 
 // @contact.name   API Support
@@ -36,10 +36,11 @@ func main() {
 
 	// Middleware
 	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	r.Use(RecoverMiddleware)                       // Custom recover middleware with error logging
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(SecurityHeadersMiddleware)               // Security headers
+	r.Use(ErrorHandlerMiddleware)                  // Log technical errors to audit log
 	r.Use(RateLimitMiddleware(generalRateLimiter)) // General rate limiting
 
 	// CORS with security improvements
@@ -60,6 +61,9 @@ func main() {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/", apiInfoHandler)
 
+		// CSRF token endpoint (public, no auth required)
+		r.Get("/csrf-token", GetCSRFTokenHandler)
+
 		// Authentication routes (public) - with rate limiting
 		r.Group(func(r chi.Router) {
 			r.Use(AuthRateLimitMiddleware)
@@ -70,11 +74,13 @@ func main() {
 		// Protected routes (require JWT)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTAuthMiddleware)
+			r.Use(CSRFMiddleware) // CSRF protection for state-changing methods
 			r.Get("/auth/profile", GetProfile)
 			
 			// 2FA routes
 			r.Post("/auth/2fa/generate", Generate2FASecret)
 			r.Post("/auth/2fa/verify", Verify2FA)
+			r.Post("/auth/2fa/disable", Disable2FA)
 			r.Get("/auth/2fa/status", Get2FAStatus)
 			
 			// Audit logs route
@@ -84,6 +90,7 @@ func main() {
 		// Documents routes (protected)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTAuthMiddleware)
+			r.Use(CSRFMiddleware) // CSRF protection for state-changing methods
 			r.Get("/documents", getDocumentsHandler)
 			r.Get("/documents/{id}", getDocumentHandler)
 			r.Post("/documents", createDocumentHandler)
@@ -108,6 +115,9 @@ func main() {
 	// Initialize audit logger
 	InitAuditLogger()
 
+	// Start CSRF token cleanup
+	StartCSRFTokenCleanup()
+
 	// Seed superadmin user
 	SeedSuperAdmin()
 
@@ -131,7 +141,7 @@ func main() {
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"message": "DMS Backend API", "version": "1.0.0", "swagger": "/swagger/index.html"}`))
+	w.Write([]byte(`{"message": "Pedeve App Backend API", "version": "1.0.0", "swagger": "/swagger/index.html"}`))
 }
 
 // healthHandler handles health check
@@ -145,7 +155,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status": "OK", "service": "dms-backend"}`))
+	w.Write([]byte(`{"status": "OK", "service": "pedeve-backend"}`))
 }
 
 // apiInfoHandler returns API information
@@ -160,7 +170,7 @@ func apiInfoHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{
-		"api": "DMS Backend API",
+		"api": "Pedeve App Backend API",
 		"version": "1.0.0",
 		"endpoints": {
 			"documents": "/api/v1/documents",

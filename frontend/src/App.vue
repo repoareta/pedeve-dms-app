@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { ConfigProvider } from 'ant-design-vue'
+import { getCSRFToken } from './api/client'
 
 const router = useRouter()
 const route = useRoute()
@@ -20,6 +21,11 @@ const handleLogout = () => {
   authStore.logout()
   router.push('/login')
 }
+
+// Initialize CSRF token on app mount
+onMounted(async () => {
+  await getCSRFToken()
+})
 
 const theme = {
   token: {

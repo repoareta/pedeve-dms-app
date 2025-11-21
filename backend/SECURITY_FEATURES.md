@@ -1,6 +1,6 @@
 # Security Features Documentation
 
-Dokumentasi lengkap untuk semua security features yang telah diimplementasikan di DMS Backend.
+Dokumentasi lengkap untuk semua security features yang telah diimplementasikan di Pedeve App Backend.
 
 ## Daftar Security Features
 
@@ -226,6 +226,157 @@ logs, total, err := GetAuditLogs(userID, action, resource, status, limit, offset
 - Detailed tracking (who, what, when, where)
 - Filtering capabilities
 - Pagination support
+
+---
+
+### ✅ 8. XSS Protection
+**Status:** ✅ FULLY IMPLEMENTED
+
+**Lokasi File:**
+- `backend/middleware.go` - SecurityHeadersMiddleware
+- `backend/validation.go` - HTML sanitization
+
+**Fitur:**
+- **X-XSS-Protection Header**: `X-XSS-Protection: 1; mode=block`
+  - Browser XSS filter dengan mode block
+  - Applied di SecurityHeadersMiddleware
+- **HTML Sanitization**: 
+  - Menggunakan library `github.com/microcosm-cc/bluemonday`
+  - Sanitize semua user input sebelum disimpan
+  - Mencegah XSS melalui user-generated content
+
+**Penggunaan:**
+```go
+// HTML sanitization di validation.go
+sanitized := SanitizeString(userInput)
+
+// Header otomatis di-set oleh SecurityHeadersMiddleware
+```
+
+**Security Headers:**
+- `X-XSS-Protection: 1; mode=block` - Enable browser XSS filter
+- Applied secara global untuk semua routes
+
+---
+
+### ✅ 9. CSRF Token Implementation
+**Status:** ✅ FULLY IMPLEMENTED
+
+**Lokasi File:**
+- `backend/csrf.go` - CSRF token generation & validation
+- `backend/main.go` - CSRF middleware integration
+- `frontend/src/api/client.ts` - CSRF token handling
+
+**Fitur:**
+- **CSRF Token Generation**: 
+  - Generate secure random token (32 bytes, base64 encoded)
+  - Token expiry: 24 jam
+  - Automatic cleanup expired tokens
+- **CSRF Protection**:
+  - Middleware untuk validate CSRF token pada state-changing methods (POST, PUT, DELETE, PATCH)
+  - Skip validation untuk safe methods (GET, HEAD, OPTIONS)
+  - Double submit cookie pattern support
+
+**Endpoint:**
+- `GET /api/v1/csrf-token` - Get CSRF token (public, no auth required)
+
+**Penggunaan:**
+```go
+// Apply CSRF middleware
+r.Group(func(r chi.Router) {
+    r.Use(JWTAuthMiddleware)
+    r.Use(CSRFMiddleware)
+    r.Post("/documents", createDocumentHandler)
+})
+
+// Frontend automatically includes CSRF token in headers
+// Header: X-CSRF-Token: <token>
+```
+
+**Frontend Integration:**
+- Automatic CSRF token retrieval on app mount
+- Automatic token inclusion in state-changing requests
+- Automatic token refresh on 403 CSRF errors
+
+**Security:**
+- Token stored in-memory (dapat diganti dengan Redis untuk production)
+- Token expiry: 24 jam
+- Automatic cleanup setiap 1 jam
+
+---
+
+### ✅ 10. Content Security Policy (CSP)
+**Status:** ✅ FULLY IMPLEMENTED
+
+**Lokasi File:**
+- `backend/middleware.go` - SecurityHeadersMiddleware
+
+**Fitur:**
+- **Strict CSP untuk API Routes**: `default-src 'self'`
+  - Hanya allow resources dari same origin
+  - Mencegah XSS, code injection, dan data exfiltration
+- **Permissive CSP untuk Swagger UI**:
+  - Allow inline scripts dan styles untuk Swagger UI
+  - Allow external resources (images, fonts) yang diperlukan
+  - Policy: `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;`
+
+**Security Headers:**
+```go
+// API routes
+w.Header().Set("Content-Security-Policy", "default-src 'self'")
+
+// Swagger UI routes
+w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;")
+```
+
+**Applied:**
+- Otomatis di semua routes melalui SecurityHeadersMiddleware
+- Conditional berdasarkan route path (Swagger vs API)
+
+---
+
+### ✅ 11. Secure Cookie Handling
+**Status:** ✅ FULLY IMPLEMENTED (Optional/Ready)
+
+**Lokasi File:**
+- `backend/cookies.go` - Secure cookie utilities
+- `backend/auth.go` - Optional cookie setting on login
+
+**Fitur:**
+- **Secure Cookie Functions**:
+  - `SetSecureCookie()` - Set secure cookie dengan proper flags
+  - `GetSecureCookie()` - Get secure cookie value
+  - `DeleteSecureCookie()` - Delete secure cookie
+- **Cookie Security Flags**:
+  - `HttpOnly: true` - Prevent XSS attacks (JavaScript tidak bisa akses)
+  - `Secure: true` - Only send over HTTPS (auto-detect production)
+  - `SameSite: StrictMode` - CSRF protection
+  - `Path: /` - Cookie available untuk semua paths
+  - `MaxAge: 24 hours` - Cookie expiry
+
+**Penggunaan:**
+```go
+// Set secure cookie (optional, saat ini menggunakan localStorage)
+SetSecureCookie(w, authTokenCookie, token)
+
+// Get secure cookie
+token, err := GetSecureCookie(r, authTokenCookie)
+
+// Delete secure cookie
+DeleteSecureCookie(w, authTokenCookie)
+```
+
+**Current Implementation:**
+- Cookie functions sudah tersedia dan ready untuk digunakan
+- Saat ini JWT token disimpan di localStorage (frontend)
+- Cookie setting di-comment di auth.go (dapat diaktifkan jika diperlukan)
+- **Note**: Menggunakan httpOnly cookies lebih aman dari localStorage karena mencegah XSS attacks
+
+**Recommendation:**
+Untuk production, pertimbangkan menggunakan httpOnly cookies untuk JWT token storage:
+- Uncomment `SetSecureCookie()` di login handler
+- Update frontend untuk tidak menyimpan token di localStorage
+- Token akan otomatis terkirim dalam cookies untuk setiap request
 
 ---
 

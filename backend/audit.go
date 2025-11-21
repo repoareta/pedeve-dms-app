@@ -13,15 +13,16 @@ import (
 // AuditLog represents an audit log entry
 type AuditLog struct {
 	ID         string    `gorm:"primaryKey" json:"id"`
-	UserID     string    `gorm:"index;not null" json:"user_id"`
-	Username   string    `gorm:"index" json:"username"`
-	Action     string    `gorm:"index;not null" json:"action"` // e.g., "login", "create_document", "delete_user"
-	Resource   string    `gorm:"index" json:"resource"`         // e.g., "user", "document"
-	ResourceID string    `gorm:"index" json:"resource_id"`      // ID of the affected resource
+	UserID     string    `gorm:"index" json:"user_id"`           // Optional for system errors
+	Username   string    `gorm:"index" json:"username"`          // Optional for system errors
+	Action     string    `gorm:"index;not null" json:"action"`   // e.g., "login", "create_document", "system_error"
+	Resource   string    `gorm:"index" json:"resource"`          // e.g., "user", "document", "system"
+	ResourceID string    `gorm:"index" json:"resource_id"`       // ID of the affected resource
 	IPAddress  string    `json:"ip_address"`
 	UserAgent  string    `json:"user_agent"`
-	Details    string    `gorm:"type:text" json:"details"` // JSON string with additional details
-	Status     string    `gorm:"index" json:"status"`      // "success", "failure", "error"
+	Details    string    `gorm:"type:text" json:"details"`       // JSON string with additional details
+	Status     string    `gorm:"index" json:"status"`            // "success", "failure", "error"
+	LogType    string    `gorm:"index;default:'user_action'" json:"log_type"` // "user_action" or "technical_error"
 	CreatedAt  time.Time `json:"created_at"`
 }
 
@@ -50,6 +51,12 @@ func (al *AuditLogger) Log(userID, username, action, resource, resourceID, ipAdd
 		}
 	}
 
+	// Determine log type based on action
+	logType := LogTypeUserAction
+	if action == "system_error" || action == "database_error" || action == "validation_error" || action == "panic" {
+		logType = LogTypeTechnicalError
+	}
+
 	auditLog := AuditLog{
 		ID:         GenerateUUID(),
 		UserID:     userID,
@@ -61,6 +68,7 @@ func (al *AuditLogger) Log(userID, username, action, resource, resourceID, ipAdd
 		UserAgent:  userAgent,
 		Details:    detailsJSON,
 		Status:     status,
+		LogType:    logType,
 		CreatedAt:  time.Now(),
 	}
 
@@ -87,7 +95,7 @@ func LogAction(userID, username, action, resource, resourceID, ipAddress, userAg
 }
 
 // GetAuditLogs retrieves audit logs with filters
-func GetAuditLogs(userID, action, resource, status string, limit, offset int) ([]AuditLog, int64, error) {
+func GetAuditLogs(userID, action, resource, status, logType string, limit, offset int) ([]AuditLog, int64, error) {
 	var logs []AuditLog
 	var total int64
 
@@ -104,6 +112,9 @@ func GetAuditLogs(userID, action, resource, status string, limit, offset int) ([
 	}
 	if status != "" {
 		query = query.Where("status = ?", status)
+	}
+	if logType != "" {
+		query = query.Where("log_type = ?", logType)
 	}
 
 	// Get total count
@@ -149,6 +160,7 @@ func GetAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
 	action := r.URL.Query().Get("action")
 	resource := r.URL.Query().Get("resource")
 	status := r.URL.Query().Get("status")
+	logType := r.URL.Query().Get("logType") // Filter by log type: "user_action" or "technical_error"
 
 	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
 		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
@@ -184,7 +196,7 @@ func GetAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
 	offset := (page - 1) * pageSize
 
 	// Get audit logs
-	logs, total, err := GetAuditLogs(filterUserID, action, resource, status, pageSize, offset)
+	logs, total, err := GetAuditLogs(filterUserID, action, resource, status, logType, pageSize, offset)
 	if err != nil {
 		render.Status(r, http.StatusInternalServerError)
 		render.JSON(w, r, ErrorResponse{

@@ -83,7 +83,7 @@ func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
 
 	// Generate TOTP key
 	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      "DMS App",
+		Issuer:      "Pedeve Apps",
 		AccountName: username,
 		Period:      30,
 		Digits:      otp.DigitsSix,
@@ -356,5 +356,103 @@ func Get2FAStatus(w http.ResponseWriter, r *http.Request) {
 	render.Status(r, http.StatusOK)
 	render.JSON(w, r, map[string]interface{}{
 		"enabled": twoFA.Enabled,
+	})
+}
+
+// Disable2FA disables 2FA for current user
+// @Summary      Disable 2FA
+// @Description  Disable 2FA for current user
+// @Tags         Authentication
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  map[string]interface{}
+// @Failure      401  {object}  ErrorResponse
+// @Failure      404  {object}  ErrorResponse
+// @Router       /api/v1/auth/2fa/disable [post]
+func Disable2FA(w http.ResponseWriter, r *http.Request) {
+	userIDValue := r.Context().Value(contextKeyUserID)
+	usernameValue := r.Context().Value(contextKeyUsername)
+
+	if userIDValue == nil || usernameValue == nil {
+		log.Printf("Error: user context not found in request")
+		render.Status(r, http.StatusUnauthorized)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found. Please ensure you are authenticated.",
+		})
+		return
+	}
+
+	userID, ok := userIDValue.(string)
+	if !ok {
+		log.Printf("Error: invalid userID type in context")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Invalid user context",
+		})
+		return
+	}
+
+	username, ok := usernameValue.(string)
+	if !ok {
+		log.Printf("Error: invalid username type in context")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Invalid user context",
+		})
+		return
+	}
+
+	// Get IP address and user agent for audit log
+	ipAddress := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		ipAddress = forwarded
+	}
+	userAgent := r.UserAgent()
+
+	// Find existing 2FA record
+	var twoFA TwoFactorAuth
+	result := DB.Where("user_id = ?", userID).First(&twoFA)
+
+	if result.Error == gorm.ErrRecordNotFound {
+		render.Status(r, http.StatusNotFound)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "2fa_not_found",
+			Message: "2FA is not enabled for this user",
+		})
+		return
+	}
+
+	if result.Error != nil {
+		log.Printf("Error querying 2FA: %v", result.Error)
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to disable 2FA",
+		})
+		return
+	}
+
+	// Disable 2FA
+	twoFA.Enabled = false
+	if err := DB.Save(&twoFA).Error; err != nil {
+		log.Printf("Error disabling 2FA: %v", err)
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to disable 2FA",
+		})
+		return
+	}
+
+	// Log action
+	LogAction(userID, username, "disable_2fa", "auth", "", ipAddress, userAgent, "success", nil)
+
+	render.Status(r, http.StatusOK)
+	render.JSON(w, r, map[string]interface{}{
+		"message": "2FA has been disabled successfully",
 	})
 }

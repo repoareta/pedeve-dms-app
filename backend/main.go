@@ -76,6 +76,9 @@ func main() {
 			r.Post("/auth/2fa/generate", Generate2FASecret)
 			r.Post("/auth/2fa/verify", Verify2FA)
 			r.Get("/auth/2fa/status", Get2FAStatus)
+			
+			// Audit logs route
+			r.Get("/audit-logs", GetAuditLogsHandler)
 		})
 
 		// Documents routes (protected)

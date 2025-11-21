@@ -2,8 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/go-chi/render"
 	"gorm.io/gorm"
 )
 
@@ -111,6 +114,97 @@ func GetAuditLogs(userID, action, resource, status string, limit, offset int) ([
 	return logs, total, err
 }
 
+// GetAuditLogsHandler handles GET request for audit logs
+// @Summary      Get audit logs
+// @Description  Get audit logs with pagination and filters
+// @Tags         Audit
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        page      query     int     false  "Page number (default: 1)"
+// @Param        pageSize  query     int     false  "Page size (default: 10)"
+// @Param        action    query     string  false  "Filter by action"
+// @Param        resource  query     string  false  "Filter by resource"
+// @Param        status    query     string  false  "Filter by status"
+// @Success      200       {object}  map[string]interface{}
+// @Failure      401       {object}  ErrorResponse
+// @Router       /api/v1/audit-logs [get]
+func GetAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
+	// Get current user from context
+	userIDValue := r.Context().Value(contextKeyUserID)
+	if userIDValue == nil {
+		render.Status(r, http.StatusUnauthorized)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+		return
+	}
+
+	currentUserID := userIDValue.(string)
+
+	// Parse query parameters
+	page := 1
+	pageSize := 10
+	action := r.URL.Query().Get("action")
+	resource := r.URL.Query().Get("resource")
+	status := r.URL.Query().Get("status")
+
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	if pageSizeStr := r.URL.Query().Get("pageSize"); pageSizeStr != "" {
+		if ps, err := strconv.Atoi(pageSizeStr); err == nil && ps > 0 && ps <= 100 {
+			pageSize = ps
+		}
+	}
+
+	// Get user from database to check role
+	var currentUser UserModel
+	if err := DB.First(&currentUser, "id = ?", currentUserID).Error; err != nil {
+		render.Status(r, http.StatusNotFound)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "user_not_found",
+			Message: "User not found",
+		})
+		return
+	}
+
+	// Regular users can only see their own audit logs
+	filterUserID := currentUserID
+	if currentUser.Role == "admin" || currentUser.Role == "superadmin" {
+		// Admins can see all logs, don't filter by userID
+		filterUserID = ""
+	}
+
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	// Get audit logs
+	logs, total, err := GetAuditLogs(filterUserID, action, resource, status, pageSize, offset)
+	if err != nil {
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to get audit logs",
+		})
+		return
+	}
+
+	// Return response
+	render.Status(r, http.StatusOK)
+	render.JSON(w, r, map[string]interface{}{
+		"data":      logs,
+		"total":     total,
+		"page":      page,
+		"pageSize":  pageSize,
+		"totalPages": (total + int64(pageSize) - 1) / int64(pageSize),
+	})
+}
+
 // Common audit action types
 const (
 	ActionLogin        = "login"
@@ -142,4 +236,3 @@ const (
 	StatusFailure = "failure"
 	StatusError   = "error"
 )
-

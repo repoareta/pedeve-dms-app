@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { message } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { Icon as IconifyIcon } from '@iconify/vue'
+import { auditApi, type AuditLog, type AuditLogsParams } from '../api/audit'
+import type { TableColumnsType } from 'ant-design-vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -16,6 +18,22 @@ const qrCode = ref<string>('')
 const secret = ref<string>('')
 const twoFACode = ref('')
 const backupCodes = ref<string[]>([])
+
+// Audit logs
+const auditLogs = ref<AuditLog[]>([])
+const auditLoading = ref(false)
+const auditPagination = ref({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+})
+const auditFilters = ref({
+  action: undefined as string | undefined,
+  resource: undefined as string | undefined,
+  status: undefined as string | undefined,
+})
+const selectedAuditLog = ref<AuditLog | null>(null)
+const detailModalVisible = ref(false)
 
 const handleLogout = () => {
   authStore.logout()
@@ -119,8 +137,159 @@ const handleDone = () => {
   backupCodes.value = []
 }
 
+// Audit logs functions
+const fetchAuditLogs = async (page: number = 1, pageSize: number = 10) => {
+  try {
+    auditLoading.value = true
+    const params: AuditLogsParams = {
+      page,
+      pageSize,
+      action: auditFilters.value.action,
+      resource: auditFilters.value.resource,
+      status: auditFilters.value.status,
+    }
+    
+    const response = await auditApi.getAuditLogs(params)
+    auditLogs.value = response.data
+    auditPagination.value = {
+      current: response.page,
+      pageSize: response.pageSize,
+      total: response.total,
+    }
+  } catch (error: any) {
+    console.error('Failed to fetch audit logs:', error)
+    message.error('Gagal mengambil audit logs')
+  } finally {
+    auditLoading.value = false
+  }
+}
+
+const handleAuditTableChange = (pag: any) => {
+  if (pag.current) {
+    auditPagination.value.current = pag.current
+  }
+  if (pag.pageSize) {
+    auditPagination.value.pageSize = pag.pageSize
+  }
+  fetchAuditLogs(auditPagination.value.current, auditPagination.value.pageSize)
+}
+
+const handleFilterChange = () => {
+  auditPagination.value.current = 1
+  fetchAuditLogs(1, auditPagination.value.pageSize)
+}
+
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString)
+  return date.toLocaleString('id-ID', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'success':
+      return 'success'
+    case 'failure':
+      return 'error'
+    case 'error':
+      return 'error'
+    default:
+      return 'default'
+  }
+}
+
+const getActionLabel = (action: string) => {
+  const labels: Record<string, string> = {
+    login: 'Login',
+    logout: 'Logout',
+    register: 'Register',
+    create_user: 'Create User',
+    update_user: 'Update User',
+    delete_user: 'Delete User',
+    create_document: 'Create Document',
+    update_document: 'Update Document',
+    delete_document: 'Delete Document',
+    view_document: 'View Document',
+    enable_2fa: 'Enable 2FA',
+    disable_2fa: 'Disable 2FA',
+    failed_login: 'Failed Login',
+    password_reset: 'Password Reset',
+  }
+  return labels[action] || action
+}
+
+const auditColumns: TableColumnsType = [
+  {
+    title: 'Waktu',
+    dataIndex: 'created_at',
+    key: 'created_at',
+    width: 180,
+    customRender: ({ text }: { text: string }) => formatDate(text),
+  },
+  {
+    title: 'User',
+    dataIndex: 'username',
+    key: 'username',
+    width: 150,
+  },
+  {
+    title: 'Action',
+    dataIndex: 'action',
+    key: 'action',
+    width: 150,
+    customRender: ({ text }: { text: string }) => getActionLabel(text),
+  },
+  {
+    title: 'Resource',
+    dataIndex: 'resource',
+    key: 'resource',
+    width: 120,
+  },
+  {
+    title: 'Status',
+    dataIndex: 'status',
+    key: 'status',
+    width: 100,
+    customRender: ({ text }: { text: string }) => {
+      return h('a-tag', { color: getStatusColor(text) }, { default: () => text.toUpperCase() })
+    },
+  },
+  {
+    title: 'Actions',
+    key: 'action_buttons',
+    width: 100,
+    fixed: 'right',
+  },
+]
+
+const showDetailModal = (log: AuditLog) => {
+  selectedAuditLog.value = log
+  detailModalVisible.value = true
+}
+
+const closeDetailModal = () => {
+  detailModalVisible.value = false
+  selectedAuditLog.value = null
+}
+
+const parseDetails = (detailsJson: string) => {
+  if (!detailsJson) return null
+  try {
+    return JSON.parse(detailsJson)
+  } catch {
+    return null
+  }
+}
+
 onMounted(() => {
   check2FAStatus()
+  fetchAuditLogs()
 })
 </script>
 
@@ -267,8 +436,163 @@ onMounted(() => {
             </div>
           </div>
         </a-card>
+
+        <!-- Audit Logs Section -->
+        <a-card class="audit-logs-card" style="margin-top: 24px;">
+          <template #title>
+            <div class="card-title">
+              <IconifyIcon icon="mdi:file-document-outline" width="24" height="24" />
+              <span>Audit Logs</span>
+            </div>
+          </template>
+
+          <div class="audit-logs-section">
+            <div class="section-header">
+              <div>
+                <h3 class="section-title">Activity Log</h3>
+                <p class="section-description">
+                  Riwayat aktivitas dan akses ke sistem
+                </p>
+              </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="audit-filters">
+              <a-space size="middle" wrap>
+                <a-select
+                  v-model:value="auditFilters.action"
+                  placeholder="Filter by Action"
+                  allow-clear
+                  style="width: 180px"
+                  @change="handleFilterChange"
+                >
+                  <a-select-option value="login">Login</a-select-option>
+                  <a-select-option value="logout">Logout</a-select-option>
+                  <a-select-option value="enable_2fa">Enable 2FA</a-select-option>
+                  <a-select-option value="disable_2fa">Disable 2FA</a-select-option>
+                  <a-select-option value="failed_login">Failed Login</a-select-option>
+                  <a-select-option value="create_document">Create Document</a-select-option>
+                  <a-select-option value="update_document">Update Document</a-select-option>
+                  <a-select-option value="delete_document">Delete Document</a-select-option>
+                </a-select>
+
+                <a-select
+                  v-model:value="auditFilters.resource"
+                  placeholder="Filter by Resource"
+                  allow-clear
+                  style="width: 150px"
+                  @change="handleFilterChange"
+                >
+                  <a-select-option value="auth">Auth</a-select-option>
+                  <a-select-option value="user">User</a-select-option>
+                  <a-select-option value="document">Document</a-select-option>
+                </a-select>
+
+                <a-select
+                  v-model:value="auditFilters.status"
+                  placeholder="Filter by Status"
+                  allow-clear
+                  style="width: 150px"
+                  @change="handleFilterChange"
+                >
+                  <a-select-option value="success">Success</a-select-option>
+                  <a-select-option value="failure">Failure</a-select-option>
+                  <a-select-option value="error">Error</a-select-option>
+                </a-select>
+
+                <a-button @click="handleFilterChange">
+                  <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
+                  Refresh
+                </a-button>
+              </a-space>
+            </div>
+
+            <!-- Table -->
+            <div class="audit-table">
+              <a-table
+                :columns="auditColumns"
+                :data-source="auditLogs"
+                :loading="auditLoading"
+                :pagination="{
+                  current: auditPagination.current,
+                  pageSize: auditPagination.pageSize,
+                  total: auditPagination.total,
+                  showSizeChanger: true,
+                  showTotal: (total: number) => `Total ${total} logs`,
+                  pageSizeOptions: ['10', '20', '50', '100'],
+                }"
+                :scroll="{ x: 800 }"
+                @change="handleAuditTableChange"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key === 'action_buttons'">
+                    <a-button type="link" size="small" @click="showDetailModal(record)">
+                      Detail
+                    </a-button>
+                  </template>
+                </template>
+              </a-table>
+            </div>
+          </div>
+        </a-card>
       </div>
     </div>
+
+    <!-- Audit Log Detail Modal -->
+    <a-modal
+      v-model:open="detailModalVisible"
+      title="Detail Audit Log"
+      width="800px"
+      :footer="null"
+      @cancel="closeDetailModal"
+    >
+      <div v-if="selectedAuditLog" class="audit-log-detail">
+        <a-descriptions :column="2" bordered>
+          <a-descriptions-item label="ID" :span="2">
+            <code>{{ selectedAuditLog.id }}</code>
+          </a-descriptions-item>
+          <a-descriptions-item label="Waktu" :span="2">
+            {{ formatDate(selectedAuditLog.created_at) }}
+          </a-descriptions-item>
+          <a-descriptions-item label="User">
+            {{ selectedAuditLog.username }}
+          </a-descriptions-item>
+          <a-descriptions-item label="User ID">
+            <code>{{ selectedAuditLog.user_id }}</code>
+          </a-descriptions-item>
+          <a-descriptions-item label="Action">
+            {{ getActionLabel(selectedAuditLog.action) }}
+          </a-descriptions-item>
+          <a-descriptions-item label="Resource">
+            {{ selectedAuditLog.resource || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="Resource ID">
+            {{ selectedAuditLog.resource_id || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="Status" :span="2">
+            <a-tag :color="getStatusColor(selectedAuditLog.status)">
+              {{ selectedAuditLog.status.toUpperCase() }}
+            </a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item label="IP Address" :span="2">
+            <code>{{ selectedAuditLog.ip_address || '-' }}</code>
+          </a-descriptions-item>
+          <a-descriptions-item label="User Agent" :span="2">
+            <div class="user-agent-text">{{ selectedAuditLog.user_agent || '-' }}</div>
+          </a-descriptions-item>
+          <a-descriptions-item label="Details" :span="2">
+            <div v-if="selectedAuditLog.details" class="details-container">
+              <pre class="details-json">{{ JSON.stringify(parseDetails(selectedAuditLog.details), null, 2) }}</pre>
+            </div>
+            <span v-else>-</span>
+          </a-descriptions-item>
+        </a-descriptions>
+
+        <div class="modal-footer" style="margin-top: 24px; text-align: right;">
+          <a-button @click="closeDetailModal">Close</a-button>
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -445,6 +769,88 @@ onMounted(() => {
   }
 }
 
+.audit-logs-card {
+  .card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+}
+
+.audit-logs-section {
+  .section-header {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    color: #1a1a1a;
+  }
+
+  .section-description {
+    margin: 0;
+    color: #666;
+    font-size: 14px;
+  }
+
+  .audit-filters {
+    margin-bottom: 16px;
+    padding: 16px;
+    background: #f5f5f5;
+    border-radius: 6px;
+  }
+
+  .audit-table {
+    .text-ellipsis {
+      display: block;
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+}
+
+.audit-log-detail {
+  .user-agent-text {
+    word-break: break-all;
+    font-size: 12px;
+    color: #666;
+  }
+
+  .details-container {
+    max-height: 300px;
+    overflow-y: auto;
+    background: #f5f5f5;
+    padding: 12px;
+    border-radius: 4px;
+    border: 1px solid #e8e8e8;
+
+    .details-json {
+      margin: 0;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: #1a1a1a;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+  }
+
+  code {
+    background: #f5f5f5;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+  }
+}
+
 @media (max-width: 768px) {
   .settings-content {
     padding: 16px;
@@ -452,6 +858,16 @@ onMounted(() => {
 
   .backup-codes-list {
     grid-template-columns: 1fr !important;
+  }
+
+  .audit-filters {
+    :deep(.ant-space) {
+      width: 100%;
+    }
+
+    :deep(.ant-select) {
+      width: 100% !important;
+    }
   }
 }
 </style>

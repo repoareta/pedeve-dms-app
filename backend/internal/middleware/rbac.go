@@ -1,6 +1,8 @@
-package main
+package middleware
 
 import (
+	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
+	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/database"
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
 )
@@ -80,7 +82,7 @@ func RequirePermission(permission Permission) fiber.Handler {
 		// Get user ID from locals
 		userIDVal := c.Locals("userID")
 		if userIDVal == nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
 				Error:   "unauthorized",
 				Message: "User context not found",
 			})
@@ -88,10 +90,10 @@ func RequirePermission(permission Permission) fiber.Handler {
 		userID := userIDVal.(string)
 
 		// Get user from database to check role
-		var userModel UserModel
-		result := DB.First(&userModel, "id = ?", userID)
+		var userModel domain.UserModel
+		result := database.GetDB().First(&userModel, "id = ?", userID)
 		if result.Error == gorm.ErrRecordNotFound {
-			return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
 				Error:   "unauthorized",
 				Message: "User not found",
 			})
@@ -99,7 +101,7 @@ func RequirePermission(permission Permission) fiber.Handler {
 
 		// Check permission
 		if !HasPermission(userModel.Role, permission) {
-			return c.Status(fiber.StatusForbidden).JSON(ErrorResponse{
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
 				Message: "You don't have permission to access this resource",
 			})
@@ -116,7 +118,7 @@ func RequireRole(roles ...string) fiber.Handler {
 		// Get user ID from locals
 		userIDVal := c.Locals("userID")
 		if userIDVal == nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
 				Error:   "unauthorized",
 				Message: "User context not found",
 			})
@@ -124,10 +126,10 @@ func RequireRole(roles ...string) fiber.Handler {
 		userID := userIDVal.(string)
 
 		// Get user from database to check role
-		var userModel UserModel
-		result := DB.First(&userModel, "id = ?", userID)
+		var userModel domain.UserModel
+		result := database.GetDB().First(&userModel, "id = ?", userID)
 		if result.Error == gorm.ErrRecordNotFound {
-			return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
 				Error:   "unauthorized",
 				Message: "User not found",
 			})
@@ -143,7 +145,7 @@ func RequireRole(roles ...string) fiber.Handler {
 		}
 
 		if !hasRole {
-			return c.Status(fiber.StatusForbidden).JSON(ErrorResponse{
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
 				Message: "You don't have the required role to access this resource",
 			})

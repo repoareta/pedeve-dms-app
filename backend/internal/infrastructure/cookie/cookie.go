@@ -1,4 +1,4 @@
-package main
+package cookie
 
 import (
 	"os"
@@ -52,5 +52,10 @@ func DeleteSecureCookie(c *fiber.Ctx, name string) {
 		Secure:   isHTTPS,
 		SameSite: "Strict",
 	})
+}
+
+// GetAuthTokenCookieName mengembalikan nama cookie untuk auth token
+func GetAuthTokenCookieName() string {
+	return authTokenCookie
 }
 

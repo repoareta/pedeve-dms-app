@@ -7,10 +7,9 @@ import (
 	"fmt"
 	"image/png"
 	"log"
-	"net/http"
 	"time"
 
-	"github.com/go-chi/render"
+	"github.com/gofiber/fiber/v2"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	"gorm.io/gorm"
@@ -42,41 +41,35 @@ func (TwoFactorAuth) TableName() string {
 // @Success      200  {object}  map[string]interface{}
 // @Failure      401  {object}  ErrorResponse
 // @Router       /api/v1/auth/2fa/generate [post]
-func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
-	// Ambil user dari context
-	userIDValue := r.Context().Value(contextKeyUserID)
-	usernameValue := r.Context().Value(contextKeyUsername)
+func Generate2FASecret(c *fiber.Ctx) error {
+	// Ambil user dari locals
+	userIDVal := c.Locals("userID")
+	usernameVal := c.Locals("username")
 
-	if userIDValue == nil || usernameValue == nil {
+	if userIDVal == nil || usernameVal == nil {
 		log.Printf("Error: user context not found in request")
-		render.Status(r, http.StatusUnauthorized)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
 			Error:   "unauthorized",
 			Message: "User context not found. Please ensure you are authenticated.",
 		})
-		return
 	}
 
-	userID, ok := userIDValue.(string)
+	userID, ok := userIDVal.(string)
 	if !ok {
 		log.Printf("Error: invalid userID type in context")
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error:   "internal_error",
 			Message: "Invalid user context",
 		})
-		return
 	}
 
-	username, ok := usernameValue.(string)
+	username, ok := usernameVal.(string)
 	if !ok {
 		log.Printf("Error: invalid username type in context")
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error:   "internal_error",
 			Message: "Invalid user context",
 		})
-		return
 	}
 
 	log.Printf("Generating 2FA secret for user: %s (ID: %s)", username, userID)
@@ -91,12 +84,10 @@ func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		log.Printf("Error generating TOTP key: %v", err)
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error:   "internal_error",
 			Message: "Failed to generate 2FA secret",
 		})
-		return
 	}
 
 	log.Printf("TOTP key generated successfully, secret: %s", key.Secret())
@@ -113,33 +104,27 @@ func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := DB.Create(&twoFA).Error; err != nil {
 			log.Printf("Error creating 2FA record: %v", err)
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, ErrorResponse{
+			return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 				Error:   "internal_error",
 				Message: "Failed to save 2FA secret",
 			})
-			return
 		}
 		log.Printf("2FA record created successfully")
 	} else if result.Error != nil {
 		log.Printf("Error querying 2FA record: %v", result.Error)
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error:   "internal_error",
 			Message: "Failed to query 2FA record",
 		})
-		return
 	} else {
 		twoFA.Secret = key.Secret()
 		twoFA.Enabled = false
 		if err := DB.Save(&twoFA).Error; err != nil {
 			log.Printf("Error updating 2FA record: %v", err)
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, ErrorResponse{
+			return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 				Error:   "internal_error",
 				Message: "Failed to update 2FA secret",
 			})
-			return
 		}
 		log.Printf("2FA record updated successfully")
 	}
@@ -149,29 +134,24 @@ func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
 	img, err := key.Image(200, 200)
 	if err != nil {
 		log.Printf("Error generating QR code image: %v", err)
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error:   "internal_error",
 			Message: "Failed to generate QR code",
 		})
-		return
 	}
 
 	if err := png.Encode(&buf, img); err != nil {
 		log.Printf("Error encoding PNG: %v", err)
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error:   "internal_error",
 			Message: "Failed to encode QR code",
 		})
-		return
 	}
 
 	log.Printf("QR code generated successfully, size: %d bytes", buf.Len())
 
 	// Kembalikan secret dan QR code
-	render.Status(r, http.StatusOK)
-	render.JSON(w, r, map[string]interface{}{
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"secret":  key.Secret(),
 		"qr_code": base64.StdEncoding.EncodeToString(buf.Bytes()),
 		"url":     key.URL(),
@@ -191,42 +171,43 @@ func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
 // @Failure      400   {object}  ErrorResponse
 // @Failure      401   {object}  ErrorResponse
 // @Router       /api/v1/auth/2fa/verify [post]
-func Verify2FA(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(contextKeyUserID).(string)
+func Verify2FA(c *fiber.Ctx) error {
+	userIDVal := c.Locals("userID")
+	if userIDVal == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+	}
+	userID := userIDVal.(string)
 
 	var req struct {
 		Code string `json:"code"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		render.Status(r, http.StatusBadRequest)
-		render.JSON(w, r, ErrorResponse{
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error:   "invalid_request",
 			Message: "Invalid request body",
 		})
-		return
 	}
 
 	// Ambil secret 2FA user
 	var twoFA TwoFactorAuth
 	result := DB.Where("user_id = ?", userID).First(&twoFA)
 	if result.Error == gorm.ErrRecordNotFound {
-		render.Status(r, http.StatusBadRequest)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error:   "not_found",
 			Message: "2FA not set up. Generate secret first",
 		})
-		return
 	}
 
 	// Verifikasi kode TOTP
 	valid := totp.Validate(req.Code, twoFA.Secret)
 	if !valid {
-		render.Status(r, http.StatusUnauthorized)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
 			Error:   "invalid_code",
 			Message: "Invalid verification code",
 		})
-		return
 	}
 
 	// Aktifkan 2FA dan generate backup codes
@@ -241,8 +222,7 @@ func Verify2FA(w http.ResponseWriter, r *http.Request) {
 		backupCodesArray = []string{}
 	}
 
-	render.Status(r, http.StatusOK)
-	render.JSON(w, r, map[string]interface{}{
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message":      "2FA enabled successfully",
 		"backup_codes": backupCodesArray,
 	})
@@ -309,52 +289,43 @@ func verifyBackupCode(code, backupCodesJSON string) bool {
 // @Success      200  {object}  map[string]interface{}
 // @Failure      401  {object}  ErrorResponse
 // @Router       /api/v1/auth/2fa/status [get]
-func Get2FAStatus(w http.ResponseWriter, r *http.Request) {
-	userIDValue := r.Context().Value(contextKeyUserID)
-	if userIDValue == nil {
+func Get2FAStatus(c *fiber.Ctx) error {
+	userIDVal := c.Locals("userID")
+	if userIDVal == nil {
 		log.Printf("Error: user context not found in request")
-		render.Status(r, http.StatusUnauthorized)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
 			Error:   "unauthorized",
 			Message: "User context not found. Please ensure you are authenticated.",
 		})
-		return
 	}
 
-	userID, ok := userIDValue.(string)
+	userID, ok := userIDVal.(string)
 	if !ok {
 		log.Printf("Error: invalid userID type in context")
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error:   "internal_error",
 			Message: "Invalid user context",
 		})
-		return
 	}
 
 	var twoFA TwoFactorAuth
 	result := DB.Where("user_id = ?", userID).First(&twoFA)
 
 	if result.Error == gorm.ErrRecordNotFound {
-		render.Status(r, http.StatusOK)
-		render.JSON(w, r, map[string]interface{}{
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"enabled": false,
 		})
-		return
 	}
 
 	if result.Error != nil {
 		log.Printf("Error querying 2FA status: %v", result.Error)
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error:   "internal_error",
 			Message: "Failed to get 2FA status",
 		})
-		return
 	}
 
-	render.Status(r, http.StatusOK)
-	render.JSON(w, r, map[string]interface{}{
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"enabled": twoFA.Enabled,
 	})
 }
@@ -370,89 +341,73 @@ func Get2FAStatus(w http.ResponseWriter, r *http.Request) {
 // @Failure      401  {object}  ErrorResponse
 // @Failure      404  {object}  ErrorResponse
 // @Router       /api/v1/auth/2fa/disable [post]
-func Disable2FA(w http.ResponseWriter, r *http.Request) {
-	userIDValue := r.Context().Value(contextKeyUserID)
-	usernameValue := r.Context().Value(contextKeyUsername)
+func Disable2FA(c *fiber.Ctx) error {
+	userIDVal := c.Locals("userID")
+	usernameVal := c.Locals("username")
 
-	if userIDValue == nil || usernameValue == nil {
+	if userIDVal == nil || usernameVal == nil {
 		log.Printf("Error: user context not found in request")
-		render.Status(r, http.StatusUnauthorized)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
 			Error:   "unauthorized",
 			Message: "User context not found. Please ensure you are authenticated.",
 		})
-		return
 	}
 
-	userID, ok := userIDValue.(string)
+	userID, ok := userIDVal.(string)
 	if !ok {
 		log.Printf("Error: invalid userID type in context")
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error:   "internal_error",
 			Message: "Invalid user context",
 		})
-		return
 	}
 
-	username, ok := usernameValue.(string)
+	username, ok := usernameVal.(string)
 	if !ok {
 		log.Printf("Error: invalid username type in context")
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error:   "internal_error",
 			Message: "Invalid user context",
 		})
-		return
 	}
 
 	// Ambil alamat IP dan user agent untuk audit log
-	ipAddress := r.RemoteAddr
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		ipAddress = forwarded
-	}
-	userAgent := r.UserAgent()
+	ipAddress := getClientIP(c)
+	userAgent := c.Get("User-Agent")
 
 	// Cari record 2FA yang ada
 	var twoFA TwoFactorAuth
 	result := DB.Where("user_id = ?", userID).First(&twoFA)
 
 	if result.Error == gorm.ErrRecordNotFound {
-		render.Status(r, http.StatusNotFound)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusNotFound).JSON(ErrorResponse{
 			Error:   "2fa_not_found",
 			Message: "2FA is not enabled for this user",
 		})
-		return
 	}
 
 	if result.Error != nil {
 		log.Printf("Error querying 2FA: %v", result.Error)
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error:   "internal_error",
 			Message: "Failed to disable 2FA",
 		})
-		return
 	}
 
 	// Nonaktifkan 2FA
 	twoFA.Enabled = false
 	if err := DB.Save(&twoFA).Error; err != nil {
 		log.Printf("Error disabling 2FA: %v", err)
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error:   "internal_error",
 			Message: "Failed to disable 2FA",
 		})
-		return
 	}
 
 	// Log aksi
 	LogAction(userID, username, "disable_2fa", "auth", "", ipAddress, userAgent, "success", nil)
 
-	render.Status(r, http.StatusOK)
-	render.JSON(w, r, map[string]interface{}{
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "2FA has been disabled successfully",
 	})
 }

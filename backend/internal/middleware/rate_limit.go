@@ -1,9 +1,10 @@
-package main
+package middleware
 
 import (
 	"sync"
 	"time"
 
+	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/time/rate"
 )
@@ -70,14 +71,17 @@ func (rl *RateLimiter) cleanupVisitors() {
 
 // Global rate limiters
 var (
-	// General API rate limiter: 100 requests per second, burst of 50 (ditingkatkan untuk development)
-	generalRateLimiter = NewRateLimiter(100, 50)
+	// General API rate limiter: 200 requests per second, burst of 200 (sangat longgar untuk development)
+	// Burst tinggi untuk mengakomodasi frontend yang melakukan polling/auto-refresh
+	// Di production, bisa dikurangi ke 100 req/s, burst 100
+	GeneralRateLimiter = NewRateLimiter(200, 200)
 
 	// Auth rate limiter: 5 requests per minute, burst of 5 (to prevent brute force)
-	authRateLimiter = NewRateLimiter(rate.Every(time.Minute/5), 5)
+	// Hanya untuk public auth endpoints (login)
+	AuthRateLimiter = NewRateLimiter(rate.Every(time.Minute/5), 5)
 
-	// Strict rate limiter: 10 requests per minute, burst of 5
-	strictRateLimiter = NewRateLimiter(rate.Every(time.Minute/10), 5)
+	// Strict rate limiter: 20 requests per minute, burst of 20 (ditingkatkan untuk development)
+	StrictRateLimiter = NewRateLimiter(rate.Every(time.Minute/20), 20)
 )
 
 // RateLimitMiddleware applies rate limiting based on client IP (untuk Fiber)
@@ -91,7 +95,7 @@ func RateLimitMiddleware(limiter *RateLimiter) fiber.Handler {
 
 		// Check if request is allowed
 		if !visitorLimiter.Allow() {
-			return c.Status(fiber.StatusTooManyRequests).JSON(ErrorResponse{
+			return c.Status(fiber.StatusTooManyRequests).JSON(domain.ErrorResponse{
 				Error:   "rate_limit_exceeded",
 				Message: "Too many requests. Please try again later.",
 			})
@@ -104,43 +108,48 @@ func RateLimitMiddleware(limiter *RateLimiter) fiber.Handler {
 
 // getClientIP extracts client IP from request (untuk Fiber)
 func getClientIP(c *fiber.Ctx) string {
+	// Normalisasi IP untuk konsistensi rate limiting
+	normalizeIP := func(ip string) string {
+		// Normalisasi IPv6 localhost ke IPv4 untuk konsistensi
+		if ip == "::1" || ip == "::ffff:127.0.0.1" || ip == "[::1]" {
+			return "127.0.0.1"
+		}
+		return ip
+	}
+
 	// Check X-Forwarded-For header first (bisa mengandung multiple IPs, ambil yang pertama)
 	xff := c.Get("X-Forwarded-For")
 	if xff != "" {
 		// X-Forwarded-For bisa mengandung multiple IPs dipisahkan koma
 		// Ambil IP pertama (client asli)
-		if idx := 0; idx < len(xff) {
-			for i, char := range xff {
-				if char == ',' {
-					return xff[:i]
-				}
+		for i, char := range xff {
+			if char == ',' {
+				return normalizeIP(xff[:i])
 			}
-			return xff
 		}
+		return normalizeIP(xff)
 	}
 
 	// Check X-Real-IP header
 	xri := c.Get("X-Real-IP")
 	if xri != "" {
-		return xri
+		return normalizeIP(xri)
 	}
 
 	// Fallback to IP() method dari Fiber (handles all cases including ::1)
 	ip := c.IP()
-	if ip == "" || ip == "::1" {
-		// Untuk localhost/development, gunakan IP yang konsisten
+	if ip == "" {
 		return "127.0.0.1"
 	}
-	return ip
+	return normalizeIP(ip)
 }
 
 // AuthRateLimitMiddleware applies stricter rate limiting for auth endpoints (untuk Fiber)
 func AuthRateLimitMiddleware(c *fiber.Ctx) error {
-	return RateLimitMiddleware(authRateLimiter)(c)
+	return RateLimitMiddleware(AuthRateLimiter)(c)
 }
 
 // StrictRateLimitMiddleware applies strict rate limiting (untuk Fiber)
 func StrictRateLimitMiddleware(c *fiber.Ctx) error {
-	return RateLimitMiddleware(strictRateLimiter)(c)
+	return RateLimitMiddleware(StrictRateLimiter)(c)
 }
-

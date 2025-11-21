@@ -16,16 +16,15 @@
 
 ### Technology Stack
 - **Language**: Go (Golang) 1.25
-- **Framework/Router**: Chi Router v5.2.3
+- **Framework/Router**: Fiber v2.52.10 (High-performance HTTP framework dengan fasthttp)
 - **ORM**: GORM v1.31.1
 - **Database Drivers**:
   - SQLite (Development): `gorm.io/driver/sqlite v1.6.0`
   - PostgreSQL (Production): `gorm.io/driver/postgres v1.6.0`
 - **Authentication**: JWT (JSON Web Token) - `github.com/golang-jwt/jwt/v5 v5.3.0`
 - **Password Hashing**: Bcrypt via `golang.org/x/crypto v0.44.0`
-- **API Documentation**: Swagger/OpenAPI - `github.com/swaggo/swag v1.16.6`
-- **CORS**: `github.com/go-chi/cors v1.2.2`
-- **HTTP Rendering**: `github.com/go-chi/render v1.0.3`
+- **API Documentation**: Swagger/OpenAPI - `github.com/gofiber/swagger v1.1.1` + `github.com/swaggo/swag v1.16.6`
+- **CORS**: `github.com/gofiber/cors v0.2.2`
 - **UUID Generation**: `github.com/google/uuid v1.6.0`
 
 ### Security Libraries
@@ -42,33 +41,67 @@
 - **Health Check**: `/health`
 
 ### Key Features
-- ✅ JWT Authentication
+- ✅ JWT Authentication dengan httpOnly Cookies
 - ✅ Role-Based Access Control (RBAC)
 - ✅ Two-Factor Authentication (2FA/TOTP)
 - ✅ Rate Limiting (Auth, General, Strict)
+- ✅ CSRF Protection (Double-submit cookie pattern)
 - ✅ Input Validation & Sanitization
-- ✅ Audit Logging
+- ✅ Audit Logging (User actions + Technical errors)
+- ✅ Audit Log Optimization (Retention policy, auto-cleanup)
 - ✅ Security Headers
 - ✅ CORS Configuration
 - ✅ Swagger/OpenAPI Documentation
+- ✅ Clean Architecture (cmd/, internal/)
 
-### File Structure
+### File Structure (Clean Architecture)
 ```
 backend/
-├── main.go              # Entry point, routing, middleware setup
-├── models.go            # Data models (User, Document, etc.)
-├── auth.go              # Authentication handlers (Register, Login, Profile)
-├── middleware.go        # JWT auth, security headers
-├── database.go           # Database initialization, models
-├── utils.go             # JWT generation, password hashing
-├── rbac.go              # Role-Based Access Control
-├── ratelimit.go         # Rate limiting middleware
-├── validation.go        # Input validation & sanitization
-├── audit.go             # Audit logging system
-├── 2fa.go               # Two-Factor Authentication
-├── go.mod               # Go dependencies
-├── Dockerfile           # Production Docker image
-└── docs/                # Swagger generated docs
+├── cmd/
+│   └── api/
+│       └── main.go              # Entry point aplikasi
+├── internal/
+│   ├── domain/
+│   │   └── models.go           # Domain models (User, Document, AuditLog, etc.)
+│   ├── infrastructure/
+│   │   ├── database/
+│   │   │   └── database.go     # Database connection & initialization
+│   │   ├── jwt/
+│   │   │   └── jwt.go          # JWT generation & validation
+│   │   ├── password/
+│   │   │   └── password.go     # Password hashing utilities
+│   │   ├── uuid/
+│   │   │   └── uuid.go         # UUID generation
+│   │   ├── cookie/
+│   │   │   └── cookie.go        # Secure cookie management
+│   │   ├── validation/
+│   │   │   └── validation.go   # Input validation & sanitization
+│   │   ├── audit/
+│   │   │   └── audit.go        # Audit logger initialization
+│   │   └── seed/
+│   │       └── seed.go          # Database seeding
+│   ├── delivery/
+│   │   └── http/
+│   │       ├── auth_handler.go      # Authentication handlers (Login, Profile, Logout)
+│   │       ├── twofa_handler.go     # 2FA handlers
+│   │       ├── audit_handler.go     # Audit log handlers
+│   │       ├── document_handler.go   # Document handlers
+│   │       └── csrf_handler.go      # CSRF token handler
+│   ├── middleware/
+│   │   ├── auth.go              # JWT authentication middleware
+│   │   ├── security.go          # Security headers middleware
+│   │   ├── csrf.go              # CSRF protection middleware
+│   │   ├── error.go             # Error logging middleware
+│   │   ├── rate_limit.go        # Rate limiting middleware
+│   │   └── rbac.go              # RBAC middleware
+│   ├── repository/
+│   │   └── audit_repository.go  # Audit log repository
+│   └── usecase/
+│       ├── twofa_usecase.go         # 2FA business logic
+│       └── audit_cleanup_usecase.go # Audit cleanup logic
+├── go.mod                 # Go dependencies
+├── Dockerfile             # Production Docker image
+└── docs/                  # Swagger generated docs
 ```
 
 ---
@@ -174,15 +207,16 @@ frontend/
 
 ### Database Selection Logic
 
-```31:38:backend/database.go
-	// Use SQLite for development if DATABASE_URL not set
-	if dbURL == "" {
-		log.Println("Using SQLite database (development)")
-		dialector = sqlite.Open("dms.db")
-	} else {
-		log.Println("Using PostgreSQL database")
-		dialector = postgres.Open(dbURL)
-	}
+```go
+// File: backend/internal/infrastructure/database/database.go
+// Use SQLite for development if DATABASE_URL not set
+if dbURL == "" {
+    log.Println("Using SQLite database (development)")
+    dialector = sqlite.Open("dms.db")
+} else {
+    log.Println("Using PostgreSQL database")
+    dialector = postgres.Open(dbURL)
+}
 ```
 
 **Cara Kerja**:
@@ -223,12 +257,22 @@ CREATE TABLE two_factor_auths (
 CREATE TABLE audit_logs (
     id TEXT PRIMARY KEY,
     user_id TEXT,
+    username TEXT,
     action TEXT NOT NULL,
-    description TEXT,
+    resource TEXT,
+    resource_id TEXT,
     ip_address TEXT,
     user_agent TEXT,
+    details TEXT,  -- JSON string untuk detail tambahan
+    status TEXT NOT NULL,  -- success, failure, error
+    log_type TEXT DEFAULT 'user_action',  -- user_action atau technical_error
     created_at DATETIME
 );
+-- Indexes untuk performa
+CREATE INDEX idx_audit_logs_created_at_log_type ON audit_logs(created_at, log_type);
+CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
+CREATE INDEX idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX idx_audit_logs_log_type ON audit_logs(log_type);
 ```
 
 ### Database Management
@@ -315,14 +359,17 @@ CREATE TABLE audit_logs (
 ### Rate Limiting
 1. **Auth Rate Limiter**
    - Rate: 5 requests per minute per IP
-   - Applied to: `/auth/login`, `/auth/register`
+   - Burst: 5
+   - Applied to: `/auth/login` (public endpoint)
 
 2. **General Rate Limiter**
-   - Rate: 100 requests per minute per IP
-   - Applied to: All routes
+   - Rate: 200 requests per second per IP
+   - Burst: 200
+   - Applied to: All routes (untuk development, bisa dikurangi di production)
 
 3. **Strict Rate Limiter**
-   - Rate: 10 requests per minute per IP
+   - Rate: 20 requests per minute per IP
+   - Burst: 20
    - Ready for sensitive endpoints
 
 ### Input Validation & Sanitization
@@ -343,6 +390,13 @@ CREATE TABLE audit_logs (
 - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
 - `Content-Security-Policy: default-src 'self'` (relaxed for Swagger)
 
+### CSRF Protection
+- **Method**: Double-submit cookie pattern
+- **Token Header**: `X-CSRF-Token`
+- **Cookie**: `csrf_token` (httpOnly, Secure, SameSite=Strict)
+- **Applied to**: State-changing methods (POST, PUT, DELETE, PATCH)
+- **Excluded**: GET, HEAD, OPTIONS methods
+
 ### CORS Configuration
 - **Allowed Origins**: `http://localhost:5173`, `http://localhost:3000`
 - **Allowed Methods**: GET, POST, PUT, DELETE, OPTIONS, PATCH
@@ -351,9 +405,15 @@ CREATE TABLE audit_logs (
 - **Max Age**: 300 seconds
 
 ### Audit Logging
-- **Actions Tracked**: Login Success, Login Failed, Logout, Create, Update, Delete
-- **Information Logged**: User ID, Action, Description, IP Address, User Agent, Timestamp
+- **Actions Tracked**: 
+  - User Actions: Login Success, Login Failed, Logout, Create, Update, Delete, 2FA Enable/Disable
+  - Technical Errors: System errors, Database errors, Validation errors, Panics
+- **Information Logged**: User ID, Username, Action, Resource, Resource ID, IP Address, User Agent, Status, Details (JSON), Log Type, Timestamp
 - **Storage**: Database table `audit_logs`
+- **Optimization**:
+  - Retention Policy: User actions (90 days default), Technical errors (30 days default)
+  - Auto-cleanup: Every 24 hours
+  - Indexing: Composite indexes on `created_at` + `log_type` for performance
 
 ---
 
@@ -380,63 +440,104 @@ CREATE TABLE audit_logs (
 - **Description**: API version and endpoints
 - **Response**: JSON with API info
 
-#### 4. Register
-- **POST** `/api/v1/auth/register`
-- **Description**: Register new user
-- **Body**:
-  ```json
-  {
-    "username": "string",
-    "email": "string",
-    "password": "string"
-  }
-  ```
-- **Response**: `AuthResponse` (token + user)
-- **Rate Limit**: 5 req/min
+#### 4. CSRF Token
+- **GET** `/api/v1/csrf-token`
+- **Description**: Get CSRF token untuk form submissions
+- **Response**: `{"csrf_token": "string"}`
+- **Note**: Public endpoint, tidak memerlukan authentication
 
 #### 5. Login
 - **POST** `/api/v1/auth/login`
-- **Description**: Authenticate user (username or email)
+- **Description**: Authenticate user (username or email). Mendukung 2FA jika diaktifkan.
 - **Body**:
   ```json
   {
     "username": "string",
-    "password": "string"
+    "password": "string",
+    "code": "string"  // Opsional: 2FA code jika 2FA aktif
   }
   ```
-- **Response**: `AuthResponse` (token + user)
+- **Response**: 
+  - Jika 2FA tidak aktif: `AuthResponse` (token + user)
+  - Jika 2FA aktif dan code belum diberikan: `{"requires_2fa": true, "message": "..."}`
+  - Jika 2FA aktif dan code diberikan: `AuthResponse` (token + user)
 - **Rate Limit**: 5 req/min
+- **Note**: Token disimpan dalam httpOnly cookie (`auth_token`) untuk keamanan XSS
 
 ### Protected Endpoints (Require JWT)
 
 #### 6. Get Profile
 - **GET** `/api/v1/auth/profile`
-- **Headers**: `Authorization: Bearer <token>`
+- **Headers**: `Authorization: Bearer <token>` (opsional, fallback jika cookie tidak tersedia)
+- **Cookies**: `auth_token` (httpOnly cookie, preferred method)
 - **Response**: `User` object
+- **Note**: Menggunakan httpOnly cookie untuk authentication (lebih aman dari XSS)
 
-#### 7. Documents - List
+#### 7. Logout
+- **POST** `/api/v1/auth/logout`
+- **Headers**: `Authorization: Bearer <token>` atau `auth_token` cookie
+- **Headers**: `X-CSRF-Token: <csrf_token>` (required untuk POST)
+- **Response**: `{"message": "Logged out successfully"}`
+- **Note**: Menghapus httpOnly cookie dan mencatat aksi logout ke audit log
+
+#### 8. 2FA - Generate Secret
+- **POST** `/api/v1/auth/2fa/generate`
+- **Headers**: `X-CSRF-Token: <csrf_token>` (required)
+- **Response**: `{"secret": "string", "qr_code": "base64_image", "url": "string", "message": "string"}`
+- **Note**: Generate TOTP secret dan QR code untuk setup 2FA
+
+#### 9. 2FA - Verify & Enable
+- **POST** `/api/v1/auth/2fa/verify`
+- **Headers**: `X-CSRF-Token: <csrf_token>` (required)
+- **Body**: `{"code": "string"}` (6-digit TOTP code)
+- **Response**: `{"message": "string", "backup_codes": ["string"]}`
+- **Note**: Verifikasi TOTP code dan aktifkan 2FA, return backup codes
+
+#### 10. 2FA - Get Status
+- **GET** `/api/v1/auth/2fa/status`
+- **Response**: `{"enabled": boolean}`
+- **Note**: Cek status 2FA user saat ini
+
+#### 11. 2FA - Disable
+- **POST** `/api/v1/auth/2fa/disable`
+- **Headers**: `X-CSRF-Token: <csrf_token>` (required)
+- **Response**: `{"message": "2FA has been disabled successfully"}`
+- **Note**: Nonaktifkan 2FA untuk user
+
+#### 12. Audit Logs - List
+- **GET** `/api/v1/audit-logs`
+- **Query Parameters**: `page`, `pageSize`, `action`, `resource`, `status`, `logType`
+- **Response**: Paginated audit logs
+- **Note**: User reguler hanya melihat logs sendiri, admin/superadmin melihat semua
+
+#### 13. Audit Logs - Stats
+- **GET** `/api/v1/audit-logs/stats`
+- **Response**: Statistics (total records, counts by type, estimated size, retention policy)
+- **Note**: Real-time statistics untuk monitoring
+
+#### 14. Documents - List
 - **GET** `/api/v1/documents`
 - **Headers**: `Authorization: Bearer <token>`
 - **Response**: Array of `Document`
 
-#### 8. Documents - Get by ID
+#### 15. Documents - Get by ID
 - **GET** `/api/v1/documents/{id}`
 - **Headers**: `Authorization: Bearer <token>`
 - **Response**: `Document` object
 
-#### 9. Documents - Create
+#### 16. Documents - Create
 - **POST** `/api/v1/documents`
 - **Headers**: `Authorization: Bearer <token>`
 - **Body**: `Document` object
 - **Response**: Created `Document`
 
-#### 10. Documents - Update
+#### 17. Documents - Update
 - **PUT** `/api/v1/documents/{id}`
 - **Headers**: `Authorization: Bearer <token>`
 - **Body**: `Document` object
 - **Response**: Updated `Document`
 
-#### 11. Documents - Delete
+#### 18. Documents - Delete
 - **DELETE** `/api/v1/documents/{id}`
 - **Headers**: `Authorization: Bearer <token>`
 - **Response**: Success message
@@ -495,7 +596,7 @@ make rebuild       # Rebuild and restart
 
 # Backend (local)
 cd backend
-go run main.go
+go run ./cmd/api
 go test ./...
 golangci-lint run
 
@@ -580,14 +681,43 @@ VITE_API_URL=https://api.yourdomain.com/api/v1
 ## Documentation Files
 
 - `README.md`: Project overview and quick start
-- `AUTH.md`: Authentication documentation
-- `SECURITY_FEATURES.md`: Security features documentation
-- `URLS_AND_PORTS.md`: Quick reference for URLs and ports
-- `DATABASE_CONNECTION.md`: Database connection guide
+- `DEVELOPMENT.md`: Development guide dengan hot reload
 - `SPESIFIKASI_TEKNIS.md`: This file (technical specifications)
+- `URLS_AND_PORTS.md`: Quick reference for URLs and ports
+
+### Backend Documentation (dalam folder backend/)
+- `backend/AUTH.md`: Authentication documentation
+- `backend/SECURITY_FEATURES.md`: Security features documentation
+- `backend/AUDIT_LOG_OPTIMIZATION.md`: Audit log optimization documentation
+- `backend/REFACTORING_NOTES.md`: Catatan refactoring ke Clean Architecture
 
 ---
 
-**Last Updated**: 2025-01-XX
+## Architecture Notes
+
+### Clean Architecture
+Project menggunakan Clean Architecture dengan struktur:
+- **cmd/**: Entry points aplikasi (api, migrate, worker, dll)
+- **internal/**: Kode internal aplikasi
+  - **domain/**: Domain models dan entities
+  - **infrastructure/**: External dependencies (database, JWT, password, dll)
+  - **delivery/**: Delivery layer (HTTP handlers)
+  - **middleware/**: HTTP middleware
+  - **repository/**: Data access layer
+  - **usecase/**: Business logic layer
+
+### Framework Migration
+- **Sebelumnya**: Chi Router v5.2.3
+- **Sekarang**: Fiber v2.52.10
+- **Alasan**: Requirement project untuk menggunakan Fiber, Gin, atau Echo
+- **Keuntungan**: 
+  - Performa tinggi dengan fasthttp
+  - API yang lebih modern dan intuitif
+  - Built-in middleware yang lengkap
+  - Tim internal sudah familiar dengan Fiber
+
+---
+
+**Last Updated**: 2025-11-21
 **Version**: 1.0.0
 

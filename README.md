@@ -34,7 +34,7 @@ docker-compose -f docker-compose.dev.yml up --build
 docker-compose -f docker-compose.postgres.yml up --build
 
 # Atau set DATABASE_URL di docker-compose.dev.yml
-# Lihat panduan lengkap di POSTGRESQL_MIGRATION.md
+# PostgreSQL sudah dikonfigurasi di docker-compose.dev.yml
 ```
 
 **Hot Reload:**

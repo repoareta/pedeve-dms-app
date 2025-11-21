@@ -2,12 +2,11 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"os"
 	"strconv"
 	"time"
 
-	"github.com/go-chi/render"
+	"github.com/gofiber/fiber/v2"
 )
 
 // Konstanta untuk retention policy
@@ -142,7 +141,7 @@ func GetAuditLogStats() (map[string]interface{}, error) {
 	return stats, nil
 }
 
-// GetAuditLogStatsHandler menangani request GET untuk statistik audit logs
+// GetAuditLogStatsHandler menangani request GET untuk statistik audit logs (untuk Fiber)
 // @Summary      Get audit log statistics
 // @Description  Get statistics about audit logs (total records, counts by type, estimated size, etc.)
 // @Tags         Audit
@@ -153,27 +152,24 @@ func GetAuditLogStats() (map[string]interface{}, error) {
 // @Failure      401  {object}  ErrorResponse
 // @Failure      500  {object}  ErrorResponse
 // @Router       /api/v1/audit-logs/stats [get]
-func GetAuditLogStatsHandler(w http.ResponseWriter, r *http.Request) {
+func GetAuditLogStatsHandler(c *fiber.Ctx) error {
 	stats, err := GetAuditLogStats()
 	if err != nil {
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error:   "internal_error",
 			Message: "Failed to get audit log statistics",
 		})
-		return
 	}
 
 	// Tambahkan informasi retention policy
 	userActionRetention := getRetentionDays(LogTypeUserAction)
 	technicalErrorRetention := getRetentionDays(LogTypeTechnicalError)
 	
-	stats["retention_policy"] = map[string]interface{}{
-		"user_action_days":    userActionRetention,
+	stats["retention_policy"] = fiber.Map{
+		"user_action_days":     userActionRetention,
 		"technical_error_days": technicalErrorRetention,
 	}
 
-	render.Status(r, http.StatusOK)
-	render.JSON(w, r, stats)
+	return c.Status(fiber.StatusOK).JSON(stats)
 }
 

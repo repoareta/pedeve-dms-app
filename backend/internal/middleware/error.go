@@ -1,4 +1,4 @@
-package main
+package middleware
 
 import (
 	"encoding/json"
@@ -6,11 +6,14 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
+	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/database"
+	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/uuid"
 	"github.com/gofiber/fiber/v2"
 )
 
 const (
-	LogTypeUserAction    = "user_action"
+	LogTypeUserAction     = "user_action"
 	LogTypeTechnicalError = "technical_error"
 )
 
@@ -75,8 +78,8 @@ func LogActionAsync(userID, username, action, resource, resourceID, ipAddress, u
 			}
 		}
 
-		auditLog := AuditLog{
-			ID:         GenerateUUID(),
+		auditLog := domain.AuditLog{
+			ID:         uuid.GenerateUUID(),
 			UserID:     userID,
 			Username:   username,
 			Action:     action,
@@ -91,7 +94,7 @@ func LogActionAsync(userID, username, action, resource, resourceID, ipAddress, u
 		}
 
 		// Log secara asinkron (non-blocking)
-		_ = DB.Create(&auditLog).Error
+		_ = database.GetDB().Create(&auditLog).Error
 	}()
 }
 
@@ -133,7 +136,7 @@ func RecoverMiddleware(c *fiber.Ctx) error {
 			LogTechnicalError(panicErr, c, details)
 
 			// Kembalikan response error
-			_ = c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			_ = c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
 				Error:   "internal_server_error",
 				Message: "An unexpected error occurred",
 			})
@@ -141,5 +144,10 @@ func RecoverMiddleware(c *fiber.Ctx) error {
 	}()
 
 	return c.Next()
+}
+
+// LogAction adalah fungsi helper untuk mencatat aksi (wrapper untuk repository)
+func LogAction(userID, username, action, resource, resourceID, ipAddress, userAgent, status string, details map[string]interface{}) {
+	LogActionAsync(userID, username, action, resource, resourceID, ipAddress, userAgent, status, details)
 }
 

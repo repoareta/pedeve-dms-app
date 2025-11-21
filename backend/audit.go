@@ -3,11 +3,10 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"net/http"
 	"strconv"
 	"time"
 
-	"github.com/go-chi/render"
+	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
 )
 
@@ -142,7 +141,7 @@ func GetAuditLogs(userID, action, resource, status, logType string, limit, offse
 	return logs, total, err
 }
 
-// GetAuditLogsHandler menangani request GET untuk audit logs
+// GetAuditLogsHandler menangani request GET untuk audit logs (untuk Fiber)
 // @Summary      Get audit logs
 // @Description  Get audit logs with pagination and filters
 // @Tags         Audit
@@ -157,35 +156,33 @@ func GetAuditLogs(userID, action, resource, status, logType string, limit, offse
 // @Success      200       {object}  map[string]interface{}
 // @Failure      401       {object}  ErrorResponse
 // @Router       /api/v1/audit-logs [get]
-func GetAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
-	// Ambil user saat ini dari context
-	userIDValue := r.Context().Value(contextKeyUserID)
-	if userIDValue == nil {
-		render.Status(r, http.StatusUnauthorized)
-		render.JSON(w, r, ErrorResponse{
+func GetAuditLogsHandler(c *fiber.Ctx) error {
+	// Ambil user saat ini dari locals
+	userIDVal := c.Locals("userID")
+	if userIDVal == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
 			Error:   "unauthorized",
 			Message: "User context not found",
 		})
-		return
 	}
 
-	currentUserID := userIDValue.(string)
+	currentUserID := userIDVal.(string)
 
 	// Parse parameter query
 	page := 1
 	pageSize := 10
-	action := r.URL.Query().Get("action")
-	resource := r.URL.Query().Get("resource")
-	status := r.URL.Query().Get("status")
-	logType := r.URL.Query().Get("logType") // Filter berdasarkan tipe log: "user_action" atau "technical_error"
+	action := c.Query("action")
+	resource := c.Query("resource")
+	status := c.Query("status")
+	logType := c.Query("logType") // Filter berdasarkan tipe log: "user_action" atau "technical_error"
 
-	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+	if pageStr := c.Query("page"); pageStr != "" {
 		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
 			page = p
 		}
 	}
 
-	if pageSizeStr := r.URL.Query().Get("pageSize"); pageSizeStr != "" {
+	if pageSizeStr := c.Query("pageSize"); pageSizeStr != "" {
 		if ps, err := strconv.Atoi(pageSizeStr); err == nil && ps > 0 && ps <= 100 {
 			pageSize = ps
 		}
@@ -194,12 +191,10 @@ func GetAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
 	// Ambil user dari database untuk cek role
 	var currentUser UserModel
 	if err := DB.First(&currentUser, "id = ?", currentUserID).Error; err != nil {
-		render.Status(r, http.StatusNotFound)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusNotFound).JSON(ErrorResponse{
 			Error:   "user_not_found",
 			Message: "User not found",
 		})
-		return
 	}
 
 	// User reguler hanya bisa lihat audit logs mereka sendiri
@@ -215,21 +210,18 @@ func GetAuditLogsHandler(w http.ResponseWriter, r *http.Request) {
 	// Ambil audit logs
 	logs, total, err := GetAuditLogs(filterUserID, action, resource, status, logType, pageSize, offset)
 	if err != nil {
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error:   "internal_error",
 			Message: "Failed to get audit logs",
 		})
-		return
 	}
 
 	// Kembalikan response
-	render.Status(r, http.StatusOK)
-	render.JSON(w, r, map[string]interface{}{
-		"data":      logs,
-		"total":     total,
-		"page":      page,
-		"pageSize":  pageSize,
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"data":       logs,
+		"total":      total,
+		"page":       page,
+		"pageSize":   pageSize,
 		"totalPages": (total + int64(pageSize) - 1) / int64(pageSize),
 	})
 }

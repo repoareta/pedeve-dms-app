@@ -1,121 +1,31 @@
 package main
 
 import (
-	"encoding/json"
-	"net/http"
-	"time"
-
-	"github.com/go-chi/render"
-	"github.com/google/uuid"
+	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
 )
 
-// Register handles user registration
-// @Summary      Register new user
-// @Description  Register a new user account
+// Login handles user login (untuk Fiber)
+// @Summary      User login
+// @Description  Authentikasi user dan kembalikan JWT token. Mendukung login dengan username atau email. Jika 2FA aktif, akan memerlukan kode verifikasi tambahan.
 // @Tags         Authentication
 // @Accept       json
 // @Produce      json
-// @Param        user  body      RegisterRequest  true  "User registration data"
-// @Success      201   {object}  AuthResponse
-// @Failure      400   {object}  ErrorResponse
-// @Failure      409   {object}  ErrorResponse
-// @Router       /api/v1/auth/register [post]
-func Register(w http.ResponseWriter, r *http.Request) {
-	var req RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		render.Status(r, http.StatusBadRequest)
-		render.JSON(w, r, ErrorResponse{
-			Error:   "invalid_request",
-			Message: "Invalid request body",
-		})
-		return
-	}
-
-	// Validate and sanitize input
-	if err := ValidateRegisterInput(&req); err != nil {
-		render.Status(r, http.StatusBadRequest)
-		render.JSON(w, r, ErrorResponse{
-			Error:   "validation_error",
-			Message: err.Error(),
-		})
-		return
-	}
-
-	// Cek apakah user sudah ada
-	var existingUser UserModel
-	result := DB.Where("username = ? OR email = ?", req.Username, req.Email).First(&existingUser)
-	if result.Error == nil {
-		render.Status(r, http.StatusConflict)
-		render.JSON(w, r, ErrorResponse{
-			Error:   "user_exists",
-			Message: "Username or email already exists",
-		})
-		return
-	}
-
-	// Hash password
-	hashedPassword, err := HashPassword(req.Password)
-	if err != nil {
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
-			Error:   "internal_error",
-			Message: "Failed to hash password",
-		})
-		return
-	}
-
-	// Buat user baru
-	now := time.Now()
-	userModel := &UserModel{
-		ID:        uuid.New().String(),
-		Username:  req.Username,
-		Email:     req.Email,
-		Password:  hashedPassword,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-
-	// Simpan ke database
-	if err := DB.Create(userModel).Error; err != nil {
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
-			Error:   "internal_error",
-			Message: "Failed to create user",
-		})
-		return
-	}
-
-	// Generate JWT token
-	token, err := GenerateJWT(userModel.ID, userModel.Username)
-	if err != nil {
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
-			Error:   "internal_error",
-			Message: "Failed to generate token",
-		})
-		return
-	}
-
-	// Set cookie aman dengan token JWT (httpOnly cookie untuk keamanan yang lebih baik)
-	SetSecureCookie(w, authTokenCookie, token)
-
-	// Kembalikan response
-	render.Status(r, http.StatusCreated)
-	render.JSON(w, r, AuthResponse{
-		Token: token,
-		User: User{
-			ID:        userModel.ID,
-			Username:  userModel.Username,
-			Email:     userModel.Email,
-			Role:      userModel.Role,
-			CreatedAt: userModel.CreatedAt,
-			UpdatedAt: userModel.UpdatedAt,
-		},
-	})
-}
-
-// Login handles user login
+// @Param        credentials  body      LoginRequest  true  "Login credentials (username/email dan password, opsional: code untuk 2FA)"
+// @Success      200          {object}  AuthResponse  "Login berhasil, token JWT dikembalikan dalam response body dan httpOnly cookie"
+// @Success      200          {object}  map[string]interface{}  "2FA diperlukan: requires_2fa: true, kirim code pada request berikutnya"
+// @Failure      400          {object}  ErrorResponse  "Request body tidak valid atau validation error"
+// @Failure      401          {object}  ErrorResponse  "Kredensial tidak valid atau 2FA code salah"
+// @Failure      429          {object}  ErrorResponse  "Terlalu banyak request, rate limit terlampaui"
+// @Router       /api/v1/auth/login [post]
+// @Security     None
+// @note         Catatan Teknis:
+// @note         1. Rate Limiting: Endpoint ini memiliki rate limiting khusus (5 requests per minute, burst: 5) untuk mencegah brute force attack
+// @note         2. Password Hashing: Menggunakan bcrypt dengan cost factor default Go (10 rounds)
+// @note         3. JWT Token: Token disimpan dalam httpOnly cookie (auth_token) untuk keamanan XSS, lifetime 24 jam
+// @note         4. 2FA Support: Jika user mengaktifkan 2FA, endpoint ini akan return requires_2fa: true pada request pertama
+// @note         5. Audit Logging: Semua percobaan login (berhasil/gagal) dicatat dalam audit log untuk keamanan
+// @note         6. CSRF Protection: Tidak berlaku untuk endpoint public ini, hanya untuk authenticated requests
 // @Summary      User login
 // @Description  Authenticate user and return JWT token
 // @Tags         Authentication
@@ -125,41 +35,35 @@ func Register(w http.ResponseWriter, r *http.Request) {
 // @Success      200          {object}  AuthResponse
 // @Failure      401          {object}  ErrorResponse
 // @Router       /api/v1/auth/login [post]
-func Login(w http.ResponseWriter, r *http.Request) {
+func Login(c *fiber.Ctx) error {
 	var req LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		render.Status(r, http.StatusBadRequest)
-		render.JSON(w, r, ErrorResponse{
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error:   "invalid_request",
 			Message: "Invalid request body",
 		})
-		return
 	}
 
 	// Validate and sanitize input
 	if err := ValidateLoginInput(&req); err != nil {
-		render.Status(r, http.StatusBadRequest)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error:   "validation_error",
 			Message: err.Error(),
 		})
-		return
 	}
 
 	// Ambil IP client dan User Agent untuk audit logging
-	ipAddress := getClientIP(r)
-	userAgent := r.UserAgent()
+	ipAddress := getClientIP(c)
+	userAgent := c.Get("User-Agent")
 
 	// Cari user di database (bisa login dengan username atau email)
 	var userModel UserModel
 	result := DB.Where("username = ? OR email = ?", req.Username, req.Username).First(&userModel)
 	if result.Error == gorm.ErrRecordNotFound {
-		render.Status(r, http.StatusUnauthorized)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
 			Error:   "invalid_credentials",
 			Message: "Invalid username or password",
 		})
-		return
 	}
 
 	// Cek password
@@ -169,12 +73,10 @@ func Login(w http.ResponseWriter, r *http.Request) {
 			"reason": "invalid_password",
 		})
 
-		render.Status(r, http.StatusUnauthorized)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
 			Error:   "invalid_credentials",
 			Message: "Invalid username or password",
 		})
-		return
 	}
 
 	// Cek apakah 2FA diaktifkan
@@ -186,12 +88,10 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	if is2FAEnabled {
 		if req.Code == "" {
 			// 2FA diperlukan tapi kode tidak diberikan
-			render.Status(r, http.StatusOK)
-			render.JSON(w, r, map[string]interface{}{
+			return c.Status(fiber.StatusOK).JSON(fiber.Map{
 				"requires_2fa": true,
 				"message":      "2FA verification required. Please enter your 2FA code.",
 			})
-			return
 		}
 
 		// Verifikasi kode 2FA
@@ -202,12 +102,10 @@ func Login(w http.ResponseWriter, r *http.Request) {
 				"reason": "invalid_2fa_code",
 			})
 
-			render.Status(r, http.StatusUnauthorized)
-			render.JSON(w, r, ErrorResponse{
+			return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
 				Error:   "invalid_2fa_code",
 				Message: "Invalid 2FA code",
 			})
-			return
 		}
 	}
 
@@ -217,20 +115,17 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	// Generate JWT token
 	token, err := GenerateJWT(userModel.ID, userModel.Username)
 	if err != nil {
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
 			Error:   "internal_error",
 			Message: "Failed to generate token",
 		})
-		return
 	}
 
 	// Set cookie aman dengan token JWT (httpOnly cookie untuk keamanan yang lebih baik)
-	SetSecureCookie(w, authTokenCookie, token)
+	SetSecureCookie(c, authTokenCookie, token)
 
 	// Kembalikan response
-	render.Status(r, http.StatusOK)
-	render.JSON(w, r, AuthResponse{
+	return c.Status(fiber.StatusOK).JSON(AuthResponse{
 		Token: token,
 		User: User{
 			ID:        userModel.ID,
@@ -243,36 +138,47 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetProfile returns current user profile
+// GetProfile returns current user profile (untuk Fiber)
 // @Summary      Get user profile
-// @Description  Get current authenticated user profile
+// @Description  Mengambil profil user yang sedang terautentikasi. Data user diambil dari JWT token yang tersimpan dalam cookie.
 // @Tags         Authentication
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {object}  User
-// @Failure      401  {object}  ErrorResponse
+// @Success      200  {object}  User  "Profil user berhasil diambil (tanpa informasi password)"
+// @Failure      401  {object}  ErrorResponse  "Token tidak valid atau expired, user tidak terautentikasi"
+// @Failure      404  {object}  ErrorResponse  "User tidak ditemukan di database"
 // @Router       /api/v1/auth/profile [get]
-func GetProfile(w http.ResponseWriter, r *http.Request) {
-	// Ambil user dari context (diset oleh JWT middleware)
-	userID := r.Context().Value(contextKeyUserID).(string)
-	_ = r.Context().Value(contextKeyUsername).(string) // Tersedia tapi tidak diperlukan untuk lookup
+// @Security     BearerAuth
+// @note         Catatan Teknis:
+// @note         1. Authentication: Memerlukan JWT token valid dalam cookie httpOnly (auth_token) atau Authorization header
+// @note         2. CSRF Protection: Endpoint ini tidak memerlukan CSRF token karena menggunakan GET method (read-only)
+// @note         3. Data Privacy: Password tidak pernah dikembalikan dalam response untuk keamanan
+// @note         4. User Context: User ID dan username diambil dari JWT claims, tidak dari request body
+func GetProfile(c *fiber.Ctx) error {
+	// Ambil user dari locals (diset oleh JWT middleware)
+	userIDVal := c.Locals("userID")
+	if userIDVal == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			Error:   "unauthorized",
+			Message: "Authentication required",
+		})
+	}
+	userID := userIDVal.(string)
+	_ = c.Locals("username") // Tersedia tapi tidak diperlukan untuk lookup
 
 	// Cari user di database
 	var userModel UserModel
 	result := DB.First(&userModel, "id = ?", userID)
 	if result.Error == gorm.ErrRecordNotFound {
-		render.Status(r, http.StatusNotFound)
-		render.JSON(w, r, ErrorResponse{
+		return c.Status(fiber.StatusNotFound).JSON(ErrorResponse{
 			Error:   "user_not_found",
 			Message: "User not found",
 		})
-		return
 	}
 
 	// Return user (tanpa password)
-	render.Status(r, http.StatusOK)
-	render.JSON(w, r, User{
+	return c.Status(fiber.StatusOK).JSON(User{
 		ID:        userModel.ID,
 		Username:  userModel.Username,
 		Email:     userModel.Email,
@@ -282,38 +188,44 @@ func GetProfile(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Logout handles user logout
+// Logout handles user logout (untuk Fiber)
 // @Summary      User logout
-// @Description  Logout user and clear authentication cookie
+// @Description  Logout user dan hapus authentication cookie. Aksi logout dicatat dalam audit log untuk keamanan.
 // @Tags         Authentication
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {object}  map[string]string
-// @Failure      401  {object}  ErrorResponse
+// @Success      200  {object}  map[string]string  "Logout berhasil: message: 'Logged out successfully'"
+// @Failure      401  {object}  ErrorResponse  "Token tidak valid atau user tidak terautentikasi"
 // @Router       /api/v1/auth/logout [post]
-func Logout(w http.ResponseWriter, r *http.Request) {
-	// Ambil info user dari context untuk audit logging
-	userIDValue := r.Context().Value(contextKeyUserID)
-	usernameValue := r.Context().Value(contextKeyUsername)
+// @Security     BearerAuth
+// @note         Catatan Teknis:
+// @note         1. Cookie Deletion: HttpOnly cookie (auth_token) dihapus dengan MaxAge: -1 untuk memastikan cookie dihapus di browser
+// @note         2. CSRF Protection: Memerlukan CSRF token yang valid dalam header X-CSRF-Token untuk keamanan
+// @note         3. Audit Logging: Semua aksi logout dicatat dengan IP address dan user agent untuk audit trail
+// @note         4. State Clear: Token dihapus dari cookie, namun tidak ada blacklist token (stateless JWT approach)
+// @note         5. Security: Setelah logout, user harus login kembali untuk mengakses protected endpoints
+func Logout(c *fiber.Ctx) error {
+	// Ambil info user dari locals untuk audit logging
+	userIDVal := c.Locals("userID")
+	usernameVal := c.Locals("username")
 
-	if userIDValue != nil && usernameValue != nil {
-		userID := userIDValue.(string)
-		username := usernameValue.(string)
+	if userIDVal != nil && usernameVal != nil {
+		userID := userIDVal.(string)
+		username := usernameVal.(string)
 
 		// Ambil alamat IP dan user agent untuk audit log
-		ipAddress := getClientIP(r)
-		userAgent := r.UserAgent()
+		ipAddress := getClientIP(c)
+		userAgent := c.Get("User-Agent")
 
 		// Log aksi logout
 		LogAction(userID, username, ActionLogout, ResourceAuth, "", ipAddress, userAgent, StatusSuccess, nil)
 	}
 
 	// Hapus cookie aman
-	DeleteSecureCookie(w, authTokenCookie)
+	DeleteSecureCookie(c, authTokenCookie)
 
-	render.Status(r, http.StatusOK)
-	render.JSON(w, r, map[string]string{
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Logged out successfully",
 	})
 }

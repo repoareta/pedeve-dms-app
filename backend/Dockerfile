@@ -16,8 +16,8 @@ RUN go mod download
 COPY . .
 
 # Build the application
-# Adjust the build command based on your main.go location
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
+# Build from cmd/api directory (Clean Architecture structure)
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/api
 
 # Stage 2: Production
 FROM alpine:latest

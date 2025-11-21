@@ -1,4 +1,4 @@
-package main
+package middleware
 
 import (
 	"crypto/rand"
@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -98,7 +99,7 @@ func CSRFMiddleware(c *fiber.Ctx) error {
 	// Ambil token CSRF dari header
 	csrfToken := c.Get(csrfTokenHeader)
 	if csrfToken == "" {
-		return c.Status(fiber.StatusForbidden).JSON(ErrorResponse{
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "csrf_token_missing",
 			Message: "CSRF token is required",
 		})
@@ -106,49 +107,12 @@ func CSRFMiddleware(c *fiber.Ctx) error {
 
 	// Validasi token CSRF
 	if !ValidateCSRFToken(csrfToken) {
-		return c.Status(fiber.StatusForbidden).JSON(ErrorResponse{
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "csrf_token_invalid",
 			Message: "Invalid or expired CSRF token",
 		})
 	}
 
 	return c.Next()
-}
-
-// GetCSRFTokenHandler mengembalikan token CSRF (untuk Fiber)
-// @Summary      Get CSRF token
-// @Description  Get a new CSRF token for form submissions
-// @Tags         Security
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  map[string]string
-// @Router       /api/v1/csrf-token [get]
-func GetCSRFTokenHandler(c *fiber.Ctx) error {
-	token, err := GenerateCSRFToken()
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error:   "internal_error",
-			Message: "Failed to generate CSRF token",
-		})
-	}
-
-	// Simpan token
-	StoreCSRFToken(token)
-
-	// Set cookie with CSRF token (optional, untuk double submit cookie pattern)
-	isHTTPS := c.Protocol() == "https" || c.Get("X-Forwarded-Proto") == "https"
-	c.Cookie(&fiber.Cookie{
-		Name:     csrfTokenCookie,
-		Value:    token,
-		Path:     "/",
-		MaxAge:   int(csrfTokenExpiry.Seconds()),
-		HTTPOnly: true,
-		Secure:   isHTTPS, // Hanya set flag Secure jika HTTPS
-		SameSite: "Strict",
-	})
-
-	return c.Status(fiber.StatusOK).JSON(map[string]string{
-		"csrf_token": token,
-	})
 }
 

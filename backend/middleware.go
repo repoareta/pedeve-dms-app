@@ -1,93 +1,75 @@
 package main
 
 import (
-	"context"
-	"net/http"
 	"strings"
 
-	"github.com/go-chi/render"
+	"github.com/gofiber/fiber/v2"
 )
 
-// Tipe context key untuk menghindari collision
-type contextKey string
+// JWTAuthMiddleware memvalidasi token JWT dan menambahkan info user ke locals (untuk Fiber)
+func JWTAuthMiddleware(c *fiber.Ctx) error {
+	var tokenString string
 
-const (
-	contextKeyUserID   contextKey = "userID"
-	contextKeyUsername contextKey = "username"
-)
-
-// JWTAuthMiddleware memvalidasi token JWT dan menambahkan info user ke context
-func JWTAuthMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var tokenString string
-
-		// Coba ambil token dari cookie terlebih dahulu (metode yang diutamakan)
-		cookieToken, err := GetSecureCookie(r, authTokenCookie)
-		if err == nil && cookieToken != "" {
-			tokenString = cookieToken
-		} else {
-			// Fallback ke Authorization header (untuk kompatibilitas ke belakang)
-			authHeader := r.Header.Get("Authorization")
-			if authHeader != "" {
-				parts := strings.Split(authHeader, " ")
-				if len(parts) == 2 && parts[0] == "Bearer" {
-					tokenString = parts[1]
-				}
+	// Coba ambil token dari cookie terlebih dahulu (metode yang diutamakan)
+	cookieToken, err := GetSecureCookie(c, authTokenCookie)
+	if err == nil && cookieToken != "" {
+		tokenString = cookieToken
+	} else {
+		// Fallback ke Authorization header (untuk kompatibilitas ke belakang)
+		authHeader := c.Get("Authorization")
+		if authHeader != "" {
+			parts := strings.Split(authHeader, " ")
+			if len(parts) == 2 && parts[0] == "Bearer" {
+				tokenString = parts[1]
 			}
 		}
+	}
 
-		// Jika token tidak ditemukan, return unauthorized
-		if tokenString == "" {
-			render.Status(r, http.StatusUnauthorized)
-			render.JSON(w, r, ErrorResponse{
-				Error:   "unauthorized",
-				Message: "Authentication required. Please login.",
-			})
-			return
-		}
+	// Jika token tidak ditemukan, return unauthorized
+	if tokenString == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			Error:   "unauthorized",
+			Message: "Authentication required. Please login.",
+		})
+	}
 
-		// Validasi token
-		claims, err := ValidateJWT(tokenString)
-		if err != nil {
-			render.Status(r, http.StatusUnauthorized)
-			render.JSON(w, r, ErrorResponse{
-				Error:   "unauthorized",
-				Message: "Invalid or expired token",
-			})
-			return
-		}
+	// Validasi token
+	claims, err := ValidateJWT(tokenString)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			Error:   "unauthorized",
+			Message: "Invalid or expired token",
+		})
+	}
 
-		// Tambahkan info user ke context
-		ctx := context.WithValue(r.Context(), contextKeyUserID, claims.UserID)
-		ctx = context.WithValue(ctx, contextKeyUsername, claims.Username)
+	// Tambahkan info user ke locals (Fiber equivalent dari context)
+	c.Locals("userID", claims.UserID)
+	c.Locals("username", claims.Username)
 
-		// Panggil handler berikutnya
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+	// Panggil handler berikutnya
+	return c.Next()
 }
 
-// SecurityHeadersMiddleware menambahkan security headers
-func SecurityHeadersMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Header keamanan
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-XSS-Protection", "1; mode=block")
-		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+// SecurityHeadersMiddleware menambahkan security headers (untuk Fiber)
+func SecurityHeadersMiddleware(c *fiber.Ctx) error {
+	// Header keamanan
+	c.Set("X-Content-Type-Options", "nosniff")
+	c.Set("X-XSS-Protection", "1; mode=block")
+	c.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 
-		// Cek apakah ini route Swagger
-		if strings.HasPrefix(r.URL.Path, "/swagger") {
-			// Header yang lebih permisif untuk Swagger UI
-			w.Header().Set("X-Frame-Options", "SAMEORIGIN")
-			// Izinkan inline scripts dan styles untuk Swagger UI
-			w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;")
-		} else {
-			// Header ketat untuk route API
-			w.Header().Set("X-Frame-Options", "DENY")
-			w.Header().Set("Content-Security-Policy", "default-src 'self'")
-		}
+	// Cek apakah ini route Swagger
+	if strings.HasPrefix(c.Path(), "/swagger") {
+		// Header yang lebih permisif untuk Swagger UI
+		c.Set("X-Frame-Options", "SAMEORIGIN")
+		// Izinkan inline scripts dan styles untuk Swagger UI
+		c.Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;")
+	} else {
+		// Header ketat untuk route API
+		c.Set("X-Frame-Options", "DENY")
+		c.Set("Content-Security-Policy", "default-src 'self'")
+	}
 
-		// Panggil handler berikutnya
-		next.ServeHTTP(w, r)
-	})
+	// Panggil handler berikutnya
+	return c.Next()
 }
 

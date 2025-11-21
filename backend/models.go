@@ -17,6 +17,7 @@ type User struct {
 type LoginRequest struct {
 	Username string `json:"username" example:"admin"` // Can be username or email
 	Password string `json:"password" example:"password123"`
+	Code     string `json:"code,omitempty" example:"123456"` // 2FA code (optional)
 }
 
 // RegisterRequest represents registration request payload

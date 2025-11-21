@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { message } from 'ant-design-vue'
+import { Icon as IconifyIcon } from '@iconify/vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -10,18 +11,36 @@ const authStore = useAuthStore()
 const email = ref('')
 const password = ref('')
 const loading = ref(false)
+const requires2FA = ref(false)
+const twoFACode = ref('')
 
 const handleLogin = async () => {
   try {
     loading.value = true
-    await authStore.login(email.value, password.value)
+    const response = await authStore.login(email.value, password.value)
+    
+    // Check if 2FA is required
+    if (response.requires_2fa) {
+      requires2FA.value = true
+      message.info(response.message || 'Masukkan kode 2FA dari authenticator app Anda')
+      return
+    }
+    
+    // Normal login success
     message.success('Login berhasil!')
-    // Wait a bit before redirect to ensure state is saved
     setTimeout(() => {
       router.push('/dashboard')
     }, 100)
   } catch (error: any) {
     console.error('Login error:', error)
+    
+    // Check if error is because 2FA is required
+    if (error?.response?.status === 200 && error?.response?.data?.requires_2fa) {
+      requires2FA.value = true
+      message.info('Masukkan kode 2FA dari authenticator app Anda')
+      return
+    }
+    
     // Extract error message from various possible locations
     const errorMessage = 
       error?.response?.data?.message || 
@@ -38,6 +57,43 @@ const handleLogin = async () => {
     loading.value = false
   }
 }
+
+const handleVerify2FA = async () => {
+  if (!twoFACode.value || twoFACode.value.length !== 6) {
+    message.error('Kode harus 6 digit')
+    return
+  }
+
+  try {
+    loading.value = true
+    await authStore.loginWith2FA(email.value, password.value, twoFACode.value)
+    message.success('Login berhasil!')
+    setTimeout(() => {
+      router.push('/dashboard')
+    }, 100)
+  } catch (error: any) {
+    console.error('2FA verification error:', error)
+    const errorMessage = 
+      error?.response?.data?.message || 
+      error?.response?.data?.Message || 
+      authStore.error || 
+      error?.message || 
+      'Kode 2FA tidak valid'
+    
+    message.error({
+      content: errorMessage,
+      duration: 5,
+    })
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleBackToLogin = () => {
+  requires2FA.value = false
+  twoFACode.value = ''
+  password.value = ''
+}
 </script>
 
 <template>
@@ -52,10 +108,56 @@ const handleLogin = async () => {
 
         <!-- Login Form -->
         <div class="login-form-container">
-          <h2 class="login-title">Login</h2>
-          <p class="login-subtitle">Login to your account</p>
+          <h2 class="login-title">{{ requires2FA ? 'Verifikasi 2FA' : 'Login' }}</h2>
+          <p class="login-subtitle">
+            {{ requires2FA ? 'Masukkan kode 6 digit dari authenticator app Anda' : 'Login to your account' }}
+          </p>
 
+          <!-- 2FA Verification Form -->
           <a-form 
+            v-if="requires2FA"
+            :model="{ twoFACode }" 
+            @finish="handleVerify2FA" 
+            layout="vertical" 
+            class="login-form"
+            :validate-trigger="['submit']"
+          >
+            <a-form-item 
+              label="Kode 2FA" 
+              name="twoFACode"
+              :rules="[
+                { required: true, message: 'Kode 2FA wajib diisi' },
+                { len: 6, message: 'Kode harus 6 digit', trigger: 'blur' }
+              ]">
+              <a-input 
+                v-model:value="twoFACode" 
+                placeholder="Masukkan kode 6 digit"
+                size="large" 
+                :maxlength="6"
+                autocomplete="one-time-code"
+                :disabled="loading">
+                <template #prefix>
+                  <IconifyIcon icon="mdi:shield-lock" width="18" />
+                </template>
+              </a-input>
+            </a-form-item>
+
+            <a-form-item>
+              <a-button type="primary" html-type="submit" block size="large" :loading="loading" class="login-button">
+                Verifikasi
+              </a-button>
+            </a-form-item>
+
+            <a-form-item>
+              <a-button type="link" block @click="handleBackToLogin" :disabled="loading">
+                Kembali ke Login
+              </a-button>
+            </a-form-item>
+          </a-form>
+
+          <!-- Normal Login Form -->
+          <a-form 
+            v-else
             :model="{ email, password }" 
             @finish="handleLogin" 
             layout="vertical" 

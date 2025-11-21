@@ -175,7 +175,7 @@ onUnmounted(() => {
                 <IconifyIcon icon="mdi:account" width="16" style="margin-right: 8px;" />
                 Profile
               </a-menu-item>
-              <a-menu-item key="settings">
+              <a-menu-item key="settings" @click="handleMenuItemClick('/settings')">
                 <IconifyIcon icon="mdi:cog" width="16" style="margin-right: 8px;" />
                 Settings
               </a-menu-item>

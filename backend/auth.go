@@ -174,8 +174,39 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Check if 2FA is enabled and require 2FA code if enabled
-	// For now, we skip 2FA check but it's ready to be integrated
+	// Check if 2FA is enabled
+	var twoFA TwoFactorAuth
+	result2FA := DB.Where("user_id = ? AND enabled = ?", userModel.ID, true).First(&twoFA)
+	is2FAEnabled := result2FA.Error == nil
+
+	// If 2FA is enabled, verify the code
+	if is2FAEnabled {
+		if req.Code == "" {
+			// 2FA required but no code provided
+			render.Status(r, http.StatusOK)
+			render.JSON(w, r, map[string]interface{}{
+				"requires_2fa": true,
+				"message":      "2FA verification required. Please enter your 2FA code.",
+			})
+			return
+		}
+
+		// Verify 2FA code
+		valid, err := Verify2FALogin(userModel.ID, req.Code)
+		if err != nil || !valid {
+			// Log failed 2FA attempt
+			LogAction(userModel.ID, userModel.Username, ActionFailedLogin, ResourceAuth, "", ipAddress, userAgent, StatusFailure, map[string]interface{}{
+				"reason": "invalid_2fa_code",
+			})
+
+			render.Status(r, http.StatusUnauthorized)
+			render.JSON(w, r, ErrorResponse{
+				Error:   "invalid_2fa_code",
+				Message: "Invalid 2FA code",
+			})
+			return
+		}
+	}
 
 	// Log successful login
 	LogAction(userModel.ID, userModel.Username, ActionLogin, ResourceAuth, "", ipAddress, userAgent, StatusSuccess, nil)

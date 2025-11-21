@@ -3,8 +3,8 @@
 
 // Theme Colors
 :root {
-  --primary-color: #035CAB;
-  --secondary-color: #DB241B;
+  --primary-color: #035cab;
+  --secondary-color: #db241b;
   --text-color: #333333;
   --text-color-secondary: #666666;
   --text-color-disabled: #999999;
@@ -199,8 +199,8 @@ body {
   left: 0;
   right: 0;
   width: 100%;
-  background: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: transparent;
+  //   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   z-index: 1000;
   transition: background-color 0.3s ease, box-shadow 0.3s ease;
 
@@ -209,11 +209,12 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 12px 24px;
-    border-bottom: 1px solid #f0f0f0;
+    // border-bottom: 1px solid #f0f0f0;
     transition: border-bottom-color 0.3s ease;
 
     &.onscrollnav {
-      background: var(--primary-color) !important;
+      //   background: var(--primary-color) !important;
+      background: white;
       box-shadow: 0 4px 12px rgba(3, 92, 171, 0.2);
       transition: background-color 0.3s ease, box-shadow 0.3s ease;
     }
@@ -237,6 +238,33 @@ body {
     display: flex;
     justify-content: center;
     padding: 0 24px;
+
+    .ant-menu-light{
+        background: transparent;
+        border-bottom: 0;
+
+        .ant-menu-item-selected{
+            background: rgba(128, 128, 128, 0.072);
+            border-radius: 50px;
+            border-color: transparent;
+            &::after{
+                border-bottom: 0;
+                border-bottom-color: red;
+            }
+        }
+
+        .ant-menu-item{
+            &:hover{
+                color: var(--primary-color);
+            }
+            &::after{
+                border-bottom: 0;
+                border-bottom-color: red;
+            }
+        }
+        
+        
+    }
 
     :deep(.ant-menu) {
       border-bottom: none;

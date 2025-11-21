@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image/png"
+	"log"
 	"net/http"
 	"time"
 
@@ -17,13 +18,13 @@ import (
 
 // TwoFactorAuth represents 2FA settings for a user
 type TwoFactorAuth struct {
-	ID           string    `gorm:"primaryKey" json:"id"`
-	UserID       string    `gorm:"uniqueIndex;not null" json:"user_id"`
-	Secret       string    `gorm:"not null" json:"-"` // TOTP secret
-	Enabled      bool      `gorm:"default:false" json:"enabled"`
-	BackupCodes  string    `gorm:"type:text" json:"-"` // JSON array of backup codes
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID          string    `gorm:"primaryKey" json:"id"`
+	UserID      string    `gorm:"uniqueIndex;not null" json:"user_id"`
+	Secret      string    `gorm:"not null" json:"-"` // TOTP secret
+	Enabled     bool      `gorm:"default:false" json:"enabled"`
+	BackupCodes string    `gorm:"type:text" json:"-"` // JSON array of backup codes
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // TableName specifies the table name for TwoFactorAuth
@@ -43,8 +44,42 @@ func (TwoFactorAuth) TableName() string {
 // @Router       /api/v1/auth/2fa/generate [post]
 func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
 	// Get user from context
-	userID := r.Context().Value(contextKeyUserID).(string)
-	username := r.Context().Value(contextKeyUsername).(string)
+	userIDValue := r.Context().Value(contextKeyUserID)
+	usernameValue := r.Context().Value(contextKeyUsername)
+
+	if userIDValue == nil || usernameValue == nil {
+		log.Printf("Error: user context not found in request")
+		render.Status(r, http.StatusUnauthorized)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found. Please ensure you are authenticated.",
+		})
+		return
+	}
+
+	userID, ok := userIDValue.(string)
+	if !ok {
+		log.Printf("Error: invalid userID type in context")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Invalid user context",
+		})
+		return
+	}
+
+	username, ok := usernameValue.(string)
+	if !ok {
+		log.Printf("Error: invalid username type in context")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Invalid user context",
+		})
+		return
+	}
+
+	log.Printf("Generating 2FA secret for user: %s (ID: %s)", username, userID)
 
 	// Generate TOTP key
 	key, err := totp.Generate(totp.GenerateOpts{
@@ -55,6 +90,7 @@ func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
 		Algorithm:   otp.AlgorithmSHA1,
 	})
 	if err != nil {
+		log.Printf("Error generating TOTP key: %v", err)
 		render.Status(r, http.StatusInternalServerError)
 		render.JSON(w, r, ErrorResponse{
 			Error:   "internal_error",
@@ -62,6 +98,8 @@ func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	log.Printf("TOTP key generated successfully, secret: %s", key.Secret())
 
 	// Save or update 2FA record
 	var twoFA TwoFactorAuth
@@ -73,17 +111,44 @@ func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
 			Secret:  key.Secret(),
 			Enabled: false,
 		}
-		DB.Create(&twoFA)
+		if err := DB.Create(&twoFA).Error; err != nil {
+			log.Printf("Error creating 2FA record: %v", err)
+			render.Status(r, http.StatusInternalServerError)
+			render.JSON(w, r, ErrorResponse{
+				Error:   "internal_error",
+				Message: "Failed to save 2FA secret",
+			})
+			return
+		}
+		log.Printf("2FA record created successfully")
+	} else if result.Error != nil {
+		log.Printf("Error querying 2FA record: %v", result.Error)
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to query 2FA record",
+		})
+		return
 	} else {
 		twoFA.Secret = key.Secret()
 		twoFA.Enabled = false
-		DB.Save(&twoFA)
+		if err := DB.Save(&twoFA).Error; err != nil {
+			log.Printf("Error updating 2FA record: %v", err)
+			render.Status(r, http.StatusInternalServerError)
+			render.JSON(w, r, ErrorResponse{
+				Error:   "internal_error",
+				Message: "Failed to update 2FA secret",
+			})
+			return
+		}
+		log.Printf("2FA record updated successfully")
 	}
 
 	// Generate QR code image
 	var buf bytes.Buffer
 	img, err := key.Image(200, 200)
 	if err != nil {
+		log.Printf("Error generating QR code image: %v", err)
 		render.Status(r, http.StatusInternalServerError)
 		render.JSON(w, r, ErrorResponse{
 			Error:   "internal_error",
@@ -91,15 +156,26 @@ func Generate2FASecret(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	png.Encode(&buf, img)
+
+	if err := png.Encode(&buf, img); err != nil {
+		log.Printf("Error encoding PNG: %v", err)
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to encode QR code",
+		})
+		return
+	}
+
+	log.Printf("QR code generated successfully, size: %d bytes", buf.Len())
 
 	// Return secret and QR code
 	render.Status(r, http.StatusOK)
 	render.JSON(w, r, map[string]interface{}{
-		"secret":    key.Secret(),
-		"qr_code":   base64.StdEncoding.EncodeToString(buf.Bytes()),
-		"url":       key.URL(),
-		"message":   "Scan QR code with authenticator app to enable 2FA",
+		"secret":  key.Secret(),
+		"qr_code": base64.StdEncoding.EncodeToString(buf.Bytes()),
+		"url":     key.URL(),
+		"message": "Scan QR code with authenticator app to enable 2FA",
 	})
 }
 
@@ -154,15 +230,21 @@ func Verify2FA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Enable 2FA and generate backup codes
-	backupCodes := generateBackupCodes()
+	backupCodesJSON := generateBackupCodes()
 	twoFA.Enabled = true
-	twoFA.BackupCodes = backupCodes
+	twoFA.BackupCodes = backupCodesJSON
 	DB.Save(&twoFA)
+
+	// Parse backup codes to return as array
+	var backupCodesArray []string
+	if err := json.Unmarshal([]byte(backupCodesJSON), &backupCodesArray); err != nil {
+		backupCodesArray = []string{}
+	}
 
 	render.Status(r, http.StatusOK)
 	render.JSON(w, r, map[string]interface{}{
-		"message":     "2FA enabled successfully",
-		"backup_codes": backupCodes,
+		"message":      "2FA enabled successfully",
+		"backup_codes": backupCodesArray,
 	})
 }
 
@@ -205,15 +287,74 @@ func verifyBackupCode(code, backupCodesJSON string) bool {
 		return false
 	}
 
-		for i, backupCode := range codes {
-			if backupCode == code {
-				// Remove used backup code
-				codes = append(codes[:i], codes[i+1:]...)
-				// TODO: Update database with new backup codes
-				// DB.Model(&TwoFactorAuth{}).Where("user_id = ?", userID).Update("backup_codes", json.Marshal(codes))
-				return true
-			}
+	for i, backupCode := range codes {
+		if backupCode == code {
+			// Remove used backup code
+			codes = append(codes[:i], codes[i+1:]...)
+			// TODO: Update database with new backup codes
+			// DB.Model(&TwoFactorAuth{}).Where("user_id = ?", userID).Update("backup_codes", json.Marshal(codes))
+			return true
 		}
+	}
 	return false
 }
 
+// Get2FAStatus returns 2FA status for current user
+// @Summary      Get 2FA status
+// @Description  Get current user's 2FA status
+// @Tags         Authentication
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  map[string]interface{}
+// @Failure      401  {object}  ErrorResponse
+// @Router       /api/v1/auth/2fa/status [get]
+func Get2FAStatus(w http.ResponseWriter, r *http.Request) {
+	userIDValue := r.Context().Value(contextKeyUserID)
+	if userIDValue == nil {
+		log.Printf("Error: user context not found in request")
+		render.Status(r, http.StatusUnauthorized)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found. Please ensure you are authenticated.",
+		})
+		return
+	}
+
+	userID, ok := userIDValue.(string)
+	if !ok {
+		log.Printf("Error: invalid userID type in context")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Invalid user context",
+		})
+		return
+	}
+
+	var twoFA TwoFactorAuth
+	result := DB.Where("user_id = ?", userID).First(&twoFA)
+
+	if result.Error == gorm.ErrRecordNotFound {
+		render.Status(r, http.StatusOK)
+		render.JSON(w, r, map[string]interface{}{
+			"enabled": false,
+		})
+		return
+	}
+
+	if result.Error != nil {
+		log.Printf("Error querying 2FA status: %v", result.Error)
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to get 2FA status",
+		})
+		return
+	}
+
+	render.Status(r, http.StatusOK)
+	render.JSON(w, r, map[string]interface{}{
+		"enabled": twoFA.Enabled,
+	})
+}

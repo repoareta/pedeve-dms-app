@@ -71,6 +71,11 @@ func main() {
 		r.Group(func(r chi.Router) {
 			r.Use(JWTAuthMiddleware)
 			r.Get("/auth/profile", GetProfile)
+			
+			// 2FA routes
+			r.Post("/auth/2fa/generate", Generate2FASecret)
+			r.Post("/auth/2fa/verify", Verify2FA)
+			r.Get("/auth/2fa/status", Get2FAStatus)
 		})
 
 		// Documents routes (protected)

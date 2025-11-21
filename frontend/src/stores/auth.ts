@@ -76,6 +76,68 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Login with 2FA code
+  const loginWith2FA = async (usernameOrEmail: string, password: string, code: string) => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await authApi.loginWith2FA({ username: usernameOrEmail, password, code })
+      token.value = response.token
+      user.value = response.user
+      localStorage.setItem('auth_token', response.token)
+      localStorage.setItem('auth_user', JSON.stringify(response.user))
+      return response
+    } catch (err: any) {
+      error.value = err.response?.data?.message || '2FA verification failed'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 2FA methods
+  const generate2FA = async () => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await authApi.generate2FA()
+      return response
+    } catch (err: any) {
+      error.value = err.response?.data?.message || 'Failed to generate 2FA secret'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const verify2FA = async (code: string) => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await authApi.verify2FA(code)
+      return response
+    } catch (err: any) {
+      error.value = err.response?.data?.message || 'Failed to verify 2FA code'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const get2FAStatus = async () => {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await authApi.get2FAStatus()
+      return response
+    } catch (err: any) {
+      error.value = err.response?.data?.message || 'Failed to get 2FA status'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     token,
     user,
@@ -83,9 +145,13 @@ export const useAuthStore = defineStore('auth', () => {
     error,
     isAuthenticated,
     login,
+    loginWith2FA,
     register,
     logout,
     fetchProfile,
+    generate2FA,
+    verify2FA,
+    get2FAStatus,
   }
 })
 

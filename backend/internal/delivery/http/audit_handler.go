@@ -12,21 +12,29 @@ import (
 )
 
 // GetAuditLogsHandler menangani request GET untuk audit logs (untuk Fiber)
-// @Summary      Get audit logs
-// @Description  Get audit logs with pagination and filters
+// @Summary      Ambil Audit Logs
+// @Description  Mengambil audit logs dengan pagination dan filter. User reguler hanya bisa melihat audit logs mereka sendiri, sedangkan admin/superadmin bisa melihat semua audit logs. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).
 // @Tags         Audit
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        page      query     int     false  "Page number (default: 1)"
-// @Param        pageSize  query     int     false  "Page size (default: 10)"
-// @Param        action    query     string  false  "Filter by action"
-// @Param        resource  query     string  false  "Filter by resource"
-// @Param        status    query     string  false  "Filter by status"
-// @Param        logType   query     string  false  "Filter by log type (user_action or technical_error)"
-// @Success      200       {object}  map[string]interface{}
-// @Failure      401       {object}  domain.ErrorResponse
+// @Param        page      query     int     false  "Nomor halaman (default: 1)"
+// @Param        pageSize  query     int     false  "Jumlah item per halaman (default: 10, maksimal: 100)"
+// @Param        action    query     string  false  "Filter berdasarkan action (contoh: login, logout, create_document)"
+// @Param        resource  query     string  false  "Filter berdasarkan resource (contoh: auth, document, user)"
+// @Param        status    query     string  false  "Filter berdasarkan status (success, failure, error)"
+// @Param        logType   query     string  false  "Filter berdasarkan tipe log (user_action atau technical_error)"
+// @Success      200       {object}  map[string]interface{}  "Audit logs berhasil diambil. Response berisi data (array audit logs), total, page, pageSize, dan totalPages"
+// @Failure      401       {object}  domain.ErrorResponse  "Token tidak valid atau user tidak terautentikasi"
+// @Failure      404       {object}  domain.ErrorResponse  "User tidak ditemukan di database"
+// @Failure      500       {object}  domain.ErrorResponse  "Gagal mengambil audit logs"
 // @Router       /api/v1/audit-logs [get]
+// @note         Catatan Teknis:
+// @note         1. Authentication: Memerlukan JWT token valid dalam httpOnly cookie (auth_token) atau Authorization header
+// @note         2. CSRF Protection: Endpoint ini tidak memerlukan CSRF token karena menggunakan GET method (read-only)
+// @note         3. Authorization: User reguler hanya melihat logs sendiri, admin/superadmin melihat semua logs
+// @note         4. Pagination: Default page=1, pageSize=10, maksimal pageSize=100
+// @note         5. Filtering: Filter dapat dikombinasikan untuk hasil yang lebih spesifik
 func GetAuditLogsHandler(c *fiber.Ctx) error {
 	// Ambil user saat ini dari locals
 	userIDVal := c.Locals("userID")
@@ -98,16 +106,22 @@ func GetAuditLogsHandler(c *fiber.Ctx) error {
 }
 
 // GetAuditLogStatsHandler menangani request GET untuk statistik audit logs (untuk Fiber)
-// @Summary      Get audit log statistics
-// @Description  Get statistics about audit logs (total records, counts by type, estimated size, etc.)
+// @Summary      Ambil Statistik Audit Logs
+// @Description  Mengambil statistik tentang audit logs termasuk total records, jumlah berdasarkan tipe, estimasi ukuran database, dan retention policy. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).
 // @Tags         Audit
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {object}  map[string]interface{}
-// @Failure      401  {object}  domain.ErrorResponse
-// @Failure      500  {object}  domain.ErrorResponse
+// @Success      200  {object}  map[string]interface{}  "Statistik audit logs berhasil diambil. Response berisi total_records, user_action_count, technical_error_count, estimated_size_mb, retention_policy (user_action_days, technical_error_days), dll"
+// @Failure      401  {object}  domain.ErrorResponse  "Token tidak valid atau user tidak terautentikasi"
+// @Failure      500  {object}  domain.ErrorResponse  "Gagal mengambil statistik audit logs"
 // @Router       /api/v1/audit-logs/stats [get]
+// @note         Catatan Teknis:
+// @note         1. Authentication: Memerlukan JWT token valid dalam httpOnly cookie (auth_token) atau Authorization header
+// @note         2. CSRF Protection: Endpoint ini tidak memerlukan CSRF token karena menggunakan GET method (read-only)
+// @note         3. Retention Policy: User action logs disimpan selama 90 hari, technical error logs disimpan selama 30 hari
+// @note         4. Auto Cleanup: Logs yang expired akan dihapus otomatis oleh background job
+// @note         5. Statistics: Statistik dihitung secara real-time dari database
 func GetAuditLogStatsHandler(c *fiber.Ctx) error {
 	stats, err := usecase.GetAuditLogStats()
 	if err != nil {

@@ -194,13 +194,17 @@ func indexHandler(c *fiber.Ctx) error {
 }
 
 // healthHandler returns health status
-// @Summary      Health check
-// @Description  Returns API health status
+// @Summary      Health Check
+// @Description  Mengecek status kesehatan API. Endpoint ini public dan tidak memerlukan authentication. Digunakan untuk monitoring dan health checks.
 // @Tags         General
 // @Accept       json
 // @Produce      json
-// @Success      200  {object}  map[string]string
+// @Success      200  {object}  map[string]string  "API sehat. Response berisi status: 'OK' dan service: 'pedeve-backend'"
 // @Router       /health [get]
+// @note         Catatan Teknis:
+// @note         1. Public Endpoint: Endpoint ini tidak memerlukan authentication
+// @note         2. Monitoring: Digunakan untuk health checks oleh load balancer atau monitoring tools
+// @note         3. Response: Response selalu berisi status: 'OK' jika API berjalan dengan baik
 func healthHandler(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"status":  "OK",
@@ -209,13 +213,17 @@ func healthHandler(c *fiber.Ctx) error {
 }
 
 // apiInfoHandler returns API information
-// @Summary      API Information
-// @Description  Returns API version and endpoints
+// @Summary      Informasi API
+// @Description  Mengembalikan informasi tentang API termasuk versi dan daftar endpoint. Endpoint ini public dan tidak memerlukan authentication.
 // @Tags         General
 // @Accept       json
 // @Produce      json
-// @Success      200  {object}  map[string]interface{}
+// @Success      200  {object}  map[string]interface{}  "Informasi API berhasil diambil. Response berisi api, version, dan endpoints"
 // @Router       /api/v1 [get]
+// @note         Catatan Teknis:
+// @note         1. Public Endpoint: Endpoint ini tidak memerlukan authentication
+// @note         2. API Version: Mengembalikan versi API saat ini
+// @note         3. Endpoints: Mengembalikan daftar endpoint yang tersedia
 func apiInfoHandler(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"api":     "Pedeve App Backend API",

@@ -14,18 +14,24 @@ import (
 )
 
 // Login handles user login (untuk Fiber)
-// @Summary      User login
-// @Description  Authentikasi user dan kembalikan JWT token. Mendukung login dengan username atau email. Jika 2FA aktif, akan memerlukan kode verifikasi tambahan.
+// @Summary      Login User
+// @Description  Autentikasi user dan kembalikan JWT token. Mendukung login dengan username atau email. Jika 2FA aktif, akan memerlukan kode verifikasi tambahan pada request berikutnya.
 // @Tags         Authentication
 // @Accept       json
 // @Produce      json
-// @Param        credentials  body      domain.LoginRequest  true  "Login credentials (username/email dan password, opsional: code untuk 2FA)"
-// @Success      200          {object}  domain.AuthResponse  "Login berhasil, token JWT dikembalikan dalam response body dan httpOnly cookie"
-// @Success      200          {object}  map[string]interface{}  "2FA diperlukan: requires_2fa: true, kirim code pada request berikutnya"
-// @Failure      400          {object}  domain.ErrorResponse  "Request body tidak valid atau validation error"
-// @Failure      401          {object}  domain.ErrorResponse  "Kredensial tidak valid atau 2FA code salah"
-// @Failure      429          {object}  domain.ErrorResponse  "Terlalu banyak request, rate limit terlampaui"
+// @Param        credentials  body      domain.LoginRequest  true  "Kredensial login (username/email, password, dan opsional: code untuk 2FA)"
+// @Success      200          {object}  domain.AuthResponse  "Login berhasil. Token JWT dikembalikan dalam response body dan disimpan dalam httpOnly cookie (auth_token) untuk keamanan."
+// @Success      200          {object}  map[string]interface{}  "2FA diperlukan. Response berisi requires_2fa: true. Kirim kode 2FA pada request login berikutnya dengan field 'code'."
+// @Failure      400          {object}  domain.ErrorResponse  "Request body tidak valid atau validation error (username/password tidak memenuhi syarat)"
+// @Failure      401          {object}  domain.ErrorResponse  "Kredensial tidak valid atau kode 2FA salah"
+// @Failure      429          {object}  domain.ErrorResponse  "Terlalu banyak request, rate limit terlampaui (5 req/min untuk auth endpoints)"
 // @Router       /api/v1/auth/login [post]
+// @note         Catatan Teknis:
+// @note         1. Authentication: JWT token disimpan dalam httpOnly cookie untuk mencegah XSS attacks
+// @note         2. 2FA Support: Jika user memiliki 2FA aktif, response pertama akan berisi requires_2fa: true
+// @note         3. Rate Limiting: Endpoint ini memiliki rate limiting khusus (5 req/min, burst: 5) untuk mencegah brute force
+// @note         4. Audit Logging: Semua percobaan login (berhasil/gagal) dicatat dalam audit log
+// @note         5. Password: Password di-hash menggunakan bcrypt sebelum disimpan di database
 func Login(c *fiber.Ctx) error {
 	var req domain.LoginRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -130,16 +136,21 @@ func Login(c *fiber.Ctx) error {
 }
 
 // GetProfile returns current user profile (untuk Fiber)
-// @Summary      Get user profile
-// @Description  Mengambil profil user yang sedang terautentikasi. Data user diambil dari JWT token yang tersimpan dalam cookie.
+// @Summary      Ambil Profil User
+// @Description  Mengambil profil user yang sedang terautentikasi. Data user diambil dari JWT token yang tersimpan dalam httpOnly cookie. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).
 // @Tags         Authentication
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {object}  domain.User  "Profil user berhasil diambil (tanpa informasi password)"
+// @Success      200  {object}  domain.User  "Profil user berhasil diambil. Response berisi id, username, email, role, created_at, dan updated_at (tanpa informasi password)"
 // @Failure      401  {object}  domain.ErrorResponse  "Token tidak valid atau expired, user tidak terautentikasi"
 // @Failure      404  {object}  domain.ErrorResponse  "User tidak ditemukan di database"
 // @Router       /api/v1/auth/profile [get]
+// @note         Catatan Teknis:
+// @note         1. Authentication: Memerlukan JWT token valid dalam httpOnly cookie (auth_token) atau Authorization header
+// @note         2. CSRF Protection: Endpoint ini tidak memerlukan CSRF token karena menggunakan GET method (read-only)
+// @note         3. Data Privacy: Password tidak pernah dikembalikan dalam response untuk keamanan
+// @note         4. User Context: User ID dan username diambil dari JWT claims, tidak dari request body
 func GetProfile(c *fiber.Ctx) error {
 	// Ambil user dari locals (diset oleh JWT middleware)
 	userIDVal := c.Locals("userID")
@@ -174,15 +185,21 @@ func GetProfile(c *fiber.Ctx) error {
 }
 
 // Logout handles user logout (untuk Fiber)
-// @Summary      User logout
-// @Description  Logout user dan hapus authentication cookie. Aksi logout dicatat dalam audit log untuk keamanan.
+// @Summary      Logout User
+// @Description  Logout user dan hapus authentication cookie (auth_token). Aksi logout dicatat dalam audit log untuk keamanan dan audit trail. Endpoint ini memerlukan CSRF token karena menggunakan method POST.
 // @Tags         Authentication
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {object}  map[string]string  "Logout berhasil: message: 'Logged out successfully'"
+// @Success      200  {object}  map[string]string  "Logout berhasil. Response berisi message: 'Logged out successfully'. Cookie auth_token akan dihapus."
 // @Failure      401  {object}  domain.ErrorResponse  "Token tidak valid atau user tidak terautentikasi"
+// @Failure      403  {object}  domain.ErrorResponse  "CSRF token tidak valid atau tidak ditemukan"
 // @Router       /api/v1/auth/logout [post]
+// @note         Catatan Teknis:
+// @note         1. Authentication: Memerlukan JWT token valid dalam httpOnly cookie (auth_token) atau Authorization header
+// @note         2. CSRF Protection: Endpoint ini memerlukan CSRF token dalam header X-CSRF-Token karena menggunakan POST method
+// @note         3. Cookie Deletion: Cookie auth_token akan dihapus setelah logout berhasil
+// @note         4. Audit Logging: Aksi logout dicatat dalam audit log dengan status success
 func Logout(c *fiber.Ctx) error {
 	// Ambil info user dari locals untuk audit logging
 	userIDVal := c.Locals("userID")

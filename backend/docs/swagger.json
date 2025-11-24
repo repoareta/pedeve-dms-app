@@ -1,8 +1,8 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "Document Management System Backend API",
-        "title": "DMS Backend API",
+        "description": "Pedeve App Backend API dengan struktur Clean Architecture",
+        "title": "Pedeve App Backend API",
         "termsOfService": "http://swagger.io/terms/",
         "contact": {
             "name": "API Support",
@@ -68,9 +68,140 @@
                 }
             }
         },
-        "/api/v1/auth/login": {
+        "/api/v1/audit-logs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil audit logs dengan pagination dan filter. User reguler hanya bisa melihat audit logs mereka sendiri, sedangkan admin/superadmin bisa melihat semua audit logs. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Audit"
+                ],
+                "summary": "Ambil Audit Logs",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Nomor halaman (default: 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Jumlah item per halaman (default: 10, maksimal: 100)",
+                        "name": "pageSize",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter berdasarkan action (contoh: login, logout, create_document)",
+                        "name": "action",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter berdasarkan resource (contoh: auth, document, user)",
+                        "name": "resource",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter berdasarkan status (success, failure, error)",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter berdasarkan tipe log (user_action atau technical_error)",
+                        "name": "logType",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Audit logs berhasil diambil. Response berisi data (array audit logs), total, page, pageSize, dan totalPages",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Token tidak valid atau user tidak terautentikasi",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "User tidak ditemukan di database",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Gagal mengambil audit logs",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/audit-logs/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil statistik tentang audit logs termasuk total records, jumlah berdasarkan tipe, estimasi ukuran database, dan retention policy. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Audit"
+                ],
+                "summary": "Ambil Statistik Audit Logs",
+                "responses": {
+                    "200": {
+                        "description": "Statistik audit logs berhasil diambil. Response berisi total_records, user_action_count, technical_error_count, estimated_size_mb, retention_policy (user_action_days, technical_error_days), dll",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Token tidak valid atau user tidak terautentikasi",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Gagal mengambil statistik audit logs",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/2fa/disable": {
             "post": {
-                "description": "Authenticate user and return JWT token",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menonaktifkan 2FA untuk user yang sedang terautentikasi. Setelah 2FA dinonaktifkan, user tidak perlu memasukkan kode 2FA saat login. Endpoint ini memerlukan authentication dan CSRF token.",
                 "consumes": [
                     "application/json"
                 ],
@@ -80,29 +211,282 @@
                 "tags": [
                     "Authentication"
                 ],
-                "summary": "User login",
+                "summary": "Nonaktifkan 2FA",
+                "responses": {
+                    "200": {
+                        "description": "2FA berhasil dinonaktifkan. Response berisi message: '2FA has been disabled successfully'",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Token tidak valid atau user tidak terautentikasi",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "CSRF token tidak valid atau tidak ditemukan",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "2FA tidak aktif untuk user ini (2fa_not_found)",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Gagal menonaktifkan 2FA",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/2fa/generate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menghasilkan secret TOTP baru dan QR code untuk setup 2FA. Secret ini digunakan untuk generate kode 2FA di authenticator app (Google Authenticator, Authy, dll). Endpoint ini memerlukan authentication dan CSRF token.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Generate Secret 2FA",
+                "responses": {
+                    "200": {
+                        "description": "Secret 2FA berhasil di-generate. Response berisi secret, qr_code (base64 image), url (untuk manual entry), dan message",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Token tidak valid atau user tidak terautentikasi",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "CSRF token tidak valid atau tidak ditemukan",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Gagal generate secret 2FA",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/2fa/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil status 2FA untuk user yang sedang terautentikasi. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Cek Status 2FA",
+                "responses": {
+                    "200": {
+                        "description": "Status 2FA berhasil diambil. Response berisi enabled: true/false",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Token tidak valid atau user tidak terautentikasi",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Gagal mengambil status 2FA",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/2fa/verify": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Memverifikasi kode TOTP dari authenticator app dan mengaktifkan 2FA untuk user. Setelah verifikasi berhasil, 2FA akan diaktifkan dan backup codes akan di-generate. Endpoint ini memerlukan authentication dan CSRF token.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Verifikasi dan Aktifkan 2FA",
                 "parameters": [
                     {
-                        "description": "Login credentials",
-                        "name": "credentials",
+                        "description": "Kode TOTP 6 digit dari authenticator app",
+                        "name": "code",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/main.LoginRequest"
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "2FA berhasil diaktifkan. Response berisi message, backup_codes (array string), dan enabled: true",
                         "schema": {
-                            "$ref": "#/definitions/main.AuthResponse"
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Request body tidak valid atau secret 2FA tidak ditemukan",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Token tidak valid, user tidak terautentikasi, atau kode verifikasi tidak valid",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrorResponse"
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "CSRF token tidak valid atau tidak ditemukan",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/login": {
+            "post": {
+                "description": "Autentikasi user dan kembalikan JWT token. Mendukung login dengan username atau email. Jika 2FA aktif, akan memerlukan kode verifikasi tambahan pada request berikutnya.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Login User",
+                "parameters": [
+                    {
+                        "description": "Kredensial login (username/email, password, dan opsional: code untuk 2FA)",
+                        "name": "credentials",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/domain.LoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "2FA diperlukan. Response berisi requires_2fa: true. Kirim kode 2FA pada request login berikutnya dengan field 'code'.",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Request body tidak valid atau validation error (username/password tidak memenuhi syarat)",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Kredensial tidak valid atau kode 2FA salah",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Terlalu banyak request, rate limit terlampaui (5 req/min untuk auth endpoints)",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/logout": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Logout user dan hapus authentication cookie (auth_token). Aksi logout dicatat dalam audit log untuk keamanan dan audit trail. Endpoint ini memerlukan CSRF token karena menggunakan method POST.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Logout User",
+                "responses": {
+                    "200": {
+                        "description": "Logout berhasil. Response berisi message: 'Logged out successfully'. Cookie auth_token akan dihapus.",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Token tidak valid atau user tidak terautentikasi",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "CSRF token tidak valid atau tidak ditemukan",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     }
                 }
@@ -115,7 +499,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Get current authenticated user profile",
+                "description": "Mengambil profil user yang sedang terautentikasi. Data user diambil dari JWT token yang tersimpan dalam httpOnly cookie. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).",
                 "consumes": [
                     "application/json"
                 ],
@@ -125,26 +509,32 @@
                 "tags": [
                     "Authentication"
                 ],
-                "summary": "Get user profile",
+                "summary": "Ambil Profil User",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Profil user berhasil diambil. Response berisi id, username, email, role, created_at, dan updated_at (tanpa informasi password)",
                         "schema": {
-                            "$ref": "#/definitions/main.User"
+                            "$ref": "#/definitions/domain.User"
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "Token tidak valid atau expired, user tidak terautentikasi",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrorResponse"
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "User tidak ditemukan di database",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     }
                 }
             }
         },
-        "/api/v1/auth/register": {
-            "post": {
-                "description": "Register a new user account",
+        "/api/v1/csrf-token": {
+            "get": {
+                "description": "Mengambil token CSRF baru untuk digunakan pada request yang mengubah state (POST, PUT, DELETE, PATCH). Token CSRF juga disimpan dalam cookie (csrf_token) untuk double-submit cookie pattern. Endpoint ini public dan tidak memerlukan authentication.",
                 "consumes": [
                     "application/json"
                 ],
@@ -152,37 +542,23 @@
                     "application/json"
                 ],
                 "tags": [
-                    "Authentication"
+                    "Security"
                 ],
-                "summary": "Register new user",
-                "parameters": [
-                    {
-                        "description": "User registration data",
-                        "name": "user",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/main.RegisterRequest"
-                        }
-                    }
-                ],
+                "summary": "Ambil Token CSRF",
                 "responses": {
-                    "201": {
-                        "description": "Created",
+                    "200": {
+                        "description": "Token CSRF berhasil diambil. Response berisi csrf_token. Token juga disimpan dalam cookie csrf_token.",
                         "schema": {
-                            "$ref": "#/definitions/main.AuthResponse"
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     },
-                    "400": {
-                        "description": "Bad Request",
+                    "500": {
+                        "description": "Gagal generate token CSRF",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
-                        "schema": {
-                            "$ref": "#/definitions/main.ErrorResponse"
+                            "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     }
                 }
@@ -457,6 +833,99 @@
         }
     },
     "definitions": {
+        "domain.AuthResponse": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/domain.User"
+                }
+            }
+        },
+        "domain.Document": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.LoginRequest": {
+            "type": "object",
+            "required": [
+                "password",
+                "username"
+            ],
+            "properties": {
+                "code": {
+                    "description": "Kode 2FA (opsional)",
+                    "type": "string",
+                    "example": "123456"
+                },
+                "password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "example": "password123"
+                },
+                "username": {
+                    "description": "Bisa username atau email",
+                    "type": "string",
+                    "minLength": 3,
+                    "example": "admin"
+                }
+            }
+        },
+        "domain.User": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
         "main.AuthResponse": {
             "type": "object",
             "properties": {
@@ -505,28 +974,17 @@
         "main.LoginRequest": {
             "type": "object",
             "properties": {
-                "password": {
+                "code": {
+                    "description": "Kode 2FA (opsional)",
                     "type": "string",
-                    "example": "password123"
-                },
-                "username": {
-                    "type": "string",
-                    "example": "admin"
-                }
-            }
-        },
-        "main.RegisterRequest": {
-            "type": "object",
-            "properties": {
-                "email": {
-                    "type": "string",
-                    "example": "admin@example.com"
+                    "example": "123456"
                 },
                 "password": {
                     "type": "string",
                     "example": "password123"
                 },
                 "username": {
+                    "description": "Bisa username atau email",
                     "type": "string",
                     "example": "admin"
                 }
@@ -544,6 +1002,9 @@
                 "id": {
                     "type": "string"
                 },
+                "role": {
+                    "type": "string"
+                },
                 "updated_at": {
                     "type": "string"
                 },
@@ -555,7 +1016,7 @@
     },
     "securityDefinitions": {
         "BearerAuth": {
-            "description": "Type \"Bearer\" followed by a space and JWT token.",
+            "description": "Type \"Bearer\" followed by a space and JWT token. Atau menggunakan httpOnly cookie (auth_token) untuk keamanan yang lebih baik.",
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"

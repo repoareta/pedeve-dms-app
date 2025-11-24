@@ -10,15 +10,23 @@ import (
 )
 
 // Generate2FASecret menghasilkan secret TOTP baru untuk user
-// @Summary      Generate 2FA secret
-// @Description  Generate a new TOTP secret and QR code for 2FA setup
+// @Summary      Generate Secret 2FA
+// @Description  Menghasilkan secret TOTP baru dan QR code untuk setup 2FA. Secret ini digunakan untuk generate kode 2FA di authenticator app (Google Authenticator, Authy, dll). Endpoint ini memerlukan authentication dan CSRF token.
 // @Tags         Authentication
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {object}  map[string]interface{}
-// @Failure      401  {object}  domain.ErrorResponse
+// @Success      200  {object}  map[string]interface{}  "Secret 2FA berhasil di-generate. Response berisi secret, qr_code (base64 image), url (untuk manual entry), dan message"
+// @Failure      401  {object}  domain.ErrorResponse  "Token tidak valid atau user tidak terautentikasi"
+// @Failure      403  {object}  domain.ErrorResponse  "CSRF token tidak valid atau tidak ditemukan"
+// @Failure      500  {object}  domain.ErrorResponse  "Gagal generate secret 2FA"
 // @Router       /api/v1/auth/2fa/generate [post]
+// @note         Catatan Teknis:
+// @note         1. Authentication: Memerlukan JWT token valid dalam httpOnly cookie (auth_token) atau Authorization header
+// @note         2. CSRF Protection: Endpoint ini memerlukan CSRF token dalam header X-CSRF-Token karena menggunakan POST method
+// @note         3. TOTP Algorithm: Menggunakan TOTP (Time-based One-Time Password) dengan algoritma SHA1
+// @note         4. QR Code: QR code dalam format base64 image untuk scan di authenticator app
+// @note         5. Secret Storage: Secret disimpan di database dengan encryption (tidak dalam plain text)
 func Generate2FASecret(c *fiber.Ctx) error {
 	zapLog := logger.GetLogger()
 	
@@ -64,17 +72,24 @@ func Generate2FASecret(c *fiber.Ctx) error {
 }
 
 // Verify2FA memverifikasi kode TOTP dan mengaktifkan 2FA
-// @Summary      Verify and enable 2FA
-// @Description  Verify TOTP code and enable 2FA for user
+// @Summary      Verifikasi dan Aktifkan 2FA
+// @Description  Memverifikasi kode TOTP dari authenticator app dan mengaktifkan 2FA untuk user. Setelah verifikasi berhasil, 2FA akan diaktifkan dan backup codes akan di-generate. Endpoint ini memerlukan authentication dan CSRF token.
 // @Tags         Authentication
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        code  body      map[string]string  true  "TOTP code"
-// @Success      200   {object}  map[string]interface{}
-// @Failure      400   {object}  domain.ErrorResponse
-// @Failure      401   {object}  domain.ErrorResponse
+// @Param        code  body      map[string]string  true  "Kode TOTP 6 digit dari authenticator app"
+// @Success      200   {object}  map[string]interface{}  "2FA berhasil diaktifkan. Response berisi message, backup_codes (array string), dan enabled: true"
+// @Failure      400   {object}  domain.ErrorResponse  "Request body tidak valid atau secret 2FA tidak ditemukan"
+// @Failure      401   {object}  domain.ErrorResponse  "Token tidak valid, user tidak terautentikasi, atau kode verifikasi tidak valid"
+// @Failure      403   {object}  domain.ErrorResponse  "CSRF token tidak valid atau tidak ditemukan"
 // @Router       /api/v1/auth/2fa/verify [post]
+// @note         Catatan Teknis:
+// @note         1. Authentication: Memerlukan JWT token valid dalam httpOnly cookie (auth_token) atau Authorization header
+// @note         2. CSRF Protection: Endpoint ini memerlukan CSRF token dalam header X-CSRF-Token karena menggunakan POST method
+// @note         3. TOTP Verification: Kode TOTP divalidasi dengan secret yang di-generate sebelumnya
+// @note         4. Backup Codes: Setelah verifikasi berhasil, 10 backup codes akan di-generate untuk recovery
+// @note         5. Audit Logging: Aksi enable 2FA dicatat dalam audit log dengan status success
 func Verify2FA(c *fiber.Ctx) error {
 	zapLog := logger.GetLogger()
 	
@@ -129,15 +144,21 @@ func Verify2FA(c *fiber.Ctx) error {
 }
 
 // Get2FAStatus mengembalikan status 2FA untuk user saat ini
-// @Summary      Get 2FA status
-// @Description  Get current user's 2FA status
+// @Summary      Cek Status 2FA
+// @Description  Mengambil status 2FA untuk user yang sedang terautentikasi. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).
 // @Tags         Authentication
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {object}  map[string]interface{}
-// @Failure      401  {object}  domain.ErrorResponse
+// @Success      200  {object}  map[string]interface{}  "Status 2FA berhasil diambil. Response berisi enabled: true/false"
+// @Failure      401  {object}  domain.ErrorResponse  "Token tidak valid atau user tidak terautentikasi"
+// @Failure      500  {object}  domain.ErrorResponse  "Gagal mengambil status 2FA"
 // @Router       /api/v1/auth/2fa/status [get]
+// @note         Catatan Teknis:
+// @note         1. Authentication: Memerlukan JWT token valid dalam httpOnly cookie (auth_token) atau Authorization header
+// @note         2. CSRF Protection: Endpoint ini tidak memerlukan CSRF token karena menggunakan GET method (read-only)
+// @note         3. Response: Response berisi enabled: true jika 2FA aktif, false jika tidak aktif
+// @note         4. User Context: User ID diambil dari JWT claims, tidak dari request body
 func Get2FAStatus(c *fiber.Ctx) error {
 	zapLog := logger.GetLogger()
 	
@@ -171,16 +192,24 @@ func Get2FAStatus(c *fiber.Ctx) error {
 }
 
 // Disable2FA menonaktifkan 2FA untuk user saat ini
-// @Summary      Disable 2FA
-// @Description  Disable 2FA for current user
+// @Summary      Nonaktifkan 2FA
+// @Description  Menonaktifkan 2FA untuk user yang sedang terautentikasi. Setelah 2FA dinonaktifkan, user tidak perlu memasukkan kode 2FA saat login. Endpoint ini memerlukan authentication dan CSRF token.
 // @Tags         Authentication
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {object}  map[string]interface{}
-// @Failure      401  {object}  domain.ErrorResponse
-// @Failure      404  {object}  domain.ErrorResponse
+// @Success      200  {object}  map[string]interface{}  "2FA berhasil dinonaktifkan. Response berisi message: '2FA has been disabled successfully'"
+// @Failure      401  {object}  domain.ErrorResponse  "Token tidak valid atau user tidak terautentikasi"
+// @Failure      403  {object}  domain.ErrorResponse  "CSRF token tidak valid atau tidak ditemukan"
+// @Failure      404  {object}  domain.ErrorResponse  "2FA tidak aktif untuk user ini (2fa_not_found)"
+// @Failure      500  {object}  domain.ErrorResponse  "Gagal menonaktifkan 2FA"
 // @Router       /api/v1/auth/2fa/disable [post]
+// @note         Catatan Teknis:
+// @note         1. Authentication: Memerlukan JWT token valid dalam httpOnly cookie (auth_token) atau Authorization header
+// @note         2. CSRF Protection: Endpoint ini memerlukan CSRF token dalam header X-CSRF-Token karena menggunakan POST method
+// @note         3. Data Deletion: Secret 2FA dan backup codes akan dihapus dari database setelah 2FA dinonaktifkan
+// @note         4. Audit Logging: Aksi disable 2FA dicatat dalam audit log dengan status success
+// @note         5. Security: Setelah 2FA dinonaktifkan, user hanya perlu password untuk login
 func Disable2FA(c *fiber.Ctx) error {
 	zapLog := logger.GetLogger()
 	

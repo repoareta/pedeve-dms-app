@@ -1,5 +1,68 @@
 basePath: /api/v1
 definitions:
+  domain.AuthResponse:
+    properties:
+      token:
+        type: string
+      user:
+        $ref: '#/definitions/domain.User'
+    type: object
+  domain.Document:
+    properties:
+      content:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  domain.ErrorResponse:
+    properties:
+      error:
+        type: string
+      message:
+        type: string
+    type: object
+  domain.LoginRequest:
+    properties:
+      code:
+        description: Kode 2FA (opsional)
+        example: "123456"
+        type: string
+      password:
+        example: password123
+        minLength: 8
+        type: string
+      username:
+        description: Bisa username atau email
+        example: admin
+        minLength: 3
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  domain.User:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      role:
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
   main.AuthResponse:
     properties:
       token:
@@ -31,22 +94,15 @@ definitions:
     type: object
   main.LoginRequest:
     properties:
-      password:
-        example: password123
-        type: string
-      username:
-        example: admin
-        type: string
-    type: object
-  main.RegisterRequest:
-    properties:
-      email:
-        example: admin@example.com
+      code:
+        description: Kode 2FA (opsional)
+        example: "123456"
         type: string
       password:
         example: password123
         type: string
       username:
+        description: Bisa username atau email
         example: admin
         type: string
     type: object
@@ -57,6 +113,8 @@ definitions:
       email:
         type: string
       id:
+        type: string
+      role:
         type: string
       updated_at:
         type: string
@@ -69,12 +127,12 @@ info:
     email: support@swagger.io
     name: API Support
     url: http://www.swagger.io/support
-  description: Document Management System Backend API
+  description: Pedeve App Backend API dengan struktur Clean Architecture
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
   termsOfService: http://swagger.io/terms/
-  title: DMS Backend API
+  title: Pedeve App Backend API
   version: "1.0"
 paths:
   /:
@@ -110,83 +168,359 @@ paths:
       summary: API Information
       tags:
       - General
-  /api/v1/auth/login:
-    post:
+  /api/v1/audit-logs:
+    get:
       consumes:
       - application/json
-      description: Authenticate user and return JWT token
+      description: Mengambil audit logs dengan pagination dan filter. User reguler
+        hanya bisa melihat audit logs mereka sendiri, sedangkan admin/superadmin bisa
+        melihat semua audit logs. Endpoint ini tidak memerlukan CSRF token karena
+        menggunakan method GET (read-only).
       parameters:
-      - description: Login credentials
-        in: body
-        name: credentials
-        required: true
-        schema:
-          $ref: '#/definitions/main.LoginRequest'
+      - description: 'Nomor halaman (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Jumlah item per halaman (default: 10, maksimal: 100)'
+        in: query
+        name: pageSize
+        type: integer
+      - description: 'Filter berdasarkan action (contoh: login, logout, create_document)'
+        in: query
+        name: action
+        type: string
+      - description: 'Filter berdasarkan resource (contoh: auth, document, user)'
+        in: query
+        name: resource
+        type: string
+      - description: Filter berdasarkan status (success, failure, error)
+        in: query
+        name: status
+        type: string
+      - description: Filter berdasarkan tipe log (user_action atau technical_error)
+        in: query
+        name: logType
+        type: string
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Audit logs berhasil diambil. Response berisi data (array audit
+            logs), total, page, pageSize, dan totalPages
           schema:
-            $ref: '#/definitions/main.AuthResponse'
+            additionalProperties: true
+            type: object
         "401":
-          description: Unauthorized
+          description: Token tidak valid atau user tidak terautentikasi
           schema:
-            $ref: '#/definitions/main.ErrorResponse'
-      summary: User login
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: User tidak ditemukan di database
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Gagal mengambil audit logs
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Audit Logs
+      tags:
+      - Audit
+  /api/v1/audit-logs/stats:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil statistik tentang audit logs termasuk total records,
+        jumlah berdasarkan tipe, estimasi ukuran database, dan retention policy. Endpoint
+        ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Statistik audit logs berhasil diambil. Response berisi total_records,
+            user_action_count, technical_error_count, estimated_size_mb, retention_policy
+            (user_action_days, technical_error_days), dll
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Token tidak valid atau user tidak terautentikasi
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Gagal mengambil statistik audit logs
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Statistik Audit Logs
+      tags:
+      - Audit
+  /api/v1/auth/2fa/disable:
+    post:
+      consumes:
+      - application/json
+      description: Menonaktifkan 2FA untuk user yang sedang terautentikasi. Setelah
+        2FA dinonaktifkan, user tidak perlu memasukkan kode 2FA saat login. Endpoint
+        ini memerlukan authentication dan CSRF token.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '2FA berhasil dinonaktifkan. Response berisi message: ''2FA
+            has been disabled successfully'''
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Token tidak valid atau user tidak terautentikasi
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: CSRF token tidak valid atau tidak ditemukan
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: 2FA tidak aktif untuk user ini (2fa_not_found)
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Gagal menonaktifkan 2FA
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Nonaktifkan 2FA
+      tags:
+      - Authentication
+  /api/v1/auth/2fa/generate:
+    post:
+      consumes:
+      - application/json
+      description: Menghasilkan secret TOTP baru dan QR code untuk setup 2FA. Secret
+        ini digunakan untuk generate kode 2FA di authenticator app (Google Authenticator,
+        Authy, dll). Endpoint ini memerlukan authentication dan CSRF token.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Secret 2FA berhasil di-generate. Response berisi secret, qr_code
+            (base64 image), url (untuk manual entry), dan message
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Token tidak valid atau user tidak terautentikasi
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: CSRF token tidak valid atau tidak ditemukan
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Gagal generate secret 2FA
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Generate Secret 2FA
+      tags:
+      - Authentication
+  /api/v1/auth/2fa/status:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil status 2FA untuk user yang sedang terautentikasi. Endpoint
+        ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'Status 2FA berhasil diambil. Response berisi enabled: true/false'
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Token tidak valid atau user tidak terautentikasi
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Gagal mengambil status 2FA
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Cek Status 2FA
+      tags:
+      - Authentication
+  /api/v1/auth/2fa/verify:
+    post:
+      consumes:
+      - application/json
+      description: Memverifikasi kode TOTP dari authenticator app dan mengaktifkan
+        2FA untuk user. Setelah verifikasi berhasil, 2FA akan diaktifkan dan backup
+        codes akan di-generate. Endpoint ini memerlukan authentication dan CSRF token.
+      parameters:
+      - description: Kode TOTP 6 digit dari authenticator app
+        in: body
+        name: code
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '2FA berhasil diaktifkan. Response berisi message, backup_codes
+            (array string), dan enabled: true'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Request body tidak valid atau secret 2FA tidak ditemukan
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Token tidak valid, user tidak terautentikasi, atau kode verifikasi
+            tidak valid
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: CSRF token tidak valid atau tidak ditemukan
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Verifikasi dan Aktifkan 2FA
+      tags:
+      - Authentication
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Autentikasi user dan kembalikan JWT token. Mendukung login dengan
+        username atau email. Jika 2FA aktif, akan memerlukan kode verifikasi tambahan
+        pada request berikutnya.
+      parameters:
+      - description: 'Kredensial login (username/email, password, dan opsional: code
+          untuk 2FA)'
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/domain.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '2FA diperlukan. Response berisi requires_2fa: true. Kirim
+            kode 2FA pada request login berikutnya dengan field ''code''.'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Request body tidak valid atau validation error (username/password
+            tidak memenuhi syarat)
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Kredensial tidak valid atau kode 2FA salah
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "429":
+          description: Terlalu banyak request, rate limit terlampaui (5 req/min untuk
+            auth endpoints)
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Login User
+      tags:
+      - Authentication
+  /api/v1/auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Logout user dan hapus authentication cookie (auth_token). Aksi
+        logout dicatat dalam audit log untuk keamanan dan audit trail. Endpoint ini
+        memerlukan CSRF token karena menggunakan method POST.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'Logout berhasil. Response berisi message: ''Logged out successfully''.
+            Cookie auth_token akan dihapus.'
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Token tidak valid atau user tidak terautentikasi
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: CSRF token tidak valid atau tidak ditemukan
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Logout User
       tags:
       - Authentication
   /api/v1/auth/profile:
     get:
       consumes:
       - application/json
-      description: Get current authenticated user profile
+      description: Mengambil profil user yang sedang terautentikasi. Data user diambil
+        dari JWT token yang tersimpan dalam httpOnly cookie. Endpoint ini tidak memerlukan
+        CSRF token karena menggunakan method GET (read-only).
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Profil user berhasil diambil. Response berisi id, username,
+            email, role, created_at, dan updated_at (tanpa informasi password)
           schema:
-            $ref: '#/definitions/main.User'
+            $ref: '#/definitions/domain.User'
         "401":
-          description: Unauthorized
+          description: Token tidak valid atau expired, user tidak terautentikasi
           schema:
-            $ref: '#/definitions/main.ErrorResponse'
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: User tidak ditemukan di database
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Get user profile
+      summary: Ambil Profil User
       tags:
       - Authentication
-  /api/v1/auth/register:
-    post:
+  /api/v1/csrf-token:
+    get:
       consumes:
       - application/json
-      description: Register a new user account
-      parameters:
-      - description: User registration data
-        in: body
-        name: user
-        required: true
-        schema:
-          $ref: '#/definitions/main.RegisterRequest'
+      description: Mengambil token CSRF baru untuk digunakan pada request yang mengubah
+        state (POST, PUT, DELETE, PATCH). Token CSRF juga disimpan dalam cookie (csrf_token)
+        untuk double-submit cookie pattern. Endpoint ini public dan tidak memerlukan
+        authentication.
       produces:
       - application/json
       responses:
-        "201":
-          description: Created
+        "200":
+          description: Token CSRF berhasil diambil. Response berisi csrf_token. Token
+            juga disimpan dalam cookie csrf_token.
           schema:
-            $ref: '#/definitions/main.AuthResponse'
-        "400":
-          description: Bad Request
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Gagal generate token CSRF
           schema:
-            $ref: '#/definitions/main.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/main.ErrorResponse'
-      summary: Register new user
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Ambil Token CSRF
       tags:
-      - Authentication
+      - Security
   /api/v1/documents:
     get:
       consumes:
@@ -359,7 +693,8 @@ paths:
       - General
 securityDefinitions:
   BearerAuth:
-    description: Type "Bearer" followed by a space and JWT token.
+    description: Type "Bearer" followed by a space and JWT token. Atau menggunakan
+      httpOnly cookie (auth_token) untuk keamanan yang lebih baik.
     in: header
     name: Authorization
     type: apiKey

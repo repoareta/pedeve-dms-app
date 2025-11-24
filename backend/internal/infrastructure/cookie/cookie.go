@@ -17,6 +17,13 @@ func SetSecureCookie(c *fiber.Ctx, name, value string) {
 	           os.Getenv("HTTPS") == "true" ||
 	           os.Getenv("FORCE_HTTPS") == "true"
 	
+	// SameSite: "Lax" untuk development (memungkinkan cookie terkirim dari cross-site navigation)
+	// "Strict" untuk production (lebih aman, tapi bisa memblokir beberapa use case)
+	sameSite := "Lax"
+	if isHTTPS {
+		sameSite = "Strict" // Production: gunakan Strict untuk keamanan maksimal
+	}
+	
 	c.Cookie(&fiber.Cookie{
 		Name:     name,
 		Value:    value,
@@ -24,7 +31,7 @@ func SetSecureCookie(c *fiber.Ctx, name, value string) {
 		MaxAge:   cookieMaxAge,
 		HTTPOnly: true,              // Cegah serangan XSS
 		Secure:   isHTTPS,           // Hanya kirim melalui HTTPS di production
-		SameSite: "Strict",          // Perlindungan CSRF
+		SameSite: sameSite,          // Lax untuk development, Strict untuk production
 	})
 }
 
@@ -43,6 +50,12 @@ func DeleteSecureCookie(c *fiber.Ctx, name string) {
 	           os.Getenv("HTTPS") == "true" ||
 	           os.Getenv("FORCE_HTTPS") == "true"
 	
+	// SameSite: "Lax" untuk development, "Strict" untuk production
+	sameSite := "Lax"
+	if isHTTPS {
+		sameSite = "Strict"
+	}
+	
 	c.Cookie(&fiber.Cookie{
 		Name:     name,
 		Value:    "",
@@ -50,7 +63,7 @@ func DeleteSecureCookie(c *fiber.Ctx, name string) {
 		MaxAge:   -1, // Hapus cookie
 		HTTPOnly: true,
 		Secure:   isHTTPS,
-		SameSite: "Strict",
+		SameSite: sameSite,
 	})
 }
 

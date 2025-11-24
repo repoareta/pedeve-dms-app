@@ -34,6 +34,9 @@ services:
       - PORT=8080
       - ENV=development
       - CGO_ENABLED=0  # Tidak perlu CGO untuk PostgreSQL
+      # SSL/TLS: sslmode=disable untuk development (aman di local network)
+      # Production: ubah ke sslmode=require atau sslmode=verify-full
+      # Format: postgres://user:pass@host:port/db?sslmode=require
       - DATABASE_URL=postgres://postgres:dms_password@postgres:5432/db_dms_pedeve?sslmode=disable
     volumes:
       - ./backend:/app

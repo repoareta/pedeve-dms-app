@@ -6,17 +6,21 @@ import (
 	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/cookie"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/jwt"
+	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
 	"github.com/gofiber/fiber/v2"
+	"go.uber.org/zap"
 )
 
 // JWTAuthMiddleware memvalidasi token JWT dan menambahkan info user ke locals (untuk Fiber)
 func JWTAuthMiddleware(c *fiber.Ctx) error {
+	zapLog := logger.GetLogger()
 	var tokenString string
 
 	// Coba ambil token dari cookie terlebih dahulu (metode yang diutamakan)
 	cookieToken, err := cookie.GetSecureCookie(c, cookie.GetAuthTokenCookieName())
 	if err == nil && cookieToken != "" {
 		tokenString = cookieToken
+		zapLog.Debug("JWT token found in cookie", zap.String("path", c.Path()))
 	} else {
 		// Fallback ke Authorization header (untuk kompatibilitas ke belakang)
 		authHeader := c.Get("Authorization")
@@ -24,7 +28,18 @@ func JWTAuthMiddleware(c *fiber.Ctx) error {
 			parts := strings.Split(authHeader, " ")
 			if len(parts) == 2 && parts[0] == "Bearer" {
 				tokenString = parts[1]
+				zapLog.Debug("JWT token found in Authorization header", zap.String("path", c.Path()))
 			}
+		}
+		
+		// Log jika token tidak ditemukan (untuk debugging)
+		if tokenString == "" {
+			zapLog.Warn("JWT token not found",
+				zap.String("path", c.Path()),
+				zap.String("method", c.Method()),
+				zap.String("ip", c.IP()),
+				zap.Error(err),
+			)
 		}
 	}
 
@@ -39,6 +54,11 @@ func JWTAuthMiddleware(c *fiber.Ctx) error {
 	// Validasi token
 	claims, err := jwt.ValidateJWT(tokenString)
 	if err != nil {
+		zapLog.Warn("JWT token validation failed",
+			zap.String("path", c.Path()),
+			zap.String("method", c.Method()),
+			zap.Error(err),
+		)
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
 			Error:   "unauthorized",
 			Message: "Invalid or expired token",

@@ -12,6 +12,7 @@ export const useAuthStore = defineStore('auth', () => {
   })
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const isLoggingOut = ref(false) // Flag untuk mencegah validasi saat logout
 
   // Cek status autentikasi - token ada di httpOnly cookie, jadi cek user saja
   const isAuthenticated = computed(() => !!user.value)
@@ -71,6 +72,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Logout
   const logout = async () => {
+    // Set flag untuk mencegah validasi token saat logout
+    isLoggingOut.value = true
     try {
       // Hanya panggil logout endpoint jika user terautentikasi (punya cookie)
       // Cek apakah user ada sebelum memanggil API
@@ -91,11 +94,18 @@ export const useAuthStore = defineStore('auth', () => {
       token.value = null
       user.value = null
       localStorage.removeItem('auth_user')
+      // Reset flag setelah logout selesai
+      isLoggingOut.value = false
     }
   }
 
   // Get profile
   const fetchProfile = async () => {
+    // Jangan fetch profile jika sedang logout
+    if (isLoggingOut.value) {
+      throw new Error('Logout in progress')
+    }
+    
     loading.value = true
     error.value = null
     try {

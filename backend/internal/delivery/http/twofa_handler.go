@@ -76,11 +76,18 @@ func Generate2FASecret(c *fiber.Ctx) error {
 // @Failure      401   {object}  domain.ErrorResponse
 // @Router       /api/v1/auth/2fa/verify [post]
 func Verify2FA(c *fiber.Ctx) error {
+	zapLog := logger.GetLogger()
+	
 	userIDVal := c.Locals("userID")
 	if userIDVal == nil {
+		zapLog.Warn("User context not found in Verify2FA",
+			zap.String("path", c.Path()),
+			zap.String("method", c.Method()),
+			zap.String("ip", c.IP()),
+		)
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
 			Error:   "unauthorized",
-			Message: "User context not found",
+			Message: "User context not found. Please ensure you are authenticated.",
 		})
 	}
 	userID := userIDVal.(string)

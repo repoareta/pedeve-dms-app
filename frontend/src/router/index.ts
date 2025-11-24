@@ -70,9 +70,25 @@ router.beforeEach(async (to, from, next) => {
       return
     } catch (error: any) {
       // Token tidak valid atau expired (401/403) - hapus auth dan redirect ke login
-      console.error('Token validation failed:', error)
-      authStore.logout()
-      next({ name: 'login', query: { redirect: to.fullPath } })
+      // Jangan log error jika ini adalah navigasi ke login (user sedang logout)
+      const isNavigatingToLogin = to.name === 'login'
+      if (!isNavigatingToLogin) {
+        console.error('Token validation failed:', error)
+      }
+      
+      // Hapus state lokal tanpa memanggil logout API (untuk menghindari loop)
+      // karena cookie mungkin sudah dihapus atau tidak valid
+      authStore.$patch({
+        user: null,
+        token: null,
+      })
+      localStorage.removeItem('auth_user')
+      
+      if (!isNavigatingToLogin) {
+        next({ name: 'login', query: { redirect: to.fullPath } })
+      } else {
+        next()
+      }
       return
     }
   }

@@ -20,7 +20,10 @@ func JWTAuthMiddleware(c *fiber.Ctx) error {
 	cookieToken, err := cookie.GetSecureCookie(c, cookie.GetAuthTokenCookieName())
 	if err == nil && cookieToken != "" {
 		tokenString = cookieToken
-		zapLog.Debug("JWT token found in cookie", zap.String("path", c.Path()))
+		zapLog.Debug("JWT token found in cookie",
+			zap.String("path", c.Path()),
+			zap.String("method", c.Method()),
+		)
 	} else {
 		// Fallback ke Authorization header (untuk kompatibilitas ke belakang)
 		authHeader := c.Get("Authorization")
@@ -28,16 +31,23 @@ func JWTAuthMiddleware(c *fiber.Ctx) error {
 			parts := strings.Split(authHeader, " ")
 			if len(parts) == 2 && parts[0] == "Bearer" {
 				tokenString = parts[1]
-				zapLog.Debug("JWT token found in Authorization header", zap.String("path", c.Path()))
+				zapLog.Debug("JWT token found in Authorization header",
+					zap.String("path", c.Path()),
+					zap.String("method", c.Method()),
+				)
 			}
 		}
 		
 		// Log jika token tidak ditemukan (untuk debugging)
 		if tokenString == "" {
+			// Log cookie auth_token yang diterima untuk debugging
+			authCookieValue := c.Cookies(cookie.GetAuthTokenCookieName())
 			zapLog.Warn("JWT token not found",
 				zap.String("path", c.Path()),
 				zap.String("method", c.Method()),
 				zap.String("ip", c.IP()),
+				zap.String("cookie_name", cookie.GetAuthTokenCookieName()),
+				zap.String("cookie_value", authCookieValue),
 				zap.Error(err),
 			)
 		}

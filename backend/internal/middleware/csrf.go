@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
+	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
 	"github.com/gofiber/fiber/v2"
+	"go.uber.org/zap"
 )
 
 // CSRF token store (in-memory, bisa diganti dengan Redis untuk production)
@@ -99,6 +101,13 @@ func CSRFMiddleware(c *fiber.Ctx) error {
 	// Ambil token CSRF dari header
 	csrfToken := c.Get(csrfTokenHeader)
 	if csrfToken == "" {
+		// Log untuk debugging
+		zapLog := logger.GetLogger()
+		zapLog.Warn("CSRF token missing",
+			zap.String("path", c.Path()),
+			zap.String("method", c.Method()),
+			zap.String("header_name", csrfTokenHeader),
+		)
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "csrf_token_missing",
 			Message: "CSRF token is required",

@@ -2,6 +2,7 @@ package database
 
 import (
 	"os"
+	"time"
 
 	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
@@ -38,6 +39,38 @@ func InitDB() {
 	})
 	if err != nil {
 		zapLog.Fatal("Failed to connect to database", zap.Error(err))
+	}
+
+	// Konfigurasi connection pooling (hanya untuk PostgreSQL)
+	// SQLite tidak memerlukan connection pooling karena file-based
+	if dbURL != "" {
+		sqlDB, err := DB.DB()
+		if err != nil {
+			zapLog.Fatal("Failed to get underlying sql.DB", zap.Error(err))
+		}
+
+		// SetMaxOpenConns: Maksimal koneksi yang bisa dibuka secara bersamaan
+		// Default: unlimited, kita set 25 untuk production stability
+		sqlDB.SetMaxOpenConns(25)
+
+		// SetMaxIdleConns: Maksimal koneksi idle yang dipertahankan di pool
+		// Default: 2, kita set 5 untuk mengurangi overhead pembuatan koneksi baru
+		sqlDB.SetMaxIdleConns(5)
+
+		// SetConnMaxLifetime: Maksimal waktu hidup koneksi sebelum ditutup
+		// Default: unlimited, kita set 5 menit untuk mencegah koneksi stale
+		sqlDB.SetConnMaxLifetime(5 * time.Minute)
+
+		// SetConnMaxIdleTime: Maksimal waktu koneksi idle sebelum ditutup
+		// Default: unlimited, kita set 10 menit untuk cleanup otomatis
+		sqlDB.SetConnMaxIdleTime(10 * time.Minute)
+
+		zapLog.Info("Connection pool configured",
+			zap.Int("max_open_conns", 25),
+			zap.Int("max_idle_conns", 5),
+			zap.Duration("conn_max_lifetime", 5*time.Minute),
+			zap.Duration("conn_max_idle_time", 10*time.Minute),
+		)
 	}
 
 	// Auto migrate schema

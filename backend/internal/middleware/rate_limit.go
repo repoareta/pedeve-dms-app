@@ -1,11 +1,14 @@
 package middleware
 
 import (
+	"os"
 	"sync"
 	"time"
 
 	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
+	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
 	"github.com/gofiber/fiber/v2"
+	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
 
@@ -71,30 +74,56 @@ func (rl *RateLimiter) cleanupVisitors() {
 
 // Global rate limiters
 var (
-	// General API rate limiter: 200 requests per second, burst of 200 (sangat longgar untuk development)
+	// General API rate limiter: 500 requests per second, burst of 500 (sangat longgar untuk development)
 	// Burst tinggi untuk mengakomodasi frontend yang melakukan polling/auto-refresh
 	// Di production, bisa dikurangi ke 100 req/s, burst 100
-	GeneralRateLimiter = NewRateLimiter(200, 200)
+	GeneralRateLimiter = NewRateLimiter(500, 500)
 
 	// Auth rate limiter: 5 requests per minute, burst of 5 (to prevent brute force)
 	// Hanya untuk public auth endpoints (login)
 	AuthRateLimiter = NewRateLimiter(rate.Every(time.Minute/5), 5)
 
-	// Strict rate limiter: 20 requests per minute, burst of 20 (ditingkatkan untuk development)
-	StrictRateLimiter = NewRateLimiter(rate.Every(time.Minute/20), 20)
+	// Strict rate limiter: 50 requests per minute, burst of 50 (ditingkatkan untuk development)
+	StrictRateLimiter = NewRateLimiter(rate.Every(time.Minute/50), 50)
 )
 
 // RateLimitMiddleware applies rate limiting based on client IP (untuk Fiber)
 func RateLimitMiddleware(limiter *RateLimiter) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Get client IP
-		ip := getClientIP(c)
+		// Disable rate limiting sepenuhnya untuk development
+		env := os.Getenv("ENV")
+		disableRateLimit := os.Getenv("DISABLE_RATE_LIMIT") == "true"
 
-		// Get rate limiter for this IP
+		// Bypass rate limiting jika:
+		// 1. ENV tidak "production" (development/staging)
+		// 2. DISABLE_RATE_LIMIT=true
+		if env != "production" || disableRateLimit {
+			// Development: bypass rate limiting sepenuhnya
+			// Log hanya sekali untuk menghindari spam log
+			if disableRateLimit {
+				zapLog := logger.GetLogger()
+				zapLog.Debug("Rate limit bypassed",
+					zap.String("reason", "DISABLE_RATE_LIMIT=true"),
+					zap.String("path", c.Path()),
+					zap.String("method", c.Method()),
+				)
+			}
+			return c.Next()
+		}
+
+		// Production: apply rate limiting
+		ip := getClientIP(c)
 		visitorLimiter := limiter.GetVisitor(ip)
 
 		// Check if request is allowed
 		if !visitorLimiter.Allow() {
+			zapLog := logger.GetLogger()
+			zapLog.Warn("Rate limit exceeded",
+				zap.String("ip", ip),
+				zap.String("path", c.Path()),
+				zap.String("method", c.Method()),
+				zap.String("env", env),
+			)
 			return c.Status(fiber.StatusTooManyRequests).JSON(domain.ErrorResponse{
 				Error:   "rate_limit_exceeded",
 				Message: "Too many requests. Please try again later.",
@@ -138,7 +167,7 @@ func getClientIP(c *fiber.Ctx) string {
 
 	// Fallback to IP() method dari Fiber (handles all cases including ::1)
 	ip := c.IP()
-	if ip == "" {
+	if ip == "" || ip == "::1" || ip == "[::1]" {
 		return "127.0.0.1"
 	}
 	return normalizeIP(ip)

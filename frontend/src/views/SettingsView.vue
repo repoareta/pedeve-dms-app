@@ -761,7 +761,7 @@ onUnmounted(() => {
           <a-descriptions-item label="Resource">
             {{ selectedAuditLog.resource || '-' }}
           </a-descriptions-item>
-          <a-descriptions-item label="Resource ID">
+          <a-descriptions-item label="Resource ID" :span="2">
             {{ selectedAuditLog.resource_id || '-' }}
           </a-descriptions-item>
           <a-descriptions-item label="Status" :span="2">

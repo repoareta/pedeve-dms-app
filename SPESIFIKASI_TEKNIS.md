@@ -277,7 +277,18 @@ CREATE INDEX idx_audit_logs_log_type ON audit_logs(log_type);
 
 ### Database Management
 - **ORM**: GORM (Auto-migration enabled)
-- **Connection Pool**: Managed by GORM
+- **Connection Pool**: Dikonfigurasi eksplisit untuk PostgreSQL
+  - Max Open Connections: 25
+  - Max Idle Connections: 5
+  - Connection Max Lifetime: 5 menit
+  - Connection Max Idle Time: 10 menit
+- **SSL/TLS**: 
+  - Development: `sslmode=disable` (aman di local network)
+  - Production: `sslmode=require` atau `sslmode=verify-full` (wajib)
+- **Backup**: Automated backup script tersedia di `backend/scripts/backup-db.sh`
+  - Manual backup: `./scripts/backup-db.sh`
+  - Automated backup: Setup cron job (contoh: setiap hari jam 2 pagi)
+  - Retention: 7 hari (configurable)
 - **Query Builder**: GORM Query Builder
 - **Migrations**: Auto-migrate on startup
 
@@ -631,17 +642,30 @@ npm run lint
 # Backend
 PORT=8080
 ENV=production
-DATABASE_URL=postgres://user:pass@host:5432/dbname
+# DATABASE_URL dengan SSL/TLS (wajib untuk production)
+# Format: postgres://user:pass@host:5432/dbname?sslmode=require
+# Atau: postgres://user:pass@host:5432/dbname?sslmode=verify-full (lebih aman, butuh CA cert)
+DATABASE_URL=postgres://user:pass@host:5432/dbname?sslmode=require
 JWT_SECRET=your-secret-key-here
 CGO_ENABLED=0
+AUDIT_LOG_USER_ACTION_RETENTION_DAYS=365
+AUDIT_LOG_TECHNICAL_ERROR_RETENTION_DAYS=90
 
 # Frontend (build-time)
 VITE_API_URL=https://api.yourdomain.com/api/v1
 ```
 
+**Catatan Penting**:
+- **SSL/TLS**: Pastikan `DATABASE_URL` menggunakan `sslmode=require` atau `sslmode=verify-full` di production
+- **Connection Pooling**: Sudah dikonfigurasi otomatis di aplikasi (tidak perlu environment variable)
+- **Backup**: Setup automated backup menggunakan cron job atau managed service backup
+
 ### Security Checklist
 - ✅ Use strong JWT secret
 - ✅ Enable HTTPS/TLS
+- ✅ Enable SSL/TLS untuk database connections (`sslmode=require`)
+- ✅ Configure connection pooling untuk database stability
+- ✅ Setup automated database backups
 - ✅ Configure CORS for production domains
 - ✅ Use managed database with backups
 - ✅ Enable rate limiting

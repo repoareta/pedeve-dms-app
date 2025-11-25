@@ -9,6 +9,7 @@ import (
 
 	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/database"
+	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/encryption"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/uuid"
 	"github.com/pquerna/otp"
@@ -25,14 +26,28 @@ func Verify2FALogin(userID, code string) (bool, error) {
 		return false, fmt.Errorf("2FA not enabled")
 	}
 
+	// Decrypt secret (handle backward compatibility untuk data lama)
+	secret, err := encryption.Decrypt(twoFA.Secret)
+	if err != nil {
+		// Jika decrypt gagal, gunakan as-is (backward compatibility)
+		secret = twoFA.Secret
+	}
+
 	// Coba kode TOTP terlebih dahulu
-	valid := totp.Validate(code, twoFA.Secret)
+	valid := totp.Validate(code, secret)
 	if valid {
 		return true, nil
 	}
 
+	// Decrypt backup codes (handle backward compatibility)
+	backupCodes, err := encryption.Decrypt(twoFA.BackupCodes)
+	if err != nil {
+		// Jika decrypt gagal, gunakan as-is (backward compatibility)
+		backupCodes = twoFA.BackupCodes
+	}
+
 	// Coba backup codes
-	if verifyBackupCode(code, twoFA.BackupCodes) {
+	if verifyBackupCode(code, backupCodes) {
 		return true, nil
 	}
 
@@ -59,6 +74,13 @@ func Generate2FASecretUseCase(userID, username string) (map[string]interface{}, 
 
 	zapLog.Debug("TOTP key generated successfully", zap.String("user_id", userID))
 
+	// Encrypt secret sebelum disimpan
+	encryptedSecret, err := encryption.Encrypt(key.Secret())
+	if err != nil {
+		zapLog.Error("Error encrypting 2FA secret", zap.Error(err))
+		return nil, fmt.Errorf("failed to encrypt 2FA secret: %w", err)
+	}
+
 	// Simpan atau update record 2FA
 	var twoFA domain.TwoFactorAuth
 	result := database.GetDB().Where("user_id = ?", userID).First(&twoFA)
@@ -66,7 +88,7 @@ func Generate2FASecretUseCase(userID, username string) (map[string]interface{}, 
 		twoFA = domain.TwoFactorAuth{
 			ID:      uuid.GenerateUUID(),
 			UserID:  userID,
-			Secret:  key.Secret(),
+			Secret:  encryptedSecret, // Simpan encrypted secret
 			Enabled: false,
 		}
 		if err := database.GetDB().Create(&twoFA).Error; err != nil {
@@ -78,7 +100,7 @@ func Generate2FASecretUseCase(userID, username string) (map[string]interface{}, 
 		zapLog.Error("Error querying 2FA record", zap.Error(result.Error))
 		return nil, fmt.Errorf("failed to query 2FA record: %w", result.Error)
 	} else {
-		twoFA.Secret = key.Secret()
+		twoFA.Secret = encryptedSecret // Update dengan encrypted secret
 		twoFA.Enabled = false
 		if err := database.GetDB().Save(&twoFA).Error; err != nil {
 			zapLog.Error("Error updating 2FA record", zap.Error(err))
@@ -120,16 +142,30 @@ func Verify2FAUseCase(userID, code string) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("2FA not set up. Generate secret first")
 	}
 
+	// Decrypt secret (handle backward compatibility untuk data lama)
+	secret, err := encryption.Decrypt(twoFA.Secret)
+	if err != nil {
+		// Jika decrypt gagal, gunakan as-is (backward compatibility)
+		secret = twoFA.Secret
+	}
+
 	// Verifikasi kode TOTP
-	valid := totp.Validate(code, twoFA.Secret)
+	valid := totp.Validate(code, secret)
 	if !valid {
 		return nil, fmt.Errorf("invalid verification code")
 	}
 
 	// Aktifkan 2FA dan generate backup codes
 	backupCodesJSON := generateBackupCodes()
+	
+	// Encrypt backup codes sebelum disimpan
+	encryptedBackupCodes, err := encryption.Encrypt(backupCodesJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt backup codes: %w", err)
+	}
+	
 	twoFA.Enabled = true
-	twoFA.BackupCodes = backupCodesJSON
+	twoFA.BackupCodes = encryptedBackupCodes // Simpan encrypted backup codes
 	if err := database.GetDB().Save(&twoFA).Error; err != nil {
 		return nil, fmt.Errorf("failed to enable 2FA: %w", err)
 	}
@@ -203,7 +239,12 @@ func generateBackupCodes() string {
 }
 
 // verifyBackupCode memverifikasi apakah kode adalah backup code yang valid
+// backupCodesJSON sudah di-decrypt sebelumnya (dari Verify2FALogin)
 func verifyBackupCode(code, backupCodesJSON string) bool {
+	if backupCodesJSON == "" {
+		return false
+	}
+
 	var codes []string
 	if err := json.Unmarshal([]byte(backupCodesJSON), &codes); err != nil {
 		return false
@@ -213,7 +254,7 @@ func verifyBackupCode(code, backupCodesJSON string) bool {
 		if backupCode == code {
 			// Hapus backup code yang sudah digunakan
 			codes = append(codes[:i], codes[i+1:]...)
-			// TODO: Update database dengan backup codes baru
+			// TODO: Update database dengan backup codes baru (perlu encrypt lagi)
 			return true
 		}
 	}

@@ -28,8 +28,17 @@ export const getCSRFToken = async (): Promise<string | null> => {
     const response = await axios.get<{ csrf_token: string }>(`${API_BASE_URL}/csrf-token`)
     csrfToken = response.data.csrf_token
     return csrfToken
-  } catch (error) {
+  } catch (error: any) {
+    // Handle connection errors (server tidak tersedia)
+    if (error.code === 'ERR_NETWORK' || error.code === 'ERR_CONNECTION_REFUSED' || error.message?.includes('Network Error')) {
+      // Server tidak tersedia - jangan log error, hanya return null
+      // Token CSRF akan di-fetch lagi saat diperlukan
+      csrfToken = null
+      return null
+    }
+    // Error lainnya - log untuk debugging
     console.error('Failed to get CSRF token:', error)
+    csrfToken = null
     return null
   }
 }

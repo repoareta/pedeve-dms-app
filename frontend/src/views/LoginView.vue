@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { message } from 'ant-design-vue'
@@ -7,6 +7,14 @@ import { Icon as IconifyIcon } from '@iconify/vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+// Clear auth state saat masuk ke halaman login
+// Memastikan state benar-benar clean saat redirect dari protected route
+onMounted(() => {
+  // Clear state lokal untuk memastikan kondisi seperti belum login
+  // Cookie akan tetap ada di browser, tapi state aplikasi di-reset
+  authStore.clearAuthState()
+})
 
 const email = ref('')
 const password = ref('')

@@ -7,6 +7,7 @@ import (
 	"github.com/Fajarriswandi/dms-app/backend/internal/delivery/http"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/audit"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/database"
+	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/encryption"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/seed"
 	"github.com/Fajarriswandi/dms-app/backend/internal/middleware"
@@ -58,6 +59,11 @@ func main() {
 
 	// Inisialisasi database
 	database.InitDB()
+
+	// Inisialisasi encryption
+	if err := encryption.InitEncryption(); err != nil {
+		zapLog.Fatal("Failed to initialize encryption", zap.Error(err))
+	}
 
 	// Inisialisasi audit logger
 	audit.InitAuditLogger()

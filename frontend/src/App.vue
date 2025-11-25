@@ -23,8 +23,14 @@ const handleLogout = () => {
 }
 
 // Inisialisasi token CSRF saat app mount
+// Handle connection errors dengan graceful (tidak throw error)
 onMounted(async () => {
-  await getCSRFToken()
+  try {
+    await getCSRFToken()
+  } catch (error) {
+    // Ignore errors saat mount - token akan di-fetch lagi saat diperlukan
+    // Server mungkin belum ready, tidak perlu throw error
+  }
 })
 
 const theme = {

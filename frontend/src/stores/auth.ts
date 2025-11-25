@@ -6,10 +6,13 @@ export const useAuthStore = defineStore('auth', () => {
   // Token sekarang di httpOnly cookie, jadi tidak disimpan di localStorage
   // Pertahankan token ref untuk kompatibilitas ke belakang (tapi tidak digunakan untuk API calls)
   const token = ref<string | null>(null)
-  const user = ref<User | null>(() => {
+  
+  // Initialize user from localStorage
+  const getInitialUser = (): User | null => {
     const stored = localStorage.getItem('auth_user')
     return stored ? JSON.parse(stored) : null
-  })
+  }
+  const user = ref<User | null>(getInitialUser())
   const loading = ref(false)
   const error = ref<string | null>(null)
   const isLoggingOut = ref(false) // Flag untuk mencegah validasi saat logout
@@ -115,10 +118,29 @@ export const useAuthStore = defineStore('auth', () => {
       return profile
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Failed to fetch profile'
+      
+      // Handle connection errors (server tidak tersedia)
+      const isConnectionError = err.code === 'ERR_NETWORK' || 
+                                err.code === 'ERR_CONNECTION_REFUSED' || 
+                                err.message?.includes('Network Error')
+      
+      if (isConnectionError) {
+        // Server tidak tersedia - clear state dan throw error khusus
+        clearAuthState()
+        throw new Error('SERVER_UNAVAILABLE')
+      }
+      
       throw err
     } finally {
       loading.value = false
     }
+  }
+
+  // Clear auth state (helper function)
+  const clearAuthState = () => {
+    token.value = null
+    user.value = null
+    localStorage.removeItem('auth_user')
   }
 
   // Login with 2FA code
@@ -209,6 +231,7 @@ export const useAuthStore = defineStore('auth', () => {
     register,
     logout,
     fetchProfile,
+    clearAuthState, // Export helper function
     generate2FA,
     verify2FA,
     get2FAStatus,

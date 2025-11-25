@@ -69,20 +69,35 @@ router.beforeEach(async (to, from, next) => {
       next()
       return
     } catch (error: any) {
-      // Token tidak valid atau expired (401/403) - hapus auth dan redirect ke login
-      // Jangan log error jika ini adalah navigasi ke login (user sedang logout)
+      // Handle connection errors (server tidak tersedia)
+      const isConnectionError = error.message === 'SERVER_UNAVAILABLE' ||
+                                error.code === 'ERR_NETWORK' ||
+                                error.code === 'ERR_CONNECTION_REFUSED' ||
+                                error.message?.includes('Network Error')
+      
+      // Token tidak valid atau expired (401/403) atau server tidak tersedia
+      // Hapus auth dan redirect ke login
       const isNavigatingToLogin = to.name === 'login'
+      
+      if (isConnectionError) {
+        // Server tidak tersedia - clear state dan redirect ke login
+        authStore.clearAuthState()
+        if (!isNavigatingToLogin) {
+          next({ name: 'login', query: { redirect: to.fullPath } })
+        } else {
+          next()
+        }
+        return
+      }
+      
+      // Error lainnya (401/403) - hapus auth dan redirect ke login
       if (!isNavigatingToLogin) {
         console.error('Token validation failed:', error)
       }
       
       // Hapus state lokal tanpa memanggil logout API (untuk menghindari loop)
       // karena cookie mungkin sudah dihapus atau tidak valid
-      authStore.$patch({
-        user: null,
-        token: null,
-      })
-      localStorage.removeItem('auth_user')
+      authStore.clearAuthState()
       
       if (!isNavigatingToLogin) {
         next({ name: 'login', query: { redirect: to.fullPath } })
@@ -108,16 +123,18 @@ router.beforeEach(async (to, from, next) => {
         next({ name: 'dashboard' })
         return
       } catch (error: any) {
-        // Cookie tidak valid atau hilang - hapus state lokal secara diam-diam
+        // Handle connection errors (server tidak tersedia)
+        const isConnectionError = error.message === 'SERVER_UNAVAILABLE' ||
+                                  error.code === 'ERR_NETWORK' ||
+                                  error.code === 'ERR_CONNECTION_REFUSED' ||
+                                  error.message?.includes('Network Error')
+        
+        // Cookie tidak valid atau hilang atau server tidak tersedia
+        // Hapus state lokal secara diam-diam
         // Jangan panggil logout API karena cookie tidak ada atau sudah dihapus
-        // Manipulasi store langsung untuk menghindari memicu side effects
-        const store = useAuthStore()
-        store.$patch({
-          user: null,
-          token: null,
-        })
-        localStorage.removeItem('auth_user')
-        // Izinkan akses ke route guest (user sudah logout)
+        authStore.clearAuthState()
+        
+        // Izinkan akses ke route guest (user sudah logout atau server tidak tersedia)
         next()
         return
       }

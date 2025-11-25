@@ -10,7 +10,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 // Active tab
-const activeTab = ref('companies')
+const activeTab = ref('users')
 
 // Companies
 const companies = ref<Company[]>([])

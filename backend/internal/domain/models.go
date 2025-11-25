@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"encoding/json"
+	"strings"
+	"time"
+)
 
 // User merepresentasikan user dalam sistem (domain model)
 type User struct {
@@ -138,17 +142,189 @@ type Company struct {
 type CompanyModel struct {
 	ID          string    `gorm:"primaryKey" json:"id"`
 	Name        string    `gorm:"not null;index" json:"name"`
-	Code        string    `gorm:"uniqueIndex;not null" json:"code"` // Unique company code
+	ShortName   string    `gorm:"index" json:"short_name"`           // Nama singkat
+	Code        string    `gorm:"uniqueIndex;not null" json:"code"`  // Unique company code
 	Description string    `gorm:"type:text" json:"description"`
+	NPWP        string    `gorm:"index" json:"npwp"`                 // Nomor Pokok Wajib Pajak
+	NIB         string    `gorm:"index" json:"nib"`                  // Nomor Induk Berusaha
+	Status      string    `gorm:"default:'Aktif'" json:"status"`     // Status perusahaan
+	Logo        string    `json:"logo"`                              // Path/URL logo
+	Phone       string    `json:"phone"`                             // Telepon
+	Fax         string    `json:"fax"`                               // Fax
+	Email       string    `json:"email"`                              // Email
+	Website     string    `json:"website"`                           // Website
+	Address     string    `gorm:"type:text" json:"address"`          // Alamat perusahaan
+	OperationalAddress string `gorm:"type:text" json:"operational_address"` // Alamat operasional
 	ParentID    *string   `gorm:"index" json:"parent_id"`           // NULL untuk root/holding company
+	MainParentCompanyID *string `gorm:"index" json:"main_parent_company"` // ID perusahaan induk utama
 	Level       int       `gorm:"not null;default:0;index" json:"level"` // 0=root, 1=holding, 2=subsidiary, etc
 	IsActive    bool      `gorm:"default:true;index" json:"is_active"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+	
+	// Relationships
+	Shareholders []ShareholderModel `gorm:"foreignKey:CompanyID" json:"shareholders,omitempty"`
+	BusinessFields []BusinessFieldModel `gorm:"foreignKey:CompanyID" json:"business_fields,omitempty"`
+	Directors []DirectorModel `gorm:"foreignKey:CompanyID" json:"directors,omitempty"`
 }
 
 func (CompanyModel) TableName() string {
 	return "companies"
+}
+
+// ShareholderModel merepresentasikan pemegang saham perusahaan
+type ShareholderModel struct {
+	ID              string    `gorm:"primaryKey" json:"id"`
+	CompanyID      string    `gorm:"index;not null" json:"company_id"`
+	Type            string    `gorm:"not null" json:"type"`              // Jenis: Badan Hukum, Individu, dll
+	Name            string    `gorm:"not null" json:"name"`              // Nama pemegang saham
+	IdentityNumber  string    `json:"identity_number"`                   // KTP/NPWP
+	OwnershipPercent float64  `gorm:"not null" json:"ownership_percent"` // Persentase kepemilikan
+	ShareCount      int64     `json:"share_count"`                       // Jumlah saham
+	IsMainParent    bool      `gorm:"default:false" json:"is_main_parent"` // Apakah perusahaan induk utama
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+func (ShareholderModel) TableName() string {
+	return "shareholders"
+}
+
+// BusinessFieldModel merepresentasikan bidang usaha perusahaan
+type BusinessFieldModel struct {
+	ID                    string    `gorm:"primaryKey" json:"id"`
+	CompanyID             string    `gorm:"index;not null" json:"company_id"`
+	IndustrySector        string    `gorm:"not null" json:"industry_sector"`        // Sektor industri
+	KBLI                  string    `json:"kbli"`                                    // Klasifikasi Baku Lapangan Usaha Indonesia
+	MainBusinessActivity  string    `gorm:"type:text" json:"main_business_activity"` // Uraian kegiatan usaha utama
+	AdditionalActivities  string    `gorm:"type:text" json:"additional_activities"` // Kegiatan usaha tambahan
+	StartOperationDate    *time.Time `json:"start_operation_date"`                   // Tanggal mulai beroperasi
+	IsMain                bool      `gorm:"default:true" json:"is_main"`            // Apakah bidang usaha utama
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
+}
+
+func (BusinessFieldModel) TableName() string {
+	return "business_fields"
+}
+
+// DirectorModel merepresentasikan pengurus/dewan direksi perusahaan
+type DirectorModel struct {
+	ID              string     `gorm:"primaryKey" json:"id"`
+	CompanyID       string     `gorm:"index;not null" json:"company_id"`
+	Position        string     `gorm:"not null" json:"position"`        // Jabatan: Direktur Utama, Komisaris, dll
+	FullName        string     `gorm:"not null" json:"full_name"`        // Nama lengkap
+	KTP             string     `json:"ktp"`                              // Nomor KTP
+	NPWP            string     `json:"npwp"`                             // Nomor NPWP
+	StartDate       *time.Time `json:"start_date"`                       // Tanggal awal jabatan (nullable)
+	DomicileAddress string     `gorm:"type:text" json:"domicile_address"` // Alamat domisili
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+func (DirectorModel) TableName() string {
+	return "directors"
+}
+
+// ShareholderRequest untuk request body (tanpa CreatedAt/UpdatedAt)
+type ShareholderRequest struct {
+	Type            string   `json:"type"`
+	Name            string   `json:"name"`
+	IdentityNumber  string   `json:"identity_number"`
+	OwnershipPercent float64  `json:"ownership_percent"`
+	ShareCount      int64    `json:"share_count"`
+	IsMainParent    bool     `json:"is_main_parent"`
+}
+
+// DateOnly untuk parsing tanggal format YYYY-MM-DD
+type DateOnly struct {
+	time.Time
+}
+
+// UnmarshalJSON untuk parsing tanggal format YYYY-MM-DD
+func (d *DateOnly) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), "\"")
+	if s == "null" || s == "" {
+		d.Time = time.Time{}
+		return nil
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return err
+	}
+	d.Time = t
+	return nil
+}
+
+// MarshalJSON untuk serialize tanggal ke format YYYY-MM-DD
+func (d DateOnly) MarshalJSON() ([]byte, error) {
+	if d.Time.IsZero() {
+		return []byte("null"), nil
+	}
+	return json.Marshal(d.Time.Format("2006-01-02"))
+}
+
+// BusinessFieldRequest untuk request body (tanpa CreatedAt/UpdatedAt)
+type BusinessFieldRequest struct {
+	IndustrySector       string    `json:"industry_sector"`
+	KBLI                 string    `json:"kbli"`
+	MainBusinessActivity string    `json:"main_business_activity"`
+	AdditionalActivities string    `json:"additional_activities"`
+	StartOperationDate   *DateOnly `json:"start_operation_date"`
+}
+
+// DirectorRequest untuk request body (tanpa CreatedAt/UpdatedAt)
+type DirectorRequest struct {
+	Position        string    `json:"position"`
+	FullName        string    `json:"full_name"`
+	KTP             string    `json:"ktp"`
+	NPWP            string    `json:"npwp"`
+	StartDate       *DateOnly `json:"start_date"`
+	DomicileAddress string    `json:"domicile_address"`
+}
+
+// CompanyCreateRequest untuk create company dengan data lengkap
+type CompanyCreateRequest struct {
+	Name                string                `json:"name"`
+	ShortName           string                `json:"short_name"`
+	Code                string                `json:"code"`
+	Description         string                `json:"description"`
+	NPWP                string                `json:"npwp"`
+	NIB                 string                `json:"nib"`
+	Status              string                `json:"status"`
+	Logo                string                `json:"logo"`
+	Phone               string                `json:"phone"`
+	Fax                 string                `json:"fax"`
+	Email               string                `json:"email"`
+	Website             string                `json:"website"`
+	Address             string                `json:"address"`
+	OperationalAddress  string                `json:"operational_address"`
+	ParentID            *string               `json:"parent_id"`
+	MainParentCompany   *string               `json:"main_parent_company"`
+	Shareholders        []ShareholderRequest  `json:"shareholders"`
+	MainBusiness        *BusinessFieldRequest  `json:"main_business"`
+	Directors           []DirectorRequest      `json:"directors"`
+}
+
+// CompanyUpdateRequest untuk update company dengan data lengkap
+type CompanyUpdateRequest struct {
+	Name                string               `json:"name"`
+	ShortName           string               `json:"short_name"`
+	Description         string               `json:"description"`
+	NPWP                string               `json:"npwp"`
+	NIB                 string               `json:"nib"`
+	Status              string               `json:"status"`
+	Logo                string               `json:"logo"`
+	Phone               string               `json:"phone"`
+	Fax                 string               `json:"fax"`
+	Email               string               `json:"email"`
+	Website             string               `json:"website"`
+	Address             string               `json:"address"`
+	OperationalAddress  string               `json:"operational_address"`
+	MainParentCompany   *string              `json:"main_parent_company"`
+	Shareholders        []ShareholderRequest `json:"shareholders"`
+	MainBusiness        *BusinessFieldRequest `json:"main_business"`
+	Directors           []DirectorRequest    `json:"directors"`
 }
 
 // ============================================================================

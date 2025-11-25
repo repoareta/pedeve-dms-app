@@ -38,7 +38,7 @@ func (r *companyRepository) Create(company *domain.CompanyModel) error {
 
 func (r *companyRepository) GetByID(id string) (*domain.CompanyModel, error) {
 	var company domain.CompanyModel
-	err := r.db.Where("id = ?", id).First(&company).Error
+	err := r.db.Preload("Shareholders").Preload("BusinessFields").Preload("Directors").Where("id = ?", id).First(&company).Error
 	if err != nil {
 		return nil, err
 	}

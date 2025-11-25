@@ -1,16 +1,63 @@
 import apiClient from './client'
+import axios from 'axios'
+import { getCSRFToken } from './client'
 
 // Types
 export interface Company {
   id: string
   name: string
+  short_name?: string
   code: string
   description?: string
+  npwp?: string
+  nib?: string
+  status?: string
+  logo?: string
+  phone?: string
+  fax?: string
+  email?: string
+  website?: string
+  address?: string
+  operational_address?: string
   parent_id?: string
   level: number
   is_active: boolean
+  main_parent_company?: string
+  shareholders?: Shareholder[]
+  business_fields?: BusinessField[] // Array dari backend
+  main_business?: BusinessField // Singular untuk kompatibilitas
+  directors?: Director[]
   created_at: string
   updated_at: string
+}
+
+export interface Shareholder {
+  id?: string
+  type: string
+  name: string
+  identity_number: string
+  ownership_percent: number
+  share_count: number
+  is_main_parent?: boolean
+}
+
+export interface BusinessField {
+  id?: string
+  industry_sector: string
+  kbli: string
+  main_business_activity: string
+  additional_activities?: string
+  start_operation_date?: string
+}
+
+export interface Director {
+  id?: string
+  position: string
+  full_name: string
+  ktp: string
+  npwp: string
+  start_date?: string
+  domicile_address: string
 }
 
 export interface User {
@@ -63,20 +110,12 @@ export const companyApi = {
     return response.data
   },
 
-  create: async (data: {
-    name: string
-    code: string
-    description?: string
-    parent_id?: string
-  }): Promise<Company> => {
+  create: async (data: any): Promise<Company> => {
     const response = await apiClient.post<Company>('/companies', data)
     return response.data
   },
 
-  update: async (id: string, data: {
-    name: string
-    description?: string
-  }): Promise<Company> => {
+  update: async (id: string, data: any): Promise<Company> => {
     const response = await apiClient.put<Company>(`/companies/${id}`, data)
     return response.data
   },
@@ -224,6 +263,49 @@ export const permissionApi = {
 
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/permissions/${id}`)
+  },
+}
+
+// Upload API
+export interface UploadResponse {
+  url: string
+  filename: string
+  size: number
+}
+
+export const uploadApi = {
+  uploadLogo: async (file: File): Promise<UploadResponse> => {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    // Ambil CSRF token
+    const csrfToken = await getCSRFToken()
+    
+    // Gunakan axios langsung untuk multipart/form-data
+    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+    const baseURL = API_BASE_URL.endsWith('/api/v1') 
+      ? API_BASE_URL 
+      : `${API_BASE_URL}/api/v1`
+
+    const headers: Record<string, string> = {}
+    
+    // Tambahkan CSRF token jika tersedia
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken
+    }
+    
+    // Jangan set Content-Type secara manual untuk multipart/form-data
+    // Browser akan otomatis set dengan boundary yang benar
+
+    const response = await axios.post<UploadResponse>(
+      `${baseURL}/upload/logo`,
+      formData,
+      {
+        withCredentials: true,
+        headers,
+      }
+    )
+    return response.data
   },
 }
 

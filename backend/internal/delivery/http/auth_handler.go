@@ -266,14 +266,19 @@ func GetProfile(c *fiber.Ctx) error {
 	}
 
 	// Return user (tanpa password)
-	return c.Status(fiber.StatusOK).JSON(domain.User{
+	userResponse := domain.User{
 		ID:        userModel.ID,
 		Username:  userModel.Username,
 		Email:     userModel.Email,
 		Role:      userModel.Role,
 		CreatedAt: userModel.CreatedAt,
 		UpdatedAt: userModel.UpdatedAt,
-	})
+	}
+	// Include company_id if available
+	if userModel.CompanyID != nil {
+		userResponse.CompanyID = userModel.CompanyID
+	}
+	return c.Status(fiber.StatusOK).JSON(userResponse)
 }
 
 // Logout handles user logout (untuk Fiber)

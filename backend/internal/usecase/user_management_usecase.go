@@ -24,8 +24,11 @@ type UserManagementUseCase interface {
 	AssignUserToCompany(userID, companyID string) error
 	AssignUserToRole(userID, roleID string) error
 	DeactivateUser(id string) error
+	ActivateUser(id string) error
+	ToggleUserStatus(id string) (*domain.UserModel, error)
 	DeleteUser(id string) error
 	ValidateUserAccess(userCompanyID, targetUserID string) (bool, error)
+	ResetUserPassword(userID, newPassword string) error
 }
 
 type userManagementUseCase struct {
@@ -226,6 +229,27 @@ func (uc *userManagementUseCase) DeactivateUser(id string) error {
 	return uc.userRepo.Deactivate(id)
 }
 
+func (uc *userManagementUseCase) ActivateUser(id string) error {
+	user, err := uc.userRepo.GetByID(id)
+	if err != nil {
+		return fmt.Errorf("user not found: %w", err)
+	}
+	user.IsActive = true
+	return uc.userRepo.Update(user)
+}
+
+func (uc *userManagementUseCase) ToggleUserStatus(id string) (*domain.UserModel, error) {
+	user, err := uc.userRepo.GetByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+	user.IsActive = !user.IsActive
+	if err := uc.userRepo.Update(user); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
 func (uc *userManagementUseCase) DeleteUser(id string) error {
 	return uc.userRepo.Delete(id)
 }
@@ -249,5 +273,38 @@ func (uc *userManagementUseCase) ValidateUserAccess(userCompanyID, targetUserID 
 
 	// Check if target user's company is a descendant of user's company
 	return uc.companyRepo.IsDescendantOf(*targetUser.CompanyID, userCompanyID)
+}
+
+// ResetUserPassword resets a user's password (only for superadmin)
+func (uc *userManagementUseCase) ResetUserPassword(userID, newPassword string) error {
+	zapLog := logger.GetLogger()
+
+	// Get user
+	user, err := uc.userRepo.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("user not found: %w", err)
+	}
+
+	// Validate password strength (min 8 characters)
+	if len(newPassword) < 8 {
+		return errors.New("password must be at least 8 characters long")
+	}
+
+	// Hash new password
+	hashedPassword, err := passwordPkg.HashPassword(newPassword)
+	if err != nil {
+		zapLog.Error("Failed to hash password for reset", zap.Error(err))
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	// Update password
+	user.Password = hashedPassword
+	if err := uc.userRepo.Update(user); err != nil {
+		zapLog.Error("Failed to update password", zap.String("user_id", userID), zap.Error(err))
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	zapLog.Info("User password reset successfully", zap.String("user_id", userID), zap.String("username", user.Username))
+	return nil
 }
 

@@ -39,8 +39,8 @@ const selectedAuditLog = ref<AuditLog | null>(null)
 const detailModalVisible = ref(false)
 let auditStatsInterval: number | null = null
 
-const handleLogout = () => {
-  authStore.logout()
+const handleLogout = async () => {
+  await authStore.logout()
   router.push('/login')
 }
 

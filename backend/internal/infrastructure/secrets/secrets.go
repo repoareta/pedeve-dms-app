@@ -3,6 +3,7 @@ package secrets
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
 	"github.com/hashicorp/vault/api"
@@ -35,11 +36,20 @@ func (e *EnvSecretManager) GetSecret(key string) (string, error) {
 	return value, nil
 }
 
+// convertToKVv2Path mengkonversi path untuk KV v2 API
+// "secret/dms-app" -> "secret/data/dms-app"
+func convertToKVv2Path(path string) string {
+	if !strings.Contains(path, "/data/") && strings.HasPrefix(path, "secret/") {
+		return strings.Replace(path, "secret/", "secret/data/", 1)
+	}
+	return path
+}
+
 // VaultSecretManager menggunakan HashiCorp Vault
 type VaultSecretManager struct {
 	address string
 	token   string
-	path    string // Path ke secret di Vault (e.g., "secret/data/dms-app")
+	path    string // Path ke secret di Vault (e.g., "secret/dms-app" atau "secret/data/dms-app")
 }
 
 func NewVaultSecretManager(address, token, path string) *VaultSecretManager {
@@ -68,8 +78,9 @@ func (v *VaultSecretManager) GetEncryptionKey() (string, error) {
 	client.SetToken(v.token)
 
 	// Baca secret dari Vault
-	// Support KV v2 format: secret/data/path -> data di dalam "data" field
-	secret, err := client.Logical().Read(v.path)
+	// Support KV v2 format: untuk path "secret/dms-app", Vault API menggunakan "secret/data/dms-app"
+	vaultPath := convertToKVv2Path(v.path)
+	secret, err := client.Logical().Read(vaultPath)
 	if err != nil {
 		zapLog.Error("Failed to read secret from Vault", 
 			zap.String("path", v.path),
@@ -147,7 +158,8 @@ func (v *VaultSecretManager) GetAllSecrets(path string) (map[string]interface{},
 	client.SetToken(v.token)
 
 	// Baca secret dari Vault
-	secret, err := client.Logical().Read(path)
+	vaultPath := convertToKVv2Path(path)
+	secret, err := client.Logical().Read(vaultPath)
 	if err != nil {
 		zapLog.Error("Failed to read secret from Vault",
 			zap.String("path", path),
@@ -239,7 +251,7 @@ func GetSecretManager() SecretManager {
 
 	if vaultAddr != "" && vaultToken != "" {
 		if vaultPath == "" {
-			vaultPath = "secret/data/dms-app" // Default path
+			vaultPath = "secret/dms-app" // Default path for KV v2
 		}
 		zapLog.Info("Using HashiCorp Vault for secret management",
 			zap.String("address", vaultAddr),

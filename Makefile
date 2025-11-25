@@ -35,6 +35,16 @@ logs-backend:
 logs-frontend:
 	docker-compose -f docker-compose.dev.yml logs -f frontend
 
+# Restart backend only
+restart-backend:
+	@echo "🔄 Restarting backend only..."
+	docker-compose -f docker-compose.dev.yml restart backend
+
+# Restart frontend only
+restart-frontend:
+	@echo "🔄 Restarting frontend only..."
+	docker-compose -f docker-compose.dev.yml restart frontend
+
 # Clean everything (containers, volumes, networks)
 clean:
 	@echo "🧹 Cleaning up..."
@@ -65,6 +75,8 @@ help:
 	@echo "  logs          - View logs from all services"
 	@echo "  logs-backend  - View backend logs only"
 	@echo "  logs-frontend - View frontend logs only"
+	@echo "  restart-backend  - Restart backend service only"
+	@echo "  restart-frontend - Restart frontend service only"
 	@echo "  clean         - Stop and remove all containers, volumes, networks"
 	@echo "  rebuild       - Rebuild and restart services"
 	@echo "  status        - Show service status"

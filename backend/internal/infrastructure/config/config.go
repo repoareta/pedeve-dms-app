@@ -69,7 +69,7 @@ func loadConfigFromVault() (*AppConfig, error) {
 	}
 
 	if vaultPath == "" {
-		vaultPath = "secret/data/dms-app" // Default path
+		vaultPath = "secret/dms-app" // Default path for KV v2
 	}
 
 	// Create Vault client directly

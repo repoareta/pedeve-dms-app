@@ -337,3 +337,168 @@ func (h *UserManagementHandler) DeleteUser(c *fiber.Ctx) error {
 	})
 }
 
+// ToggleUserStatus handles toggling user active status
+// @Summary      Toggle Status User
+// @Description  Mengaktifkan atau menonaktifkan user. Superadmin tidak bisa menonaktifkan dirinya sendiri atau user superadmin lainnya.
+// @Tags         User Management
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "User ID"
+// @Success      200  {object}  domain.UserModel
+// @Failure      400  {object}  domain.ErrorResponse
+// @Failure      403  {object}  domain.ErrorResponse
+// @Router       /api/v1/users/{id}/toggle-status [patch]
+func (h *UserManagementHandler) ToggleUserStatus(c *fiber.Ctx) error {
+	id := c.Params("id")
+	currentUserID := c.Locals("userID").(string)
+	roleName := c.Locals("roleName").(string)
+
+	// Prevent superadmin from deactivating themselves
+	if roleName == "superadmin" && id == currentUserID {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Superadmin cannot deactivate their own account.",
+		})
+	}
+
+	// Get target user to check if they are superadmin
+	targetUser, err := h.userUseCase.GetUserByID(id)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
+			Error:   "not_found",
+			Message: "User not found",
+		})
+	}
+
+	// Prevent deactivating superadmin user (if trying to deactivate active superadmin)
+	if targetUser.Role == "superadmin" && targetUser.IsActive {
+		// Allow activating superadmin if inactive, but not deactivating if active
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Superadmin account cannot be deactivated through this interface.",
+		})
+	}
+
+	companyID := c.Locals("companyID")
+
+	// Check access
+	if roleName != "superadmin" && companyID != nil {
+		userCompanyID := companyID.(string)
+		hasAccess, err := h.userUseCase.ValidateUserAccess(userCompanyID, id)
+		if err != nil || !hasAccess {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "You don't have access to modify this user",
+			})
+		}
+	}
+
+	user, err := h.userUseCase.ToggleUserStatus(id)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "toggle_failed",
+			Message: err.Error(),
+		})
+	}
+
+	userID := c.Locals("userID").(string)
+	username := c.Locals("username").(string)
+	action := audit.ActionUpdateUser
+	if user.IsActive {
+		action = "activate_user"
+	} else {
+		action = "deactivate_user"
+	}
+	audit.LogAction(userID, username, action, audit.ResourceUser, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
+		"is_active": user.IsActive,
+	})
+
+	return c.Status(fiber.StatusOK).JSON(user)
+}
+
+// ResetUserPassword handles password reset for users (superadmin only)
+// @Summary      Reset Password User
+// @Description  Reset password untuk user. Hanya superadmin yang bisa melakukan reset password. Superadmin tidak bisa reset password dirinya sendiri.
+// @Tags         User Management
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "User ID"
+// @Param        request  body      object  true  "New password"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  domain.ErrorResponse
+// @Failure      403  {object}  domain.ErrorResponse
+// @Failure      404  {object}  domain.ErrorResponse
+// @Router       /api/v1/users/{id}/reset-password [post]
+func (h *UserManagementHandler) ResetUserPassword(c *fiber.Ctx) error {
+	id := c.Params("id")
+	currentUserID := c.Locals("userID").(string)
+	roleName := c.Locals("roleName").(string)
+
+	// Only superadmin can reset passwords
+	if roleName != "superadmin" {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Only superadmin can reset user passwords",
+		})
+	}
+
+	// Prevent superadmin from resetting their own password
+	if id == currentUserID {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Superadmin cannot reset their own password through this interface",
+		})
+	}
+
+	var req struct {
+		NewPassword string `json:"new_password" validate:"required,min=8"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_request",
+			Message: "Invalid request body",
+		})
+	}
+
+	// Validate password
+	if len(req.NewPassword) < 8 {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "validation_error",
+			Message: "Password must be at least 8 characters long",
+		})
+	}
+
+	// Get target user to verify they exist
+	targetUser, err := h.userUseCase.GetUserByID(id)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
+			Error:   "not_found",
+			Message: "User not found",
+		})
+	}
+
+	// Reset password
+	if err := h.userUseCase.ResetUserPassword(id, req.NewPassword); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "reset_failed",
+			Message: err.Error(),
+		})
+	}
+
+	// Log action
+	userID := c.Locals("userID").(string)
+	username := c.Locals("username").(string)
+	audit.LogAction(userID, username, "reset_user_password", audit.ResourceUser, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
+		"target_username": targetUser.Username,
+		"target_email":     targetUser.Email,
+	})
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Password reset successfully",
+		"user_id": id,
+	})
+}
+

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { companyApi, userApi, roleApi, permissionApi, type Company, type User, type Role, type Permission } from '../api/userManagement'
 import { useAuthStore } from '../stores/auth'
 
+const router = useRouter()
 const authStore = useAuthStore()
 
 // Active tab
@@ -23,6 +25,13 @@ const usersLoading = ref(false)
 const userModalVisible = ref(false)
 const userForm = ref<Partial<User & { password: string }>>({})
 const editingUser = ref<User | null>(null)
+const resetPasswordModalVisible = ref(false)
+const resetPasswordForm = ref<{ user_id: string; username: string; new_password: string; confirm_password: string }>({
+  user_id: '',
+  username: '',
+  new_password: '',
+  confirm_password: '',
+})
 
 // Search states
 const companySearchText = ref('')
@@ -329,6 +338,50 @@ const handleDeleteUser = async (id: string) => {
   }
 }
 
+const handleToggleUserStatus = async (user: User) => {
+  try {
+    const updatedUser = await userApi.toggleStatus(user.id)
+    message.success(`User berhasil ${updatedUser.is_active ? 'diaktifkan' : 'dinonaktifkan'}`)
+    loadUsers()
+  } catch (error: any) {
+    message.error('Gagal mengubah status user: ' + (error.response?.data?.message || error.message))
+  }
+}
+
+const handleResetPassword = (user: User) => {
+  resetPasswordForm.value = {
+    user_id: user.id,
+    username: user.username,
+    new_password: '',
+    confirm_password: '',
+  }
+  resetPasswordModalVisible.value = true
+}
+
+const handleSaveResetPassword = async () => {
+  if (!resetPasswordForm.value.new_password || resetPasswordForm.value.new_password.length < 8) {
+    message.error('Password harus minimal 8 karakter')
+    return
+  }
+  if (resetPasswordForm.value.new_password !== resetPasswordForm.value.confirm_password) {
+    message.error('Password dan konfirmasi password tidak cocok')
+    return
+  }
+  try {
+    await userApi.resetPassword(resetPasswordForm.value.user_id, resetPasswordForm.value.new_password)
+    message.success('Password berhasil direset')
+    resetPasswordModalVisible.value = false
+    resetPasswordForm.value = {
+      user_id: '',
+      username: '',
+      new_password: '',
+      confirm_password: '',
+    }
+  } catch (error: any) {
+    message.error('Gagal reset password: ' + (error.response?.data?.message || error.message))
+  }
+}
+
 // Load data on mount
 onMounted(() => {
   loadCompanies()
@@ -337,8 +390,9 @@ onMounted(() => {
   loadPermissions()
 })
 
-const handleLogout = () => {
-  authStore.logout()
+const handleLogout = async () => {
+  await authStore.logout()
+  router.push('/login')
 }
 
 // Helper functions untuk level label
@@ -558,9 +612,13 @@ const getScopeColor = (scope: string): string => {
                 <a-tag v-else color="purple">Superadmin (Global)</a-tag>
               </template>
               <template v-if="column.key === 'is_active'">
-                <a-tag :color="record.is_active ? 'green' : 'red'">
-                  {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
-                </a-tag>
+                <a-switch
+                  :checked="record.is_active"
+                  :disabled="isCurrentUser(record) && isUserSuperadmin(record)"
+                  @change="() => handleToggleUserStatus(record)"
+                  :checked-children="'Aktif'"
+                  :un-checked-children="'Nonaktif'"
+                />
               </template>
               <template v-if="column.key === 'actions'">
                 <a-space v-if="!isCurrentUser(record) || !isUserSuperadmin(record)">
@@ -570,6 +628,14 @@ const getScopeColor = (scope: string): string => {
                     @click="handleEditUser(record)"
                   >
                     Edit
+                  </a-button>
+                  <a-button 
+                    v-if="isCurrentUserSuperadmin && !isCurrentUser(record)"
+                    type="link" 
+                    size="small" 
+                    @click="handleResetPassword(record)"
+                  >
+                    Reset Password
                   </a-button>
                   <a-popconfirm
                     title="Apakah Anda yakin ingin menghapus user ini?"
@@ -794,6 +860,40 @@ const getScopeColor = (scope: string): string => {
               <small>Role Superadmin tidak tersedia untuk dibuat dari antarmuka ini</small>
             </div>
           </a-form-item>
+        </a-form>
+      </a-modal>
+
+      <!-- Reset Password Modal -->
+      <a-modal
+        v-model:open="resetPasswordModalVisible"
+        title="Reset Password"
+        @ok="handleSaveResetPassword"
+        ok-text="Reset Password"
+        cancel-text="Batal"
+      >
+        <a-form :model="resetPasswordForm" layout="vertical">
+          <a-form-item label="Username">
+            <a-input v-model:value="resetPasswordForm.username" disabled />
+          </a-form-item>
+          <a-form-item label="Password Baru" required>
+            <a-input-password 
+              v-model:value="resetPasswordForm.new_password" 
+              placeholder="Masukkan password baru (min 8 karakter)"
+            />
+          </a-form-item>
+          <a-form-item label="Konfirmasi Password" required>
+            <a-input-password 
+              v-model:value="resetPasswordForm.confirm_password" 
+              placeholder="Konfirmasi password baru"
+            />
+          </a-form-item>
+          <a-alert
+            message="Peringatan"
+            description="Password akan direset dan user harus login dengan password baru."
+            type="warning"
+            show-icon
+            style="margin-top: 16px;"
+          />
         </a-form>
       </a-modal>
     </div>

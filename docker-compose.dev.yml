@@ -21,9 +21,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # Backend API (Go) - Development mode
-  # Note: Untuk hot reload yang lebih baik, gunakan local development (go run main.go)
-  # Docker ini untuk consistency, tapi restart manual diperlukan untuk perubahan Go code
+  # Backend API (Go) - Development mode dengan Air hot reload
+  # Air akan otomatis rebuild dan restart saat file .go berubah
+  # Untuk disable hot reload, ubah command ke: go run ./cmd/api
   backend:
     image: golang:1.25-alpine
     container_name: dms-backend-dev
@@ -50,7 +50,10 @@ services:
     volumes:
       - ./backend:/app
       - /go/pkg/mod  # Cache Go modules
-    command: sh -c "apk add --no-cache git && go mod download && go run ./cmd/api"
+    # Menggunakan Air untuk hot reload otomatis saat file .go berubah
+    # Install Air jika belum terinstall, lalu jalankan dengan Air
+    # Jika Air gagal, akan fallback ke go run
+    command: sh -c "apk add --no-cache git && go mod download && (air -v 2>/dev/null || go install github.com/air-verse/air@latest) && (air || go run ./cmd/api)"
     restart: unless-stopped
     networks:
       - dms-network

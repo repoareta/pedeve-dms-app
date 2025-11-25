@@ -89,5 +89,19 @@ export const authApi = {
     const response = await apiClient.post<TwoFAVerifyResponse>('/auth/2fa/disable', {})
     return response.data
   },
+
+  // Profile management
+  updateEmail: async (email: string): Promise<User> => {
+    const response = await apiClient.put<User>('/auth/profile/email', { email })
+    return response.data
+  },
+
+  changePassword: async (oldPassword: string, newPassword: string): Promise<{ message: string }> => {
+    const response = await apiClient.put<{ message: string }>('/auth/profile/password', {
+      old_password: oldPassword,
+      new_password: newPassword,
+    })
+    return response.data
+  },
 }
 

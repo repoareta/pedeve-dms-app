@@ -317,6 +317,179 @@ func Logout(c *fiber.Ctx) error {
 	})
 }
 
+// UpdateProfileEmail handles email update for current user
+// @Summary      Update Email User
+// @Description  Mengupdate email user yang sedang terautentikasi. User hanya bisa mengupdate email mereka sendiri.
+// @Tags         Authentication
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request  body      object  true  "New email"
+// @Success      200  {object}  domain.User
+// @Failure      400  {object}  domain.ErrorResponse
+// @Failure      401  {object}  domain.ErrorResponse
+// @Router       /api/v1/auth/profile/email [put]
+func UpdateProfileEmail(c *fiber.Ctx) error {
+	userID := c.Locals("userID").(string)
+	username := c.Locals("username").(string)
+	zapLog := logger.GetLogger()
+
+	var req struct {
+		Email string `json:"email" validate:"required,email"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_request",
+			Message: "Invalid request body",
+		})
+	}
+
+	// Validate email format
+	if err := validation.ValidateEmail(req.Email); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "validation_error",
+			Message: err.Error(),
+		})
+	}
+
+	// Check if email already exists (by another user)
+	var existingUser domain.UserModel
+	result := database.GetDB().Where("email = ? AND id != ?", req.Email, userID).First(&existingUser)
+	if result.Error == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "email_exists",
+			Message: "Email already exists",
+		})
+	}
+
+	// Get current user
+	var userModel domain.UserModel
+	if err := database.GetDB().First(&userModel, "id = ?", userID).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
+			Error:   "user_not_found",
+			Message: "User not found",
+		})
+	}
+
+	// Update email
+	userModel.Email = req.Email
+	if err := database.GetDB().Save(&userModel).Error; err != nil {
+		zapLog.Error("Failed to update email", zap.String("user_id", userID), zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "update_failed",
+			Message: "Failed to update email",
+		})
+	}
+
+	// Log action
+	ipAddress := getClientIP(c)
+	userAgent := c.Get("User-Agent")
+	audit.LogAction(userID, username, "update_email", audit.ResourceUser, userID, ipAddress, userAgent, audit.StatusSuccess, map[string]interface{}{
+		"new_email": req.Email,
+	})
+
+	return c.Status(fiber.StatusOK).JSON(domain.User{
+		ID:        userModel.ID,
+		Username:  userModel.Username,
+		Email:     userModel.Email,
+		Role:      userModel.Role,
+		CreatedAt: userModel.CreatedAt,
+		UpdatedAt: userModel.UpdatedAt,
+	})
+}
+
+// ChangePassword handles password change for current user
+// @Summary      Change Password User
+// @Description  Mengubah password user yang sedang terautentikasi. User harus memberikan password lama untuk verifikasi.
+// @Tags         Authentication
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request  body      object  true  "Old password and new password"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  domain.ErrorResponse
+// @Failure      401  {object}  domain.ErrorResponse
+// @Router       /api/v1/auth/profile/password [put]
+func ChangePassword(c *fiber.Ctx) error {
+	userID := c.Locals("userID").(string)
+	username := c.Locals("username").(string)
+	zapLog := logger.GetLogger()
+
+	var req struct {
+		OldPassword string `json:"old_password" validate:"required"`
+		NewPassword string `json:"new_password" validate:"required,min=8"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_request",
+			Message: "Invalid request body",
+		})
+	}
+
+	// Validate new password length
+	if len(req.NewPassword) < 8 {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "validation_error",
+			Message: "New password must be at least 8 characters long",
+		})
+	}
+
+	// Get current user
+	var userModel domain.UserModel
+	if err := database.GetDB().First(&userModel, "id = ?", userID).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
+			Error:   "user_not_found",
+			Message: "User not found",
+		})
+	}
+
+	// Verify old password
+	if !password.CheckPasswordHash(req.OldPassword, userModel.Password) {
+		// Log failed password change attempt
+		ipAddress := getClientIP(c)
+		userAgent := c.Get("User-Agent")
+		audit.LogAction(userID, username, "change_password_failed", audit.ResourceAuth, userID, ipAddress, userAgent, audit.StatusFailure, map[string]interface{}{
+			"reason": "invalid_old_password",
+		})
+
+		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
+			Error:   "invalid_password",
+			Message: "Old password is incorrect",
+		})
+	}
+
+	// Hash new password
+	hashedPassword, err := password.HashPassword(req.NewPassword)
+	if err != nil {
+		zapLog.Error("Failed to hash new password", zap.String("user_id", userID), zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "hash_failed",
+			Message: "Failed to hash new password",
+		})
+	}
+
+	// Update password
+	userModel.Password = hashedPassword
+	if err := database.GetDB().Save(&userModel).Error; err != nil {
+		zapLog.Error("Failed to update password", zap.String("user_id", userID), zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "update_failed",
+			Message: "Failed to update password",
+		})
+	}
+
+	// Log action
+	ipAddress := getClientIP(c)
+	userAgent := c.Get("User-Agent")
+	audit.LogAction(userID, username, "change_password", audit.ResourceAuth, userID, ipAddress, userAgent, audit.StatusSuccess, nil)
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Password changed successfully",
+	})
+}
+
 // getClientIP extracts client IP from request (untuk Fiber)
 func getClientIP(c *fiber.Ctx) string {
 	// Check X-Forwarded-For header first

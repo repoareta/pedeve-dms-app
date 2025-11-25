@@ -169,6 +169,8 @@ func main() {
 
 	// Endpoint profil dan logout user
 	protected.Get("/auth/profile", http.GetProfile)
+	protected.Put("/auth/profile/email", http.UpdateProfileEmail)
+	protected.Put("/auth/profile/password", http.ChangePassword)
 	protected.Post("/auth/logout", http.Logout)
 
 	// Route 2FA (Two-Factor Authentication)

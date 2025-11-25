@@ -157,14 +157,14 @@ const companyColumns = computed(() => [
 
 const userColumns = computed(() => [
   { 
-    title: 'Username', 
+    title: 'Nama Pengguna', 
     dataIndex: 'username', 
     key: 'username', 
     sorter: (a: User, b: User) => a.username.localeCompare(b.username),
   },
   { title: 'Email', dataIndex: 'email', key: 'email', sorter: (a: User, b: User) => a.email.localeCompare(b.email) },
   { 
-    title: 'Role', 
+    title: 'Peran', 
     dataIndex: 'role', 
     key: 'role', 
     filters: roles.value.filter(r => r.name !== 'superadmin').map(r => ({ text: r.name, value: r.name })), 
@@ -465,118 +465,24 @@ const getScopeColor = (scope: string): string => {
     <DashboardHeader @logout="handleLogout" />
 
     <div class="user-management-content">
-      <h1 class="page-title">User Management</h1>
+      <h1 class="page-title">Manajemen Pengguna</h1>
 
       <a-tabs v-model:activeKey="activeTab" class="management-tabs">
-        <!-- Companies Tab -->
-        <a-tab-pane key="companies" tab="Companies">
-          <div class="table-header">
-            <a-button type="primary" @click="handleCreateCompany">
-              <template #icon>
-                <span>+</span>
-              </template>
-              Tambah Company
-            </a-button>
-          </div>
-
-          <div style="margin-bottom: 16px;">
-            <a-input
-              v-model:value="companySearchText"
-              placeholder="Cari perusahaan (nama, kode, deskripsi)..."
-              allow-clear
-              style="width: 300px;"
-            >
-              <template #prefix>
-                <span>🔍</span>
-              </template>
-            </a-input>
-          </div>
-
-          <a-table
-            :columns="companyColumns"
-            :data-source="filteredCompanies"
-            :loading="companiesLoading"
-            :pagination="{
-              current: companyPagination.current,
-              pageSize: companyPagination.pageSize,
-              total: companyPagination.total,
-              showSizeChanger: true,
-              showTotal: (total: number) => `Total ${total} perusahaan`,
-              pageSizeOptions: ['10', '20', '50', '100'],
-            }"
-            @change="(pagination: any) => { 
-              companyPagination.current = pagination.current || 1
-              companyPagination.pageSize = pagination.pageSize || 10
-            }"
-            row-key="id"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'level'">
-                <a-tag :color="getLevelColor(record.level)">
-                  {{ getLevelLabel(record.level) }}
-                </a-tag>
-              </template>
-              <template v-if="column.key === 'is_active'">
-                <a-tag :color="record.is_active ? 'green' : 'red'">
-                  {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
-                </a-tag>
-              </template>
-              <template v-if="column.key === 'actions'">
-                <a-space>
-                  <a-button type="link" size="small" @click="handleEditCompany(record)">
-                    Edit
-                  </a-button>
-                  <a-popconfirm
-                    title="Apakah Anda yakin ingin menghapus company ini?"
-                    @confirm="handleDeleteCompany(record.id)"
-                  >
-                    <a-button type="link" size="small" danger>Hapus</a-button>
-                  </a-popconfirm>
-                </a-space>
-              </template>
-            </template>
-          </a-table>
-
-          <!-- Info Penjelasan Istilah Teknis -->
-          <a-collapse class="info-accordion" :bordered="false">
-            <a-collapse-panel key="1" header="📚 Penjelasan Istilah Teknis">
-              <div class="info-content">
-                <div class="info-item">
-                  <strong>Tingkat Perusahaan:</strong>
-                  <ul>
-                    <li><strong>Holding (Level 0):</strong> Perusahaan induk utama, memiliki akses ke semua data perusahaan di bawahnya</li>
-                    <li><strong>Anak Perusahaan (Level 1):</strong> Perusahaan yang berada langsung di bawah holding company</li>
-                    <li><strong>Cucu Perusahaan (Level 2+):</strong> Perusahaan yang berada di bawah anak perusahaan, bisa berlanjut hingga beberapa tingkat</li>
-                  </ul>
-                </div>
-                <div class="info-item">
-                  <strong>Hierarki Perusahaan:</strong>
-                  <p>Sistem mendukung struktur perusahaan bertingkat (parent-child relationship). Setiap perusahaan hanya bisa mengakses data perusahaan mereka sendiri dan perusahaan di bawahnya (descendants), tidak bisa mengakses perusahaan di atasnya atau perusahaan sejajar.</p>
-                </div>
-                <div class="info-item">
-                  <strong>Status Aktif/Tidak Aktif:</strong>
-                  <p>Perusahaan yang dinonaktifkan tidak akan muncul di daftar aktif, namun data tetap tersimpan di sistem (soft delete).</p>
-                </div>
-              </div>
-            </a-collapse-panel>
-          </a-collapse>
-        </a-tab-pane>
-
         <!-- Users Tab -->
-        <a-tab-pane key="users" tab="Users">
+        <a-tab-pane key="users" tab="Pengguna">
           <div class="table-header">
             <a-button type="primary" @click="handleCreateUser">
               <template #icon>
                 <span>+</span>
               </template>
-              Tambah User
+              Tambah Pengguna
             </a-button>
           </div>
 
           <div style="margin-bottom: 16px;">
             <a-input
               v-model:value="userSearchText"
-              placeholder="Cari user (username, email, role)..."
+              placeholder="Cari pengguna (username, email, role)..."
               allow-clear
               style="width: 300px;"
             >
@@ -635,7 +541,7 @@ const getScopeColor = (scope: string): string => {
                     size="small" 
                     @click="handleResetPassword(record)"
                   >
-                    Reset Password
+                    Atur Ulang Password
                   </a-button>
                   <a-popconfirm
                     title="Apakah Anda yakin ingin menghapus user ini?"
@@ -656,17 +562,19 @@ const getScopeColor = (scope: string): string => {
             <a-collapse-panel key="1" header="📚 Penjelasan Istilah Teknis">
               <div class="info-content">
                 <div class="info-item">
-                  <strong>Role (Peran):</strong>
+                  <strong>Pengguna (User):</strong>
+                  <p>Akun pengguna dalam sistem yang memiliki akses untuk menggunakan aplikasi sesuai dengan role dan permission yang diberikan.</p>
+                </div>
+                <div class="info-item">
+                  <strong>Status Aktif/Nonaktif:</strong>
                   <ul>
-                    <li><strong>Superadmin:</strong> Akses penuh ke seluruh sistem, tidak terikat dengan perusahaan tertentu</li>
-                    <li><strong>Admin:</strong> Administrator perusahaan, bisa mengelola user dan data di perusahaan mereka</li>
-                    <li><strong>Manager:</strong> Manajer dengan akses terbatas untuk melihat dan mengelola data</li>
-                    <li><strong>Staff:</strong> Karyawan dengan akses dasar untuk melihat data</li>
+                    <li><strong>Aktif:</strong> Pengguna dapat login dan menggunakan sistem</li>
+                    <li><strong>Nonaktif:</strong> Pengguna tidak dapat login, akun dinonaktifkan sementara</li>
                   </ul>
                 </div>
                 <div class="info-item">
-                  <strong>Akses Berdasarkan Perusahaan:</strong>
-                  <p>Setiap user (kecuali superadmin) terikat dengan satu perusahaan. User hanya bisa mengakses data perusahaan mereka sendiri dan perusahaan di bawahnya dalam hierarki.</p>
+                  <strong>Role dan Permission:</strong>
+                  <p>Setiap pengguna memiliki role yang menentukan permission (izin) mereka dalam sistem. Role dapat di-assign ke perusahaan tertentu untuk data isolation.</p>
                 </div>
               </div>
             </a-collapse-panel>
@@ -674,16 +582,23 @@ const getScopeColor = (scope: string): string => {
         </a-tab-pane>
 
         <!-- Roles Tab -->
-        <a-tab-pane key="roles" tab="Roles">
+        <a-tab-pane key="roles" tab="Peran">
           <a-table
             :columns="[
-              { title: 'Nama Role', dataIndex: 'name', key: 'name' },
+              { title: 'Nama Peran', dataIndex: 'name', key: 'name' },
               { title: 'Deskripsi', dataIndex: 'description', key: 'description' },
               { title: 'Tingkat', dataIndex: 'level', key: 'level' },
-              { title: 'Tipe Role', dataIndex: 'is_system', key: 'is_system' },
+              { title: 'Tipe Peran', dataIndex: 'is_system', key: 'is_system' },
             ]"
             :data-source="roles"
             :loading="rolesLoading"
+            :scroll="{ x: 'max-content' }"
+            :pagination="{
+              pageSize: 10,
+              showSizeChanger: true,
+              showTotal: (total: number) => `Total ${total} peran`,
+              pageSizeOptions: ['10', '20', '50', '100'],
+            }"
             row-key="id"
           >
             <template #bodyCell="{ column, record }">
@@ -725,10 +640,10 @@ const getScopeColor = (scope: string): string => {
         </a-tab-pane>
 
         <!-- Permissions Tab -->
-        <a-tab-pane key="permissions" tab="Permissions">
+        <a-tab-pane key="permissions" tab="Izin">
           <a-table
             :columns="[
-              { title: 'Nama Permission', dataIndex: 'name', key: 'name' },
+              { title: 'Nama Izin', dataIndex: 'name', key: 'name' },
               { title: 'Deskripsi', dataIndex: 'description', key: 'description' },
               { title: 'Resource', dataIndex: 'resource', key: 'resource' },
               { title: 'Aksi', dataIndex: 'action', key: 'action' },
@@ -736,6 +651,13 @@ const getScopeColor = (scope: string): string => {
             ]"
             :data-source="permissions"
             :loading="permissionsLoading"
+            :scroll="{ x: 'max-content' }"
+            :pagination="{
+              pageSize: 10,
+              showSizeChanger: true,
+              showTotal: (total: number) => `Total ${total} izin`,
+              pageSizeOptions: ['10', '20', '50', '100'],
+            }"
             row-key="id"
           >
             <template #bodyCell="{ column, record }">
@@ -780,23 +702,23 @@ const getScopeColor = (scope: string): string => {
       <!-- Company Modal -->
       <a-modal
         v-model:open="companyModalVisible"
-        :title="editingCompany ? 'Edit Company' : 'Tambah Company'"
+        :title="editingCompany ? 'Edit Perusahaan' : 'Tambah Perusahaan'"
         @ok="handleSaveCompany"
       >
         <a-form :model="companyForm" layout="vertical">
-          <a-form-item label="Name" required>
-            <a-input v-model:value="companyForm.name" placeholder="Company name" />
+          <a-form-item label="Nama" required>
+            <a-input v-model:value="companyForm.name" placeholder="Nama perusahaan" />
           </a-form-item>
-          <a-form-item v-if="!editingCompany" label="Code" required>
-            <a-input v-model:value="companyForm.code" placeholder="Company code" />
+          <a-form-item v-if="!editingCompany" label="Kode" required>
+            <a-input v-model:value="companyForm.code" placeholder="Kode perusahaan" />
           </a-form-item>
-          <a-form-item label="Description">
-            <a-textarea v-model:value="companyForm.description" placeholder="Description" />
+          <a-form-item label="Deskripsi">
+            <a-textarea v-model:value="companyForm.description" placeholder="Deskripsi" />
           </a-form-item>
-          <a-form-item v-if="!editingCompany" label="Parent Company">
+          <a-form-item v-if="!editingCompany" label="Perusahaan Induk">
             <a-select
               v-model:value="companyForm.parent_id"
-              placeholder="Select parent company (optional)"
+              placeholder="Pilih perusahaan induk (opsional)"
               allow-clear
             >
               <a-select-option
@@ -814,12 +736,12 @@ const getScopeColor = (scope: string): string => {
       <!-- User Modal -->
       <a-modal
         v-model:open="userModalVisible"
-        :title="editingUser ? 'Edit User' : 'Tambah User'"
+        :title="editingUser ? 'Edit Pengguna' : 'Tambah Pengguna'"
         @ok="handleSaveUser"
       >
         <a-form :model="userForm" layout="vertical">
-          <a-form-item label="Username" required>
-            <a-input v-model:value="userForm.username" placeholder="Username" />
+          <a-form-item label="Nama Pengguna" required>
+            <a-input v-model:value="userForm.username" placeholder="Nama pengguna" />
           </a-form-item>
           <a-form-item label="Email" required>
             <a-input v-model:value="userForm.email" type="email" placeholder="Email" />
@@ -827,7 +749,7 @@ const getScopeColor = (scope: string): string => {
           <a-form-item v-if="!editingUser" label="Password" required>
             <a-input-password v-model:value="userForm.password" placeholder="Password" />
           </a-form-item>
-          <a-form-item label="Company">
+          <a-form-item label="Perusahaan">
             <a-select
               v-model:value="userForm.company_id"
               placeholder="Select company (optional)"
@@ -842,10 +764,10 @@ const getScopeColor = (scope: string): string => {
               </a-select-option>
             </a-select>
           </a-form-item>
-          <a-form-item label="Role">
+          <a-form-item label="Peran">
             <a-select
               v-model:value="userForm.role_id"
-              placeholder="Pilih role (opsional)"
+              placeholder="Pilih peran (opsional)"
               allow-clear
             >
               <a-select-option
@@ -866,9 +788,9 @@ const getScopeColor = (scope: string): string => {
       <!-- Reset Password Modal -->
       <a-modal
         v-model:open="resetPasswordModalVisible"
-        title="Reset Password"
+        title="Atur Ulang Password"
         @ok="handleSaveResetPassword"
-        ok-text="Reset Password"
+        ok-text="Atur Ulang Password"
         cancel-text="Batal"
       >
         <a-form :model="resetPasswordForm" layout="vertical">
@@ -889,7 +811,7 @@ const getScopeColor = (scope: string): string => {
           </a-form-item>
           <a-alert
             message="Peringatan"
-            description="Password akan direset dan user harus login dengan password baru."
+            description="Password akan diatur ulang dan pengguna harus login dengan password baru."
             type="warning"
             show-icon
             style="margin-top: 16px;"
@@ -909,27 +831,53 @@ const getScopeColor = (scope: string): string => {
 .user-management-content {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 16px;
 }
 
 .page-title {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   color: #333;
+}
+
+@media (min-width: 768px) {
+  .user-management-content {
+    padding: 24px;
+  }
+  
+  .page-title {
+    font-size: 24px;
+    margin-bottom: 24px;
+  }
 }
 
 .management-tabs {
   background: white;
-  padding: 24px;
+  padding: 16px;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+@media (min-width: 768px) {
+  .management-tabs {
+    padding: 24px;
+  }
 }
 
 .table-header {
   margin-bottom: 16px;
   display: flex;
   justify-content: flex-end;
+}
+
+.search-container {
+  margin-bottom: 16px;
+}
+
+.search-input {
+  width: 100%;
+  max-width: 300px;
 }
 
 
@@ -949,6 +897,35 @@ const getScopeColor = (scope: string): string => {
   margin-top: 24px;
   border-radius: 8px;
   background: white;
+}
+
+/* Responsive table adjustments */
+:deep(.ant-table-wrapper) {
+  overflow-x: auto;
+}
+
+:deep(.ant-table) {
+  min-width: 600px;
+}
+
+@media (max-width: 768px) {
+  .table-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .table-header .ant-btn {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+  
+  :deep(.ant-table-pagination) {
+    margin: 16px 0 !important;
+  }
+  
+  :deep(.ant-space) {
+    flex-wrap: wrap;
+  }
 }
 
 .info-content {
@@ -983,6 +960,39 @@ const getScopeColor = (scope: string): string => {
 .info-item p {
   margin: 8px 0 0 0;
   color: #666;
+}
+
+/* Responsive table adjustments */
+:deep(.ant-table-wrapper) {
+  overflow-x: auto;
+}
+
+:deep(.ant-table) {
+  min-width: 600px;
+}
+
+@media (max-width: 768px) {
+  .table-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .table-header .ant-btn {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+  
+  :deep(.ant-table-pagination) {
+    margin: 16px 0 !important;
+  }
+  
+  :deep(.ant-space) {
+    flex-wrap: wrap;
+  }
+  
+  .search-input {
+    max-width: 100%;
+  }
 }
 </style>
 

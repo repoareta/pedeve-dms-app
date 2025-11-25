@@ -17,6 +17,12 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Dashboard' },
     },
     {
+      path: '/subsidiaries',
+      name: 'subsidiaries',
+      component: () => import('../views/SubsidiariesView.vue'),
+      meta: { requiresAuth: true, title: 'Anak Perusahaan' },
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('../views/LoginView.vue'),
@@ -32,13 +38,19 @@ const router = createRouter({
       path: '/settings',
       name: 'settings',
       component: () => import('../views/SettingsView.vue'),
-      meta: { requiresAuth: true, title: 'Settings' },
+      meta: { requiresAuth: true, title: 'Pengaturan' },
+    },
+    {
+      path: '/profile',
+      name: 'profile',
+      component: () => import('../views/ProfileView.vue'),
+      meta: { requiresAuth: true, title: 'Profil' },
     },
     {
       path: '/users',
       name: 'users',
       component: () => import('../views/UserManagementView.vue'),
-      meta: { requiresAuth: true, title: 'User Management' },
+      meta: { requiresAuth: true, title: 'Manajemen Pengguna' },
     },
     {
       path: '/about',

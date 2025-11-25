@@ -56,7 +56,7 @@ func (r *companyRepository) GetByCode(code string) (*domain.CompanyModel, error)
 
 func (r *companyRepository) GetAll() ([]domain.CompanyModel, error) {
 	var companies []domain.CompanyModel
-	err := r.db.Find(&companies).Error
+	err := r.db.Where("is_active = ?", true).Find(&companies).Error
 	return companies, err
 }
 
@@ -78,11 +78,12 @@ func (r *companyRepository) GetDescendants(companyID string) ([]domain.CompanyMo
 	query := `
 		WITH RECURSIVE descendants AS (
 			-- Base case: direct children
-			SELECT * FROM companies WHERE parent_id = ?
+			SELECT * FROM companies WHERE parent_id = ? AND is_active = true
 			UNION ALL
 			-- Recursive case: children of children
 			SELECT c.* FROM companies c
 			INNER JOIN descendants d ON c.parent_id = d.id
+			WHERE c.is_active = true
 		)
 		SELECT * FROM descendants
 	`

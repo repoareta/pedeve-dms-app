@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
+	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/config"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
@@ -72,20 +73,44 @@ func (rl *RateLimiter) cleanupVisitors() {
 	}
 }
 
-// Global rate limiters
+// Global rate limiters (will be initialized from config)
 var (
-	// General API rate limiter: 500 requests per second, burst of 500 (sangat longgar untuk development)
-	// Burst tinggi untuk mengakomodasi frontend yang melakukan polling/auto-refresh
-	// Di production, bisa dikurangi ke 100 req/s, burst 100
-	GeneralRateLimiter = NewRateLimiter(500, 500)
-
-	// Auth rate limiter: 5 requests per minute, burst of 5 (to prevent brute force)
-	// Hanya untuk public auth endpoints (login)
-	AuthRateLimiter = NewRateLimiter(rate.Every(time.Minute/5), 5)
-
-	// Strict rate limiter: 50 requests per minute, burst of 50 (ditingkatkan untuk development)
-	StrictRateLimiter = NewRateLimiter(rate.Every(time.Minute/50), 50)
+	GeneralRateLimiter *RateLimiter
+	AuthRateLimiter    *RateLimiter
+	StrictRateLimiter  *RateLimiter
 )
+
+// InitRateLimiters initializes rate limiters from configuration
+func InitRateLimiters() {
+	zapLog := logger.GetLogger()
+
+	// Load config
+	cfg := config.GetConfig()
+
+	// Initialize General rate limiter
+	generalRate, generalBurst := cfg.RateLimit.GetGeneralRateLimit()
+	GeneralRateLimiter = NewRateLimiter(generalRate, generalBurst)
+	zapLog.Info("General rate limiter initialized",
+		zap.Float64("rps", cfg.RateLimit.General.RPS),
+		zap.Int("burst", cfg.RateLimit.General.Burst),
+	)
+
+	// Initialize Auth rate limiter
+	authRate, authBurst := cfg.RateLimit.GetAuthRateLimit()
+	AuthRateLimiter = NewRateLimiter(authRate, authBurst)
+	zapLog.Info("Auth rate limiter initialized",
+		zap.Int("rpm", cfg.RateLimit.Auth.RPM),
+		zap.Int("burst", cfg.RateLimit.Auth.Burst),
+	)
+
+	// Initialize Strict rate limiter
+	strictRate, strictBurst := cfg.RateLimit.GetStrictRateLimit()
+	StrictRateLimiter = NewRateLimiter(strictRate, strictBurst)
+	zapLog.Info("Strict rate limiter initialized",
+		zap.Int("rpm", cfg.RateLimit.Strict.RPM),
+		zap.Int("burst", cfg.RateLimit.Strict.Burst),
+	)
+}
 
 // RateLimitMiddleware applies rate limiting based on client IP (untuk Fiber)
 func RateLimitMiddleware(limiter *RateLimiter) fiber.Handler {

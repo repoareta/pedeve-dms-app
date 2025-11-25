@@ -6,6 +6,7 @@ import (
 
 	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
+	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/secrets"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -15,14 +16,26 @@ import (
 
 var DB *gorm.DB
 
+// getDatabaseURL mendapatkan database URL dari Vault atau environment variable
+func getDatabaseURL() string {
+	// Try to get from Vault first
+	dbURL, err := secrets.GetSecretWithFallback("database_url", "DATABASE_URL", "")
+	if err == nil && dbURL != "" {
+		return dbURL
+	}
+	
+	// Fallback to environment variable
+	return os.Getenv("DATABASE_URL")
+}
+
 // InitDB menginisialisasi koneksi database
 func InitDB() {
 	zapLog := logger.GetLogger()
 	var err error
 	var dialector gorm.Dialector
 
-	// Ambil URL database dari environment
-	dbURL := os.Getenv("DATABASE_URL")
+	// Ambil URL database dari Vault atau environment variable
+	dbURL := getDatabaseURL()
 
 	// Gunakan SQLite untuk development jika DATABASE_URL tidak diset
 	if dbURL == "" {

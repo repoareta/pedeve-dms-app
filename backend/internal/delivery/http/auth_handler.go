@@ -6,10 +6,12 @@ import (
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/cookie"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/database"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/jwt"
+	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/password"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/validation"
 	"github.com/Fajarriswandi/dms-app/backend/internal/usecase"
 	"github.com/gofiber/fiber/v2"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -54,12 +56,19 @@ func Login(c *fiber.Ctx) error {
 	userAgent := c.Get("User-Agent")
 
 	// Cari user di database (bisa login dengan username atau email)
+	zapLog := logger.GetLogger()
 	var userModel domain.UserModel
+	// Support login dengan username atau email
 	result := database.GetDB().Where("username = ? OR email = ?", req.Username, req.Username).First(&userModel)
 	if result.Error == gorm.ErrRecordNotFound {
+		// Log untuk debugging
+		zapLog.Debug("User not found for login attempt",
+			zap.String("input", req.Username),
+			zap.String("ip", getClientIP(c)),
+		)
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
 			Error:   "invalid_credentials",
-			Message: "Invalid username or password",
+			Message: "Invalid email/username or password",
 		})
 	}
 
@@ -72,7 +81,7 @@ func Login(c *fiber.Ctx) error {
 
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
 			Error:   "invalid_credentials",
-			Message: "Invalid username or password",
+			Message: "Invalid email/username or password",
 		})
 	}
 
@@ -109,8 +118,19 @@ func Login(c *fiber.Ctx) error {
 	// Log login yang berhasil
 	audit.LogAction(userModel.ID, userModel.Username, audit.ActionLogin, audit.ResourceAuth, "", ipAddress, userAgent, audit.StatusSuccess, nil)
 
-	// Generate JWT token
-	token, err := jwt.GenerateJWT(userModel.ID, userModel.Username)
+	// Get user auth info (role, company, permissions) untuk JWT claims
+	roleID, roleName, companyID, companyLevel, hierarchyScope, permissions, err := usecase.GetUserAuthInfo(userModel.ID)
+	if err != nil {
+		// Fallback jika error (backward compatibility)
+		roleName = userModel.Role
+		if roleName == "" {
+			roleName = "user"
+		}
+		permissions = []string{}
+	}
+
+	// Generate JWT token dengan claims lengkap
+	token, err := jwt.GenerateJWT(userModel.ID, userModel.Username, roleID, roleName, companyID, companyLevel, hierarchyScope, permissions)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
 			Error:   "internal_error",

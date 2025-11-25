@@ -1,0 +1,271 @@
+package http
+
+import (
+	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
+	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/audit"
+	"github.com/Fajarriswandi/dms-app/backend/internal/usecase"
+	"github.com/gofiber/fiber/v2"
+)
+
+// UserManagementHandler handles user management HTTP requests
+type UserManagementHandler struct {
+	userUseCase usecase.UserManagementUseCase
+}
+
+// NewUserManagementHandler creates a new user management handler
+func NewUserManagementHandler(userUseCase usecase.UserManagementUseCase) *UserManagementHandler {
+	return &UserManagementHandler{
+		userUseCase: userUseCase,
+	}
+}
+
+// CreateUser handles user creation
+// @Summary      Buat User Baru
+// @Description  Membuat user baru. Admin hanya bisa membuat user di company mereka atau descendants.
+// @Tags         User Management
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        user  body      object  true  "User data"
+// @Success      201   {object}  domain.UserModel
+// @Failure      400   {object}  domain.ErrorResponse
+// @Failure      403   {object}  domain.ErrorResponse
+// @Router       /api/v1/users [post]
+func (h *UserManagementHandler) CreateUser(c *fiber.Ctx) error {
+	var req struct {
+		Username  string  `json:"username" validate:"required"`
+		Email     string  `json:"email" validate:"required,email"`
+		Password  string  `json:"password" validate:"required,min=8"`
+		CompanyID *string `json:"company_id"`
+		RoleID    *string `json:"role_id"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_request",
+			Message: "Invalid request body",
+		})
+	}
+
+	userID := c.Locals("userID").(string)
+	username := c.Locals("username").(string)
+	companyID := c.Locals("companyID")
+	roleName := c.Locals("roleName").(string)
+
+	// Superadmin can create user in any company
+	// Admin can only create user in their company or descendants
+	if roleName != "superadmin" && companyID != nil {
+		userCompanyID := companyID.(string)
+		if req.CompanyID != nil {
+			hasAccess, err := h.userUseCase.ValidateUserAccess(userCompanyID, "")
+			if err != nil || !hasAccess {
+				// Check company access instead
+				companyUseCase := usecase.NewCompanyUseCase()
+				hasAccess, err = companyUseCase.ValidateCompanyAccess(userCompanyID, *req.CompanyID)
+				if err != nil || !hasAccess {
+					return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+						Error:   "forbidden",
+						Message: "You can only create users in your company or its descendants",
+					})
+				}
+			}
+		} else {
+			// Non-superadmin must specify company
+			req.CompanyID = &userCompanyID
+		}
+	}
+
+	user, err := h.userUseCase.CreateUser(req.Username, req.Email, req.Password, req.CompanyID, req.RoleID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "creation_failed",
+			Message: err.Error(),
+		})
+	}
+
+	audit.LogAction(userID, username, audit.ActionCreateUser, audit.ResourceUser, user.ID, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+	return c.Status(fiber.StatusCreated).JSON(user)
+}
+
+// GetUser handles getting user by ID
+// @Summary      Ambil User by ID
+// @Description  Mengambil informasi user berdasarkan ID.
+// @Tags         User Management
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "User ID"
+// @Success      200  {object}  domain.UserModel
+// @Failure      403  {object}  domain.ErrorResponse
+// @Failure      404  {object}  domain.ErrorResponse
+// @Router       /api/v1/users/{id} [get]
+func (h *UserManagementHandler) GetUser(c *fiber.Ctx) error {
+	id := c.Params("id")
+	companyID := c.Locals("companyID")
+	roleName := c.Locals("roleName").(string)
+
+	// Check access
+	if roleName != "superadmin" && companyID != nil {
+		userCompanyID := companyID.(string)
+		hasAccess, err := h.userUseCase.ValidateUserAccess(userCompanyID, id)
+		if err != nil || !hasAccess {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "You don't have access to this user",
+			})
+		}
+	}
+
+	user, err := h.userUseCase.GetUserByID(id)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
+			Error:   "not_found",
+			Message: "User not found",
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(user)
+}
+
+// GetAllUsers handles getting all users
+// @Summary      Ambil Semua Users
+// @Description  Mengambil daftar semua users. Filtered berdasarkan company access.
+// @Tags         User Management
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}   domain.UserModel
+// @Router       /api/v1/users [get]
+func (h *UserManagementHandler) GetAllUsers(c *fiber.Ctx) error {
+	users, err := h.userUseCase.GetAllUsers()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to get users",
+		})
+	}
+
+	// Filter based on access (if not superadmin)
+	companyID := c.Locals("companyID")
+	roleName := c.Locals("roleName").(string)
+	if roleName != "superadmin" && companyID != nil {
+		userCompanyID := companyID.(string)
+		filtered := []domain.UserModel{}
+		for _, user := range users {
+			if user.CompanyID == nil {
+				continue // Skip users without company
+			}
+			hasAccess, _ := h.userUseCase.ValidateUserAccess(userCompanyID, user.ID)
+			if hasAccess {
+				filtered = append(filtered, user)
+			}
+		}
+		users = filtered
+	}
+
+	return c.Status(fiber.StatusOK).JSON(users)
+}
+
+// UpdateUser handles user update
+// @Summary      Update User
+// @Description  Mengupdate informasi user.
+// @Tags         User Management
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id    path      string  true  "User ID"
+// @Param        user  body      object  true  "User data to update"
+// @Success      200   {object}  domain.UserModel
+// @Failure      400   {object}  domain.ErrorResponse
+// @Failure      403   {object}  domain.ErrorResponse
+// @Router       /api/v1/users/{id} [put]
+func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
+	id := c.Params("id")
+	var req struct {
+		Username  string  `json:"username"`
+		Email     string  `json:"email"`
+		CompanyID *string `json:"company_id"`
+		RoleID    *string `json:"role_id"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_request",
+			Message: "Invalid request body",
+		})
+	}
+
+	companyID := c.Locals("companyID")
+	roleName := c.Locals("roleName").(string)
+
+	// Check access
+	if roleName != "superadmin" && companyID != nil {
+		userCompanyID := companyID.(string)
+		hasAccess, err := h.userUseCase.ValidateUserAccess(userCompanyID, id)
+		if err != nil || !hasAccess {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "You don't have access to update this user",
+			})
+		}
+	}
+
+	user, err := h.userUseCase.UpdateUser(id, req.Username, req.Email, req.CompanyID, req.RoleID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "update_failed",
+			Message: err.Error(),
+		})
+	}
+
+	userID := c.Locals("userID").(string)
+	username := c.Locals("username").(string)
+	audit.LogAction(userID, username, audit.ActionUpdateUser, audit.ResourceUser, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+
+	return c.Status(fiber.StatusOK).JSON(user)
+}
+
+// DeleteUser handles user deletion
+// @Summary      Hapus User
+// @Description  Menghapus user.
+// @Tags         User Management
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "User ID"
+// @Success      200  {object}  map[string]string
+// @Failure      403  {object}  domain.ErrorResponse
+// @Router       /api/v1/users/{id} [delete]
+func (h *UserManagementHandler) DeleteUser(c *fiber.Ctx) error {
+	id := c.Params("id")
+	companyID := c.Locals("companyID")
+	roleName := c.Locals("roleName").(string)
+
+	// Check access
+	if roleName != "superadmin" && companyID != nil {
+		userCompanyID := companyID.(string)
+		hasAccess, err := h.userUseCase.ValidateUserAccess(userCompanyID, id)
+		if err != nil || !hasAccess {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "You don't have access to delete this user",
+			})
+		}
+	}
+
+	if err := h.userUseCase.DeleteUser(id); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "delete_failed",
+			Message: err.Error(),
+		})
+	}
+
+	userID := c.Locals("userID").(string)
+	username := c.Locals("username").(string)
+	audit.LogAction(userID, username, audit.ActionDeleteUser, audit.ResourceUser, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "User deleted successfully",
+	})
+}
+

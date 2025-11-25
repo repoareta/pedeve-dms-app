@@ -83,6 +83,9 @@ func main() {
 	// Mulai cleanup audit logs (retention policy)
 	usecase.StartAuditLogCleanup()
 
+	// Seed roles and permissions
+	seed.SeedRolesAndPermissions()
+	
 	// Seed user superadmin
 	seed.SeedSuperAdmin()
 
@@ -184,6 +187,42 @@ func main() {
 	protected.Post("/documents", http.CreateDocumentHandler)
 	protected.Put("/documents/:id", http.UpdateDocumentHandler)
 	protected.Delete("/documents/:id", http.DeleteDocumentHandler)
+
+	// Route Company Management (dilindungi)
+	companyHandler := http.NewCompanyHandler(usecase.NewCompanyUseCase())
+	protected.Post("/companies", companyHandler.CreateCompany)
+	protected.Get("/companies", companyHandler.GetAllCompanies)
+	protected.Get("/companies/:id", companyHandler.GetCompany)
+	protected.Get("/companies/:id/children", companyHandler.GetCompanyChildren)
+	protected.Put("/companies/:id", companyHandler.UpdateCompany)
+	protected.Delete("/companies/:id", companyHandler.DeleteCompany)
+
+	// Route User Management (dilindungi)
+	userManagementHandler := http.NewUserManagementHandler(usecase.NewUserManagementUseCase())
+	protected.Post("/users", userManagementHandler.CreateUser)
+	protected.Get("/users", userManagementHandler.GetAllUsers)
+	protected.Get("/users/:id", userManagementHandler.GetUser)
+	protected.Put("/users/:id", userManagementHandler.UpdateUser)
+	protected.Delete("/users/:id", userManagementHandler.DeleteUser)
+
+	// Route Role Management (dilindungi)
+	roleManagementHandler := http.NewRoleManagementHandler(usecase.NewRoleManagementUseCase())
+	protected.Post("/roles", roleManagementHandler.CreateRole)
+	protected.Get("/roles", roleManagementHandler.GetAllRoles)
+	protected.Get("/roles/:id", roleManagementHandler.GetRole)
+	protected.Put("/roles/:id", roleManagementHandler.UpdateRole)
+	protected.Delete("/roles/:id", roleManagementHandler.DeleteRole)
+	protected.Get("/roles/:id/permissions", roleManagementHandler.GetRolePermissions)
+	protected.Post("/roles/:id/permissions", roleManagementHandler.AssignPermissionToRole)
+	protected.Delete("/roles/:id/permissions", roleManagementHandler.RevokePermissionFromRole)
+
+	// Route Permission Management (dilindungi)
+	permissionManagementHandler := http.NewPermissionManagementHandler(usecase.NewPermissionManagementUseCase())
+	protected.Post("/permissions", permissionManagementHandler.CreatePermission)
+	protected.Get("/permissions", permissionManagementHandler.GetAllPermissions)
+	protected.Get("/permissions/:id", permissionManagementHandler.GetPermission)
+	protected.Put("/permissions/:id", permissionManagementHandler.UpdatePermission)
+	protected.Delete("/permissions/:id", permissionManagementHandler.DeletePermission)
 
 	// Swagger documentation
 	app.Get("/swagger/*", swagger.HandlerDefault)

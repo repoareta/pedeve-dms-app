@@ -78,6 +78,12 @@ func JWTAuthMiddleware(c *fiber.Ctx) error {
 	// Tambahkan info user ke locals (Fiber equivalent dari context)
 	c.Locals("userID", claims.UserID)
 	c.Locals("username", claims.Username)
+	c.Locals("roleID", claims.RoleID)
+	c.Locals("roleName", claims.RoleName)
+	c.Locals("companyID", claims.CompanyID)
+	c.Locals("companyLevel", claims.CompanyLevel)
+	c.Locals("hierarchyScope", claims.HierarchyScope)
+	c.Locals("permissions", claims.Permissions)
 
 	// Panggil handler berikutnya
 	return c.Next()

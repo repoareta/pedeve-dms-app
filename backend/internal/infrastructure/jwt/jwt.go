@@ -20,20 +20,32 @@ func getJWTSecret() string {
 	return secret
 }
 
-// Claims merepresentasikan JWT claims
+// Claims merepresentasikan JWT claims dengan company hierarchy support
 type Claims struct {
-	UserID   string `json:"user_id"`
-	Username string `json:"username"`
+	UserID         string  `json:"user_id"`
+	Username       string  `json:"username"`
+	RoleID         *string `json:"role_id,omitempty"`         // Role ID (nullable untuk backward compatibility)
+	RoleName       string  `json:"role_name"`                 // Role name (e.g., "superadmin", "admin", "manager", "staff")
+	CompanyID      *string `json:"company_id,omitempty"`      // Company ID (NULL untuk superadmin)
+	CompanyLevel   int     `json:"company_level"`             // Company level dalam hierarchy (0=root, 1=holding, etc)
+	HierarchyScope string  `json:"hierarchy_scope"`           // "global", "company", "sub_company"
+	Permissions    []string `json:"permissions,omitempty"`    // List of permission names
 	jwt.RegisteredClaims
 }
 
 // GenerateJWT menghasilkan token JWT untuk user
-func GenerateJWT(userID, username string) (string, error) {
+func GenerateJWT(userID, username string, roleID *string, roleName string, companyID *string, companyLevel int, hierarchyScope string, permissions []string) (string, error) {
 	expirationTime := time.Now().Add(24 * time.Hour) // Token expired dalam 24 jam
 
 	claims := &Claims{
-		UserID:   userID,
-		Username: username,
+		UserID:         userID,
+		Username:       username,
+		RoleID:         roleID,
+		RoleName:       roleName,
+		CompanyID:      companyID,
+		CompanyLevel:   companyLevel,
+		HierarchyScope: hierarchyScope,
+		Permissions:    permissions,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

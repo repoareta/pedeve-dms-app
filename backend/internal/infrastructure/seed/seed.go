@@ -19,8 +19,23 @@ func SeedSuperAdmin() {
 	var existingUser domain.UserModel
 	result := database.GetDB().Where("username = ? OR role = ?", "superadmin", "superadmin").First(&existingUser)
 	if result.Error == nil {
+		// Update email jika belum ada atau kosong (untuk backward compatibility)
+		if existingUser.Email == "" || existingUser.Email == "superadmin@example.com" {
+			existingUser.Email = "superadmin@pertamina.com"
+			if err := database.GetDB().Save(&existingUser).Error; err != nil {
+				zapLog.Warn("Failed to update superadmin email", zap.Error(err))
+			} else {
+				zapLog.Info("Superadmin email updated", zap.String("email", existingUser.Email))
+			}
+		}
 		zapLog.Info("Superadmin user already exists")
 		return
+	}
+
+	// Get superadmin role
+	var superadminRole domain.RoleModel
+	if err := database.GetDB().Where("name = ?", "superadmin").First(&superadminRole).Error; err != nil {
+		zapLog.Warn("Superadmin role not found, user will be created without role_id", zap.Error(err))
 	}
 
 	// Hash password for superadmin
@@ -37,7 +52,10 @@ func SeedSuperAdmin() {
 		Username:  "superadmin",
 		Email:     "superadmin@pertamina.com",
 		Password:  hashedPassword,
-		Role:      "superadmin",
+		Role:      "superadmin", // Legacy field
+		RoleID:    &superadminRole.ID, // New RBAC field
+		CompanyID: nil, // Superadmin tidak punya company (global access)
+		IsActive:  true,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -51,6 +69,7 @@ func SeedSuperAdmin() {
 	zapLog.Info("Superadmin user created successfully",
 		zap.String("username", "superadmin"),
 		zap.String("password", "Pedeve123"),
+		zap.String("role_id", superadminRole.ID),
 	)
 }
 

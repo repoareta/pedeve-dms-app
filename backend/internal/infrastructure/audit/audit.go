@@ -55,6 +55,10 @@ const (
 	ActionLogin        = "login"
 	ActionLogout       = "logout"
 	ActionRegister     = "register"
+	ActionCreate       = "create"
+	ActionUpdate       = "update"
+	ActionDelete       = "delete"
+	ActionView         = "view"
 	ActionCreateUser   = "create_user"
 	ActionUpdateUser   = "update_user"
 	ActionDeleteUser   = "delete_user"
@@ -70,9 +74,12 @@ const (
 
 // Constants untuk resource types
 const (
-	ResourceUser     = "user"
-	ResourceDocument = "document"
-	ResourceAuth     = "auth"
+	ResourceUser       = "user"
+	ResourceDocument   = "document"
+	ResourceAuth       = "auth"
+	ResourceCompany    = "company"
+	ResourceRole       = "role"
+	ResourcePermission = "permission"
 )
 
 // Constants untuk status

@@ -7,11 +7,11 @@ import (
 	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/secrets"
+	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
-	"go.uber.org/zap"
 )
 
 var DB *gorm.DB
@@ -23,7 +23,7 @@ func getDatabaseURL() string {
 	if err == nil && dbURL != "" {
 		return dbURL
 	}
-	
+
 	// Fallback to environment variable
 	return os.Getenv("DATABASE_URL")
 }
@@ -87,9 +87,34 @@ func InitDB() {
 	}
 
 	// Auto migrate schema
-	err = DB.AutoMigrate(&domain.UserModel{}, &domain.TwoFactorAuth{}, &domain.AuditLog{})
+	err = DB.AutoMigrate(
+		&domain.UserModel{},
+		&domain.TwoFactorAuth{},
+		&domain.AuditLog{},
+		&domain.CompanyModel{},
+		&domain.RoleModel{},
+		&domain.PermissionModel{},
+		&domain.RolePermissionModel{},
+	)
 	if err != nil {
 		zapLog.Fatal("Failed to migrate database", zap.Error(err))
+	}
+
+	// Create indexes untuk performance
+	// Company hierarchy indexes
+	if err := DB.Exec("CREATE INDEX IF NOT EXISTS idx_companies_parent_id ON companies(parent_id)").Error; err != nil {
+		zapLog.Warn("Failed to create index idx_companies_parent_id", zap.Error(err))
+	}
+	if err := DB.Exec("CREATE INDEX IF NOT EXISTS idx_companies_level ON companies(level)").Error; err != nil {
+		zapLog.Warn("Failed to create index idx_companies_level", zap.Error(err))
+	}
+
+	// User company relationship indexes
+	if err := DB.Exec("CREATE INDEX IF NOT EXISTS idx_users_company_id ON users(company_id)").Error; err != nil {
+		zapLog.Warn("Failed to create index idx_users_company_id", zap.Error(err))
+	}
+	if err := DB.Exec("CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id)").Error; err != nil {
+		zapLog.Warn("Failed to create index idx_users_role_id", zap.Error(err))
 	}
 
 	zapLog.Info("Database connected and migrated successfully")
@@ -99,4 +124,3 @@ func InitDB() {
 func GetDB() *gorm.DB {
 	return DB
 }
-

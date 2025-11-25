@@ -1,10 +1,14 @@
 package http
 
 import (
+	"fmt"
+
 	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
 	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/audit"
+	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
 	"github.com/Fajarriswandi/dms-app/backend/internal/usecase"
 	"github.com/gofiber/fiber/v2"
+	"go.uber.org/zap"
 )
 
 // CompanyHandler handles company-related HTTP requests
@@ -97,6 +101,162 @@ func (h *CompanyHandler) CreateCompany(c *fiber.Ctx) error {
 	audit.LogAction(userID, username, audit.ActionCreateUser, audit.ResourceCompany, company.ID, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
 
 	return c.Status(fiber.StatusCreated).JSON(company)
+}
+
+// CreateCompanyFull handles company creation with full data
+// @Summary      Buat Company Baru (Full Data)
+// @Description  Membuat company baru dengan data lengkap termasuk shareholders, business fields, dan directors
+// @Tags         Company Management
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        company  body      object  true  "Company full data"
+// @Success      201      {object}  domain.CompanyModel
+// @Failure      400      {object}  domain.ErrorResponse
+// @Failure      401      {object}  domain.ErrorResponse
+// @Failure      403      {object}  domain.ErrorResponse
+// @Router       /api/v1/companies/full [post]
+func (h *CompanyHandler) CreateCompanyFull(c *fiber.Ctx) error {
+	var req domain.CompanyCreateRequest
+
+	// Log request body untuk debugging
+	bodyBytes := c.Body()
+	zapLog := logger.GetLogger()
+	zapLog.Info("CreateCompanyFull request body", zap.String("body", string(bodyBytes)))
+
+	if err := c.BodyParser(&req); err != nil {
+		zapLog.Error("Failed to parse request body", zap.Error(err), zap.String("body", string(bodyBytes)))
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_request",
+			Message: "Invalid request body: " + err.Error(),
+		})
+	}
+
+	// Get user info from JWT
+	userID := c.Locals("userID").(string)
+	username := c.Locals("username").(string)
+	companyID := c.Locals("companyID")
+	roleName := c.Locals("roleName").(string)
+
+	// Superadmin can create company at any level
+	// Admin can only create sub-company under their company
+	if roleName != "superadmin" && companyID != nil {
+		var userCompanyID string
+		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
+			userCompanyID = *companyIDPtr
+		} else if companyIDStr, ok := companyID.(string); ok {
+			userCompanyID = companyIDStr
+		} else {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Invalid company ID format",
+			})
+		}
+		if req.ParentID != nil && *req.ParentID != userCompanyID {
+			hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, *req.ParentID)
+			if err != nil || !hasAccess {
+				return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+					Error:   "forbidden",
+					Message: "You can only create sub-company under your company or its descendants",
+				})
+			}
+		} else if req.ParentID == nil {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "You must specify a parent company",
+			})
+		}
+	}
+
+	company, err := h.companyUseCase.CreateCompanyFull(&req)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "creation_failed",
+			Message: err.Error(),
+		})
+	}
+
+	// Get full company data with relationships
+	fullCompany, _ := h.companyUseCase.GetCompanyByID(company.ID)
+
+	// Audit log
+	audit.LogAction(userID, username, audit.ActionCreateUser, audit.ResourceCompany, company.ID, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+
+	return c.Status(fiber.StatusCreated).JSON(fullCompany)
+}
+
+// UpdateCompanyFull handles company update with full data
+// @Summary      Update Company (Full Data)
+// @Description  Mengupdate company dengan data lengkap termasuk shareholders, business fields, dan directors
+// @Tags         Company Management
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id       path      string  true  "Company ID"
+// @Param        company  body      object  true  "Company full data to update"
+// @Success      200      {object}  domain.CompanyModel
+// @Failure      400      {object}  domain.ErrorResponse
+// @Failure      403      {object}  domain.ErrorResponse
+// @Router       /api/v1/companies/{id}/full [put]
+func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
+	id := c.Params("id")
+	var req domain.CompanyUpdateRequest
+
+	// Log request body untuk debugging
+	bodyBytes := c.Body()
+	zapLog := logger.GetLogger()
+	zapLog.Info("UpdateCompanyFull request body", zap.String("body", string(bodyBytes)))
+
+	if err := c.BodyParser(&req); err != nil {
+		zapLog.Error("Failed to parse request body", zap.Error(err), zap.String("body", string(bodyBytes)))
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_request",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+	}
+
+	companyID := c.Locals("companyID")
+	roleName := c.Locals("roleName").(string)
+
+	// Check access
+	if roleName != "superadmin" && companyID != nil {
+		var userCompanyID string
+		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
+			userCompanyID = *companyIDPtr
+		} else if companyIDStr, ok := companyID.(string); ok {
+			userCompanyID = companyIDStr
+		} else {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Invalid company ID format",
+			})
+		}
+		hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, id)
+		if err != nil || !hasAccess {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "You don't have access to update this company",
+			})
+		}
+	}
+
+	company, err := h.companyUseCase.UpdateCompanyFull(id, &req)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "update_failed",
+			Message: err.Error(),
+		})
+	}
+
+	// Get full company data with relationships
+	fullCompany, _ := h.companyUseCase.GetCompanyByID(company.ID)
+
+	// Audit log
+	userID := c.Locals("userID").(string)
+	username := c.Locals("username").(string)
+	audit.LogAction(userID, username, audit.ActionUpdateUser, audit.ResourceCompany, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+
+	return c.Status(fiber.StatusOK).JSON(fullCompany)
 }
 
 // GetCompany handles getting company by ID
@@ -378,6 +538,16 @@ func (h *CompanyHandler) DeleteCompany(c *fiber.Ctx) error {
 				Message: "Invalid company ID format",
 			})
 		}
+
+		// User tidak boleh menghapus perusahaan mereka sendiri
+		if id == userCompanyID {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "You cannot delete your own company",
+			})
+		}
+
+		// Cek apakah target company adalah descendant (boleh dihapus)
 		hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, id)
 		if err != nil || !hasAccess {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{

@@ -95,6 +95,9 @@ func InitDB() {
 		&domain.RoleModel{},
 		&domain.PermissionModel{},
 		&domain.RolePermissionModel{},
+		&domain.ShareholderModel{},
+		&domain.BusinessFieldModel{},
+		&domain.DirectorModel{},
 	)
 	if err != nil {
 		zapLog.Fatal("Failed to migrate database", zap.Error(err))

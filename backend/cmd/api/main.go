@@ -148,6 +148,9 @@ func main() {
 		MaxAge:           300,
 	}))
 
+	// Static file server untuk uploads
+	app.Static("/uploads", "./uploads")
+
 	// Routes
 	app.Get("/", indexHandler)
 	app.Get("/health", healthHandler)
@@ -190,13 +193,18 @@ func main() {
 	protected.Put("/documents/:id", http.UpdateDocumentHandler)
 	protected.Delete("/documents/:id", http.DeleteDocumentHandler)
 
+	// Route Upload (dilindungi)
+	protected.Post("/upload/logo", http.UploadLogo)
+
 	// Route Company Management (dilindungi)
 	companyHandler := http.NewCompanyHandler(usecase.NewCompanyUseCase())
 	protected.Post("/companies", companyHandler.CreateCompany)
+	protected.Post("/companies/full", companyHandler.CreateCompanyFull)
 	protected.Get("/companies", companyHandler.GetAllCompanies)
 	protected.Get("/companies/:id", companyHandler.GetCompany)
 	protected.Get("/companies/:id/children", companyHandler.GetCompanyChildren)
 	protected.Put("/companies/:id", companyHandler.UpdateCompany)
+	protected.Put("/companies/:id/full", companyHandler.UpdateCompanyFull)
 	protected.Delete("/companies/:id", companyHandler.DeleteCompany)
 
 	// Route User Management (dilindungi)

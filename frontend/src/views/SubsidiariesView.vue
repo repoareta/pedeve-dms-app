@@ -68,11 +68,13 @@
                     Edit
                   </a-button>
                   <a-popconfirm
+                    v-if="!isUserCompany(record.id)"
                     title="Apakah Anda yakin ingin menghapus perusahaan ini?"
                     @confirm="handleDeleteCompany(record.id)"
                   >
                     <a-button type="link" size="small" danger>Hapus</a-button>
                   </a-popconfirm>
+                  <span v-else class="no-action-text">Tidak dapat dihapus</span>
                 </a-space>
               </template>
             </template>
@@ -222,15 +224,11 @@ const loadCompanies = async () => {
 }
 
 const handleCreateCompany = () => {
-  editingCompany.value = null
-  companyForm.value = { level: 0 }
-  companyModalVisible.value = true
+  router.push('/subsidiaries/new')
 }
 
 const handleEditCompany = (company: Company) => {
-  editingCompany.value = company
-  companyForm.value = { ...company }
-  companyModalVisible.value = true
+  router.push(`/subsidiaries/${company.id}/edit`)
 }
 
 const handleSaveCompany = async () => {
@@ -255,6 +253,10 @@ const handleSaveCompany = async () => {
   } catch (error: any) {
     message.error('Gagal menyimpan perusahaan: ' + (error.response?.data?.message || error.message))
   }
+}
+
+const isUserCompany = (companyId: string): boolean => {
+  return authStore.user?.company_id === companyId
 }
 
 const handleDeleteCompany = async (id: string) => {
@@ -360,6 +362,12 @@ onMounted(() => {
 .info-content li {
   margin-bottom: 8px;
   line-height: 1.6;
+}
+
+.no-action-text {
+  color: #999;
+  font-size: 12px;
+  font-style: italic;
 }
 </style>
 

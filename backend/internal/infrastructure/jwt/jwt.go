@@ -2,19 +2,20 @@ package jwt
 
 import (
 	"errors"
-	"os"
 	"time"
 
+	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/secrets"
 	"github.com/golang-jwt/jwt/v5"
 )
 
 var jwtSecret = []byte(getJWTSecret())
 
-// getJWTSecret mengambil secret JWT dari environment atau menggunakan default
+// getJWTSecret mengambil secret JWT dari Vault atau environment variable
 func getJWTSecret() string {
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "your-secret-key-change-in-production-min-32-chars" // Default, harus diubah di production
+	secret, err := secrets.GetSecretWithFallback("jwt_secret", "JWT_SECRET", "your-secret-key-change-in-production-min-32-chars")
+	if err != nil {
+		// Fallback to default (development only)
+		return "your-secret-key-change-in-production-min-32-chars"
 	}
 	return secret
 }

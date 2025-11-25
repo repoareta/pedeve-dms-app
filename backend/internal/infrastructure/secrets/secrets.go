@@ -13,6 +13,7 @@ import (
 // Support multiple backends: Vault, Environment Variable, dll
 type SecretManager interface {
 	GetEncryptionKey() (string, error)
+	GetSecret(key string) (string, error) // Generic method untuk get secret by key
 }
 
 // EnvSecretManager menggunakan environment variable
@@ -24,6 +25,14 @@ func (e *EnvSecretManager) GetEncryptionKey() (string, error) {
 		return "", fmt.Errorf("ENCRYPTION_KEY not set")
 	}
 	return key, nil
+}
+
+func (e *EnvSecretManager) GetSecret(key string) (string, error) {
+	value := os.Getenv(key)
+	if value == "" {
+		return "", fmt.Errorf("%s not set", key)
+	}
+	return value, nil
 }
 
 // VaultSecretManager menggunakan HashiCorp Vault
@@ -119,6 +128,93 @@ func (v *VaultSecretManager) GetEncryptionKey() (string, error) {
 	return keyStr, nil
 }
 
+// GetAllSecrets reads all secrets from Vault and returns all key-value pairs
+func (v *VaultSecretManager) GetAllSecrets(path string) (map[string]interface{}, error) {
+	zapLog := logger.GetLogger()
+
+	// Buat Vault client
+	config := &api.Config{
+		Address: v.address,
+	}
+
+	client, err := api.NewClient(config)
+	if err != nil {
+		zapLog.Error("Failed to create Vault client", zap.Error(err))
+		return nil, fmt.Errorf("failed to create Vault client: %w", err)
+	}
+
+	// Set token
+	client.SetToken(v.token)
+
+	// Baca secret dari Vault
+	secret, err := client.Logical().Read(path)
+	if err != nil {
+		zapLog.Error("Failed to read secret from Vault",
+			zap.String("path", path),
+			zap.Error(err),
+		)
+		return nil, fmt.Errorf("failed to read secret from Vault: %w", err)
+	}
+
+	if secret == nil {
+		zapLog.Error("Secret not found in Vault", zap.String("path", path))
+		return nil, fmt.Errorf("secret not found at path: %s", path)
+	}
+
+	// Handle KV v2 format (secret/data/path)
+	var data map[string]interface{}
+	if secret.Data["data"] != nil {
+		// KV v2 format
+		data = secret.Data["data"].(map[string]interface{})
+		zapLog.Debug("Using KV v2 format", zap.String("path", path))
+	} else {
+		// KV v1 format atau direct data
+		data = secret.Data
+		zapLog.Debug("Using KV v1 format or direct data", zap.String("path", path))
+	}
+
+	return data, nil
+}
+
+// GetSecret reads a specific secret key from Vault
+func (v *VaultSecretManager) GetSecret(key string) (string, error) {
+	zapLog := logger.GetLogger()
+
+	// Get all secrets from Vault
+	data, err := v.GetAllSecrets(v.path)
+	if err != nil {
+		return "", err
+	}
+
+	// Extract specific key
+	value, ok := data[key]
+	if !ok {
+		zapLog.Error("Secret key not found in Vault",
+			zap.String("key", key),
+			zap.String("path", v.path),
+			zap.Any("available_keys", getKeys(data)),
+		)
+		return "", fmt.Errorf("secret key '%s' not found at path: %s", key, v.path)
+	}
+
+	// Convert to string
+	valueStr, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("secret key '%s' is not a string", key)
+	}
+
+	if valueStr == "" {
+		return "", fmt.Errorf("secret key '%s' is empty", key)
+	}
+
+	zapLog.Debug("Successfully retrieved secret from Vault",
+		zap.String("key", key),
+		zap.String("path", v.path),
+	)
+
+	return valueStr, nil
+}
+
 // getKeys helper untuk mendapatkan list keys dari map (untuk logging)
 func getKeys(m map[string]interface{}) []string {
 	keys := make([]string, 0, len(m))
@@ -175,5 +271,42 @@ func GetEncryptionKeyWithFallback() (string, error) {
 	}
 
 	return key, nil
+}
+
+// GetSecretWithFallback mendapatkan secret dengan fallback strategy
+// 1. Coba dari SecretManager (Vault atau Env)
+// 2. Jika gagal, gunakan environment variable
+// 3. Jika masih gagal, return error atau default value
+func GetSecretWithFallback(key string, envKey string, defaultValue string) (string, error) {
+	zapLog := logger.GetLogger()
+	manager := GetSecretManager()
+
+	// Try to get from secret manager
+	value, err := manager.GetSecret(key)
+	if err == nil && value != "" {
+		return value, nil
+	}
+
+	// Fallback to environment variable
+	if envKey != "" {
+		value = os.Getenv(envKey)
+		if value != "" {
+			zapLog.Info("Using environment variable for secret",
+				zap.String("key", key),
+				zap.String("env_key", envKey),
+			)
+			return value, nil
+		}
+	}
+
+	// Fallback to default value if provided
+	if defaultValue != "" {
+		zapLog.Warn("Using default value for secret (NOT SECURE FOR PRODUCTION!)",
+			zap.String("key", key),
+		)
+		return defaultValue, nil
+	}
+
+	return "", fmt.Errorf("secret '%s' not found and no fallback available", key)
 }
 

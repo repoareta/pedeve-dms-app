@@ -7,6 +7,9 @@ import DashboardHeader from '../components/DashboardHeader.vue'
 import KPICard from '../components/KPICard.vue'
 import RevenueChart from '../components/RevenueChart.vue'
 import SubsidiariesList from '../components/SubsidiariesList.vue'
+import AdminDashboard from '../components/AdminDashboard.vue'
+import ManagerDashboard from '../components/ManagerDashboard.vue'
+import StaffDashboard from '../components/StaffDashboard.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -21,6 +24,16 @@ const currentDate = computed(() => {
   ]
   return `${months[date.getMonth()]} ${date.getFullYear()}`
 })
+
+// Determine which dashboard to show based on user role
+const userRole = computed(() => {
+  return authStore.user?.role?.toLowerCase() || ''
+})
+
+const isSuperadmin = computed(() => userRole.value === 'superadmin')
+const isAdmin = computed(() => userRole.value === 'admin')
+const isManager = computed(() => userRole.value === 'manager')
+const isStaff = computed(() => userRole.value === 'staff')
 
 const handleLogout = async () => {
   await authStore.logout()
@@ -42,7 +55,8 @@ const handleExportExcel = () => {
   <div class="dashboard-layout">
     <DashboardHeader @logout="handleLogout" />
 
-    <div class="dashboard-content">
+    <!-- Superadmin Dashboard (Holding Company) -->
+    <div v-if="isSuperadmin" class="dashboard-content">
       <div class="dashboard-header-row">
         <div class="dashboard-title-section">
           <h1 class="dashboard-title">Dashboard</h1>
@@ -116,6 +130,38 @@ const handleExportExcel = () => {
           <SubsidiariesList />
         </a-col>
       </a-row>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div v-else-if="isAdmin" class="dashboard-content">
+      <AdminDashboard />
+    </div>
+
+    <!-- Manager Dashboard -->
+    <div v-else-if="isManager" class="dashboard-content">
+      <ManagerDashboard />
+    </div>
+
+    <!-- Staff Dashboard -->
+    <div v-else-if="isStaff" class="dashboard-content">
+      <StaffDashboard />
+    </div>
+
+    <!-- Fallback for unknown roles -->
+    <div v-else class="dashboard-content">
+      <a-card>
+        <a-result
+          status="warning"
+          title="Role tidak dikenali"
+          sub-title="Dashboard untuk role Anda belum tersedia. Silakan hubungi administrator."
+        >
+          <template #extra>
+            <a-button type="primary" @click="handleLogout">
+              Logout
+            </a-button>
+          </template>
+        </a-result>
+      </a-card>
     </div>
   </div>
 </template>

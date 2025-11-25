@@ -15,10 +15,10 @@ const isScrolled = ref(false)
 
 const menuItems = [
   { label: 'Dashboard', key: 'dashboard', path: '/dashboard', icon: 'mdi:view-dashboard' },
-  { label: 'Subsidiaries', key: 'subsidiaries', path: '/subsidiaries', icon: 'mdi:office-building' },
-  { label: 'Documents', key: 'documents', path: '/documents', icon: 'mdi:file-document' },
-  { label: 'Reports', key: 'reports', path: '/reports', icon: 'mdi:chart-box' },
-  { label: 'User Management', key: 'users', path: '/users', icon: 'mdi:account-group' },
+  { label: 'Anak Perusahaan', key: 'subsidiaries', path: '/subsidiaries', icon: 'mdi:office-building' },
+  { label: 'Dokumen', key: 'documents', path: '/documents', icon: 'mdi:file-document' },
+  { label: 'Laporan', key: 'reports', path: '/reports', icon: 'mdi:chart-box' },
+  { label: 'Manajemen Pengguna', key: 'users', path: '/users', icon: 'mdi:account-group' },
 ]
 
 const emit = defineEmits<{
@@ -171,18 +171,18 @@ onUnmounted(() => {
           </div>
           <template #overlay>
             <a-menu>
-              <a-menu-item key="profile">
+              <a-menu-item key="profile" @click="handleMenuItemClick('/profile')">
                 <IconifyIcon icon="mdi:account" width="16" style="margin-right: 8px;" />
-                Profile
+                Profil
               </a-menu-item>
               <a-menu-item key="settings" @click="handleMenuItemClick('/settings')">
                 <IconifyIcon icon="mdi:cog" width="16" style="margin-right: 8px;" />
-                Settings
+                Pengaturan
               </a-menu-item>
               <a-menu-divider />
               <a-menu-item key="logout" @click="handleLogout">
                 <IconifyIcon icon="mdi:logout" width="16" style="margin-right: 8px;" />
-                Logout
+                Keluar
               </a-menu-item>
             </a-menu>
           </template>

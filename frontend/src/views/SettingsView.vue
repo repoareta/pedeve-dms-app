@@ -11,6 +11,11 @@ import type { TableColumnsType } from 'ant-design-vue'
 const router = useRouter()
 const authStore = useAuthStore()
 
+// Check if user is superadmin
+const isSuperadmin = computed(() => {
+  return authStore.user?.role?.toLowerCase() === 'superadmin'
+})
+
 const loading = ref(false)
 const is2FAEnabled = ref(false)
 const setupStep = ref<'idle' | 'generate' | 'verify' | 'success'>('idle')
@@ -361,14 +366,17 @@ const parseDetails = (detailsJson: string) => {
 
 onMounted(() => {
   check2FAStatus()
-  fetchAuditLogs()
-  fetchAuditStats()
-  
-  // Auto-refresh stats cards saja setiap 30 detik (hanya untuk audit stats, bukan seluruh halaman)
-  // Interval akan dihentikan otomatis saat user keluar dari halaman (onUnmounted)
-  auditStatsInterval = window.setInterval(() => {
+  // Only fetch audit logs if user is superadmin
+  if (isSuperadmin.value) {
+    fetchAuditLogs()
     fetchAuditStats()
-  }, 30000) // 30 detik - hanya refresh stats cards
+    
+    // Auto-refresh stats cards saja setiap 30 detik (hanya untuk audit stats, bukan seluruh halaman)
+    // Interval akan dihentikan otomatis saat user keluar dari halaman (onUnmounted)
+    auditStatsInterval = window.setInterval(() => {
+      fetchAuditStats()
+    }, 30000) // 30 detik - hanya refresh stats cards
+  }
 })
 
 onUnmounted(() => {
@@ -537,8 +545,8 @@ onUnmounted(() => {
           </div>
         </a-card>
 
-        <!-- Audit Logs Section -->
-        <a-card class="audit-logs-card" style="margin-top: 24px;">
+        <!-- Audit Logs Section (Superadmin Only) -->
+        <a-card v-if="isSuperadmin" class="audit-logs-card" style="margin-top: 24px;">
           <template #title>
             <div class="card-title">
               <IconifyIcon icon="mdi:file-document-outline" width="24" height="24" />
@@ -733,8 +741,9 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Audit Log Detail Modal -->
+    <!-- Audit Log Detail Modal (Superadmin Only) -->
     <a-modal
+      v-if="isSuperadmin"
       v-model:open="detailModalVisible"
       title="Detail Audit Log"
       width="800px"

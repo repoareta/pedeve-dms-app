@@ -56,7 +56,17 @@ func (h *CompanyHandler) CreateCompany(c *fiber.Ctx) error {
 	// Superadmin can create company at any level
 	// Admin can only create sub-company under their company
 	if roleName != "superadmin" && companyID != nil {
-		userCompanyID := companyID.(string)
+		var userCompanyID string
+		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
+			userCompanyID = *companyIDPtr
+		} else if companyIDStr, ok := companyID.(string); ok {
+			userCompanyID = companyIDStr
+		} else {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Invalid company ID format",
+			})
+		}
 		if req.ParentID != nil && *req.ParentID != userCompanyID {
 			// Check if parent is descendant of user's company
 			hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, *req.ParentID)
@@ -109,7 +119,17 @@ func (h *CompanyHandler) GetCompany(c *fiber.Ctx) error {
 
 	// Superadmin can access any company
 	if roleName != "superadmin" && companyID != nil {
-		userCompanyID := companyID.(string)
+		var userCompanyID string
+		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
+			userCompanyID = *companyIDPtr
+		} else if companyIDStr, ok := companyID.(string); ok {
+			userCompanyID = companyIDStr
+		} else {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Invalid company ID format",
+			})
+		}
 		hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, id)
 		if err != nil || !hasAccess {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
@@ -141,31 +161,71 @@ func (h *CompanyHandler) GetCompany(c *fiber.Ctx) error {
 // @Failure      401  {object}  domain.ErrorResponse
 // @Router       /api/v1/companies [get]
 func (h *CompanyHandler) GetAllCompanies(c *fiber.Ctx) error {
-	companies, err := h.companyUseCase.GetAllCompanies()
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
-			Error:   "internal_error",
-			Message: "Failed to get companies",
-		})
-	}
-
-	// Filter based on user's company access (if not superadmin)
-	companyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
-	if roleName != "superadmin" && companyID != nil {
-		userCompanyID := companyID.(string)
-		filtered := []domain.CompanyModel{}
-		for _, company := range companies {
-			if company.ID == userCompanyID {
-				filtered = append(filtered, company)
-				continue
-			}
-			hasAccess, _ := h.companyUseCase.ValidateCompanyAccess(userCompanyID, company.ID)
-			if hasAccess {
-				filtered = append(filtered, company)
-			}
+	companyID := c.Locals("companyID")
+
+	var companies []domain.CompanyModel
+	var err error
+
+	// Superadmin sees all companies
+	if roleName == "superadmin" {
+		companies, err = h.companyUseCase.GetAllCompanies()
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "internal_error",
+				Message: "Failed to get companies: " + err.Error(),
+			})
 		}
-		companies = filtered
+	} else {
+		// Non-superadmin: get their company and all descendants
+		if companyID == nil {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "User company not found",
+			})
+		}
+
+		// Handle *string type
+		var userCompanyID string
+		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
+			userCompanyID = *companyIDPtr
+		} else if companyIDStr, ok := companyID.(string); ok {
+			userCompanyID = companyIDStr
+		} else {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Invalid company ID format",
+			})
+		}
+
+		// Get user's company
+		userCompany, err := h.companyUseCase.GetCompanyByID(userCompanyID)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "internal_error",
+				Message: "Failed to get user company: " + err.Error(),
+			})
+		}
+
+		// Only include user's company if it's active
+		if !userCompany.IsActive {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "User company is not active",
+			})
+		}
+
+		// Get all descendants
+		descendants, err := h.companyUseCase.GetCompanyDescendants(userCompanyID)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "internal_error",
+				Message: "Failed to get company descendants: " + err.Error(),
+			})
+		}
+
+		// Combine user's company with descendants
+		companies = append([]domain.CompanyModel{*userCompany}, descendants...)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(companies)
@@ -190,7 +250,17 @@ func (h *CompanyHandler) GetCompanyChildren(c *fiber.Ctx) error {
 
 	// Check access
 	if roleName != "superadmin" && companyID != nil {
-		userCompanyID := companyID.(string)
+		var userCompanyID string
+		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
+			userCompanyID = *companyIDPtr
+		} else if companyIDStr, ok := companyID.(string); ok {
+			userCompanyID = companyIDStr
+		} else {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Invalid company ID format",
+			})
+		}
 		hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, id)
 		if err != nil || !hasAccess {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
@@ -243,7 +313,17 @@ func (h *CompanyHandler) UpdateCompany(c *fiber.Ctx) error {
 
 	// Check access
 	if roleName != "superadmin" && companyID != nil {
-		userCompanyID := companyID.(string)
+		var userCompanyID string
+		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
+			userCompanyID = *companyIDPtr
+		} else if companyIDStr, ok := companyID.(string); ok {
+			userCompanyID = companyIDStr
+		} else {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Invalid company ID format",
+			})
+		}
 		hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, id)
 		if err != nil || !hasAccess {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
@@ -287,7 +367,17 @@ func (h *CompanyHandler) DeleteCompany(c *fiber.Ctx) error {
 
 	// Check access
 	if roleName != "superadmin" && companyID != nil {
-		userCompanyID := companyID.(string)
+		var userCompanyID string
+		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
+			userCompanyID = *companyIDPtr
+		} else if companyIDStr, ok := companyID.(string); ok {
+			userCompanyID = companyIDStr
+		} else {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Invalid company ID format",
+			})
+		}
 		hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, id)
 		if err != nil || !hasAccess {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{

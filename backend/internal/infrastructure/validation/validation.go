@@ -43,6 +43,18 @@ func SanitizeEmail(email string) (string, error) {
 	return sanitized, nil
 }
 
+// ValidateEmail memvalidasi format email
+func ValidateEmail(email string) error {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return fmt.Errorf("email is required")
+	}
+	if !govalidator.IsEmail(email) {
+		return fmt.Errorf("invalid email format")
+	}
+	return nil
+}
+
 // SanitizeUsername membersihkan dan memvalidasi username
 func SanitizeUsername(username string) (string, error) {
 	// Trim dan konversi ke lowercase

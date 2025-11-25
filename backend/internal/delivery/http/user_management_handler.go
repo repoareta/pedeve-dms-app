@@ -21,7 +21,7 @@ func NewUserManagementHandler(userUseCase usecase.UserManagementUseCase) *UserMa
 
 // CreateUser handles user creation
 // @Summary      Buat User Baru
-// @Description  Membuat user baru. Admin hanya bisa membuat user di company mereka atau descendants.
+// @Description  Membuat user baru. Admin hanya bisa membuat user di company mereka atau descendants. Superadmin role tidak bisa dibuat dari antarmuka ini.
 // @Tags         User Management
 // @Accept       json
 // @Produce      json
@@ -45,6 +45,19 @@ func (h *UserManagementHandler) CreateUser(c *fiber.Ctx) error {
 			Error:   "invalid_request",
 			Message: "Invalid request body",
 		})
+	}
+
+	// Prevent creating superadmin user
+	if req.RoleID != nil {
+		// Check if role is superadmin
+		roleUseCase := usecase.NewRoleManagementUseCase()
+		role, err := roleUseCase.GetRoleByID(*req.RoleID)
+		if err == nil && role != nil && role.Name == "superadmin" {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Superadmin role cannot be assigned through this interface. Superadmin is a system account managed separately.",
+			})
+		}
 	}
 
 	userID := c.Locals("userID").(string)
@@ -168,7 +181,7 @@ func (h *UserManagementHandler) GetAllUsers(c *fiber.Ctx) error {
 
 // UpdateUser handles user update
 // @Summary      Update User
-// @Description  Mengupdate informasi user.
+// @Description  Mengupdate informasi user. Superadmin tidak bisa mengedit dirinya sendiri.
 // @Tags         User Management
 // @Accept       json
 // @Produce      json
@@ -181,6 +194,34 @@ func (h *UserManagementHandler) GetAllUsers(c *fiber.Ctx) error {
 // @Router       /api/v1/users/{id} [put]
 func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 	id := c.Params("id")
+	currentUserID := c.Locals("userID").(string)
+	roleName := c.Locals("roleName").(string)
+
+	// Prevent superadmin from editing themselves
+	if roleName == "superadmin" && id == currentUserID {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Superadmin cannot edit their own account. Please use Vault or system administrator for account changes.",
+		})
+	}
+
+	// Get target user to check if they are superadmin
+	targetUser, err := h.userUseCase.GetUserByID(id)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
+			Error:   "not_found",
+			Message: "User not found",
+		})
+	}
+
+	// Prevent editing superadmin user (even by other superadmins)
+	if targetUser.Role == "superadmin" {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Superadmin account cannot be edited through this interface. Please use Vault or system administrator.",
+		})
+	}
+
 	var req struct {
 		Username  string  `json:"username"`
 		Email     string  `json:"email"`
@@ -196,7 +237,6 @@ func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 	}
 
 	companyID := c.Locals("companyID")
-	roleName := c.Locals("roleName").(string)
 
 	// Check access
 	if roleName != "superadmin" && companyID != nil {
@@ -227,19 +267,47 @@ func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 
 // DeleteUser handles user deletion
 // @Summary      Hapus User
-// @Description  Menghapus user.
+// @Description  Menghapus user. Superadmin tidak bisa menghapus dirinya sendiri atau user superadmin lainnya.
 // @Tags         User Management
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
 // @Param        id   path      string  true  "User ID"
 // @Success      200  {object}  map[string]string
+// @Failure      400  {object}  domain.ErrorResponse
 // @Failure      403  {object}  domain.ErrorResponse
 // @Router       /api/v1/users/{id} [delete]
 func (h *UserManagementHandler) DeleteUser(c *fiber.Ctx) error {
 	id := c.Params("id")
-	companyID := c.Locals("companyID")
+	currentUserID := c.Locals("userID").(string)
 	roleName := c.Locals("roleName").(string)
+
+	// Prevent superadmin from deleting themselves
+	if roleName == "superadmin" && id == currentUserID {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Superadmin cannot delete their own account.",
+		})
+	}
+
+	// Get target user to check if they are superadmin
+	targetUser, err := h.userUseCase.GetUserByID(id)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
+			Error:   "not_found",
+			Message: "User not found",
+		})
+	}
+
+	// Prevent deleting superadmin user
+	if targetUser.Role == "superadmin" {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Superadmin account cannot be deleted through this interface.",
+		})
+	}
+
+	companyID := c.Locals("companyID")
 
 	// Check access
 	if roleName != "superadmin" && companyID != nil {

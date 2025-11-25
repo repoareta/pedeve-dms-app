@@ -710,10 +710,10 @@ VITE_API_URL=https://api.yourdomain.com/api/v1
 - `URLS_AND_PORTS.md`: Quick reference for URLs and ports
 
 ### Backend Documentation (dalam folder backend/)
-- `backend/AUTH.md`: Authentication documentation
-- `backend/SECURITY_FEATURES.md`: Security features documentation
-- `backend/AUDIT_LOG_OPTIMIZATION.md`: Audit log optimization documentation
-- `backend/REFACTORING_NOTES.md`: Catatan refactoring ke Clean Architecture
+- `backend/doc/AUTH.md`: Authentication documentation
+- `backend/doc/SECURITY_FEATURES.md`: Security features documentation
+- `backend/doc/AUDIT_LOG_OPTIMIZATION.md`: Audit log optimization documentation
+- `backend/doc/REFACTORING_NOTES.md`: Catatan refactoring ke Clean Architecture
 
 ---
 

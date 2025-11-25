@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { companyApi, userApi, roleApi, permissionApi, type Company, type User, type Role, type Permission } from '../api/userManagement'
@@ -23,6 +23,157 @@ const usersLoading = ref(false)
 const userModalVisible = ref(false)
 const userForm = ref<Partial<User & { password: string }>>({})
 const editingUser = ref<User | null>(null)
+
+// Search states
+const companySearchText = ref('')
+const userSearchText = ref('')
+
+// Pagination
+const companyPagination = ref({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+})
+
+const userPagination = ref({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+})
+
+// Computed untuk filtered data dengan search
+const filteredCompanies = computed(() => {
+  let filtered = [...companies.value]
+  
+  // Search filter
+  if (companySearchText.value) {
+    const search = companySearchText.value.toLowerCase()
+    filtered = filtered.filter(c => 
+      c.name.toLowerCase().includes(search) ||
+      c.code.toLowerCase().includes(search) ||
+      (c.description && c.description.toLowerCase().includes(search))
+    )
+  }
+  
+  // Update pagination total
+  companyPagination.value.total = filtered.length
+  
+  return filtered
+})
+
+const filteredUsers = computed(() => {
+  let filtered = [...users.value]
+  
+  // Search filter
+  if (userSearchText.value) {
+    const search = userSearchText.value.toLowerCase()
+    filtered = filtered.filter(u => 
+      u.username.toLowerCase().includes(search) ||
+      u.email.toLowerCase().includes(search) ||
+      u.role.toLowerCase().includes(search)
+    )
+  }
+  
+  // Update pagination total
+  userPagination.value.total = filtered.length
+  
+  return filtered
+})
+
+// Update pagination total when data changes
+watch(companies, () => {
+  if (!companySearchText.value) {
+    companyPagination.value.total = companies.value.length
+  }
+}, { immediate: true })
+
+watch(users, () => {
+  if (!userSearchText.value) {
+    userPagination.value.total = users.value.length
+  }
+}, { immediate: true })
+
+// Watch search text changes
+watch(companySearchText, () => {
+  companyPagination.value.current = 1 // Reset to first page on search
+})
+
+watch(userSearchText, () => {
+  userPagination.value.current = 1 // Reset to first page on search
+})
+
+// Filter roles untuk exclude superadmin
+const availableRoles = computed(() => {
+  return roles.value.filter(r => r.name !== 'superadmin')
+})
+
+// Check if current user is superadmin
+const isCurrentUserSuperadmin = computed(() => {
+  return authStore.user?.role === 'superadmin'
+})
+
+// Check if user is superadmin (for edit/delete protection)
+const isUserSuperadmin = (user: User) => {
+  return user.role === 'superadmin' || user.role_id === roles.value.find(r => r.name === 'superadmin')?.id
+}
+
+// Check if user is current logged in user
+const isCurrentUser = (user: User) => {
+  return user.id === authStore.user?.id
+}
+
+// Table columns
+const companyColumns = computed(() => [
+  { 
+    title: 'Nama Perusahaan', 
+    dataIndex: 'name', 
+    key: 'name', 
+    sorter: (a: Company, b: Company) => a.name.localeCompare(b.name),
+  },
+  { title: 'Kode', dataIndex: 'code', key: 'code', sorter: (a: Company, b: Company) => a.code.localeCompare(b.code) },
+  { title: 'Tingkat', dataIndex: 'level', key: 'level', sorter: (a: Company, b: Company) => a.level - b.level },
+  { title: 'Deskripsi', dataIndex: 'description', key: 'description' },
+  { 
+    title: 'Status', 
+    dataIndex: 'is_active', 
+    key: 'is_active', 
+    filters: [
+      { text: 'Aktif', value: true },
+      { text: 'Tidak Aktif', value: false }
+    ], 
+    onFilter: (value: boolean, record: Company) => record.is_active === value 
+  },
+  { title: 'Aksi', key: 'actions', width: 150 },
+])
+
+const userColumns = computed(() => [
+  { 
+    title: 'Username', 
+    dataIndex: 'username', 
+    key: 'username', 
+    sorter: (a: User, b: User) => a.username.localeCompare(b.username),
+  },
+  { title: 'Email', dataIndex: 'email', key: 'email', sorter: (a: User, b: User) => a.email.localeCompare(b.email) },
+  { 
+    title: 'Role', 
+    dataIndex: 'role', 
+    key: 'role', 
+    filters: roles.value.filter(r => r.name !== 'superadmin').map(r => ({ text: r.name, value: r.name })), 
+    onFilter: (value: string, record: User) => record.role === value 
+  },
+  { title: 'Perusahaan', dataIndex: 'company_id', key: 'company_id' },
+  { 
+    title: 'Status', 
+    dataIndex: 'is_active', 
+    key: 'is_active', 
+    filters: [
+      { text: 'Aktif', value: true },
+      { text: 'Tidak Aktif', value: false }
+    ], 
+    onFilter: (value: boolean, record: User) => record.is_active === value 
+  },
+  { title: 'Aksi', key: 'actions', width: 150 },
+])
 
 // Roles
 const roles = ref<Role[]>([])
@@ -274,17 +425,35 @@ const getScopeColor = (scope: string): string => {
             </a-button>
           </div>
 
+          <div style="margin-bottom: 16px;">
+            <a-input
+              v-model:value="companySearchText"
+              placeholder="Cari perusahaan (nama, kode, deskripsi)..."
+              allow-clear
+              style="width: 300px;"
+            >
+              <template #prefix>
+                <span>🔍</span>
+              </template>
+            </a-input>
+          </div>
+
           <a-table
-            :columns="[
-              { title: 'Nama Perusahaan', dataIndex: 'name', key: 'name' },
-              { title: 'Kode', dataIndex: 'code', key: 'code' },
-              { title: 'Tingkat', dataIndex: 'level', key: 'level' },
-              { title: 'Deskripsi', dataIndex: 'description', key: 'description' },
-              { title: 'Status', dataIndex: 'is_active', key: 'is_active' },
-              { title: 'Aksi', key: 'actions' },
-            ]"
-            :data-source="companies"
+            :columns="companyColumns"
+            :data-source="filteredCompanies"
             :loading="companiesLoading"
+            :pagination="{
+              current: companyPagination.current,
+              pageSize: companyPagination.pageSize,
+              total: companyPagination.total,
+              showSizeChanger: true,
+              showTotal: (total: number) => `Total ${total} perusahaan`,
+              pageSizeOptions: ['10', '20', '50', '100'],
+            }"
+            @change="(pagination: any) => { 
+              companyPagination.current = pagination.current || 1
+              companyPagination.pageSize = pagination.pageSize || 10
+            }"
             row-key="id"
           >
             <template #bodyCell="{ column, record }">
@@ -350,17 +519,35 @@ const getScopeColor = (scope: string): string => {
             </a-button>
           </div>
 
+          <div style="margin-bottom: 16px;">
+            <a-input
+              v-model:value="userSearchText"
+              placeholder="Cari user (username, email, role)..."
+              allow-clear
+              style="width: 300px;"
+            >
+              <template #prefix>
+                <span>🔍</span>
+              </template>
+            </a-input>
+          </div>
+
           <a-table
-            :columns="[
-              { title: 'Username', dataIndex: 'username', key: 'username' },
-              { title: 'Email', dataIndex: 'email', key: 'email' },
-              { title: 'Role', dataIndex: 'role', key: 'role' },
-              { title: 'Perusahaan', dataIndex: 'company_id', key: 'company_id' },
-              { title: 'Status', dataIndex: 'is_active', key: 'is_active' },
-              { title: 'Aksi', key: 'actions' },
-            ]"
-            :data-source="users"
+            :columns="userColumns"
+            :data-source="filteredUsers"
             :loading="usersLoading"
+            :pagination="{
+              current: userPagination.current,
+              pageSize: userPagination.pageSize,
+              total: userPagination.total,
+              showSizeChanger: true,
+              showTotal: (total: number) => `Total ${total} user`,
+              pageSizeOptions: ['10', '20', '50', '100'],
+            }"
+            @change="(pagination: any) => { 
+              userPagination.current = pagination.current || 1
+              userPagination.pageSize = pagination.pageSize || 10
+            }"
             row-key="id"
           >
             <template #bodyCell="{ column, record }">
@@ -376,8 +563,12 @@ const getScopeColor = (scope: string): string => {
                 </a-tag>
               </template>
               <template v-if="column.key === 'actions'">
-                <a-space>
-                  <a-button type="link" size="small" @click="handleEditUser(record)">
+                <a-space v-if="!isCurrentUser(record) || !isUserSuperadmin(record)">
+                  <a-button 
+                    type="link" 
+                    size="small" 
+                    @click="handleEditUser(record)"
+                  >
                     Edit
                   </a-button>
                   <a-popconfirm
@@ -387,6 +578,9 @@ const getScopeColor = (scope: string): string => {
                     <a-button type="link" size="small" danger>Hapus</a-button>
                   </a-popconfirm>
                 </a-space>
+                <span v-else class="no-action-text">
+                  Tidak dapat diubah
+                </span>
               </template>
             </template>
           </a-table>
@@ -585,17 +779,20 @@ const getScopeColor = (scope: string): string => {
           <a-form-item label="Role">
             <a-select
               v-model:value="userForm.role_id"
-              placeholder="Select role (optional)"
+              placeholder="Pilih role (opsional)"
               allow-clear
             >
               <a-select-option
-                v-for="role in roles"
+                v-for="role in availableRoles"
                 :key="role.id"
                 :value="role.id"
               >
                 {{ role.name }}
               </a-select-option>
             </a-select>
+            <div class="form-help-text">
+              <small>Role Superadmin tidak tersedia untuk dibuat dari antarmuka ini</small>
+            </div>
           </a-form-item>
         </a-form>
       </a-modal>
@@ -633,6 +830,19 @@ const getScopeColor = (scope: string): string => {
   margin-bottom: 16px;
   display: flex;
   justify-content: flex-end;
+}
+
+
+.no-action-text {
+  color: #999;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.form-help-text {
+  margin-top: 4px;
+  color: #999;
+  font-size: 12px;
 }
 
 .info-accordion {

@@ -58,22 +58,75 @@ func Login(c *fiber.Ctx) error {
 	// Cari user di database (bisa login dengan username atau email)
 	zapLog := logger.GetLogger()
 	var userModel domain.UserModel
-	// Support login dengan username atau email
-	result := database.GetDB().Where("username = ? OR email = ?", req.Username, req.Username).First(&userModel)
-	if result.Error == gorm.ErrRecordNotFound {
-		// Log untuk debugging
-		zapLog.Debug("User not found for login attempt",
-			zap.String("input", req.Username),
-			zap.String("ip", getClientIP(c)),
-		)
+	// Support login dengan username atau email (case-insensitive)
+	result := database.GetDB().Where("LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)", req.Username, req.Username).First(&userModel)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			// Log untuk debugging
+			zapLog.Debug("User not found for login attempt",
+				zap.String("input", req.Username),
+				zap.String("ip", getClientIP(c)),
+			)
+		} else {
+			// Database error
+			zapLog.Error("Database error during login",
+				zap.String("input", req.Username),
+				zap.String("ip", getClientIP(c)),
+				zap.Error(result.Error),
+			)
+		}
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
 			Error:   "invalid_credentials",
 			Message: "Invalid email/username or password",
 		})
 	}
 
+	zapLog.Debug("User found for login",
+		zap.String("user_id", userModel.ID),
+		zap.String("username", userModel.Username),
+		zap.Bool("is_active", userModel.IsActive),
+		zap.String("role", userModel.Role),
+	)
+
+	// Cek apakah user aktif
+	if !userModel.IsActive {
+		zapLog.Warn("Login attempt for inactive user",
+			zap.String("username", userModel.Username),
+			zap.String("ip", getClientIP(c)),
+		)
+		audit.LogAction(userModel.ID, userModel.Username, audit.ActionFailedLogin, audit.ResourceAuth, "", ipAddress, userAgent, audit.StatusFailure, map[string]interface{}{
+			"reason": "user_inactive",
+		})
+		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
+			Error:   "account_inactive",
+			Message: "Your account is inactive. Please contact administrator.",
+		})
+	}
+
 	// Cek password
-	if !password.CheckPasswordHash(req.Password, userModel.Password) {
+	passwordValid := password.CheckPasswordHash(req.Password, userModel.Password)
+	if !passwordValid {
+		zapLog.Warn("Invalid password for login attempt",
+			zap.String("user_id", userModel.ID),
+			zap.String("username", userModel.Username),
+			zap.String("email", userModel.Email),
+			zap.String("input_email_or_username", req.Username),
+			zap.String("ip", getClientIP(c)),
+			zap.Bool("is_active", userModel.IsActive),
+			zap.String("role", userModel.Role),
+			zap.String("role_id", func() string {
+				if userModel.RoleID != nil {
+					return *userModel.RoleID
+				}
+				return "nil"
+			}()),
+			zap.String("company_id", func() string {
+				if userModel.CompanyID != nil {
+					return *userModel.CompanyID
+				}
+				return "nil"
+			}()),
+		)
 		// Log percobaan login yang gagal
 		audit.LogAction(userModel.ID, userModel.Username, audit.ActionFailedLogin, audit.ResourceAuth, "", ipAddress, userAgent, audit.StatusFailure, map[string]interface{}{
 			"reason": "invalid_password",
@@ -84,6 +137,10 @@ func Login(c *fiber.Ctx) error {
 			Message: "Invalid email/username or password",
 		})
 	}
+
+	zapLog.Debug("Password verified successfully",
+		zap.String("user_id", userModel.ID),
+	)
 
 	// Cek apakah 2FA diaktifkan
 	var twoFA domain.TwoFactorAuth
@@ -121,12 +178,27 @@ func Login(c *fiber.Ctx) error {
 	// Get user auth info (role, company, permissions) untuk JWT claims
 	roleID, roleName, companyID, companyLevel, hierarchyScope, permissions, err := usecase.GetUserAuthInfo(userModel.ID)
 	if err != nil {
+		zapLog.Warn("Failed to get user auth info, using fallback",
+			zap.String("user_id", userModel.ID),
+			zap.Error(err),
+		)
 		// Fallback jika error (backward compatibility)
 		roleName = userModel.Role
 		if roleName == "" {
 			roleName = "user"
 		}
 		permissions = []string{}
+		// Set default values untuk fallback
+		if userModel.RoleID != nil {
+			roleID = userModel.RoleID
+		}
+		if userModel.CompanyID != nil {
+			companyID = userModel.CompanyID
+			companyLevel = 1 // Default level
+			hierarchyScope = "company"
+		} else {
+			hierarchyScope = "global"
+		}
 	}
 
 	// Generate JWT token dengan claims lengkap
@@ -272,4 +344,3 @@ func getClientIP(c *fiber.Ctx) string {
 	}
 	return ip
 }
-

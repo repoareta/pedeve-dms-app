@@ -7,6 +7,67 @@ definitions:
       user:
         $ref: '#/definitions/domain.User'
     type: object
+  domain.Company:
+    properties:
+      children:
+        items:
+          $ref: '#/definitions/domain.Company'
+        type: array
+      code:
+        description: Unique company code
+        type: string
+      created_at:
+        type: string
+      description:
+        description: Optional description
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      level:
+        description: 0=root, 1=holding, 2=subsidiary, 3=sub-subsidiary, etc
+        type: integer
+      name:
+        type: string
+      parent:
+        allOf:
+        - $ref: '#/definitions/domain.Company'
+        description: Relationships (populated on query)
+      parent_id:
+        description: NULL untuk root/holding company
+        type: string
+      updated_at:
+        type: string
+      users:
+        items:
+          $ref: '#/definitions/domain.User'
+        type: array
+    type: object
+  domain.CompanyModel:
+    properties:
+      code:
+        description: Unique company code
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      level:
+        description: 0=root, 1=holding, 2=subsidiary, etc
+        type: integer
+      name:
+        type: string
+      parent_id:
+        description: NULL untuk root/holding company
+        type: string
+      updated_at:
+        type: string
+    type: object
   domain.Document:
     properties:
       content:
@@ -48,15 +109,165 @@ definitions:
     - password
     - username
     type: object
+  domain.Permission:
+    properties:
+      action:
+        description: e.g., "view", "create", "update", "delete"
+        type: string
+      created_at:
+        type: string
+      description:
+        description: Human-readable description
+        type: string
+      id:
+        type: string
+      name:
+        description: e.g., "view_dashboard", "manage_users"
+        type: string
+      resource:
+        description: e.g., "dashboard", "users", "documents"
+        type: string
+      scope:
+        allOf:
+        - $ref: '#/definitions/domain.PermissionScope'
+        description: global, company, sub_company
+      updated_at:
+        type: string
+    type: object
+  domain.PermissionModel:
+    properties:
+      action:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      resource:
+        type: string
+      scope:
+        $ref: '#/definitions/domain.PermissionScope'
+      updated_at:
+        type: string
+    type: object
+  domain.PermissionScope:
+    enum:
+    - global
+    - company
+    - sub_company
+    type: string
+    x-enum-comments:
+      ScopeCompany: Company-level access
+      ScopeGlobal: Superadmin only
+      ScopeSubCompany: Sub-company level access
+    x-enum-descriptions:
+    - Superadmin only
+    - Company-level access
+    - Sub-company level access
+    x-enum-varnames:
+    - ScopeGlobal
+    - ScopeCompany
+    - ScopeSubCompany
+  domain.Role:
+    properties:
+      created_at:
+        type: string
+      description:
+        description: Human-readable description
+        type: string
+      id:
+        type: string
+      is_system:
+        description: System role tidak bisa dihapus
+        type: boolean
+      level:
+        description: 0=superadmin, 1=admin, 2=manager, 3=staff
+        type: integer
+      name:
+        description: e.g., "superadmin", "admin", "manager", "staff"
+        type: string
+      permissions:
+        description: Relationships
+        items:
+          $ref: '#/definitions/domain.Permission'
+        type: array
+      updated_at:
+        type: string
+      users:
+        items:
+          $ref: '#/definitions/domain.User'
+        type: array
+    type: object
+  domain.RoleModel:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      is_system:
+        description: System role tidak bisa dihapus
+        type: boolean
+      level:
+        description: 0=superadmin, 1=admin, 2=manager, 3=staff
+        type: integer
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
   domain.User:
     properties:
+      company:
+        allOf:
+        - $ref: '#/definitions/domain.Company'
+        description: Relationships (populated on query)
+      company_id:
+        description: NULL untuk superadmin, required untuk user lain
+        type: string
       created_at:
         type: string
       email:
         type: string
       id:
         type: string
+      is_active:
+        type: boolean
       role:
+        description: Legacy field, akan deprecated
+        type: string
+      role_detail:
+        $ref: '#/definitions/domain.Role'
+      role_id:
+        description: Reference ke Role table
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  domain.UserModel:
+    properties:
+      company_id:
+        description: NULL untuk superadmin
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      role:
+        description: Legacy field, akan deprecated
+        type: string
+      role_id:
+        description: Reference ke Role table
         type: string
       updated_at:
         type: string
@@ -496,6 +707,202 @@ paths:
       summary: Ambil Profil User
       tags:
       - Authentication
+  /api/v1/companies:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil daftar semua companies. Superadmin melihat semua. User
+        lain hanya melihat company mereka dan descendants.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.CompanyModel'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Semua Companies
+      tags:
+      - Company Management
+    post:
+      consumes:
+      - application/json
+      description: Membuat company baru dalam hierarchy. Superadmin bisa membuat company
+        di level manapun. Admin company hanya bisa membuat sub-company di bawah company
+        mereka.
+      parameters:
+      - description: Company data (name, code, description, parent_id optional)
+        in: body
+        name: company
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.CompanyModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Buat Company Baru
+      tags:
+      - Company Management
+  /api/v1/companies/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: 'Menghapus company (soft delete: set is_active=false). Hanya bisa
+        delete company sendiri atau descendants.'
+      parameters:
+      - description: Company ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Hapus Company
+      tags:
+      - Company Management
+    get:
+      consumes:
+      - application/json
+      description: Mengambil informasi company berdasarkan ID. User hanya bisa mengakses
+        company mereka atau descendants.
+      parameters:
+      - description: Company ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.CompanyModel'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Company by ID
+      tags:
+      - Company Management
+    put:
+      consumes:
+      - application/json
+      description: Mengupdate informasi company. Hanya bisa update company sendiri
+        atau descendants.
+      parameters:
+      - description: Company ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Company data to update
+        in: body
+        name: company
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.CompanyModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update Company
+      tags:
+      - Company Management
+  /api/v1/companies/{id}/children:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil daftar children (sub-companies) dari company tertentu.
+      parameters:
+      - description: Company ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.CompanyModel'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Children Company
+      tags:
+      - Company Management
   /api/v1/csrf-token:
     get:
       consumes:
@@ -674,6 +1081,535 @@ paths:
       summary: Update document
       tags:
       - Documents
+  /api/v1/permissions:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil daftar semua permissions. Bisa difilter berdasarkan resource
+        atau scope.
+      parameters:
+      - description: Filter by resource
+        in: query
+        name: resource
+        type: string
+      - description: Filter by scope (global, company, sub_company)
+        in: query
+        name: scope
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.PermissionModel'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: Ambil Semua Permissions
+      tags:
+      - Permission Management
+    post:
+      consumes:
+      - application/json
+      description: Membuat permission baru. Hanya superadmin yang bisa membuat permission.
+      parameters:
+      - description: Permission data
+        in: body
+        name: permission
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.PermissionModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Buat Permission Baru
+      tags:
+      - Permission Management
+  /api/v1/permissions/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Menghapus permission.
+      parameters:
+      - description: Permission ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Hapus Permission
+      tags:
+      - Permission Management
+    get:
+      consumes:
+      - application/json
+      description: Mengambil informasi permission berdasarkan ID.
+      parameters:
+      - description: Permission ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.PermissionModel'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Permission by ID
+      tags:
+      - Permission Management
+    put:
+      consumes:
+      - application/json
+      description: Mengupdate informasi permission.
+      parameters:
+      - description: Permission ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Permission data to update
+        in: body
+        name: permission
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.PermissionModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update Permission
+      tags:
+      - Permission Management
+  /api/v1/roles:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil daftar semua roles.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.RoleModel'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: Ambil Semua Roles
+      tags:
+      - Role Management
+    post:
+      consumes:
+      - application/json
+      description: Membuat role baru. Hanya superadmin yang bisa membuat role.
+      parameters:
+      - description: Role data
+        in: body
+        name: role
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.RoleModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Buat Role Baru
+      tags:
+      - Role Management
+  /api/v1/roles/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Menghapus role. System roles tidak bisa dihapus.
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Hapus Role
+      tags:
+      - Role Management
+    get:
+      consumes:
+      - application/json
+      description: Mengambil informasi role berdasarkan ID.
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.RoleModel'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Role by ID
+      tags:
+      - Role Management
+    put:
+      consumes:
+      - application/json
+      description: Mengupdate informasi role. System roles tidak bisa diupdate.
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Role data to update
+        in: body
+        name: role
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.RoleModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update Role
+      tags:
+      - Role Management
+  /api/v1/roles/{id}/permissions:
+    delete:
+      consumes:
+      - application/json
+      description: Menghapus permission dari role.
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Permission ID
+        in: body
+        name: permission_id
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Revoke Permission dari Role
+      tags:
+      - Role Management
+    get:
+      consumes:
+      - application/json
+      description: Mengambil daftar permissions yang dimiliki oleh role.
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.PermissionModel'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: Ambil Permissions Role
+      tags:
+      - Role Management
+    post:
+      consumes:
+      - application/json
+      description: Menambahkan permission ke role.
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Permission ID
+        in: body
+        name: permission_id
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Assign Permission ke Role
+      tags:
+      - Role Management
+  /api/v1/users:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil daftar semua users. Filtered berdasarkan company access.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.UserModel'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: Ambil Semua Users
+      tags:
+      - User Management
+    post:
+      consumes:
+      - application/json
+      description: Membuat user baru. Admin hanya bisa membuat user di company mereka
+        atau descendants. Superadmin role tidak bisa dibuat dari antarmuka ini.
+      parameters:
+      - description: User data
+        in: body
+        name: user
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.UserModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Buat User Baru
+      tags:
+      - User Management
+  /api/v1/users/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Menghapus user. Superadmin tidak bisa menghapus dirinya sendiri
+        atau user superadmin lainnya.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Hapus User
+      tags:
+      - User Management
+    get:
+      consumes:
+      - application/json
+      description: Mengambil informasi user berdasarkan ID.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.UserModel'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil User by ID
+      tags:
+      - User Management
+    put:
+      consumes:
+      - application/json
+      description: Mengupdate informasi user. Superadmin tidak bisa mengedit dirinya
+        sendiri.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User data to update
+        in: body
+        name: user
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.UserModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update User
+      tags:
+      - User Management
   /health:
     get:
       consumes:

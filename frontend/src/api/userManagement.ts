@@ -122,6 +122,18 @@ export const userApi = {
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/users/${id}`)
   },
+
+  toggleStatus: async (id: string): Promise<User> => {
+    const response = await apiClient.patch<User>(`/users/${id}/toggle-status`)
+    return response.data
+  },
+
+  resetPassword: async (id: string, newPassword: string): Promise<{ message: string; user_id: string }> => {
+    const response = await apiClient.post<{ message: string; user_id: string }>(`/users/${id}/reset-password`, {
+      new_password: newPassword,
+    })
+    return response.data
+  },
 }
 
 // Role API

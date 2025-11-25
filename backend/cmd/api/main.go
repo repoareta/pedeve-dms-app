@@ -201,6 +201,9 @@ func main() {
 	userManagementHandler := http.NewUserManagementHandler(usecase.NewUserManagementUseCase())
 	protected.Post("/users", userManagementHandler.CreateUser)
 	protected.Get("/users", userManagementHandler.GetAllUsers)
+	// Route spesifik harus didefinisikan sebelum route dengan parameter umum
+	protected.Patch("/users/:id/toggle-status", userManagementHandler.ToggleUserStatus)
+	protected.Post("/users/:id/reset-password", userManagementHandler.ResetUserPassword)
 	protected.Get("/users/:id", userManagementHandler.GetUser)
 	protected.Put("/users/:id", userManagementHandler.UpdateUser)
 	protected.Delete("/users/:id", userManagementHandler.DeleteUser)
@@ -224,8 +227,15 @@ func main() {
 	protected.Put("/permissions/:id", permissionManagementHandler.UpdatePermission)
 	protected.Delete("/permissions/:id", permissionManagementHandler.DeletePermission)
 
-	// Swagger documentation
+	// Swagger documentation dengan auto-reload
 	app.Get("/swagger/*", swagger.HandlerDefault)
+	
+	// Swagger regeneration endpoint (untuk development)
+	protected.Post("/swagger/regenerate", http.RegenerateSwagger)
+	
+	// Swagger JSON/YAML dengan no-cache headers untuk auto-reload
+	app.Get("/swagger.json", http.GetSwaggerJSON)
+	app.Get("/swagger.yaml", http.GetSwaggerYAML)
 
 	// Start server
 	port := ":8080"

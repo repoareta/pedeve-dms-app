@@ -825,7 +825,7 @@ const getScopeColor = (scope: string): string => {
 <style scoped>
 .user-management-layout {
   min-height: 100vh;
-  background: #f5f5f5;
+  /* background: #b03131; */
 }
 
 .user-management-content {

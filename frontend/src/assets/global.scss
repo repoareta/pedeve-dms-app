@@ -190,11 +190,11 @@ body {
   }
 }
 
-.subsidiary-form-layout{
+.subsidiary-form-layout {
   // background: red !important;
-  .form-content{
+  .form-content {
     // background: orange;
-    .form-card{
+    .form-card {
       // background: blue;
     }
   }
@@ -203,30 +203,88 @@ body {
 // ==========================================
 // Dashboard Header Styles
 // ==========================================
+
+.bg-header-general {
+  // padding: 50px 24px 0 24px;
+  // background: linear-gradient(to bottom, #e7e7e7, #e2e9f1);
+
+  // &::after{
+  //   // background: linear-gradient(to bottom, #E7E7E7, #E2E9F1);
+  //   background: orange url('@/assets/images/bgHeader.png') no-repeat center center;
+  //   object-fit: cover;
+  // }
+}
+
+.dashboard-header-container {
+  // background: linear-gradient(to bottom, #e7e7e7, #e2e9f1);
+  background: #e7e7e7 url("@/assets/images/bgHeader.png") no-repeat center center;
+  background-size: cover;
+  object-fit: cover;
+  padding: 90px 24px 10px 24px;
+  margin-top: -70px;
+  margin-bottom: 100px;
+  .kpi-row {
+    margin-bottom: -80px;
+  }
+}
+
+.page-header-container{
+  background: #e7e7e7 url("@/assets/images/bgHeader.png") no-repeat center center;
+  background-size: cover;
+  object-fit: cover;
+  padding: 90px 24px 10px 24px;
+  min-height: 250px;
+  // margin-bottom: 100px;
+  justify-content: center;
+  align-items: center;
+  display: flex;
+}
+
+.mainContentPage{
+  width: 100%;
+  padding: 24px;
+}
+
+.page-header{
+  .page-title{
+    font-size: 25px !important;
+  }
+  .page-description{
+
+  }
+}
+
 .dashboard-header {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   width: 100%;
-  background: transparent;
   //   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   z-index: 1000;
-  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+  transition: all 0.3s ease;
+  background: transparent;
 
   .header-container {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 12px 24px;
-    // border-bottom: 1px solid #f0f0f0;
-    transition: border-bottom-color 0.3s ease;
+    backdrop-filter: blur(50px) !important;
+    -webkit-backdrop-filter: blur(50px) !important;
+    transition: all 0.3s ease;
+    margin: 0;
+    background: transparent;
 
     &.onscrollnav {
       //   background: var(--primary-color) !important;
-      background: white;
-      box-shadow: 0 4px 12px rgba(3, 92, 171, 0.2);
-      transition: background-color 0.3s ease, box-shadow 0.3s ease;
+      background: rgb(255, 255, 255);
+      // border-radius: 50px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      // box-shadow: 0 4px 12px rgba(3, 92, 171, 0.2);
+      transition: all 0.3s ease;
+      // margin: 15px 24px 24px 24px;
     }
   }
 
@@ -249,31 +307,29 @@ body {
     justify-content: center;
     padding: 0 24px;
 
-    .ant-menu-light{
-        background: transparent;
-        border-bottom: 0;
+    .ant-menu-light {
+      background: transparent;
+      border-bottom: 0;
 
-        .ant-menu-item-selected{
-            background: rgba(128, 128, 128, 0.072);
-            border-radius: 50px;
-            border-color: transparent;
-            &::after{
-                border-bottom: 0;
-                border-bottom-color: red;
-            }
+      .ant-menu-item-selected {
+        background: rgba(128, 128, 128, 0.072);
+        border-radius: 50px;
+        border-color: transparent;
+        &::after {
+          border-bottom: 0;
+          border-bottom-color: red;
         }
+      }
 
-        .ant-menu-item{
-            &:hover{
-                color: var(--primary-color);
-            }
-            &::after{
-                border-bottom: 0;
-                border-bottom-color: red;
-            }
+      .ant-menu-item {
+        &:hover {
+          color: var(--primary-color);
         }
-        
-        
+        &::after {
+          border-bottom: 0;
+          border-bottom-color: red;
+        }
+      }
     }
 
     :deep(.ant-menu) {
@@ -807,9 +863,12 @@ body {
 }
 
 .dashboard-content {
-  padding: 24px;
+  // padding: 24px;
   max-width: 1920px;
   margin: 0 auto;
+  .mainContent {
+    padding: 24px;
+  }
 }
 
 .dashboard-header-row {

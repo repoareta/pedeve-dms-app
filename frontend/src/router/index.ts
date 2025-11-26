@@ -29,6 +29,12 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Tambah Anak Perusahaan' },
     },
     {
+      path: '/subsidiaries/:id',
+      name: 'subsidiary-detail',
+      component: () => import('../views/SubsidiaryDetailView.vue'),
+      meta: { requiresAuth: true, title: 'Detail Anak Perusahaan' },
+    },
+    {
       path: '/subsidiaries/:id/edit',
       name: 'subsidiary-edit',
       component: () => import('../views/SubsidiaryFormView.vue'),

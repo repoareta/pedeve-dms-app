@@ -255,11 +255,21 @@ jobs:
             backend-image.tar \
             backend-dev:~/backend-image.tar
           
+          # Copy deployment script to VM
+          gcloud compute scp \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            scripts/deploy-backend.sh \
+            backend-dev:~/deploy-backend.sh
+          
           # SSH ke backend VM dan deploy
           gcloud compute ssh backend-dev \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --command="
+              # Make script executable
+              chmod +x ~/deploy-backend.sh
+              
               # Install Docker if not exists
               if ! command -v docker &> /dev/null; then
                 curl -fsSL https://get.docker.com -o get-docker.sh
@@ -271,48 +281,11 @@ jobs:
               # Load Docker image
               sudo docker load -i ~/backend-image.tar
               
-              # Stop old container
-              sudo docker stop dms-backend-prod 2>/dev/null || true
-              sudo docker rm dms-backend-prod 2>/dev/null || true
-              
-              # Get secrets from GCP Secret Manager (VM service account has access)
-              echo 'Getting secrets from GCP Secret Manager...'
-              DB_PASSWORD=\$(gcloud secrets versions access latest --secret=db_password --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null || echo '')
-              JWT_SECRET=\$(gcloud secrets versions access latest --secret=jwt_secret --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null || echo '')
-              ENCRYPTION_KEY=\$(gcloud secrets versions access latest --secret=encryption_key --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null || echo '')
-              
-              # Verify secrets were retrieved
-              if [ -z \"\${DB_PASSWORD}\" ]; then
-                echo 'ERROR: Failed to retrieve db_password from Secret Manager'
-                exit 1
-              fi
-              
-              # Debug: Check password length (without showing actual password)
-              echo \"Password retrieved: \${#DB_PASSWORD} characters\"
-              
-              # Construct DATABASE_URL directly in the docker run command
-              # This avoids variable expansion issues in nested commands
-              # Use single quotes for the URL to prevent shell expansion
-              # Start new container with all environment variables
-              # Use --network host so container can access Cloud SQL Proxy on 127.0.0.1:5432
-              sudo docker run -d \
-                --name dms-backend-prod \
-                --restart unless-stopped \
-                --network host \
-                -e GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
-                -e GCP_SECRET_MANAGER_ENABLED=false \
-                -e GCP_STORAGE_ENABLED=true \
-                -e GCP_STORAGE_BUCKET=pedeve-dev-bucket \
-                -e DATABASE_URL=\"postgres://pedeve_user_db:\${DB_PASSWORD}@127.0.0.1:5432/db_dev_pedeve?sslmode=disable\" \
-                -e JWT_SECRET=\"\${JWT_SECRET}\" \
-                -e ENCRYPTION_KEY=\"\${ENCRYPTION_KEY}\" \
-                -e PORT=8080 \
-                -e ENV=production \
-                -e CORS_ORIGIN=https://pedeve-dev.aretaamany.com \
-                ${BACKEND_IMAGE}
+              # Run deployment script
+              ~/deploy-backend.sh ${{ secrets.GCP_PROJECT_ID }} ${BACKEND_IMAGE}
               
               # Cleanup
-              rm -f ~/backend-image.tar
+              rm -f ~/backend-image.tar ~/deploy-backend.sh
             "
 
       - name: Deploy Frontend to GCP VM

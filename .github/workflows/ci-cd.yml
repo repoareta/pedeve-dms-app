@@ -301,17 +301,20 @@ jobs:
               echo \"DATABASE_URL format verified\"
               
               # Write environment variables to file for docker run
-              # Use printf to avoid heredoc issues in nested commands
-              printf 'GCP_PROJECT_ID=%s\n' \"${{ secrets.GCP_PROJECT_ID }}\" > /tmp/docker-env.txt
-              printf 'GCP_SECRET_MANAGER_ENABLED=false\n' >> /tmp/docker-env.txt
-              printf 'GCP_STORAGE_ENABLED=true\n' >> /tmp/docker-env.txt
-              printf 'GCP_STORAGE_BUCKET=pedeve-dev-bucket\n' >> /tmp/docker-env.txt
-              printf 'DATABASE_URL=%s\n' \"\${DATABASE_URL}\" >> /tmp/docker-env.txt
-              printf 'JWT_SECRET=%s\n' \"\${JWT_SECRET}\" >> /tmp/docker-env.txt
-              printf 'ENCRYPTION_KEY=%s\n' \"\${ENCRYPTION_KEY}\" >> /tmp/docker-env.txt
-              printf 'PORT=8080\n' >> /tmp/docker-env.txt
-              printf 'ENV=production\n' >> /tmp/docker-env.txt
-              printf 'CORS_ORIGIN=https://pedeve-dev.aretaamany.com\n' >> /tmp/docker-env.txt
+              # Use echo with proper escaping for nested commands
+              echo \"GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}\" > /tmp/docker-env.txt
+              echo \"GCP_SECRET_MANAGER_ENABLED=false\" >> /tmp/docker-env.txt
+              echo \"GCP_STORAGE_ENABLED=true\" >> /tmp/docker-env.txt
+              echo \"GCP_STORAGE_BUCKET=pedeve-dev-bucket\" >> /tmp/docker-env.txt
+              echo \"DATABASE_URL=\${DATABASE_URL}\" >> /tmp/docker-env.txt
+              echo \"JWT_SECRET=\${JWT_SECRET}\" >> /tmp/docker-env.txt
+              echo \"ENCRYPTION_KEY=\${ENCRYPTION_KEY}\" >> /tmp/docker-env.txt
+              echo \"PORT=8080\" >> /tmp/docker-env.txt
+              echo \"ENV=production\" >> /tmp/docker-env.txt
+              echo \"CORS_ORIGIN=https://pedeve-dev.aretaamany.com\" >> /tmp/docker-env.txt
+              
+              # Debug: Verify file content (without showing secrets)
+              echo \"Environment file created with \$(wc -l < /tmp/docker-env.txt) lines\"
               
               # Start new container with all environment variables from file
               # Use --network host so container can access Cloud SQL Proxy on 127.0.0.1:5432

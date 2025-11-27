@@ -4,8 +4,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/database"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 )
 
 func main() {

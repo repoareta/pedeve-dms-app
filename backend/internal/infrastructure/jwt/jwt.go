@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/secrets"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/secrets"
 	"github.com/golang-jwt/jwt/v5"
 )
 

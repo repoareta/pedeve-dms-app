@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"cloud.google.com/go/storage"
 	"go.uber.org/zap"
 	"google.golang.org/api/option"

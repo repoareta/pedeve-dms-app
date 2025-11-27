@@ -3,7 +3,7 @@ package usecase
 import (
 	"fmt"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"go.uber.org/zap"
 )
 

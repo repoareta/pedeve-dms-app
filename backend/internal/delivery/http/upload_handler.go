@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/storage"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/storage"
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
 )

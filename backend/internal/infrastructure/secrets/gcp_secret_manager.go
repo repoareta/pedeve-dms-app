@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"go.uber.org/zap"

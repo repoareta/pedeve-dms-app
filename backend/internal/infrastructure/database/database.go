@@ -4,9 +4,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/secrets"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/secrets"
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"

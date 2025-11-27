@@ -1,8 +1,8 @@
 package middleware
 
 import (
-	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/database"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
 )

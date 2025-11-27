@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/secrets"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/secrets"
 )
 
 var (

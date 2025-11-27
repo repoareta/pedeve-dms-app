@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/database"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/uuid"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/uuid"
 	"gorm.io/gorm"
 )
 

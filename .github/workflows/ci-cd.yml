@@ -259,33 +259,17 @@ jobs:
           gcloud compute scp \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
-            scripts/deploy-backend.sh \
-            backend-dev:~/deploy-backend.sh
+            scripts/deploy-backend-vm.sh \
+            backend-dev:~/deploy-backend-vm.sh
           
           # SSH ke backend VM dan deploy
           gcloud compute ssh backend-dev \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --command="
-              # Make script executable
-              chmod +x ~/deploy-backend.sh
-              
-              # Install Docker if not exists
-              if ! command -v docker &> /dev/null; then
-                curl -fsSL https://get.docker.com -o get-docker.sh
-                sudo sh get-docker.sh
-                sudo usermod -aG docker \$USER || true
-                rm -f get-docker.sh
-              fi
-              
-              # Load Docker image
-              sudo docker load -i ~/backend-image.tar
-              
-              # Run deployment script
-              ~/deploy-backend.sh ${{ secrets.GCP_PROJECT_ID }} ${BACKEND_IMAGE}
-              
-              # Cleanup
-              rm -f ~/backend-image.tar ~/deploy-backend.sh
+              chmod +x ~/deploy-backend-vm.sh
+              ~/deploy-backend-vm.sh ${{ secrets.GCP_PROJECT_ID }} ${BACKEND_IMAGE}
+              rm -f ~/backend-image.tar ~/deploy-backend-vm.sh
             "
 
       - name: Deploy Frontend to GCP VM

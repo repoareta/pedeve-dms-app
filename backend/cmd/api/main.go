@@ -214,6 +214,7 @@ func main() {
 	// Route spesifik harus didefinisikan sebelum route dengan parameter umum
 	protected.Patch("/users/:id/toggle-status", userManagementHandler.ToggleUserStatus)
 	protected.Post("/users/:id/reset-password", userManagementHandler.ResetUserPassword)
+	protected.Post("/users/:id/assign-company", userManagementHandler.AssignUserToCompany)
 	protected.Get("/users/:id", userManagementHandler.GetUser)
 	protected.Put("/users/:id", userManagementHandler.UpdateUser)
 	protected.Delete("/users/:id", userManagementHandler.DeleteUser)

@@ -321,6 +321,7 @@ type CompanyUpdateRequest struct {
 	Website             string               `json:"website"`
 	Address             string               `json:"address"`
 	OperationalAddress  string               `json:"operational_address"`
+	ParentID            *string              `json:"parent_id"` // Untuk mengubah parent company
 	MainParentCompany   *string              `json:"main_parent_company"`
 	Shareholders        []ShareholderRequest `json:"shareholders"`
 	MainBusiness        *BusinessFieldRequest `json:"main_business"`

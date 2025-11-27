@@ -173,6 +173,14 @@ export const userApi = {
     })
     return response.data
   },
+
+  assignToCompany: async (id: string, companyId: string, roleId?: string): Promise<User> => {
+    const response = await apiClient.post<User>(`/users/${id}/assign-company`, {
+      company_id: companyId,
+      role_id: roleId,
+    })
+    return response.data
+  },
 }
 
 // Role API

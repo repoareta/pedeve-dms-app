@@ -441,7 +441,7 @@ const authStore = useAuthStore()
 const company = ref<Company | null>(null)
 const loading = ref(false)
 const activeTab = ref('performance')
-const selectedPeriod = ref<any>(null)
+const selectedPeriod = ref<string | null>(null)
 
 // Assign User Modal
 const assignUserModalVisible = ref(false)

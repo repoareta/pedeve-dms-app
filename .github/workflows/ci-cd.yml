@@ -332,12 +332,69 @@ jobs:
               sudo rm -rf /tmp/dist
             "
 
+      - name: Verify Backend Container
+        run: |
+          echo "Verifying backend container status..."
+          gcloud compute ssh backend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="
+              echo 'Checking Docker container status...'
+              sudo docker ps -a | grep dms-backend-prod || echo 'Container not found'
+              sudo docker logs --tail 20 dms-backend-prod || echo 'Cannot get logs'
+            "
+
       - name: Health Check Backend
         run: |
-          sleep 10
-          curl -f https://api-pedeve-dev.aretaamany.com/health || exit 1
+          echo "Waiting for backend to be ready..."
+          sleep 15
+          
+          # Try health check with retry
+          MAX_RETRIES=5
+          RETRY_DELAY=5
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Health check attempt $i/$MAX_RETRIES..."
+            if curl -f -m 10 http://${{ secrets.GCP_BACKEND_VM_IP }}:8080/health 2>/dev/null; then
+              echo "✅ Backend health check passed!"
+              exit 0
+            fi
+            
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "⏳ Backend not ready yet, waiting ${RETRY_DELAY}s before retry..."
+              sleep $RETRY_DELAY
+            fi
+          done
+          
+          echo "❌ Backend health check failed after $MAX_RETRIES attempts"
+          echo "Checking container logs..."
+          gcloud compute ssh backend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="sudo docker logs --tail 50 dms-backend-prod" || true
+          exit 1
 
       - name: Health Check Frontend
         run: |
-          sleep 5
-          curl -f https://pedeve-dev.aretaamany.com || exit 1
+          echo "Waiting for frontend to be ready..."
+          sleep 10
+          
+          # Try health check with retry
+          MAX_RETRIES=3
+          RETRY_DELAY=5
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Frontend health check attempt $i/$MAX_RETRIES..."
+            if curl -f -m 10 http://${{ secrets.GCP_FRONTEND_VM_IP }} 2>/dev/null; then
+              echo "✅ Frontend health check passed!"
+              exit 0
+            fi
+            
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "⏳ Frontend not ready yet, waiting ${RETRY_DELAY}s before retry..."
+              sleep $RETRY_DELAY
+            fi
+          done
+          
+          echo "❌ Frontend health check failed after $MAX_RETRIES attempts"
+          exit 1

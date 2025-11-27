@@ -755,7 +755,7 @@ const getLevelLabel = (level: number): string => {
     case 3:
       return 'Cicit Perusahaan'
     default:
-      return `Level ${level}`
+      return `Level ${String(level)}`
   }
 }
 

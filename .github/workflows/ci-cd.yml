@@ -105,16 +105,8 @@ jobs:
           echo "image=${BACKEND_IMAGE}" >> $GITHUB_OUTPUT
 
       # ===== SECURITY SCAN =====
-      - name: Run Trivy vulnerability scanner on frontend image
-        id: trivy-frontend
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ steps.build-frontend.outputs.image }}
-          format: 'sarif'
-          output: 'trivy-results-frontend.sarif'
-          severity: 'CRITICAL,HIGH'
-        continue-on-error: true  # Don't fail pipeline on vulnerabilities, just report
-
+      # Note: Frontend tidak lagi menggunakan Docker image, hanya static files
+      # Jadi kita hanya scan backend image saja
       - name: Run Trivy vulnerability scanner on backend image
         id: trivy-backend
         uses: aquasecurity/trivy-action@master
@@ -128,14 +120,6 @@ jobs:
       - name: Check Trivy results exist
         id: check-trivy
         run: |
-          if [ -f "trivy-results-frontend.sarif" ]; then
-            echo "frontend_exists=true" >> $GITHUB_OUTPUT
-            echo "Frontend SARIF file found"
-          else
-            echo "frontend_exists=false" >> $GITHUB_OUTPUT
-            echo "Frontend SARIF file not found"
-          fi
-          
           if [ -f "trivy-results-backend.sarif" ]; then
             echo "backend_exists=true" >> $GITHUB_OUTPUT
             echo "Backend SARIF file found"
@@ -143,14 +127,6 @@ jobs:
             echo "backend_exists=false" >> $GITHUB_OUTPUT
             echo "Backend SARIF file not found"
           fi
-
-      - name: Upload Trivy results to GitHub Security (frontend)
-        uses: github/codeql-action/upload-sarif@v4
-        if: steps.check-trivy.outputs.frontend_exists == 'true'
-        with:
-          sarif_file: 'trivy-results-frontend.sarif'
-          category: 'trivy-frontend'
-          wait-for-processing: false
 
       - name: Upload Trivy results to GitHub Security (backend)
         uses: github/codeql-action/upload-sarif@v4
@@ -167,8 +143,7 @@ jobs:
       - name: Push Docker images
         run: |
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          docker push ghcr.io/${REPO_OWNER}/dms-frontend:${{ steps.version.outputs.version }}
-          docker push ghcr.io/${REPO_OWNER}/dms-frontend:latest
+          # Note: Frontend tidak lagi menggunakan Docker image, hanya backend
           docker push ghcr.io/${REPO_OWNER}/dms-backend:${{ steps.version.outputs.version }}
           docker push ghcr.io/${REPO_OWNER}/dms-backend:latest
 

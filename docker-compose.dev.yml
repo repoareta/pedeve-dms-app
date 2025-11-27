@@ -50,6 +50,7 @@ services:
     volumes:
       - ./backend:/app
       - /go/pkg/mod  # Cache Go modules
+      - ./backend/uploads:/app/uploads  # Mount uploads folder untuk persist file uploads
     # Menggunakan Air untuk hot reload otomatis saat file .go berubah
     # Install Air jika belum terinstall, lalu jalankan dengan Air
     # Jika Air gagal, akan fallback ke go run

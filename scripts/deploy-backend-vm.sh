@@ -42,11 +42,17 @@ fi
 # Debug: Check password length (without showing actual password)
 echo "✅ Password retrieved: ${#DB_PASSWORD} characters"
 
-# Construct DATABASE_URL
-DATABASE_URL="postgres://pedeve_user_db:${DB_PASSWORD}@127.0.0.1:5432/db_dev_pedeve?sslmode=disable"
+# URL-encode password untuk menghindari masalah dengan karakter khusus (+, ), dll)
+# Python urllib.parse.quote meng-encode karakter khusus dengan benar
+# Gunakan stdin untuk menghindari masalah dengan single quote atau karakter khusus lainnya
+DB_PASSWORD_ENCODED=$(echo -n "${DB_PASSWORD}" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=''))")
+
+# Construct DATABASE_URL dengan password yang sudah di-encode
+DATABASE_URL="postgres://pedeve_user_db:${DB_PASSWORD_ENCODED}@127.0.0.1:5432/db_dev_pedeve?sslmode=disable"
 
 # Debug: Verify DATABASE_URL format (without showing password)
 echo "✅ DATABASE_URL length: ${#DATABASE_URL} characters"
+echo "✅ Password encoded successfully"
 
 # Start new container with all environment variables
 # Use --network host so container can access Cloud SQL Proxy on 127.0.0.1:5432

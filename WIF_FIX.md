@@ -14,12 +14,18 @@ WIF Provider di GCP dikonfigurasi dengan **audience** yang salah. Untuk GitHub A
 
 **Error menunjukkan:** GitHub Actions mengirim ID token dengan audience `https://iam.googleapis.com/***`, tetapi WIF Provider mengharapkan `https://github.com/repoareta/pedeve-dms-app`.
 
+**Solusi:** Tambahkan parameter `audience` secara eksplisit di GitHub Actions workflow untuk memastikan token menggunakan audience yang benar.
+
 **Kemungkinan penyebab:**
 1. WIF Provider masih menggunakan "Default audience" atau audience yang salah
 2. Konfigurasi belum benar-benar ter-update di GCP
 3. Perlu refresh/update ulang konfigurasi WIF Provider
 
-## ✅ Solusi: Update WIF Provider Configuration
+## ✅ Solusi: Update WIF Provider Configuration + Workflow
+
+**PENTING:** Perlu 2 langkah:
+1. Update WIF Provider di GCP (sudah dilakukan)
+2. Update GitHub Actions workflow untuk set audience secara eksplisit (perlu dilakukan)
 
 Jalankan command berikut di GCP Console atau gcloud CLI untuk memperbaiki konfigurasi:
 

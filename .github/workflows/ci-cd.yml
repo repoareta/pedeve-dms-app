@@ -260,12 +260,14 @@ jobs:
           docker save ${BACKEND_IMAGE} -o backend-image.tar
           
           # Copy image to backend VM
-          gcloud compute scp backend-image.tar ${{ secrets.GCP_SSH_USER }}@backend-dev:~/backend-image.tar \
+          gcloud compute scp \
             --zone=asia-southeast2-a \
-            --project=${{ secrets.GCP_PROJECT_ID }}
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            backend-image.tar \
+            backend-dev:~/backend-image.tar
           
           # SSH ke backend VM dan deploy
-          gcloud compute ssh ${{ secrets.GCP_SSH_USER }}@backend-dev \
+          gcloud compute ssh backend-dev \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --command="
@@ -303,12 +305,14 @@ jobs:
           docker save ${FRONTEND_IMAGE} -o frontend-image.tar
           
           # Copy image to frontend VM
-          gcloud compute scp frontend-image.tar ${{ secrets.GCP_SSH_USER }}@frontend-dev:~/frontend-image.tar \
+          gcloud compute scp \
             --zone=asia-southeast2-a \
-            --project=${{ secrets.GCP_PROJECT_ID }}
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            frontend-image.tar \
+            frontend-dev:~/frontend-image.tar
           
           # SSH ke frontend VM dan deploy
-          gcloud compute ssh ${{ secrets.GCP_SSH_USER }}@frontend-dev \
+          gcloud compute ssh frontend-dev \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --command="

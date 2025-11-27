@@ -66,6 +66,13 @@ jobs:
           cd frontend
           tar -czf ../frontend-dist.tar.gz dist/
           echo "Frontend static files archived"
+          
+      - name: Upload frontend static files artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend-dist.tar.gz
+          retention-days: 1
 
       # ===== BACKEND =====
       - name: Setup Go
@@ -205,6 +212,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Download frontend static files artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: .
 
       - name: Authenticate to Google Cloud using Workload Identity Federation
         id: auth

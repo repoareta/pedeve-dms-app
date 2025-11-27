@@ -74,10 +74,11 @@ const handleEnable2FA = async () => {
     message.success('QR Code berhasil di-generate. Silakan scan dengan authenticator app Anda.')
   } catch (error: unknown) {
     console.error('Error generating 2FA:', error)
+    const axiosError = error as { response?: { data?: { message?: string; Message?: string } }; message?: string }
     const errorMessage = 
-      error?.response?.data?.message || 
-      error?.response?.data?.Message ||
-      error?.message ||
+      axiosError.response?.data?.message || 
+      axiosError.response?.data?.Message ||
+      axiosError.message ||
       authStore.error ||
       'Gagal generate QR Code. Pastikan Anda sudah login dan coba lagi.'
     message.error({
@@ -103,7 +104,8 @@ const handleVerify2FA = async () => {
     setupStep.value = 'success'
     message.success('2FA berhasil diaktifkan!')
   } catch (error: unknown) {
-    const errorMessage = error?.response?.data?.message || 'Kode verifikasi tidak valid'
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = axiosError.response?.data?.message || 'Kode verifikasi tidak valid'
     message.error(errorMessage)
   } finally {
     loading.value = false
@@ -154,10 +156,11 @@ const handleDisable2FA = async () => {
     setupStep.value = 'idle'
     message.success('2FA berhasil dinonaktifkan')
   } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string; Message?: string } }; message?: string }
     const errorMessage = 
-      error?.response?.data?.message || 
-      error?.response?.data?.Message ||
-      error?.message ||
+      axiosError.response?.data?.message || 
+      axiosError.response?.data?.Message ||
+      axiosError.message ||
       authStore.error ||
       'Gagal menonaktifkan 2FA'
     message.error({

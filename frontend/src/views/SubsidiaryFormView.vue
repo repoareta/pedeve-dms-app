@@ -420,7 +420,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
-import { companyApi, uploadApi, type Company } from '../api/userManagement'
+import { companyApi, uploadApi, type Company, type Shareholder, type BusinessField, type Director } from '../api/userManagement'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import apiClient from '../api/client'
@@ -436,6 +436,7 @@ const loading = ref(false)
 const availableCompanies = ref<Company[]>([])
 const logoFileList = ref<Array<{ uid: string; name: string; status?: string; url?: string }>>([])
 const uploadingLogo = ref(false)
+const hasRootHolding = ref(false)
 
 // Check if user is superadmin
 const isSuperAdmin = computed(() => {
@@ -493,7 +494,7 @@ const formData = ref({
     full_name: string
     ktp: string
     npwp: string
-    start_date: unknown
+    start_date: dayjs.Dayjs | null
     domicile_address: string
   }>,
 })
@@ -578,7 +579,8 @@ const handleLogoUpload = async (file: File): Promise<boolean> => {
     message.success('Logo berhasil diupload')
     return false // Prevent default upload
   } catch (error: unknown) {
-    message.error(error.response?.data?.message || 'Gagal upload logo')
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(axiosError.response?.data?.message || 'Gagal upload logo')
     return false
   } finally {
     uploadingLogo.value = false
@@ -677,7 +679,8 @@ const handleSubmit = async () => {
     
     router.push('/subsidiaries')
   } catch (error: unknown) {
-    message.error('Gagal menyimpan: ' + (error.response?.data?.message || error.message))
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal menyimpan: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
   } finally {
     loading.value = false
   }
@@ -760,19 +763,26 @@ const loadCompanyData = async () => {
       formData.value.parent_id = company.parent_id
       // Ambil main_parent_company langsung dari response
       formData.value.main_parent_company = company.main_parent_company || undefined
-      formData.value.shareholders = (company.shareholders || []).map((sh: unknown) => ({
-        ...sh,
+      formData.value.shareholders = (company.shareholders || []).map((sh: Shareholder) => ({
+        id: sh.id,
+        type: sh.type,
+        name: sh.name,
+        identity_number: sh.identity_number,
         ownership_percent: sh.ownership_percent || 0,
         share_count: sh.share_count || 0,
+        is_main_parent: sh.is_main_parent ?? false,
       }))
       // Transform business_fields array to main_business (ambil yang is_main = true atau yang pertama)
       if (company.business_fields && company.business_fields.length > 0) {
-        const mainBusiness = company.business_fields.find((bf: BusinessField) => bf.is_main) || company.business_fields[0]
-        formData.value.main_business.industry_sector = mainBusiness.industry_sector || ''
-        formData.value.main_business.kbli = mainBusiness.kbli || ''
-        formData.value.main_business.main_business_activity = mainBusiness.main_business_activity || ''
-        formData.value.main_business.additional_activities = mainBusiness.additional_activities || ''
-        formData.value.main_business.start_operation_date = mainBusiness.start_operation_date ? dayjs(mainBusiness.start_operation_date) : null
+        const businessFieldsWithMain = company.business_fields as Array<BusinessField & { is_main?: boolean }>
+        const mainBusiness = businessFieldsWithMain.find((bf) => bf.is_main) || company.business_fields[0]
+        if (mainBusiness) {
+          formData.value.main_business.industry_sector = mainBusiness.industry_sector || ''
+          formData.value.main_business.kbli = mainBusiness.kbli || ''
+          formData.value.main_business.main_business_activity = mainBusiness.main_business_activity || ''
+          formData.value.main_business.additional_activities = mainBusiness.additional_activities || ''
+          formData.value.main_business.start_operation_date = mainBusiness.start_operation_date ? dayjs(mainBusiness.start_operation_date) : null
+        }
       } else if (company.main_business) {
         // Fallback untuk kompatibilitas jika ada main_business langsung
         formData.value.main_business.industry_sector = company.main_business.industry_sector || ''

@@ -185,7 +185,8 @@ const handleUpdateEmail = async () => {
     message.success('Email berhasil diupdate')
     resetEmailForm()
   } catch (error: unknown) {
-    message.error(error.response?.data?.message || 'Gagal mengupdate email')
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(axiosError.response?.data?.message || 'Gagal mengupdate email')
   } finally {
     emailLoading.value = false
   }
@@ -206,7 +207,8 @@ const handleChangePassword = async () => {
     message.success('Password berhasil diubah')
     resetPasswordForm()
   } catch (error: unknown) {
-    message.error(error.response?.data?.message || 'Gagal mengubah password')
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(axiosError.response?.data?.message || 'Gagal mengubah password')
   } finally {
     passwordLoading.value = false
   }

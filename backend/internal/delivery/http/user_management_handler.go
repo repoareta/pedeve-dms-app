@@ -502,3 +502,97 @@ func (h *UserManagementHandler) ResetUserPassword(c *fiber.Ctx) error {
 	})
 }
 
+// AssignUserToCompany handles assigning user to a company
+// @Summary      Assign User ke Company
+// @Description  Mengassign user ke company tertentu. Hanya superadmin yang bisa melakukan assign user.
+// @Tags         User Management
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id         path      string  true  "User ID"
+// @Param        request    body      object  true  "Company ID and Role ID"
+// @Success      200        {object}  domain.UserModel
+// @Failure      400        {object}  domain.ErrorResponse
+// @Failure      403        {object}  domain.ErrorResponse
+// @Failure      404        {object}  domain.ErrorResponse
+// @Router       /api/v1/users/{id}/assign-company [post]
+func (h *UserManagementHandler) AssignUserToCompany(c *fiber.Ctx) error {
+	id := c.Params("id")
+	roleName := c.Locals("roleName").(string)
+
+	// Only superadmin can assign users to companies
+	if roleName != "superadmin" {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Only superadmin can assign users to companies",
+		})
+	}
+
+	var req struct {
+		CompanyID string  `json:"company_id" validate:"required"`
+		RoleID    *string `json:"role_id"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_request",
+			Message: "Invalid request body",
+		})
+	}
+
+	// Get target user to verify they exist
+	targetUser, err := h.userUseCase.GetUserByID(id)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
+			Error:   "not_found",
+			Message: "User not found",
+		})
+	}
+
+	// Prevent assigning superadmin user
+	if targetUser.Role == "superadmin" {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Superadmin account cannot be assigned to a company",
+		})
+	}
+
+	// Assign user to company
+	if err := h.userUseCase.AssignUserToCompany(id, req.CompanyID); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "assign_failed",
+			Message: err.Error(),
+		})
+	}
+
+	// If role_id is provided, also assign role
+	if req.RoleID != nil {
+		if err := h.userUseCase.AssignUserToRole(id, *req.RoleID); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+				Error:   "assign_role_failed",
+				Message: err.Error(),
+			})
+		}
+	}
+
+	// Get updated user
+	updatedUser, err := h.userUseCase.GetUserByID(id)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to get updated user",
+		})
+	}
+
+	// Log action
+	userID := c.Locals("userID").(string)
+	username := c.Locals("username").(string)
+	audit.LogAction(userID, username, "assign_user_to_company", audit.ResourceUser, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
+		"target_username": targetUser.Username,
+		"company_id":       req.CompanyID,
+		"role_id":         req.RoleID,
+	})
+
+	return c.Status(fiber.StatusOK).JSON(updatedUser)
+}
+

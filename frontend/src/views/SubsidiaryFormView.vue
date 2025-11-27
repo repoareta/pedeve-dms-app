@@ -159,11 +159,12 @@
                   </a-form-item>
                 </a-col>
                 <a-col v-if="!route.params.id" :xs="24" :md="12">
-                  <a-form-item label="Perusahaan Induk">
+                  <a-form-item label="Perusahaan Induk" :required="!isSuperAdmin">
                     <a-select
                       v-model:value="formData.parent_id"
-                      placeholder="Pilih perusahaan induk (opsional)"
+                      :placeholder="isSuperAdmin ? 'Pilih perusahaan induk (opsional - kosongkan untuk holding)' : 'Pilih perusahaan induk'"
                       allow-clear
+                      :disabled="!isSuperAdmin && userCompanyId ? true : false"
                     >
                       <a-select-option
                         v-for="company in availableCompanies"
@@ -173,6 +174,13 @@
                         {{ company.name }} ({{ getLevelLabel(company.level) }})
                       </a-select-option>
                     </a-select>
+                    <div v-if="!isSuperAdmin && userCompanyId" style="margin-top: 4px; color: #666; font-size: 12px">
+                      Akan otomatis menjadi anak perusahaan dari perusahaan Anda
+                    </div>
+                    <div v-else-if="isSuperAdmin" style="margin-top: 4px; color: #666; font-size: 12px">
+                      <span v-if="hasRootHolding">Pilih perusahaan induk (holding sudah ada)</span>
+                      <span v-else>Kosongkan untuk membuat holding/perusahaan induk (belum ada holding)</span>
+                    </div>
                   </a-form-item>
                 </a-col>
                 <a-col :xs="24" :md="12">
@@ -408,7 +416,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
@@ -428,6 +436,16 @@ const loading = ref(false)
 const availableCompanies = ref<Company[]>([])
 const logoFileList = ref<any[]>([])
 const uploadingLogo = ref(false)
+
+// Check if user is superadmin
+const isSuperAdmin = computed(() => {
+  return authStore.user?.role === 'superadmin'
+})
+
+// Get user's company ID
+const userCompanyId = computed(() => {
+  return authStore.user?.company_id || undefined
+})
 
 const formData = ref({
   // Step 1: Identitas Perusahaan
@@ -590,6 +608,12 @@ const handleCancel = () => {
 }
 
 const handleSubmit = async () => {
+  // Validasi untuk superadmin: jika sudah ada holding, wajib pilih parent
+  if (isSuperAdmin.value && hasRootHolding.value && !formData.value.parent_id) {
+    message.error('Holding company sudah ada. Silakan pilih perusahaan induk.')
+    return
+  }
+
   loading.value = true
   try {
     // Prepare data untuk API - menggunakan snake_case sesuai JSON tag
@@ -608,7 +632,13 @@ const handleSubmit = async () => {
       website: formData.value.website,
       address: formData.value.address,
       operational_address: formData.value.operational_address,
-      parent_id: formData.value.parent_id || null,
+      // Set parent_id: 
+      // - Superadmin: jika belum ada holding, bisa null (jadi holding pertama)
+      // - Superadmin: jika sudah ada holding, wajib pilih parent
+      // - Non-superadmin: otomatis ke company mereka
+      parent_id: isSuperAdmin.value 
+        ? (hasRootHolding.value ? (formData.value.parent_id || null) : (formData.value.parent_id || null))
+        : (formData.value.parent_id || userCompanyId.value || null),
       main_parent_company: formData.value.main_parent_company || null,
       shareholders: formData.value.shareholders.map(sh => ({
         type: sh.type,
@@ -676,6 +706,8 @@ const getLevelLabel = (level: number): string => {
 const loadAvailableCompanies = async () => {
   try {
     availableCompanies.value = await companyApi.getAll()
+    // Check if there's a root holding (parent_id = null, level = 0)
+    hasRootHolding.value = availableCompanies.value.some(c => c.parent_id === null || c.parent_id === undefined)
   } catch (error) {
     console.error('Failed to load companies:', error)
   }

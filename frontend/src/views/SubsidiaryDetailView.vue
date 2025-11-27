@@ -54,10 +54,29 @@
                 </a-button>
                 <a-date-picker v-model:value="selectedPeriod" picker="month" placeholder="Select Periode"
                   style="width: 150px;" />
-                <a-button>
-                  <IconifyIcon icon="mdi:pencil" width="16" style="margin-right: 8px;" />
-                  Options
-                </a-button>
+                <a-dropdown>
+                  <template #overlay>
+                    <a-menu @click="handleMenuClick">
+                      <a-menu-item key="edit">
+                        <IconifyIcon icon="mdi:pencil" width="16" style="margin-right: 8px;" />
+                        Edit
+                      </a-menu-item>
+                      <a-menu-item v-if="isSuperAdmin" key="assign-user">
+                        <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
+                        Assign User
+                      </a-menu-item>
+                      <a-menu-divider />
+                      <a-menu-item key="delete" danger>
+                        <IconifyIcon icon="mdi:delete" width="16" style="margin-right: 8px;" />
+                        Hapus
+                      </a-menu-item>
+                    </a-menu>
+                  </template>
+                  <a-button>
+                    <IconifyIcon icon="mdi:dots-vertical" width="16" style="margin-right: 8px;" />
+                    Options
+                  </a-button>
+                </a-dropdown>
               </a-space>
             </div>
           </div>
@@ -351,6 +370,56 @@
         <p>Subsidiary tidak ditemukan</p>
         <a-button type="primary" @click="handleBack">Kembali ke Daftar</a-button>
       </div>
+
+      <!-- Assign User Modal -->
+      <a-modal
+        v-model:open="assignUserModalVisible"
+        title="Assign User ke Subsidiary"
+        :confirm-loading="assignUserLoading"
+        @ok="handleAssignUser"
+        @cancel="handleCancelAssignUser"
+        width="600px"
+      >
+        <a-form :model="assignUserForm" layout="vertical">
+          <a-form-item label="Cari User" required>
+            <a-select
+              v-model:value="assignUserForm.userId"
+              show-search
+              placeholder="Cari user berdasarkan nama atau email"
+              :filter-option="filterUserOption"
+              :loading="usersLoading"
+              @search="handleUserSearch"
+            >
+              <a-select-option
+                v-for="user in filteredUsers"
+                :key="user.id"
+                :value="user.id"
+              >
+                {{ user.username }} ({{ user.email }})
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+
+          <a-form-item label="Pilih Role" required>
+            <a-select
+              v-model:value="assignUserForm.roleId"
+              show-search
+              placeholder="Cari role"
+              :filter-option="filterRoleOption"
+              :loading="rolesLoading"
+              @search="handleRoleSearch"
+            >
+              <a-select-option
+                v-for="role in filteredRoles"
+                :key="role.id"
+                :value="role.id"
+              >
+                {{ role.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-form>
+      </a-modal>
     </div>
   </div>
 </template>
@@ -360,7 +429,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
-import { companyApi, type Company, type BusinessField } from '../api/userManagement'
+import { companyApi, userApi, roleApi, type Company, type BusinessField, type User, type Role } from '../api/userManagement'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import dayjs from 'dayjs'
@@ -373,6 +442,50 @@ const company = ref<Company | null>(null)
 const loading = ref(false)
 const activeTab = ref('performance')
 const selectedPeriod = ref<any>(null)
+
+// Assign User Modal
+const assignUserModalVisible = ref(false)
+const assignUserLoading = ref(false)
+const assignUserForm = ref({
+  userId: undefined as string | undefined,
+  roleId: undefined as string | undefined,
+})
+
+// Users and Roles for search
+const allUsers = ref<User[]>([])
+const allRoles = ref<Role[]>([])
+const usersLoading = ref(false)
+const rolesLoading = ref(false)
+const userSearchText = ref('')
+const roleSearchText = ref('')
+
+// Computed: Check if user is superadmin
+const isSuperAdmin = computed(() => {
+  return authStore.user?.role === 'superadmin'
+})
+
+// Filtered users and roles
+const filteredUsers = computed(() => {
+  if (!userSearchText.value) {
+    return allUsers.value.slice(0, 20) // Limit to 20 for performance
+  }
+  const search = userSearchText.value.toLowerCase()
+  return allUsers.value.filter(
+    user => 
+      user.username.toLowerCase().includes(search) ||
+      user.email.toLowerCase().includes(search)
+  ).slice(0, 20)
+})
+
+const filteredRoles = computed(() => {
+  if (!roleSearchText.value) {
+    return allRoles.value
+  }
+  const search = roleSearchText.value.toLowerCase()
+  return allRoles.value.filter(
+    role => role.name.toLowerCase().includes(search)
+  )
+})
 
 // Dummy data untuk charts
 const rkapData = ref({
@@ -669,6 +782,126 @@ const handleEdit = () => {
   if (company.value) {
     router.push(`/subsidiaries/${company.value.id}/edit`)
   }
+}
+
+const handleDelete = async () => {
+  if (!company.value) return
+  
+  try {
+    await companyApi.delete(company.value.id)
+    message.success('Subsidiary berhasil dihapus')
+    router.push('/subsidiaries')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || 'Gagal menghapus subsidiary')
+  }
+}
+
+const handleMenuClick = ({ key }: { key: string }) => {
+  if (key === 'edit') {
+    handleEdit()
+  } else if (key === 'assign-user') {
+    openAssignUserModal()
+  } else if (key === 'delete') {
+    // Show confirmation before delete
+    if (company.value && confirm(`Apakah Anda yakin ingin menghapus ${company.value.name}?`)) {
+      handleDelete()
+    }
+  }
+}
+
+const openAssignUserModal = async () => {
+  if (!isSuperAdmin.value) {
+    message.error('Hanya superadmin yang dapat mengassign user')
+    return
+  }
+  
+  assignUserModalVisible.value = true
+  assignUserForm.value = {
+    userId: undefined,
+    roleId: undefined,
+  }
+  
+  // Load users and roles
+  await loadUsers()
+  await loadRoles()
+}
+
+const loadUsers = async () => {
+  usersLoading.value = true
+  try {
+    allUsers.value = await userApi.getAll()
+  } catch (error: any) {
+    message.error('Gagal memuat daftar user')
+  } finally {
+    usersLoading.value = false
+  }
+}
+
+const loadRoles = async () => {
+  rolesLoading.value = true
+  try {
+    allRoles.value = await roleApi.getAll()
+  } catch (error: any) {
+    message.error('Gagal memuat daftar role')
+  } finally {
+    rolesLoading.value = false
+  }
+}
+
+const handleUserSearch = (value: string) => {
+  userSearchText.value = value
+}
+
+const handleRoleSearch = (value: string) => {
+  roleSearchText.value = value
+}
+
+const filterUserOption = (input: string, option: any) => {
+  const user = allUsers.value.find(u => u.id === option.value)
+  if (!user) return false
+  const search = input.toLowerCase()
+  return user.username.toLowerCase().includes(search) || 
+         user.email.toLowerCase().includes(search)
+}
+
+const filterRoleOption = (input: string, option: any) => {
+  const role = allRoles.value.find(r => r.id === option.value)
+  if (!role) return false
+  return role.name.toLowerCase().includes(input.toLowerCase())
+}
+
+const handleAssignUser = async () => {
+  if (!company.value || !assignUserForm.value.userId || !assignUserForm.value.roleId) {
+    message.error('Harap pilih user dan role')
+    return
+  }
+  
+  assignUserLoading.value = true
+  try {
+    await userApi.assignToCompany(
+      assignUserForm.value.userId,
+      company.value.id,
+      assignUserForm.value.roleId
+    )
+    message.success('User berhasil diassign ke subsidiary')
+    assignUserModalVisible.value = false
+    // Reload company data to show updated users
+    await loadCompany()
+  } catch (error: any) {
+    message.error(error.response?.data?.message || 'Gagal mengassign user')
+  } finally {
+    assignUserLoading.value = false
+  }
+}
+
+const handleCancelAssignUser = () => {
+  assignUserModalVisible.value = false
+  assignUserForm.value = {
+    userId: undefined,
+    roleId: undefined,
+  }
+  userSearchText.value = ''
+  roleSearchText.value = ''
 }
 
 const handleManageFiles = () => {

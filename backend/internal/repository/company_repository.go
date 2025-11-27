@@ -19,6 +19,8 @@ type CompanyRepository interface {
 	Update(company *domain.CompanyModel) error
 	Delete(id string) error
 	IsDescendantOf(childID, parentID string) (bool, error) // Check if childID is descendant of parentID
+	GetRootHolding() (*domain.CompanyModel, error)        // Get the root holding company (parent_id = NULL)
+	CountRootHoldings() (int64, error)                     // Count companies with parent_id = NULL
 }
 
 type companyRepository struct {
@@ -74,7 +76,7 @@ func (r *companyRepository) GetChildren(companyID string) ([]domain.CompanyModel
 func (r *companyRepository) GetDescendants(companyID string) ([]domain.CompanyModel, error) {
 	var descendants []domain.CompanyModel
 	
-	// PostgreSQL recursive CTE
+	// PostgreSQL recursive CTE untuk mendapatkan semua descendants (children, grandchildren, etc)
 	query := `
 		WITH RECURSIVE descendants AS (
 			-- Base case: direct children
@@ -85,11 +87,16 @@ func (r *companyRepository) GetDescendants(companyID string) ([]domain.CompanyMo
 			INNER JOIN descendants d ON c.parent_id = d.id
 			WHERE c.is_active = true
 		)
-		SELECT * FROM descendants
+		SELECT * FROM descendants ORDER BY level, name
 	`
 	
 	err := r.db.Raw(query, companyID).Scan(&descendants).Error
-	return descendants, err
+	if err != nil {
+		return nil, err
+	}
+	
+	// Ensure we return all descendants including direct children
+	return descendants, nil
 }
 
 // GetAncestors menggunakan recursive CTE untuk mendapatkan semua ancestors
@@ -136,5 +143,22 @@ func (r *companyRepository) IsDescendantOf(childID, parentID string) (bool, erro
 	}
 	
 	return false, nil
+}
+
+// GetRootHolding returns the root holding company (parent_id = NULL)
+func (r *companyRepository) GetRootHolding() (*domain.CompanyModel, error) {
+	var company domain.CompanyModel
+	err := r.db.Where("parent_id IS NULL AND is_active = ?", true).First(&company).Error
+	if err != nil {
+		return nil, err
+	}
+	return &company, nil
+}
+
+// CountRootHoldings counts companies with parent_id = NULL
+func (r *companyRepository) CountRootHoldings() (int64, error) {
+	var count int64
+	err := r.db.Model(&domain.CompanyModel{}).Where("parent_id IS NULL AND is_active = ?", true).Count(&count).Error
+	return count, err
 }
 

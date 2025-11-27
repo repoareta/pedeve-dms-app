@@ -81,11 +81,8 @@ func (h *CompanyHandler) CreateCompany(c *fiber.Ctx) error {
 				})
 			}
 		} else if req.ParentID == nil {
-			// Non-superadmin must specify parent
-			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
-				Error:   "forbidden",
-				Message: "You must specify a parent company",
-			})
+			// Non-superadmin: set parent to their company if not specified
+			req.ParentID = &userCompanyID
 		}
 	}
 
@@ -161,10 +158,8 @@ func (h *CompanyHandler) CreateCompanyFull(c *fiber.Ctx) error {
 				})
 			}
 		} else if req.ParentID == nil {
-			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
-				Error:   "forbidden",
-				Message: "You must specify a parent company",
-			})
+			// Non-superadmin: set parent to their company if not specified
+			req.ParentID = &userCompanyID
 		}
 	}
 
@@ -375,7 +370,7 @@ func (h *CompanyHandler) GetAllCompanies(c *fiber.Ctx) error {
 			})
 		}
 
-		// Get all descendants
+		// Get all descendants (includes direct children and all nested descendants)
 		descendants, err := h.companyUseCase.GetCompanyDescendants(userCompanyID)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -384,7 +379,8 @@ func (h *CompanyHandler) GetAllCompanies(c *fiber.Ctx) error {
 			})
 		}
 
-		// Combine user's company with descendants
+		// Combine user's company with all descendants
+		// Note: descendants already includes direct children, so we just combine them
 		companies = append([]domain.CompanyModel{*userCompany}, descendants...)
 	}
 

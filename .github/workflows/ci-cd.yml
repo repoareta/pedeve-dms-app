@@ -329,32 +329,50 @@ jobs:
           sleep 30  # Increased wait time for seeding to complete
           
           # Try health check with retry
+          # Health check dilakukan dari dalam VM karena firewall mungkin block akses dari GitHub Actions
           MAX_RETRIES=10  # Increased retries
           RETRY_DELAY=10  # Increased delay between retries
           
           for i in $(seq 1 $MAX_RETRIES); do
             echo "Health check attempt $i/$MAX_RETRIES..."
             
-            # Try health check with verbose output for debugging
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 15 http://${{ secrets.GCP_BACKEND_VM_IP }}:8080/health 2>&1 || echo "000")
+            # Health check dari dalam VM (via SSH) untuk avoid firewall issues
+            HEALTH_RESULT=$(gcloud compute ssh backend-dev \
+              --zone=asia-southeast2-a \
+              --project=${{ secrets.GCP_PROJECT_ID }} \
+              --command="
+                # Check if container is running
+                if ! sudo docker ps | grep -q dms-backend-prod; then
+                  echo 'CONTAINER_NOT_RUNNING'
+                  exit 1
+                fi
+                
+                # Try health check from within VM
+                HTTP_CODE=\$(curl -s -o /dev/null -w '%{http_code}' -m 10 http://127.0.0.1:8080/health 2>/dev/null || echo '000')
+                
+                if [ \"\$HTTP_CODE\" = '200' ]; then
+                  RESPONSE=\$(curl -s -m 10 http://127.0.0.1:8080/health 2>/dev/null || echo '')
+                  echo \"SUCCESS:\$HTTP_CODE:\$RESPONSE\"
+                  exit 0
+                else
+                  echo \"FAILED:\$HTTP_CODE\"
+                  exit 1
+                fi
+              " 2>&1 || echo "SSH_FAILED")
             
-            if [ "$HTTP_CODE" = "200" ]; then
+            # Parse result
+            if echo "$HEALTH_RESULT" | grep -q "SUCCESS:"; then
+              HTTP_CODE=$(echo "$HEALTH_RESULT" | grep "SUCCESS:" | cut -d: -f2)
+              RESPONSE=$(echo "$HEALTH_RESULT" | grep "SUCCESS:" | cut -d: -f3-)
               echo "✅ Backend health check passed! (HTTP $HTTP_CODE)"
-              # Verify response content
-              RESPONSE=$(curl -s -m 10 http://${{ secrets.GCP_BACKEND_VM_IP }}:8080/health 2>&1 || echo "")
               echo "Response: $RESPONSE"
               exit 0
+            elif echo "$HEALTH_RESULT" | grep -q "CONTAINER_NOT_RUNNING"; then
+              echo "❌ Container not running!"
+              exit 1
             else
+              HTTP_CODE=$(echo "$HEALTH_RESULT" | grep "FAILED:" | cut -d: -f2 || echo "000")
               echo "⏳ Backend not ready yet (HTTP $HTTP_CODE), waiting ${RETRY_DELAY}s before retry..."
-              
-              # Check if container is running
-              if [ $i -eq 1 ] || [ $((i % 3)) -eq 0 ]; then
-                echo "Checking container status..."
-                gcloud compute ssh backend-dev \
-                  --zone=asia-southeast2-a \
-                  --project=${{ secrets.GCP_PROJECT_ID }} \
-                  --command="sudo docker ps | grep dms-backend-prod || echo 'Container not found'" || true
-              fi
             fi
             
             if [ $i -lt $MAX_RETRIES ]; then
@@ -369,11 +387,17 @@ jobs:
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --command="sudo docker logs --tail 100 dms-backend-prod" || true
           
-          echo "Checking if port 8080 is listening..."
+          echo "Checking container and port status..."
           gcloud compute ssh backend-dev \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
-            --command="sudo netstat -tlnp | grep 8080 || sudo ss -tlnp | grep 8080 || echo 'Port 8080 not found'" || true
+            --command="
+              echo 'Container status:'
+              sudo docker ps | grep dms-backend-prod || echo 'Container not found'
+              echo ''
+              echo 'Port 8080 status:'
+              sudo ss -tlnp | grep 8080 || echo 'Port 8080 not listening'
+            " || true
           
           exit 1
 

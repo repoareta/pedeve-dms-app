@@ -223,7 +223,7 @@ const fetchAuditLogs = async (page: number = 1, pageSize: number = 10) => {
   }
 }
 
-const handleAuditTableChange = (pag: unknown) => {
+const handleAuditTableChange = (pag: { current?: number; pageSize?: number }) => {
   if (pag.current) {
     auditPagination.value.current = pag.current
   }

@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - development  # Tambah branch development untuk deployment ke GCP
     tags:
       - 'v*.*.*'  # Trigger on version tags (v1.0.0, v2.1.3, etc.)
   workflow_dispatch:  # 👉 memungkinkan run manual
@@ -205,3 +206,127 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ===== DEPLOY TO GCP (Development Branch) =====
+  deploy-gcp:
+    if: github.ref == 'refs/heads/development'
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for Workload Identity Federation
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud using Workload Identity Federation
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker to use gcloud as a credential helper
+        run: |
+          gcloud auth configure-docker --quiet
+
+      - name: Pull Docker images from GHCR
+        run: |
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          docker pull ghcr.io/${REPO_OWNER}/dms-frontend:latest
+          docker pull ghcr.io/${REPO_OWNER}/dms-backend:latest
+
+      - name: Deploy Backend to GCP VM
+        run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          BACKEND_IMAGE="ghcr.io/${REPO_OWNER}/dms-backend:latest"
+          
+          # Save image to tar file
+          docker save ${BACKEND_IMAGE} -o backend-image.tar
+          
+          # Copy image to backend VM
+          gcloud compute scp backend-image.tar ${{ secrets.GCP_SSH_USER }}@backend-dev:~/backend-image.tar \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }}
+          
+          # SSH ke backend VM dan deploy
+          gcloud compute ssh ${{ secrets.GCP_SSH_USER }}@backend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="
+              # Load Docker image
+              docker load -i ~/backend-image.tar
+              
+              # Stop old container
+              docker stop dms-backend-prod 2>/dev/null || true
+              docker rm dms-backend-prod 2>/dev/null || true
+              
+              # Start new container
+              docker run -d \
+                --name dms-backend-prod \
+                --restart unless-stopped \
+                -p 8080:8080 \
+                -e GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
+                -e GCP_SECRET_MANAGER_ENABLED=true \
+                -e GCP_STORAGE_ENABLED=true \
+                -e GCP_STORAGE_BUCKET=pedeve-dev-bucket \
+                -e PORT=8080 \
+                -e ENV=production \
+                -e CORS_ORIGIN=https://pedeve-dev.aretaamany.com \
+                ${BACKEND_IMAGE}
+              
+              # Cleanup
+              rm -f ~/backend-image.tar
+            "
+
+      - name: Deploy Frontend to GCP VM
+        run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          FRONTEND_IMAGE="ghcr.io/${REPO_OWNER}/dms-frontend:latest"
+          
+          # Save image to tar file
+          docker save ${FRONTEND_IMAGE} -o frontend-image.tar
+          
+          # Copy image to frontend VM
+          gcloud compute scp frontend-image.tar ${{ secrets.GCP_SSH_USER }}@frontend-dev:~/frontend-image.tar \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }}
+          
+          # SSH ke frontend VM dan deploy
+          gcloud compute ssh ${{ secrets.GCP_SSH_USER }}@frontend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="
+              # Load Docker image
+              docker load -i ~/frontend-image.tar
+              
+              # Stop old container
+              docker stop dms-frontend-prod 2>/dev/null || true
+              docker rm dms-frontend-prod 2>/dev/null || true
+              
+              # Start new container
+              docker run -d \
+                --name dms-frontend-prod \
+                --restart unless-stopped \
+                -p 80:80 \
+                ${FRONTEND_IMAGE}
+              
+              # Cleanup
+              rm -f ~/frontend-image.tar
+              docker image prune -f
+            "
+
+      - name: Health Check Backend
+        run: |
+          sleep 10
+          curl -f https://api-pedeve-dev.aretaamany.com/health || exit 1
+
+      - name: Health Check Frontend
+        run: |
+          sleep 5
+          curl -f https://pedeve-dev.aretaamany.com || exit 1

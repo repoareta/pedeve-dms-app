@@ -16,15 +16,15 @@ import (
 
 var DB *gorm.DB
 
-// getDatabaseURL mendapatkan database URL dari Vault atau environment variable
+// getDatabaseURL mendapatkan database URL dari GCP Secret Manager, Vault, atau environment variable
 func getDatabaseURL() string {
-	// Try to get from Vault first
+	// Priority 1: Try to get from Secret Manager (GCP Secret Manager atau Vault)
 	dbURL, err := secrets.GetSecretWithFallback("database_url", "DATABASE_URL", "")
 	if err == nil && dbURL != "" {
 		return dbURL
 	}
 
-	// Fallback to environment variable
+	// Priority 2: Fallback to environment variable
 	return os.Getenv("DATABASE_URL")
 }
 

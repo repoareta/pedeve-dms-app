@@ -345,7 +345,7 @@ func (uc *companyUseCase) UpdateCompanyFull(id string, data *domain.CompanyUpdat
 
 	// Jika parent_id berubah, update level semua descendants
 	if data.ParentID != nil {
-		uc.recalculateDescendantsLevel(id)
+		uc.updateDescendantsLevel(id)
 	}
 
 	// Delete existing related data

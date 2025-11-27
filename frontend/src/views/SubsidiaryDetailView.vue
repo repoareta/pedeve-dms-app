@@ -686,7 +686,7 @@ const loadCompany = async () => {
       npatData.value.value = (20 + (hash % 30)) * 1000000
       npatData.value.change = 10 + (hash % 10)
     }
-    } catch {
+  } catch (error: unknown) {
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     message.error('Gagal memuat data perusahaan: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
   } finally {

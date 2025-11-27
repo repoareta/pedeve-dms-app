@@ -155,33 +155,82 @@ Setelah memperbaiki konfigurasi WIF Provider, jalankan kembali GitHub Actions wo
 - [x] Attribute condition = `assertion.repository == "repoareta/pedeve-dms-app"` ✅
 - [x] Service Account binding sudah benar ✅
 
-**⚠️ Jika Error Masih Terjadi:**
+**⚠️ Jika Error Masih Terjadi Setelah 15+ Menit:**
 
-1. **Propagation Delay (PALING UMUM):**
-   - Tunggu **5-10 menit** setelah update WIF Provider
-   - GCP memerlukan waktu untuk propagate perubahan ke semua region
-   - Coba jalankan workflow lagi setelah menunggu
+1. **Verifikasi Ulang WIF Provider (PENTING!):**
+   ```bash
+   # Cek detail lengkap WIF Provider
+   gcloud iam workload-identity-pools providers describe github-actions-provider \
+     --workload-identity-pool=github-actions-pool \
+     --location=global \
+     --project=pedeve-pertamina-dms \
+     --format=json
+   ```
+   
+   **Pastikan output menunjukkan:**
+   - `oidc.allowedAudiences` HANYA berisi `["https://github.com/repoareta/pedeve-dms-app"]`
+   - TIDAK ada field `oidc.defaultAudience` di output (atau jika ada, harus kosong/null)
+   - TIDAK ada `iam.googleapis.com` di `allowedAudiences`
+   - `state: "ACTIVE"`
+   
+   **Jika masih ada `defaultAudience` di output, berarti masih menggunakan "Default audience".**
 
-2. **Clear GitHub Actions Cache:**
-   - Cancel workflow yang sedang berjalan
+2. **Hapus Default Audience (Jika Ada):**
+   Jika masih ada default audience, update provider dengan hanya menggunakan allowed audiences:
+   ```bash
+   # Update provider dengan hanya allowed audiences (ini akan otomatis menghapus default audience)
+   gcloud iam workload-identity-pools providers update-oidc github-actions-provider \
+     --workload-identity-pool=github-actions-pool \
+     --location=global \
+     --project=pedeve-pertamina-dms \
+     --allowed-audiences="https://github.com/repoareta/pedeve-dms-app"
+   ```
+   
+   **Catatan:** Ketika Anda set `--allowed-audiences`, default audience akan otomatis di-nonaktifkan. Pastikan di GCP Console, radio button "Allowed audiences" dipilih (bukan "Default audience").
+
+3. **Verifikasi di GCP Console:**
+   - Buka **IAM & Admin → Workload Identity Federation**
+   - Pilih pool: `github-actions-pool`
+   - Pilih provider: `github-actions-provider`
+   - Klik **EDIT**
+   - Di tab **"Provider details"**, bagian **"Audiences"**:
+     - **WAJIB:** Pilih **"Allowed audiences"** (bukan "Default audience")
+     - **WAJIB:** Pastikan hanya ada 1 audience: `https://github.com/repoareta/pedeve-dms-app`
+     - **WAJIB:** Hapus semua audience lain jika ada
+   - Klik **SAVE**
+
+4. **Clear GitHub Actions Cache:**
+   - Cancel semua workflow yang sedang berjalan
    - Klik **"Re-run all jobs"** atau buat commit baru untuk trigger workflow baru
    - GitHub Actions mungkin masih menggunakan token lama
 
-3. **Verifikasi Ulang di GCP Console:**
-   - Buka WIF Provider di GCP Console
-   - Pastikan **"Allowed audiences"** dipilih (bukan "Default audience")
-   - Pastikan hanya ada 1 audience: `https://github.com/repoareta/pedeve-dms-app`
-   - Pastikan tidak ada audience lain yang tersembunyi
-
-4. **Cek Logs di GCP:**
+5. **Cek Logs di GCP untuk Detail Error:**
    ```bash
    # Cek audit logs untuk melihat detail error
    gcloud logging read "resource.type=workload_identity_pool_provider" \
      --project=pedeve-pertamina-dms \
-     --limit=10 \
-     --format=json
+     --limit=20 \
+     --format=json \
+     --freshness=1h
    ```
 
-5. **Last Resort - Recreate Provider:**
-   Jika semua langkah di atas tidak berhasil, coba hapus dan buat ulang provider (dengan konfigurasi yang sama)
+6. **Last Resort - Recreate Provider:**
+   Jika semua langkah di atas tidak berhasil setelah 30+ menit, coba hapus dan buat ulang provider:
+   ```bash
+   # Hapus provider lama
+   gcloud iam workload-identity-pools providers delete github-actions-provider \
+     --workload-identity-pool=github-actions-pool \
+     --location=global \
+     --project=pedeve-pertamina-dms
+   
+   # Buat ulang provider dengan konfigurasi yang benar
+   gcloud iam workload-identity-pools providers create-oidc github-actions-provider \
+     --workload-identity-pool=github-actions-pool \
+     --location=global \
+     --project=pedeve-pertamina-dms \
+     --issuer-uri=https://token.actions.githubusercontent.com \
+     --allowed-audiences="https://github.com/repoareta/pedeve-dms-app" \
+     --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository" \
+     --attribute-condition="assertion.repository == \"repoareta/pedeve-dms-app\""
+   ```
 

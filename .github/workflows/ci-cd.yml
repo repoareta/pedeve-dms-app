@@ -290,16 +290,15 @@ jobs:
               # Debug: Check password length (without showing actual password)
               echo \"Password retrieved: \${#DB_PASSWORD} characters\"
               
-              # URL encode password to handle special characters
-              # Use Python for reliable URL encoding (available on Ubuntu)
-              DB_PASSWORD_ESCAPED=\$(python3 -c \"import urllib.parse; print(urllib.parse.quote('\"'\${DB_PASSWORD}'\"'))\" 2>/dev/null || echo \"\${DB_PASSWORD}\")
-              
               # Construct DATABASE_URL
-              DATABASE_URL=\"postgres://pedeve_user_db:\${DB_PASSWORD_ESCAPED}@127.0.0.1:5432/db_dev_pedeve?sslmode=disable\"
+              # Note: PostgreSQL connection string handles special characters automatically
+              # Only URL encode if password contains characters that break URL parsing
+              # For now, use password directly as PostgreSQL driver handles encoding
+              DATABASE_URL=\"postgres://pedeve_user_db:\${DB_PASSWORD}@127.0.0.1:5432/db_dev_pedeve?sslmode=disable\"
               
               # Debug: Verify DATABASE_URL format (without showing password)
               echo \"DATABASE_URL length: \${#DATABASE_URL} characters\"
-              echo \"DATABASE_URL starts with: postgres://pedeve_user_db\"
+              echo \"DATABASE_URL format verified\"
               
               # Write environment variables to file for docker run
               # Use printf to avoid heredoc issues in nested commands

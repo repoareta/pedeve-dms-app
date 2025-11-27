@@ -92,7 +92,10 @@ onMounted(() => {
   }
   
   // Store handler reference for cleanup
-  ;(window as any).__dashboardHeaderScrollHandler = scrollHandler
+  interface WindowWithScrollHandler extends Window {
+    __dashboardHeaderScrollHandler?: () => void
+  }
+  ;(window as WindowWithScrollHandler).__dashboardHeaderScrollHandler = scrollHandler
   
   // Test scroll detection with polling (temporary for debugging)
   let pollCount = 0
@@ -117,14 +120,17 @@ onMounted(() => {
 
 onUnmounted(() => {
 //   console.log('🛑 DashboardHeader unmounting, removing listeners')
-  const handler = (window as any).__dashboardHeaderScrollHandler
+  interface WindowWithScrollHandler extends Window {
+    __dashboardHeaderScrollHandler?: () => void
+  }
+  const handler = (window as WindowWithScrollHandler).__dashboardHeaderScrollHandler
   if (handler) {
     window.removeEventListener('scroll', handler)
     document.removeEventListener('scroll', handler)
     if (document.body) {
       document.body.removeEventListener('scroll', handler)
     }
-    delete (window as any).__dashboardHeaderScrollHandler
+    delete (window as WindowWithScrollHandler).__dashboardHeaderScrollHandler
   }
 })
 </script>

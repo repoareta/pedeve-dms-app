@@ -686,7 +686,7 @@ const loadCompany = async () => {
       npatData.value.value = (20 + (hash % 30)) * 1000000
       npatData.value.change = 10 + (hash % 10)
     }
-  } catch (error: any) {
+    } catch {
     message.error('Gagal memuat data perusahaan: ' + (error.response?.data?.message || error.message))
   } finally {
     loading.value = false
@@ -791,7 +791,7 @@ const handleDelete = async () => {
     await companyApi.delete(company.value.id)
     message.success('Subsidiary berhasil dihapus')
     router.push('/subsidiaries')
-  } catch (error: any) {
+    } catch {
     message.error(error.response?.data?.message || 'Gagal menghapus subsidiary')
   }
 }
@@ -830,7 +830,7 @@ const loadUsers = async () => {
   usersLoading.value = true
   try {
     allUsers.value = await userApi.getAll()
-  } catch (error: any) {
+    } catch {
     message.error('Gagal memuat daftar user')
   } finally {
     usersLoading.value = false
@@ -841,7 +841,7 @@ const loadRoles = async () => {
   rolesLoading.value = true
   try {
     allRoles.value = await roleApi.getAll()
-  } catch (error: any) {
+    } catch {
     message.error('Gagal memuat daftar role')
   } finally {
     rolesLoading.value = false
@@ -856,7 +856,7 @@ const handleRoleSearch = (value: string) => {
   roleSearchText.value = value
 }
 
-const filterUserOption = (input: string, option: any) => {
+const filterUserOption = (input: string, option: unknown) => {
   const user = allUsers.value.find(u => u.id === option.value)
   if (!user) return false
   const search = input.toLowerCase()
@@ -864,7 +864,7 @@ const filterUserOption = (input: string, option: any) => {
          user.email.toLowerCase().includes(search)
 }
 
-const filterRoleOption = (input: string, option: any) => {
+const filterRoleOption = (input: string, option: unknown) => {
   const role = allRoles.value.find(r => r.id === option.value)
   if (!role) return false
   return role.name.toLowerCase().includes(input.toLowerCase())
@@ -887,7 +887,7 @@ const handleAssignUser = async () => {
     assignUserModalVisible.value = false
     // Reload company data to show updated users
     await loadCompany()
-  } catch (error: any) {
+    } catch {
     message.error(error.response?.data?.message || 'Gagal mengassign user')
   } finally {
     assignUserLoading.value = false

@@ -45,8 +45,9 @@ export const useAuthStore = defineStore('auth', () => {
       }
       
       return response
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Login failed'
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } } }
+      error.value = axiosError.response?.data?.message || 'Login failed'
       throw err
     } finally {
       loading.value = false
@@ -65,8 +66,9 @@ export const useAuthStore = defineStore('auth', () => {
       // Jangan simpan token di localStorage lagi (sudah di httpOnly cookie)
       localStorage.setItem('auth_user', JSON.stringify(response.user))
       return response
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Registration failed'
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } } }
+      error.value = axiosError.response?.data?.message || 'Registration failed'
       throw err
     } finally {
       loading.value = false
@@ -87,7 +89,8 @@ export const useAuthStore = defineStore('auth', () => {
       // Lanjutkan dengan pembersihan lokal meskipun API call gagal
       // Jangan log error jika status 401 (user sudah logout)
       if (error && typeof error === 'object' && 'response' in error) {
-        const status = (error as any).response?.status
+        const axiosError = error as { response?: { status?: number } }
+        const status = axiosError.response?.status
         if (status !== 401) {
           console.error('Logout API error:', error)
         }
@@ -116,13 +119,14 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = profile
       localStorage.setItem('auth_user', JSON.stringify(profile))
       return profile
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to fetch profile'
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } }; code?: string; message?: string }
+      error.value = axiosError.response?.data?.message || 'Failed to fetch profile'
       
       // Handle connection errors (server tidak tersedia)
-      const isConnectionError = err.code === 'ERR_NETWORK' || 
-                                err.code === 'ERR_CONNECTION_REFUSED' || 
-                                err.message?.includes('Network Error')
+      const isConnectionError = axiosError.code === 'ERR_NETWORK' || 
+                                axiosError.code === 'ERR_CONNECTION_REFUSED' || 
+                                axiosError.message?.includes('Network Error')
       
       if (isConnectionError) {
         // Server tidak tersedia - clear state dan throw error khusus
@@ -155,8 +159,9 @@ export const useAuthStore = defineStore('auth', () => {
       // Jangan simpan token di localStorage lagi (sudah di httpOnly cookie)
       localStorage.setItem('auth_user', JSON.stringify(response.user))
       return response
-    } catch (err: any) {
-      error.value = err.response?.data?.message || '2FA verification failed'
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } } }
+      error.value = axiosError.response?.data?.message || '2FA verification failed'
       throw err
     } finally {
       loading.value = false
@@ -170,8 +175,9 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await authApi.generate2FA()
       return response
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to generate 2FA secret'
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } } }
+      error.value = axiosError.response?.data?.message || 'Failed to generate 2FA secret'
       throw err
     } finally {
       loading.value = false
@@ -184,8 +190,9 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await authApi.verify2FA(code)
       return response
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to verify 2FA code'
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } } }
+      error.value = axiosError.response?.data?.message || 'Failed to verify 2FA code'
       throw err
     } finally {
       loading.value = false
@@ -198,8 +205,9 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await authApi.get2FAStatus()
       return response
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to get 2FA status'
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } } }
+      error.value = axiosError.response?.data?.message || 'Failed to get 2FA status'
       throw err
     } finally {
       loading.value = false
@@ -212,8 +220,9 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await authApi.disable2FA()
       return response
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to disable 2FA'
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } } }
+      error.value = axiosError.response?.data?.message || 'Failed to disable 2FA'
       throw err
     } finally {
       loading.value = false

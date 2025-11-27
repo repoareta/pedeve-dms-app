@@ -27,7 +27,7 @@ const handleRegister = async () => {
   try {
     await authStore.register(username.value, email.value, password.value)
     router.push('/')
-  } catch (error) {
+  } catch {
     // Error already handled in store
   }
 }

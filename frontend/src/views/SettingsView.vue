@@ -57,7 +57,7 @@ const check2FAStatus = async () => {
     if (!status.enabled) {
       setupStep.value = 'idle'
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to get 2FA status:', error)
   } finally {
     loading.value = false
@@ -72,7 +72,7 @@ const handleEnable2FA = async () => {
     secret.value = response.secret
     setupStep.value = 'generate'
     message.success('QR Code berhasil di-generate. Silakan scan dengan authenticator app Anda.')
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error generating 2FA:', error)
     const errorMessage = 
       error?.response?.data?.message || 
@@ -102,7 +102,7 @@ const handleVerify2FA = async () => {
     is2FAEnabled.value = true
     setupStep.value = 'success'
     message.success('2FA berhasil diaktifkan!')
-  } catch (error: any) {
+  } catch (error: unknown) {
     const errorMessage = error?.response?.data?.message || 'Kode verifikasi tidak valid'
     message.error(errorMessage)
   } finally {
@@ -153,7 +153,7 @@ const handleDisable2FA = async () => {
     is2FAEnabled.value = false
     setupStep.value = 'idle'
     message.success('2FA berhasil dinonaktifkan')
-  } catch (error: any) {
+  } catch (error: unknown) {
     const errorMessage = 
       error?.response?.data?.message || 
       error?.response?.data?.Message ||
@@ -175,7 +175,7 @@ const fetchAuditStats = async () => {
     auditStatsLoading.value = true
     const stats = await auditApi.getAuditLogStats()
     auditStats.value = stats
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to fetch audit stats:', error)
     // Set default values jika error
     if (!auditStats.value) {
@@ -212,7 +212,7 @@ const fetchAuditLogs = async (page: number = 1, pageSize: number = 10) => {
       total: response.total,
     }
     // Tidak refresh stats otomatis saat fetch logs, hanya saat user klik refresh atau auto-refresh interval
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to fetch audit logs:', error)
     message.error('Gagal mengambil audit logs')
   } finally {
@@ -220,7 +220,7 @@ const fetchAuditLogs = async (page: number = 1, pageSize: number = 10) => {
   }
 }
 
-const handleAuditTableChange = (pag: any) => {
+const handleAuditTableChange = (pag: unknown) => {
   if (pag.current) {
     auditPagination.value.current = pag.current
   }

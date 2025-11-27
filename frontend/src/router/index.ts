@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import HomeView from '../views/HomeView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -104,12 +103,13 @@ router.beforeEach(async (to, from, next) => {
       // Token valid, izinkan akses
       next()
       return
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Handle connection errors (server tidak tersedia)
-      const isConnectionError = error.message === 'SERVER_UNAVAILABLE' ||
-                                error.code === 'ERR_NETWORK' ||
-                                error.code === 'ERR_CONNECTION_REFUSED' ||
-                                error.message?.includes('Network Error')
+      const err = error as { message?: string; code?: string }
+      const isConnectionError = err.message === 'SERVER_UNAVAILABLE' ||
+                                err.code === 'ERR_NETWORK' ||
+                                err.code === 'ERR_CONNECTION_REFUSED' ||
+                                err.message?.includes('Network Error')
       
       // Token tidak valid atau expired (401/403) atau server tidak tersedia
       // Hapus auth dan redirect ke login
@@ -158,13 +158,7 @@ router.beforeEach(async (to, from, next) => {
         // Cookie valid, redirect ke dashboard
         next({ name: 'dashboard' })
         return
-      } catch (error: any) {
-        // Handle connection errors (server tidak tersedia)
-        const isConnectionError = error.message === 'SERVER_UNAVAILABLE' ||
-                                  error.code === 'ERR_NETWORK' ||
-                                  error.code === 'ERR_CONNECTION_REFUSED' ||
-                                  error.message?.includes('Network Error')
-        
+      } catch {
         // Cookie tidak valid atau hilang atau server tidak tersedia
         // Hapus state lokal secara diam-diam
         // Jangan panggil logout API karena cookie tidak ada atau sudah dihapus

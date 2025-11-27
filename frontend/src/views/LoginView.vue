@@ -39,11 +39,12 @@ const handleLogin = async () => {
     setTimeout(() => {
       router.push('/dashboard')
     }, 100)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Login error:', error)
+    const axiosError = error as { response?: { status?: number; data?: { requires_2fa?: boolean; message?: string; Message?: string } }; message?: string }
     
     // Cek apakah error karena 2FA diperlukan
-    if (error?.response?.status === 200 && error?.response?.data?.requires_2fa) {
+    if (axiosError.response?.status === 200 && axiosError.response?.data?.requires_2fa) {
       requires2FA.value = true
       message.info('Masukkan kode 2FA dari authenticator app Anda')
       return
@@ -51,10 +52,10 @@ const handleLogin = async () => {
     
     // Ekstrak pesan error dari berbagai lokasi yang mungkin
     const errorMessage = 
-      error?.response?.data?.message || 
-      error?.response?.data?.Message || 
+      axiosError.response?.data?.message || 
+      axiosError.response?.data?.Message || 
       authStore.error || 
-      error?.message || 
+      axiosError.message || 
       'Email atau password salah'
     
     message.error({
@@ -79,13 +80,14 @@ const handleVerify2FA = async () => {
     setTimeout(() => {
       router.push('/dashboard')
     }, 100)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('2FA verification error:', error)
+    const axiosError = error as { response?: { data?: { message?: string; Message?: string } }; message?: string }
     const errorMessage = 
-      error?.response?.data?.message || 
-      error?.response?.data?.Message || 
+      axiosError.response?.data?.message || 
+      axiosError.response?.data?.Message || 
       authStore.error || 
-      error?.message || 
+      axiosError.message || 
       'Kode 2FA tidak valid'
     
     message.error({

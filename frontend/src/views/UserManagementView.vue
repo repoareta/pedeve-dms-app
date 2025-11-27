@@ -50,8 +50,8 @@ const userPagination = ref({
   total: 0,
 })
 
-// Computed untuk filtered data dengan search
-const filteredCompanies = computed(() => {
+// Computed untuk filtered data dengan search (unused but kept for future use)
+// const filteredCompanies = computed(() => {
   let filtered = [...companies.value]
   
   // Search filter
@@ -64,11 +64,8 @@ const filteredCompanies = computed(() => {
     )
   }
   
-  // Update pagination total
-  companyPagination.value.total = filtered.length
-  
   return filtered
-})
+// })
 
 const filteredUsers = computed(() => {
   let filtered = [...users.value]
@@ -82,9 +79,6 @@ const filteredUsers = computed(() => {
       u.role.toLowerCase().includes(search)
     )
   }
-  
-  // Update pagination total
-  userPagination.value.total = filtered.length
   
   return filtered
 })
@@ -131,29 +125,29 @@ const isCurrentUser = (user: User) => {
   return user.id === authStore.user?.id
 }
 
-// Table columns
-const companyColumns = computed(() => [
-  { 
-    title: 'Nama Perusahaan', 
-    dataIndex: 'name', 
-    key: 'name', 
-    sorter: (a: Company, b: Company) => a.name.localeCompare(b.name),
-  },
-  { title: 'Kode', dataIndex: 'code', key: 'code', sorter: (a: Company, b: Company) => a.code.localeCompare(b.code) },
-  { title: 'Tingkat', dataIndex: 'level', key: 'level', sorter: (a: Company, b: Company) => a.level - b.level },
-  { title: 'Deskripsi', dataIndex: 'description', key: 'description' },
-  { 
-    title: 'Status', 
-    dataIndex: 'is_active', 
-    key: 'is_active', 
-    filters: [
-      { text: 'Aktif', value: true },
-      { text: 'Tidak Aktif', value: false }
-    ], 
-    onFilter: (value: boolean, record: Company) => record.is_active === value 
-  },
-  { title: 'Aksi', key: 'actions', width: 150 },
-])
+// Table columns (unused but kept for future use)
+// const companyColumns = computed(() => [
+//   { 
+//     title: 'Nama Perusahaan', 
+//     dataIndex: 'name', 
+//     key: 'name', 
+//     sorter: (a: Company, b: Company) => a.name.localeCompare(b.name),
+//   },
+//   { title: 'Kode', dataIndex: 'code', key: 'code', sorter: (a: Company, b: Company) => a.code.localeCompare(b.code) },
+//   { title: 'Tingkat', dataIndex: 'level', key: 'level', sorter: (a: Company, b: Company) => a.level - b.level },
+//   { title: 'Deskripsi', dataIndex: 'description', key: 'description' },
+//   { 
+//     title: 'Status', 
+//     dataIndex: 'is_active', 
+//     key: 'is_active', 
+//     filters: [
+//       { text: 'Aktif', value: true },
+//       { text: 'Tidak Aktif', value: false }
+//     ], 
+//     onFilter: (value: boolean, record: Company) => record.is_active === value 
+//   },
+//   { title: 'Aksi', key: 'actions', width: 150 },
+// ])
 
 const userColumns = computed(() => [
   { 
@@ -197,8 +191,9 @@ const loadCompanies = async () => {
   companiesLoading.value = true
   try {
     companies.value = await companyApi.getAll()
-  } catch (error: any) {
-    message.error('Gagal memuat companies: ' + (error.response?.data?.message || error.message))
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal memuat companies: ' + (axiosError.response?.data?.message || axiosError.message))
   } finally {
     companiesLoading.value = false
   }
@@ -208,8 +203,9 @@ const loadUsers = async () => {
   usersLoading.value = true
   try {
     users.value = await userApi.getAll()
-  } catch (error: any) {
-    message.error('Gagal memuat users: ' + (error.response?.data?.message || error.message))
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal memuat users: ' + (axiosError.response?.data?.message || axiosError.message))
   } finally {
     usersLoading.value = false
   }
@@ -219,8 +215,9 @@ const loadRoles = async () => {
   rolesLoading.value = true
   try {
     roles.value = await roleApi.getAll()
-  } catch (error: any) {
-    message.error('Gagal memuat roles: ' + (error.response?.data?.message || error.message))
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal memuat roles: ' + (axiosError.response?.data?.message || axiosError.message))
   } finally {
     rolesLoading.value = false
   }
@@ -230,25 +227,26 @@ const loadPermissions = async () => {
   permissionsLoading.value = true
   try {
     permissions.value = await permissionApi.getAll()
-  } catch (error: any) {
-    message.error('Gagal memuat permissions: ' + (error.response?.data?.message || error.message))
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal memuat permissions: ' + (axiosError.response?.data?.message || axiosError.message))
   } finally {
     permissionsLoading.value = false
   }
 }
 
-// Company handlers
-const handleCreateCompany = () => {
-  editingCompany.value = null
-  companyForm.value = { level: 0 }
-  companyModalVisible.value = true
-}
+// Company handlers (unused but kept for future use)
+// const handleCreateCompany = () => {
+//   editingCompany.value = null
+//   companyForm.value = { level: 0 }
+//   companyModalVisible.value = true
+// }
 
-const handleEditCompany = (company: Company) => {
-  editingCompany.value = company
-  companyForm.value = { ...company }
-  companyModalVisible.value = true
-}
+// const handleEditCompany = (company: Company) => {
+//   editingCompany.value = company
+//   companyForm.value = { ...company }
+//   companyModalVisible.value = true
+// }
 
 const handleSaveCompany = async () => {
   try {
@@ -269,20 +267,22 @@ const handleSaveCompany = async () => {
     }
     companyModalVisible.value = false
     loadCompanies()
-  } catch (error: any) {
-    message.error('Gagal menyimpan company: ' + (error.response?.data?.message || error.message))
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal menyimpan company: ' + (axiosError.response?.data?.message || axiosError.message))
   }
 }
 
-const handleDeleteCompany = async (id: string) => {
-  try {
-    await companyApi.delete(id)
-    message.success('Company berhasil dihapus')
-    loadCompanies()
-  } catch (error: any) {
-    message.error('Gagal menghapus company: ' + (error.response?.data?.message || error.message))
-  }
-}
+// const handleDeleteCompany = async (id: string) => {
+//   try {
+//     await companyApi.delete(id)
+//     message.success('Company berhasil dihapus')
+//     loadCompanies()
+//   } catch (error: unknown) {
+//     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+//     message.error('Gagal menghapus company: ' + (axiosError.response?.data?.message || axiosError.message))
+//   }
+// }
 
 // User handlers
 const handleCreateUser = () => {
@@ -323,8 +323,9 @@ const handleSaveUser = async () => {
     }
     userModalVisible.value = false
     loadUsers()
-  } catch (error: any) {
-    message.error('Gagal menyimpan user: ' + (error.response?.data?.message || error.message))
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal menyimpan user: ' + (axiosError.response?.data?.message || axiosError.message))
   }
 }
 
@@ -333,8 +334,9 @@ const handleDeleteUser = async (id: string) => {
     await userApi.delete(id)
     message.success('User berhasil dihapus')
     loadUsers()
-  } catch (error: any) {
-    message.error('Gagal menghapus user: ' + (error.response?.data?.message || error.message))
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal menghapus user: ' + (axiosError.response?.data?.message || axiosError.message))
   }
 }
 
@@ -343,8 +345,9 @@ const handleToggleUserStatus = async (user: User) => {
     const updatedUser = await userApi.toggleStatus(user.id)
     message.success(`User berhasil ${updatedUser.is_active ? 'diaktifkan' : 'dinonaktifkan'}`)
     loadUsers()
-  } catch (error: any) {
-    message.error('Gagal mengubah status user: ' + (error.response?.data?.message || error.message))
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal mengubah status user: ' + (axiosError.response?.data?.message || axiosError.message))
   }
 }
 
@@ -377,8 +380,9 @@ const handleSaveResetPassword = async () => {
       new_password: '',
       confirm_password: '',
     }
-  } catch (error: any) {
-    message.error('Gagal reset password: ' + (error.response?.data?.message || error.message))
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal reset password: ' + (axiosError.response?.data?.message || axiosError.message))
   }
 }
 
@@ -395,21 +399,21 @@ const handleLogout = async () => {
   router.push('/login')
 }
 
-// Helper functions untuk level label
-const getLevelLabel = (level: number): string => {
-  switch (level) {
-    case 0:
-      return 'Holding (Induk)'
-    case 1:
-      return 'Anak Perusahaan'
-    case 2:
-      return 'Cucu Perusahaan'
-    case 3:
-      return 'Cicit Perusahaan'
-    default:
-      return `Level ${level}`
-  }
-}
+// Helper functions untuk level label (unused but kept for future use)
+// const getLevelLabel = (level: number): string => {
+//   switch (level) {
+//     case 0:
+//       return 'Holding (Induk)'
+//     case 1:
+//       return 'Anak Perusahaan'
+//     case 2:
+//       return 'Cucu Perusahaan'
+//     case 3:
+//       return 'Cicit Perusahaan'
+//     default:
+//       return `Level ${level}`
+//   }
+// }
 
 const getLevelColor = (level: number): string => {
   switch (level) {

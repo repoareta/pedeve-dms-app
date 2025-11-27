@@ -1,33 +1,15 @@
 <script setup lang="ts">
-import { RouterView, useRouter, useRoute } from 'vue-router'
-import { useAuthStore } from './stores/auth'
-import { computed, onMounted } from 'vue'
+import { RouterView } from 'vue-router'
+import { onMounted } from 'vue'
 import { ConfigProvider } from 'ant-design-vue'
 import { getCSRFToken } from './api/client'
-
-const router = useRouter()
-const route = useRoute()
-const authStore = useAuthStore()
-
-const isAuthenticated = computed(() => authStore.isAuthenticated)
-const user = computed(() => authStore.user)
-
-// Sembunyikan navigasi di halaman auth (login, register)
-const isAuthPage = computed(() => {
-  return route.name === 'login' || route.name === 'register'
-})
-
-const handleLogout = () => {
-  authStore.logout()
-  router.push('/login')
-}
 
 // Inisialisasi token CSRF saat app mount
 // Handle connection errors dengan graceful (tidak throw error)
 onMounted(async () => {
   try {
     await getCSRFToken()
-  } catch (error) {
+  } catch {
     // Ignore errors saat mount - token akan di-fetch lagi saat diperlukan
     // Server mungkin belum ready, tidak perlu throw error
   }

@@ -287,9 +287,14 @@ jobs:
                 exit 1
               fi
               
-              # Construct DATABASE_URL
-              # Use single quotes in printf to avoid shell expansion issues
+              # Debug: Check password length (without showing actual password)
+              echo \"Password retrieved: \${#DB_PASSWORD} characters\"
+              
+              # Construct DATABASE_URL using printf and store in variable
               DATABASE_URL=\$(printf 'postgres://pedeve_user_db:%s@127.0.0.1:5432/db_dev_pedeve?sslmode=disable' \"\${DB_PASSWORD}\")
+              
+              # Debug: Show first few characters of DATABASE_URL (without password)
+              echo \"DATABASE_URL constructed: postgres://pedeve_user_db:***@127.0.0.1:5432/db_dev_pedeve?sslmode=disable\"
               
               # Start new container with all environment variables
               # Use --network host so container can access Cloud SQL Proxy on 127.0.0.1:5432
@@ -301,9 +306,9 @@ jobs:
                 -e GCP_SECRET_MANAGER_ENABLED=false \
                 -e GCP_STORAGE_ENABLED=true \
                 -e GCP_STORAGE_BUCKET=pedeve-dev-bucket \
-                -e DATABASE_URL=\${DATABASE_URL} \
-                -e JWT_SECRET=\${JWT_SECRET} \
-                -e ENCRYPTION_KEY=\${ENCRYPTION_KEY} \
+                -e DATABASE_URL=\"\${DATABASE_URL}\" \
+                -e JWT_SECRET=\"\${JWT_SECRET}\" \
+                -e ENCRYPTION_KEY=\"\${ENCRYPTION_KEY}\" \
                 -e PORT=8080 \
                 -e ENV=production \
                 -e CORS_ORIGIN=https://pedeve-dev.aretaamany.com \

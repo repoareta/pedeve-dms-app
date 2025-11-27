@@ -290,29 +290,41 @@ jobs:
               # Debug: Check password length (without showing actual password)
               echo \"Password retrieved: \${#DB_PASSWORD} characters\"
               
-              # Construct DATABASE_URL using printf and store in variable
-              DATABASE_URL=\$(printf 'postgres://pedeve_user_db:%s@127.0.0.1:5432/db_dev_pedeve?sslmode=disable' \"\${DB_PASSWORD}\")
+              # URL encode password to handle special characters
+              # Use Python for reliable URL encoding (available on Ubuntu)
+              DB_PASSWORD_ESCAPED=\$(python3 -c \"import urllib.parse; print(urllib.parse.quote('\"'\${DB_PASSWORD}'\"'))\" 2>/dev/null || echo \"\${DB_PASSWORD}\")
               
-              # Debug: Show first few characters of DATABASE_URL (without password)
-              echo \"DATABASE_URL constructed: postgres://pedeve_user_db:***@127.0.0.1:5432/db_dev_pedeve?sslmode=disable\"
+              # Construct DATABASE_URL
+              DATABASE_URL=\"postgres://pedeve_user_db:\${DB_PASSWORD_ESCAPED}@127.0.0.1:5432/db_dev_pedeve?sslmode=disable\"
               
-              # Start new container with all environment variables
+              # Debug: Verify DATABASE_URL format (without showing password)
+              echo \"DATABASE_URL length: \${#DATABASE_URL} characters\"
+              echo \"DATABASE_URL starts with: postgres://pedeve_user_db\"
+              
+              # Write environment variables to file for docker run
+              # Use printf to avoid heredoc issues in nested commands
+              printf 'GCP_PROJECT_ID=%s\n' \"${{ secrets.GCP_PROJECT_ID }}\" > /tmp/docker-env.txt
+              printf 'GCP_SECRET_MANAGER_ENABLED=false\n' >> /tmp/docker-env.txt
+              printf 'GCP_STORAGE_ENABLED=true\n' >> /tmp/docker-env.txt
+              printf 'GCP_STORAGE_BUCKET=pedeve-dev-bucket\n' >> /tmp/docker-env.txt
+              printf 'DATABASE_URL=%s\n' \"\${DATABASE_URL}\" >> /tmp/docker-env.txt
+              printf 'JWT_SECRET=%s\n' \"\${JWT_SECRET}\" >> /tmp/docker-env.txt
+              printf 'ENCRYPTION_KEY=%s\n' \"\${ENCRYPTION_KEY}\" >> /tmp/docker-env.txt
+              printf 'PORT=8080\n' >> /tmp/docker-env.txt
+              printf 'ENV=production\n' >> /tmp/docker-env.txt
+              printf 'CORS_ORIGIN=https://pedeve-dev.aretaamany.com\n' >> /tmp/docker-env.txt
+              
+              # Start new container with all environment variables from file
               # Use --network host so container can access Cloud SQL Proxy on 127.0.0.1:5432
               sudo docker run -d \
                 --name dms-backend-prod \
                 --restart unless-stopped \
                 --network host \
-                -e GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
-                -e GCP_SECRET_MANAGER_ENABLED=false \
-                -e GCP_STORAGE_ENABLED=true \
-                -e GCP_STORAGE_BUCKET=pedeve-dev-bucket \
-                -e DATABASE_URL=\"\${DATABASE_URL}\" \
-                -e JWT_SECRET=\"\${JWT_SECRET}\" \
-                -e ENCRYPTION_KEY=\"\${ENCRYPTION_KEY}\" \
-                -e PORT=8080 \
-                -e ENV=production \
-                -e CORS_ORIGIN=https://pedeve-dev.aretaamany.com \
+                --env-file /tmp/docker-env.txt \
                 ${BACKEND_IMAGE}
+              
+              # Cleanup
+              rm -f /tmp/docker-env.txt
               
               # Cleanup
               rm -f ~/backend-image.tar

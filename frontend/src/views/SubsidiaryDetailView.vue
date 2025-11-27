@@ -793,8 +793,9 @@ const handleDelete = async () => {
     await companyApi.delete(company.value.id)
     message.success('Subsidiary berhasil dihapus')
     router.push('/subsidiaries')
-    } catch {
-    message.error(error.response?.data?.message || 'Gagal menghapus subsidiary')
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(axiosError.response?.data?.message || 'Gagal menghapus subsidiary')
   }
 }
 
@@ -859,7 +860,8 @@ const handleRoleSearch = (value: string) => {
 }
 
 const filterUserOption = (input: string, option: unknown) => {
-  const user = allUsers.value.find(u => u.id === option.value)
+  const opt = option as { value: string }
+  const user = allUsers.value.find(u => u.id === opt.value)
   if (!user) return false
   const search = input.toLowerCase()
   return user.username.toLowerCase().includes(search) || 
@@ -867,7 +869,8 @@ const filterUserOption = (input: string, option: unknown) => {
 }
 
 const filterRoleOption = (input: string, option: unknown) => {
-  const role = allRoles.value.find(r => r.id === option.value)
+  const opt = option as { value: string }
+  const role = allRoles.value.find(r => r.id === opt.value)
   if (!role) return false
   return role.name.toLowerCase().includes(input.toLowerCase())
 }
@@ -889,8 +892,9 @@ const handleAssignUser = async () => {
     assignUserModalVisible.value = false
     // Reload company data to show updated users
     await loadCompany()
-    } catch {
-    message.error(error.response?.data?.message || 'Gagal mengassign user')
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(axiosError.response?.data?.message || 'Gagal mengassign user')
   } finally {
     assignUserLoading.value = false
   }

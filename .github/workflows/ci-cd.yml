@@ -242,6 +242,26 @@ jobs:
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           docker pull ghcr.io/${REPO_OWNER}/dms-backend:latest
 
+      - name: Setup Backend Firewall Rules
+        run: |
+          echo "🔥 Setting up firewall rules for backend..."
+          
+          # Allow Backend API (port 8080)
+          gcloud compute firewall-rules create allow-backend-api \
+            --allow tcp:8080 \
+            --source-ranges 0.0.0.0/0 \
+            --target-tags backend-api-server \
+            --description "Allow Backend API traffic on port 8080" \
+            --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null || echo "⚠️  Firewall rule 'allow-backend-api' already exists or creation failed"
+          
+          # Apply tag to backend VM
+          gcloud compute instances add-tags backend-dev \
+            --tags backend-api-server \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null || echo "⚠️  Tags already applied or operation failed"
+          
+          echo "✅ Firewall rules setup completed"
+
       - name: Deploy Backend to GCP VM
         run: |
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')

@@ -258,12 +258,18 @@ func main() {
 	app.Get("/swagger.yaml", http.GetSwaggerYAML)
 
 	// Start server
-	port := ":8080"
+	// Listen on 0.0.0.0 to accept connections from all interfaces (not just localhost)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	listenAddr := "0.0.0.0:" + port
 	zapLog.Info("Server starting",
+		zap.String("listen_addr", listenAddr),
 		zap.String("port", port),
-		zap.String("swagger", "http://localhost"+port+"/swagger/index.html"),
+		zap.String("swagger", "http://localhost:"+port+"/swagger/index.html"),
 	)
-	if err := app.Listen(port); err != nil {
+	if err := app.Listen(listenAddr); err != nil {
 		zapLog.Fatal("Failed to start server", zap.Error(err))
 	}
 }

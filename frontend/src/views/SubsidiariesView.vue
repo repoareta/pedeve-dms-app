@@ -288,7 +288,8 @@ const loadCompanies = async () => {
       generateFinancialData(company.id)
     })
   } catch (error: unknown) {
-    message.error('Gagal memuat perusahaan: ' + (error.response?.data?.message || error.message))
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal memuat perusahaan: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
   } finally {
     companiesLoading.value = false
   }

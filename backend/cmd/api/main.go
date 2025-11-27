@@ -139,8 +139,17 @@ func main() {
 	}
 
 	// CORS dengan peningkatan keamanan
+	// Get CORS origin from environment variable, fallback to localhost for development
+	corsOrigin := os.Getenv("CORS_ORIGIN")
+	if corsOrigin == "" {
+		corsOrigin = "http://localhost:5173,http://localhost:3000"
+		zapLog.Info("CORS origin not set, using default localhost origins")
+	} else {
+		zapLog.Info("CORS origin configured", zap.String("origin", corsOrigin))
+	}
+	
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:5173,http://localhost:3000",
+		AllowOrigins:     corsOrigin,
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS,PATCH",
 		AllowHeaders:     "Accept,Authorization,Content-Type,X-CSRF-Token,X-Requested-With",
 		ExposeHeaders:    "Link,X-Total-Count",

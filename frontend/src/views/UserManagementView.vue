@@ -52,19 +52,19 @@ const userPagination = ref({
 
 // Computed untuk filtered data dengan search (unused but kept for future use)
 // const filteredCompanies = computed(() => {
-  let filtered = [...companies.value]
-  
-  // Search filter
-  if (companySearchText.value) {
-    const search = companySearchText.value.toLowerCase()
-    filtered = filtered.filter(c => 
-      c.name.toLowerCase().includes(search) ||
-      c.code.toLowerCase().includes(search) ||
-      (c.description && c.description.toLowerCase().includes(search))
-    )
-  }
-  
-  return filtered
+//   let filtered = [...companies.value]
+//   
+//   // Search filter
+//   if (companySearchText.value) {
+//     const search = companySearchText.value.toLowerCase()
+//     filtered = filtered.filter(c => 
+//       c.name.toLowerCase().includes(search) ||
+//       c.code.toLowerCase().includes(search) ||
+//       (c.description && c.description.toLowerCase().includes(search))
+//     )
+//   }
+//   
+//   return filtered
 // })
 
 const filteredUsers = computed(() => {

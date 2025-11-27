@@ -290,43 +290,26 @@ jobs:
               # Debug: Check password length (without showing actual password)
               echo \"Password retrieved: \${#DB_PASSWORD} characters\"
               
-              # Construct DATABASE_URL
-              # Note: PostgreSQL connection string handles special characters automatically
-              # Only URL encode if password contains characters that break URL parsing
-              # For now, use password directly as PostgreSQL driver handles encoding
-              DATABASE_URL=\"postgres://pedeve_user_db:\${DB_PASSWORD}@127.0.0.1:5432/db_dev_pedeve?sslmode=disable\"
-              
-              # Debug: Verify DATABASE_URL format (without showing password)
-              echo \"DATABASE_URL length: \${#DATABASE_URL} characters\"
-              echo \"DATABASE_URL format verified\"
-              
-              # Write environment variables to file for docker run
-              # Use echo with proper escaping for nested commands
-              echo \"GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}\" > /tmp/docker-env.txt
-              echo \"GCP_SECRET_MANAGER_ENABLED=false\" >> /tmp/docker-env.txt
-              echo \"GCP_STORAGE_ENABLED=true\" >> /tmp/docker-env.txt
-              echo \"GCP_STORAGE_BUCKET=pedeve-dev-bucket\" >> /tmp/docker-env.txt
-              echo \"DATABASE_URL=\${DATABASE_URL}\" >> /tmp/docker-env.txt
-              echo \"JWT_SECRET=\${JWT_SECRET}\" >> /tmp/docker-env.txt
-              echo \"ENCRYPTION_KEY=\${ENCRYPTION_KEY}\" >> /tmp/docker-env.txt
-              echo \"PORT=8080\" >> /tmp/docker-env.txt
-              echo \"ENV=production\" >> /tmp/docker-env.txt
-              echo \"CORS_ORIGIN=https://pedeve-dev.aretaamany.com\" >> /tmp/docker-env.txt
-              
-              # Debug: Verify file content (without showing secrets)
-              echo \"Environment file created with \$(wc -l < /tmp/docker-env.txt) lines\"
-              
-              # Start new container with all environment variables from file
+              # Construct DATABASE_URL directly in the docker run command
+              # This avoids variable expansion issues in nested commands
+              # Use single quotes for the URL to prevent shell expansion
+              # Start new container with all environment variables
               # Use --network host so container can access Cloud SQL Proxy on 127.0.0.1:5432
               sudo docker run -d \
                 --name dms-backend-prod \
                 --restart unless-stopped \
                 --network host \
-                --env-file /tmp/docker-env.txt \
+                -e GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
+                -e GCP_SECRET_MANAGER_ENABLED=false \
+                -e GCP_STORAGE_ENABLED=true \
+                -e GCP_STORAGE_BUCKET=pedeve-dev-bucket \
+                -e DATABASE_URL=\"postgres://pedeve_user_db:\${DB_PASSWORD}@127.0.0.1:5432/db_dev_pedeve?sslmode=disable\" \
+                -e JWT_SECRET=\"\${JWT_SECRET}\" \
+                -e ENCRYPTION_KEY=\"\${ENCRYPTION_KEY}\" \
+                -e PORT=8080 \
+                -e ENV=production \
+                -e CORS_ORIGIN=https://pedeve-dev.aretaamany.com \
                 ${BACKEND_IMAGE}
-              
-              # Cleanup
-              rm -f /tmp/docker-env.txt
               
               # Cleanup
               rm -f ~/backend-image.tar

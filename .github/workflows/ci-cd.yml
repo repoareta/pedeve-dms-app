@@ -275,15 +275,27 @@ jobs:
               sudo docker stop dms-backend-prod 2>/dev/null || true
               sudo docker rm dms-backend-prod 2>/dev/null || true
               
-              # Start new container
+              # Get secrets from GCP Secret Manager (VM service account has access)
+              echo 'Getting secrets from GCP Secret Manager...'
+              DB_PASSWORD=\$(gcloud secrets versions access latest --secret=db_password --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null || echo '')
+              JWT_SECRET=\$(gcloud secrets versions access latest --secret=jwt_secret --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null || echo '')
+              ENCRYPTION_KEY=\$(gcloud secrets versions access latest --secret=encryption_key --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null || echo '')
+              
+              # Construct DATABASE_URL
+              DATABASE_URL=\"postgres://pedeve_user_db:\${DB_PASSWORD}@127.0.0.1:5432/db_dev_pedeve?sslmode=disable\"
+              
+              # Start new container with all environment variables
               sudo docker run -d \
                 --name dms-backend-prod \
                 --restart unless-stopped \
                 -p 8080:8080 \
                 -e GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
-                -e GCP_SECRET_MANAGER_ENABLED=true \
+                -e GCP_SECRET_MANAGER_ENABLED=false \
                 -e GCP_STORAGE_ENABLED=true \
                 -e GCP_STORAGE_BUCKET=pedeve-dev-bucket \
+                -e DATABASE_URL=\"\${DATABASE_URL}\" \
+                -e JWT_SECRET=\"\${JWT_SECRET}\" \
+                -e ENCRYPTION_KEY=\"\${ENCRYPTION_KEY}\" \
                 -e PORT=8080 \
                 -e ENV=production \
                 -e CORS_ORIGIN=https://pedeve-dev.aretaamany.com \

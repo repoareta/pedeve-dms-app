@@ -434,7 +434,7 @@ const authStore = useAuthStore()
 const currentStep = ref(0)
 const loading = ref(false)
 const availableCompanies = ref<Company[]>([])
-const logoFileList = ref<any[]>([])
+const logoFileList = ref<Array<{ uid: string; name: string; status?: string; url?: string }>>([])
 const uploadingLogo = ref(false)
 
 // Check if user is superadmin
@@ -483,7 +483,7 @@ const formData = ref({
     kbli: '',
     main_business_activity: '',
     additional_activities: '',
-    start_operation_date: null as any,
+    start_operation_date: null as dayjs.Dayjs | null,
   },
   
   // Step 4: Pengurus/Dewan Direksi
@@ -493,7 +493,7 @@ const formData = ref({
     full_name: string
     ktp: string
     npwp: string
-    start_date: any
+    start_date: unknown
     domicile_address: string
   }>,
 })
@@ -577,7 +577,7 @@ const handleLogoUpload = async (file: File): Promise<boolean> => {
     }]
     message.success('Logo berhasil diupload')
     return false // Prevent default upload
-  } catch (error: any) {
+  } catch (error: unknown) {
     message.error(error.response?.data?.message || 'Gagal upload logo')
     return false
   } finally {
@@ -676,7 +676,7 @@ const handleSubmit = async () => {
     }
     
     router.push('/subsidiaries')
-  } catch (error: any) {
+  } catch (error: unknown) {
     message.error('Gagal menyimpan: ' + (error.response?.data?.message || error.message))
   } finally {
     loading.value = false
@@ -760,14 +760,14 @@ const loadCompanyData = async () => {
       formData.value.parent_id = company.parent_id
       // Ambil main_parent_company langsung dari response
       formData.value.main_parent_company = company.main_parent_company || undefined
-      formData.value.shareholders = (company.shareholders || []).map((sh: any) => ({
+      formData.value.shareholders = (company.shareholders || []).map((sh: unknown) => ({
         ...sh,
         ownership_percent: sh.ownership_percent || 0,
         share_count: sh.share_count || 0,
       }))
       // Transform business_fields array to main_business (ambil yang is_main = true atau yang pertama)
       if (company.business_fields && company.business_fields.length > 0) {
-        const mainBusiness = company.business_fields.find((bf: any) => bf.is_main) || company.business_fields[0]
+        const mainBusiness = company.business_fields.find((bf: BusinessField) => bf.is_main) || company.business_fields[0]
         formData.value.main_business.industry_sector = mainBusiness.industry_sector || ''
         formData.value.main_business.kbli = mainBusiness.kbli || ''
         formData.value.main_business.main_business_activity = mainBusiness.main_business_activity || ''
@@ -781,11 +781,11 @@ const loadCompanyData = async () => {
         formData.value.main_business.additional_activities = company.main_business.additional_activities || ''
         formData.value.main_business.start_operation_date = company.main_business.start_operation_date ? dayjs(company.main_business.start_operation_date) : null
       }
-      formData.value.directors = (company.directors || []).map((d: any) => ({
+      formData.value.directors = (company.directors || []).map((d: Director) => ({
         ...d,
         start_date: d.start_date ? dayjs(d.start_date) : null,
       }))
-    } catch (error: any) {
+    } catch {
       message.error('Gagal memuat data perusahaan')
     } finally {
       loading.value = false

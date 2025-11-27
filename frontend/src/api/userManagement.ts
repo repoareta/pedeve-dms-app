@@ -93,6 +93,49 @@ export interface Permission {
   updated_at: string
 }
 
+export interface CompanyCreateRequest {
+  name: string
+  short_name?: string
+  code: string
+  description?: string
+  npwp?: string
+  nib?: string
+  status?: string
+  logo?: string
+  phone?: string
+  fax?: string
+  email?: string
+  website?: string
+  address?: string
+  operational_address?: string
+  parent_id?: string
+  main_parent_company?: string
+  shareholders?: Shareholder[]
+  main_business?: BusinessField
+  directors?: Director[]
+}
+
+export interface CompanyUpdateRequest {
+  name?: string
+  short_name?: string
+  description?: string
+  npwp?: string
+  nib?: string
+  status?: string
+  logo?: string
+  phone?: string
+  fax?: string
+  email?: string
+  website?: string
+  address?: string
+  operational_address?: string
+  parent_id?: string
+  main_parent_company?: string
+  shareholders?: Shareholder[]
+  main_business?: BusinessField
+  directors?: Director[]
+}
+
 // Company API
 export const companyApi = {
   getAll: async (): Promise<Company[]> => {
@@ -110,12 +153,12 @@ export const companyApi = {
     return response.data
   },
 
-  create: async (data: any): Promise<Company> => {
+  create: async (data: CompanyCreateRequest): Promise<Company> => {
     const response = await apiClient.post<Company>('/companies', data)
     return response.data
   },
 
-  update: async (id: string, data: any): Promise<Company> => {
+  update: async (id: string, data: CompanyUpdateRequest): Promise<Company> => {
     const response = await apiClient.put<Company>(`/companies/${id}`, data)
     return response.data
   },

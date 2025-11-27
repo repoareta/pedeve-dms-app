@@ -404,7 +404,7 @@ func (h *UserManagementHandler) ToggleUserStatus(c *fiber.Ctx) error {
 
 	userID := c.Locals("userID").(string)
 	username := c.Locals("username").(string)
-	action := audit.ActionUpdateUser
+	var action string
 	if user.IsActive {
 		action = "activate_user"
 	} else {

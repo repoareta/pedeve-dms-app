@@ -315,11 +315,10 @@ func (uc *companyUseCase) UpdateCompanyFull(id string, data *domain.CompanyUpdat
 			company.Level = parent.Level + 1
 		}
 		
-		// Jika parent berubah, perlu update level semua descendants
-		if oldParentID != company.ParentID {
-			// Update level semua descendants akan dilakukan setelah company di-update
-			// Menggunakan recursive update query
-		}
+		// Jika parent berubah, update level semua descendants akan dilakukan setelah company di-update
+		// Menggunakan recursive update query di updateDescendantsLevel
+		// Note: Perubahan parent akan terdeteksi setelah company di-update dan akan trigger updateDescendantsLevel
+		_ = oldParentID // Explicitly mark as used to avoid unused variable warning
 	}
 
 	// Update company fields
@@ -345,13 +344,21 @@ func (uc *companyUseCase) UpdateCompanyFull(id string, data *domain.CompanyUpdat
 
 	// Jika parent_id berubah, update level semua descendants
 	if data.ParentID != nil {
-		uc.updateDescendantsLevel(id)
+		if err := uc.updateDescendantsLevel(id); err != nil {
+			zapLog.Warn("Failed to update descendants level", zap.String("company_id", id), zap.Error(err))
+		}
 	}
 
 	// Delete existing related data
-	uc.shareholderRepo.DeleteByCompanyID(id)
-	uc.businessFieldRepo.DeleteByCompanyID(id)
-	uc.directorRepo.DeleteByCompanyID(id)
+	if err := uc.shareholderRepo.DeleteByCompanyID(id); err != nil {
+		zapLog.Warn("Failed to delete shareholders", zap.String("company_id", id), zap.Error(err))
+	}
+	if err := uc.businessFieldRepo.DeleteByCompanyID(id); err != nil {
+		zapLog.Warn("Failed to delete business fields", zap.String("company_id", id), zap.Error(err))
+	}
+	if err := uc.directorRepo.DeleteByCompanyID(id); err != nil {
+		zapLog.Warn("Failed to delete directors", zap.String("company_id", id), zap.Error(err))
+	}
 
 	// Create new shareholders
 	for _, sh := range data.Shareholders {

@@ -15,19 +15,23 @@ func InitValidator() {
 	validate = validator.New()
 
 	// Register custom validation untuk alphanumeric + underscore
-	validate.RegisterValidation("alphanum_underscore", func(fl validator.FieldLevel) bool {
+	if err := validate.RegisterValidation("alphanum_underscore", func(fl validator.FieldLevel) bool {
 		value := fl.Field().String()
 		matched, _ := regexp.MatchString(`^[a-z0-9_]+$`, strings.ToLower(value))
 		return matched
-	})
+	}); err != nil {
+		panic(fmt.Sprintf("failed to register alphanum_underscore validation: %v", err))
+	}
 
 	// Register custom validation untuk password strength
-	validate.RegisterValidation("password_strength", func(fl validator.FieldLevel) bool {
+	if err := validate.RegisterValidation("password_strength", func(fl validator.FieldLevel) bool {
 		password := fl.Field().String()
 		hasLetter := regexp.MustCompile(`[a-zA-Z]`).MatchString(password)
 		hasNumber := regexp.MustCompile(`[0-9]`).MatchString(password)
 		return hasLetter && hasNumber
-	})
+	}); err != nil {
+		panic(fmt.Sprintf("failed to register password_strength validation: %v", err))
+	}
 }
 
 // GetValidator mengembalikan instance validator

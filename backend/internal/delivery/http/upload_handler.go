@@ -106,7 +106,12 @@ func UploadLogo(c *fiber.Ctx) error {
 	}
 
 	// Reset file pointer
-	src.Seek(0, 0)
+	if _, err := src.Seek(0, 0); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "seek_failed",
+			"message": "Failed to reset file pointer",
+		})
+	}
 
 	// Validasi MIME type
 	mimeType := http.DetectContentType(buffer)

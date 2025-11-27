@@ -25,7 +25,12 @@ func main() {
 	// Initialize logger
 	logger.InitLogger()
 	zapLog := logger.GetLogger()
-	defer zapLog.Sync()
+	defer func() {
+		if err := zapLog.Sync(); err != nil {
+			// Ignore sync errors on stdout/stderr
+			_ = err
+		}
+	}()
 
 	// Initialize database
 	database.InitDB()

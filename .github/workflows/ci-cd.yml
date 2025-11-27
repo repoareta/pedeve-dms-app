@@ -325,22 +325,39 @@ jobs:
 
       - name: Health Check Backend
         run: |
-          echo "Waiting for backend to be ready..."
-          sleep 15
+          echo "Waiting for backend to be ready (seeding may take time)..."
+          sleep 30  # Increased wait time for seeding to complete
           
           # Try health check with retry
-          MAX_RETRIES=5
-          RETRY_DELAY=5
+          MAX_RETRIES=10  # Increased retries
+          RETRY_DELAY=10  # Increased delay between retries
           
           for i in $(seq 1 $MAX_RETRIES); do
             echo "Health check attempt $i/$MAX_RETRIES..."
-            if curl -f -m 10 http://${{ secrets.GCP_BACKEND_VM_IP }}:8080/health 2>/dev/null; then
-              echo "✅ Backend health check passed!"
+            
+            # Try health check with verbose output for debugging
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 15 http://${{ secrets.GCP_BACKEND_VM_IP }}:8080/health 2>&1 || echo "000")
+            
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Backend health check passed! (HTTP $HTTP_CODE)"
+              # Verify response content
+              RESPONSE=$(curl -s -m 10 http://${{ secrets.GCP_BACKEND_VM_IP }}:8080/health 2>&1 || echo "")
+              echo "Response: $RESPONSE"
               exit 0
+            else
+              echo "⏳ Backend not ready yet (HTTP $HTTP_CODE), waiting ${RETRY_DELAY}s before retry..."
+              
+              # Check if container is running
+              if [ $i -eq 1 ] || [ $((i % 3)) -eq 0 ]; then
+                echo "Checking container status..."
+                gcloud compute ssh backend-dev \
+                  --zone=asia-southeast2-a \
+                  --project=${{ secrets.GCP_PROJECT_ID }} \
+                  --command="sudo docker ps | grep dms-backend-prod || echo 'Container not found'" || true
+              fi
             fi
             
             if [ $i -lt $MAX_RETRIES ]; then
-              echo "⏳ Backend not ready yet, waiting ${RETRY_DELAY}s before retry..."
               sleep $RETRY_DELAY
             fi
           done
@@ -350,7 +367,14 @@ jobs:
           gcloud compute ssh backend-dev \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
-            --command="sudo docker logs --tail 50 dms-backend-prod" || true
+            --command="sudo docker logs --tail 100 dms-backend-prod" || true
+          
+          echo "Checking if port 8080 is listening..."
+          gcloud compute ssh backend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="sudo netstat -tlnp | grep 8080 || sudo ss -tlnp | grep 8080 || echo 'Port 8080 not found'" || true
+          
           exit 1
 
       - name: Health Check Frontend

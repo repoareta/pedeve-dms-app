@@ -281,6 +281,13 @@ jobs:
             frontend-dist.tar.gz \
             frontend-dev:~/frontend-dist.tar.gz
           
+          # Copy Nginx setup script to frontend VM
+          gcloud compute scp \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            scripts/setup-nginx-frontend.sh \
+            frontend-dev:~/setup-nginx-frontend.sh
+          
           # SSH ke frontend VM dan deploy static files
           gcloud compute ssh frontend-dev \
             --zone=asia-southeast2-a \
@@ -302,12 +309,12 @@ jobs:
               sudo chown -R www-data:www-data /var/www/html
               sudo chmod -R 755 /var/www/html
               
-              # Ensure Nginx is running
-              sudo systemctl start nginx || true
-              sudo systemctl reload nginx || sudo systemctl restart nginx
+              # Setup Nginx config for SPA
+              chmod +x ~/setup-nginx-frontend.sh
+              ~/setup-nginx-frontend.sh
               
               # Cleanup
-              rm -f ~/frontend-dist.tar.gz
+              rm -f ~/frontend-dist.tar.gz ~/setup-nginx-frontend.sh
               sudo rm -rf /tmp/dist
             "
 

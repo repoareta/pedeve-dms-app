@@ -293,9 +293,9 @@ jobs:
                 -e GCP_SECRET_MANAGER_ENABLED=false \
                 -e GCP_STORAGE_ENABLED=true \
                 -e GCP_STORAGE_BUCKET=pedeve-dev-bucket \
-                -e DATABASE_URL=\"\${DATABASE_URL}\" \
-                -e JWT_SECRET=\"\${JWT_SECRET}\" \
-                -e ENCRYPTION_KEY=\"\${ENCRYPTION_KEY}\" \
+                -e DATABASE_URL=\${DATABASE_URL} \
+                -e JWT_SECRET=\${JWT_SECRET} \
+                -e ENCRYPTION_KEY=\${ENCRYPTION_KEY} \
                 -e PORT=8080 \
                 -e ENV=production \
                 -e CORS_ORIGIN=https://pedeve-dev.aretaamany.com \

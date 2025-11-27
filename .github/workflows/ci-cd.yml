@@ -281,8 +281,15 @@ jobs:
               JWT_SECRET=\$(gcloud secrets versions access latest --secret=jwt_secret --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null || echo '')
               ENCRYPTION_KEY=\$(gcloud secrets versions access latest --secret=encryption_key --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null || echo '')
               
+              # Verify secrets were retrieved
+              if [ -z \"\${DB_PASSWORD}\" ]; then
+                echo 'ERROR: Failed to retrieve db_password from Secret Manager'
+                exit 1
+              fi
+              
               # Construct DATABASE_URL
-              DATABASE_URL=\"postgres://pedeve_user_db:\${DB_PASSWORD}@127.0.0.1:5432/db_dev_pedeve?sslmode=disable\"
+              # Use single quotes in printf to avoid shell expansion issues
+              DATABASE_URL=\$(printf 'postgres://pedeve_user_db:%s@127.0.0.1:5432/db_dev_pedeve?sslmode=disable' \"\${DB_PASSWORD}\")
               
               # Start new container with all environment variables
               # Use --network host so container can access Cloud SQL Proxy on 127.0.0.1:5432

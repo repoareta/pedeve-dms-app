@@ -56,6 +56,8 @@ jobs:
 
       - name: Build frontend static files
         working-directory: frontend
+        env:
+          VITE_API_URL: https://api-pedeve-dev.aretaamany.com/api/v1
         run: |
           npm run build
           echo "Frontend build completed. Files in ./dist"

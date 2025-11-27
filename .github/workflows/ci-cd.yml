@@ -285,10 +285,11 @@ jobs:
               DATABASE_URL=\"postgres://pedeve_user_db:\${DB_PASSWORD}@127.0.0.1:5432/db_dev_pedeve?sslmode=disable\"
               
               # Start new container with all environment variables
+              # Use --network host so container can access Cloud SQL Proxy on 127.0.0.1:5432
               sudo docker run -d \
                 --name dms-backend-prod \
                 --restart unless-stopped \
-                -p 8080:8080 \
+                --network host \
                 -e GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
                 -e GCP_SECRET_MANAGER_ENABLED=false \
                 -e GCP_STORAGE_ENABLED=true \

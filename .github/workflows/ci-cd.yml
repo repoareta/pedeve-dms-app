@@ -76,7 +76,7 @@ jobs:
 
       - name: Lint backend
         working-directory: backend
-        run: golangci-lint run ./...
+        run: golangci-lint run --timeout=10m ./...
 
       - name: Test backend
         working-directory: backend

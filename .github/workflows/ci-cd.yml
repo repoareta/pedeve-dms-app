@@ -54,16 +54,18 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
-      - name: Build frontend Docker image
-        id: build-frontend
+      - name: Build frontend static files
+        working-directory: frontend
         run: |
-          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          FRONTEND_IMAGE="ghcr.io/${REPO_OWNER}/dms-frontend:${{ steps.version.outputs.version }}"
-          docker build \
-            -t ${FRONTEND_IMAGE} \
-            -t ghcr.io/${REPO_OWNER}/dms-frontend:latest \
-            ./frontend
-          echo "image=${FRONTEND_IMAGE}" >> $GITHUB_OUTPUT
+          npm run build
+          echo "Frontend build completed. Files in ./dist"
+          
+      - name: Prepare frontend for deployment
+        run: |
+          # Create deployment archive
+          cd frontend
+          tar -czf ../frontend-dist.tar.gz dist/
+          echo "Frontend static files archived"
 
       # ===== BACKEND =====
       - name: Setup Go
@@ -244,11 +246,10 @@ jobs:
         run: |
           gcloud auth configure-docker --quiet
 
-      - name: Pull Docker images from GHCR
+      - name: Pull Docker image for backend
         run: |
           echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          docker pull ghcr.io/${REPO_OWNER}/dms-frontend:latest
           docker pull ghcr.io/${REPO_OWNER}/dms-backend:latest
 
       - name: Deploy Backend to GCP VM
@@ -271,15 +272,23 @@ jobs:
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --command="
+              # Install Docker if not exists
+              if ! command -v docker &> /dev/null; then
+                curl -fsSL https://get.docker.com -o get-docker.sh
+                sudo sh get-docker.sh
+                sudo usermod -aG docker \$USER || true
+                rm -f get-docker.sh
+              fi
+              
               # Load Docker image
-              docker load -i ~/backend-image.tar
+              sudo docker load -i ~/backend-image.tar
               
               # Stop old container
-              docker stop dms-backend-prod 2>/dev/null || true
-              docker rm dms-backend-prod 2>/dev/null || true
+              sudo docker stop dms-backend-prod 2>/dev/null || true
+              sudo docker rm dms-backend-prod 2>/dev/null || true
               
               # Start new container
-              docker run -d \
+              sudo docker run -d \
                 --name dms-backend-prod \
                 --restart unless-stopped \
                 -p 8080:8080 \
@@ -298,41 +307,41 @@ jobs:
 
       - name: Deploy Frontend to GCP VM
         run: |
-          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          FRONTEND_IMAGE="ghcr.io/${REPO_OWNER}/dms-frontend:latest"
-          
-          # Save image to tar file
-          docker save ${FRONTEND_IMAGE} -o frontend-image.tar
-          
-          # Copy image to frontend VM
+          # Copy static files to frontend VM
           gcloud compute scp \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
-            frontend-image.tar \
-            frontend-dev:~/frontend-image.tar
+            frontend-dist.tar.gz \
+            frontend-dev:~/frontend-dist.tar.gz
           
-          # SSH ke frontend VM dan deploy
+          # SSH ke frontend VM dan deploy static files
           gcloud compute ssh frontend-dev \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --command="
-              # Load Docker image
-              docker load -i ~/frontend-image.tar
+              # Install Nginx if not exists
+              if ! command -v nginx &> /dev/null; then
+                sudo apt-get update
+                sudo apt-get install -y nginx
+                sudo systemctl enable nginx
+              fi
               
-              # Stop old container
-              docker stop dms-frontend-prod 2>/dev/null || true
-              docker rm dms-frontend-prod 2>/dev/null || true
+              # Extract static files
+              sudo rm -rf /var/www/html/*
+              sudo tar -xzf ~/frontend-dist.tar.gz -C /tmp/
+              sudo cp -r /tmp/dist/* /var/www/html/
               
-              # Start new container
-              docker run -d \
-                --name dms-frontend-prod \
-                --restart unless-stopped \
-                -p 80:80 \
-                ${FRONTEND_IMAGE}
+              # Set proper permissions
+              sudo chown -R www-data:www-data /var/www/html
+              sudo chmod -R 755 /var/www/html
+              
+              # Ensure Nginx is running
+              sudo systemctl start nginx || true
+              sudo systemctl reload nginx || sudo systemctl restart nginx
               
               # Cleanup
-              rm -f ~/frontend-image.tar
-              docker image prune -f
+              rm -f ~/frontend-dist.tar.gz
+              sudo rm -rf /tmp/dist
             "
 
       - name: Health Check Backend

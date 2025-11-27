@@ -698,7 +698,9 @@ const getMainBusiness = (company: Company): BusinessField | null => {
     return company.main_business
   }
   if (company.business_fields && company.business_fields.length > 0) {
-    const mainField = company.business_fields.find((bf: BusinessField) => (bf as any).is_main)
+    // Find main business field (checking is_main property if it exists)
+    const businessFieldsWithMain = company.business_fields as Array<BusinessField & { is_main?: boolean }>
+    const mainField = businessFieldsWithMain.find((bf) => bf.is_main)
     return mainField || company.business_fields[0] || null
   }
   return null

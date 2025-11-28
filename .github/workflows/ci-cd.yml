@@ -340,6 +340,14 @@ jobs:
               
               # SSL setup akan dijalankan manual (perlu interaksi untuk first-time setup)
               # chmod +x ~/setup-backend-ssl.sh && ~/setup-backend-ssl.sh
+              
+              # Copy status check script untuk debugging
+              echo '#!/bin/bash' > ~/check-backend-status.sh
+              echo 'sudo systemctl status nginx --no-pager -l | head -10' >> ~/check-backend-status.sh
+              echo 'sudo docker ps | grep dms-backend-prod' >> ~/check-backend-status.sh
+              echo 'sudo ss -tlnp | grep -E ":(80|443|8080)"' >> ~/check-backend-status.sh
+              chmod +x ~/check-backend-status.sh
+              
               rm -f ~/backend-image.tar ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/setup-backend-ssl.sh
             "
 
@@ -416,6 +424,13 @@ jobs:
               
               # SSL setup akan dijalankan manual (perlu interaksi untuk first-time setup)
               # chmod +x ~/setup-frontend-ssl.sh && ~/setup-frontend-ssl.sh
+              
+              # Copy status check script untuk debugging
+              echo '#!/bin/bash' > ~/check-frontend-status.sh
+              echo 'sudo systemctl status nginx --no-pager -l | head -10' >> ~/check-frontend-status.sh
+              echo 'sudo ss -tlnp | grep -E ":(80|443)"' >> ~/check-frontend-status.sh
+              echo 'ls -la /var/www/html/ | head -5' >> ~/check-frontend-status.sh
+              chmod +x ~/check-frontend-status.sh
               
               # Cleanup
               rm -f ~/frontend-dist.tar.gz ~/setup-nginx-frontend.sh ~/setup-frontend-ssl.sh

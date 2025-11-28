@@ -328,9 +328,9 @@ jobs:
                   echo '✅ Nginx is running'
                   break
                 else
-                  RETRY_COUNT=$((RETRY_COUNT + 1))
+                  RETRY_COUNT=$(expr $RETRY_COUNT + 1)
                   if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                    echo "⚠️  Nginx not running, retrying... ($RETRY_COUNT/$MAX_RETRIES)"
+                    echo "⚠️  Nginx not running, retrying... attempt $RETRY_COUNT of $MAX_RETRIES"
                     sudo systemctl restart nginx
                     sleep 3
                   else
@@ -456,9 +456,9 @@ jobs:
                   echo '✅ Nginx is running'
                   break
                 else
-                  RETRY_COUNT=$((RETRY_COUNT + 1))
+                  RETRY_COUNT=$(expr $RETRY_COUNT + 1)
                   if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                    echo "⚠️  Nginx not running, retrying... ($RETRY_COUNT/$MAX_RETRIES)"
+                    echo "⚠️  Nginx not running, retrying... attempt $RETRY_COUNT of $MAX_RETRIES"
                     sudo systemctl restart nginx
                     sleep 3
                   else

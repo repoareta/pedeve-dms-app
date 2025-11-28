@@ -299,15 +299,34 @@ jobs:
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --command="
               chmod +x ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh
-              ~/deploy-backend-vm.sh ${{ secrets.GCP_PROJECT_ID }} ${BACKEND_IMAGE}
-              ~/setup-backend-nginx.sh
+              if ! ~/deploy-backend-vm.sh ${{ secrets.GCP_PROJECT_ID }} ${BACKEND_IMAGE}; then
+                echo '❌ ERROR: deploy-backend-vm.sh failed!'
+                exit 1
+              fi
+              
+              if ! ~/setup-backend-nginx.sh; then
+                echo '❌ ERROR: setup-backend-nginx.sh failed!'
+                exit 1
+              fi
+              
+              # Hapus config frontend jika ter-copy (pastikan tidak ada conflict)
+              sudo rm -f /etc/nginx/sites-enabled/default
+              
+              # Pastikan hanya backend-api yang enabled
+              sudo rm -f /etc/nginx/sites-enabled/default
+              sudo ln -sf /etc/nginx/sites-available/backend-api /etc/nginx/sites-enabled/backend-api
+              
+              # Verify config menggunakan certificate backend (api-pedeve-dev)
+              if ! sudo grep -q 'api-pedeve-dev' /etc/nginx/sites-available/backend-api 2>/dev/null; then
+                echo '⚠️  WARNING: Backend config may not have correct certificate path'
+              fi
               
               # Ensure Nginx is enabled and running
               sudo systemctl enable nginx
               sudo systemctl start nginx || sudo systemctl restart nginx
               
               # Wait for services to stabilize
-              sleep 3
+              sleep 5
               
               # Verify Nginx is running
               if ! sudo systemctl is-active --quiet nginx; then
@@ -319,7 +338,21 @@ jobs:
               
               # Verify listening ports
               echo 'Checking listening ports...'
-              sudo ss -tlnp | grep -E ':(80|443|8080)' || echo 'No relevant ports listening'
+              if ! sudo ss -tlnp | grep -q ':80 '; then
+                echo '❌ ERROR: Port 80 is not listening!'
+                exit 1
+              fi
+              if ! sudo ss -tlnp | grep -q ':443 '; then
+                echo '⚠️  WARNING: Port 443 is not listening (HTTPS may not be configured)'
+                echo 'Checking SSL certificate...'
+                sudo certbot certificates 2>/dev/null | head -10 || true
+              else
+                echo '✅ Port 443 is listening'
+              fi
+              if ! sudo ss -tlnp | grep -q ':8080'; then
+                echo '❌ ERROR: Port 8080 is not listening!'
+                exit 1
+              fi
               
               # Verify backend container is running
               if ! sudo docker ps | grep -q dms-backend-prod; then
@@ -327,12 +360,6 @@ jobs:
                 sudo docker ps -a | grep dms-backend-prod
                 sudo docker logs --tail 30 dms-backend-prod 2>/dev/null || true
                 exit 1
-              fi
-              
-              # Verify container is healthy
-              if ! sudo ss -tlnp | grep -q ':8080'; then
-                echo '⚠️  WARNING: Container running but port 8080 not listening'
-                sudo docker logs --tail 20 dms-backend-prod
               fi
               
               echo '✅ Backend container is running'
@@ -393,14 +420,31 @@ jobs:
               
               # Setup Nginx config for SPA
               chmod +x ~/setup-nginx-frontend.sh
-              ~/setup-nginx-frontend.sh
+              if ! ~/setup-nginx-frontend.sh; then
+                echo '❌ ERROR: setup-nginx-frontend.sh failed!'
+                exit 1
+              fi
+              
+              # Hapus config backend jika ter-copy (pastikan tidak ada conflict)
+              sudo rm -f /etc/nginx/sites-available/backend-api
+              sudo rm -f /etc/nginx/sites-enabled/backend-api
+              
+              # Pastikan hanya default yang enabled
+              sudo rm -f /etc/nginx/sites-enabled/*
+              sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+              
+              # Verify config tidak ada mention api-pedeve-dev (backend certificate)
+              if sudo grep -r 'api-pedeve-dev' /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default 2>/dev/null; then
+                echo '❌ ERROR: Frontend config still has backend certificate path!'
+                exit 1
+              fi
               
               # Ensure Nginx is enabled and running
               sudo systemctl enable nginx
               sudo systemctl start nginx || sudo systemctl restart nginx
               
               # Wait for services to stabilize
-              sleep 3
+              sleep 5
               
               # Verify Nginx is running
               if ! sudo systemctl is-active --quiet nginx; then
@@ -412,7 +456,17 @@ jobs:
               
               # Verify listening ports
               echo 'Checking listening ports...'
-              sudo ss -tlnp | grep -E ':(80|443)' || echo 'No relevant ports listening'
+              if ! sudo ss -tlnp | grep -q ':80 '; then
+                echo '❌ ERROR: Port 80 is not listening!'
+                exit 1
+              fi
+              if ! sudo ss -tlnp | grep -q ':443 '; then
+                echo '⚠️  WARNING: Port 443 is not listening (HTTPS may not be configured)'
+                echo 'Checking SSL certificate...'
+                sudo certbot certificates 2>/dev/null | head -10 || true
+              else
+                echo '✅ Port 443 is listening'
+              fi
               
               # Verify files exist
               if [ ! -f /var/www/html/index.html ]; then

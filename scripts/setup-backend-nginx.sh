@@ -115,11 +115,14 @@ server {
 EOF
 fi
 
-# Enable site
+# Hapus semua enabled sites untuk avoid conflict
+sudo rm -f /etc/nginx/sites-enabled/*
+
+# Enable backend-api site
 sudo ln -sf /etc/nginx/sites-available/backend-api /etc/nginx/sites-enabled/backend-api
 
-# Remove default site if exists
-sudo rm -f /etc/nginx/sites-enabled/default
+# Hapus config frontend jika ter-copy (pastikan tidak ada conflict)
+# (tidak perlu, karena frontend pakai default)
 
 # Test Nginx config
 echo "🧪 Testing Nginx configuration..."

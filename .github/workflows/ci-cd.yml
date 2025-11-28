@@ -295,32 +295,43 @@ jobs:
             backend-dev:~/setup-backend-ssl.sh 2>/dev/null || echo "⚠️  SSL script copy failed (optional)"
           
           # SSH ke backend VM dan deploy
+          # IMPORTANT: This deployment preserves:
+          # - SSL certificates in /etc/letsencrypt/live/
+          # - Nginx config with SSL (if already configured correctly)
+          # - Docker container network mode (host)
+          # - All manual configurations
           gcloud compute ssh backend-dev \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --command="
               chmod +x ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/verify-backend-deployment.sh ~/ensure-services-running.sh
+              
+              # Deploy backend container (preserves network mode: host)
               if ! ~/deploy-backend-vm.sh ${{ secrets.GCP_PROJECT_ID }} ${BACKEND_IMAGE}; then
                 echo '❌ ERROR: deploy-backend-vm.sh failed!'
                 exit 1
               fi
               
+              # Setup Nginx (preserves SSL config if already correct)
+              # Script will skip update if SSL certificate exists and config is correct
               if ! ~/setup-backend-nginx.sh; then
                 echo '❌ ERROR: setup-backend-nginx.sh failed!'
                 exit 1
               fi
               
-              # Ensure services are running
+              # Ensure services are running (container + Nginx)
               if ! ~/ensure-services-running.sh backend; then
                 echo '❌ ERROR: ensure-services-running.sh failed!'
                 exit 1
               fi
               
+              # Verify deployment
               if ! ~/verify-backend-deployment.sh; then
                 echo '❌ ERROR: verify-backend-deployment.sh failed!'
                 exit 1
               fi
               
+              # Cleanup: Only remove temporary deployment files (NOT configs or certificates)
               rm -f ~/backend-image.tar ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/setup-backend-ssl.sh ~/verify-backend-deployment.sh ~/ensure-services-running.sh
             "
 
@@ -334,6 +345,9 @@ jobs:
             frontend-dev:~/frontend-dist.tar.gz
           
           # Copy Nginx setup scripts to frontend VM
+          # NOTE: These scripts are idempotent and preserve existing configurations:
+          # - setup-nginx-frontend.sh: Preserves SSL certificates and HTTPS config if already correct
+          # - setup-frontend-ssl.sh: Optional, run manually if needed (SSL should be setup once)
           gcloud compute scp \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
@@ -344,6 +358,10 @@ jobs:
             frontend-dev:~/
           
           # SSH ke frontend VM dan deploy static files
+          # IMPORTANT: This deployment preserves:
+          # - SSL certificates in /etc/letsencrypt/live/
+          # - Nginx config with SSL (if already configured correctly)
+          # - All manual configurations
           gcloud compute ssh frontend-dev \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
@@ -355,7 +373,8 @@ jobs:
                 sudo systemctl enable nginx
               fi
               
-              # Extract static files
+              # Extract static files (ONLY updates static files, NOT configs or certificates)
+              # This is safe - only removes old static files, preserves Nginx config and SSL
               sudo rm -rf /var/www/html/*
               sudo tar -xzf ~/frontend-dist.tar.gz -C /tmp/
               sudo cp -r /tmp/dist/* /var/www/html/
@@ -364,25 +383,27 @@ jobs:
               sudo chown -R www-data:www-data /var/www/html
               sudo chmod -R 755 /var/www/html
               
-              # Setup Nginx config for SPA
+              # Setup Nginx config for SPA (preserves SSL config if already correct)
+              # Script will skip update if SSL certificate exists and config is correct
               chmod +x ~/setup-nginx-frontend.sh ~/verify-frontend-deployment.sh ~/ensure-services-running.sh
               if ! ~/setup-nginx-frontend.sh; then
                 echo '❌ ERROR: setup-nginx-frontend.sh failed!'
                 exit 1
               fi
               
-              # Ensure services are running
+              # Ensure services are running (Nginx)
               if ! ~/ensure-services-running.sh frontend; then
                 echo '❌ ERROR: ensure-services-running.sh failed!'
                 exit 1
               fi
               
+              # Verify deployment
               if ! ~/verify-frontend-deployment.sh; then
                 echo '❌ ERROR: verify-frontend-deployment.sh failed!'
                 exit 1
               fi
               
-              # Cleanup
+              # Cleanup: Only remove temporary deployment files (NOT configs or certificates)
               rm -f ~/frontend-dist.tar.gz ~/setup-nginx-frontend.sh ~/setup-frontend-ssl.sh ~/verify-frontend-deployment.sh ~/ensure-services-running.sh
               sudo rm -rf /tmp/dist
             "

@@ -119,3 +119,83 @@ Setelah semua fix:
 - ✅ Nginx listen di port 443
 - ✅ HTTPS endpoint bisa diakses
 
+---
+
+## Memperbaiki Warning "Conflicting Server Name"
+
+### Masalah: Warning saat `nginx -t`
+
+```
+nginx: [warn] conflicting server name "api-pedeve-dev.aretaamany.com" on 0.0.0.0:80, ignored
+```
+
+**Penyebab:** Ada beberapa `server` block dengan `server_name` yang sama pada port yang sama. Ini biasanya terjadi karena:
+- Certbot menambahkan config tambahan
+- Ada file config lain yang juga menggunakan `server_name` yang sama
+- Config default masih aktif
+
+### Solusi: Jalankan Script Fix
+
+**Dari local machine (akan copy script ke VM):**
+
+```bash
+# Copy script ke VM
+gcloud compute scp --zone=asia-southeast2-a \
+  scripts/fix-nginx-conflict.sh \
+  backend-dev:~/fix-nginx-conflict.sh
+
+# SSH ke VM dan jalankan
+gcloud compute ssh --zone=asia-southeast2-a backend-dev -- \
+  "chmod +x ~/fix-nginx-conflict.sh && sudo ~/fix-nginx-conflict.sh"
+```
+
+**Atau langsung dari dalam VM:**
+
+```bash
+# Download script dari repo atau copy manual
+# Lalu jalankan:
+chmod +x fix-nginx-conflict.sh
+sudo ./fix-nginx-conflict.sh
+```
+
+### Manual Fix (jika script tidak tersedia)
+
+1. **Cek file config yang aktif:**
+   ```bash
+   sudo ls -la /etc/nginx/sites-enabled/
+   ```
+
+2. **Hapus config default jika masih ada:**
+   ```bash
+   sudo rm -f /etc/nginx/sites-enabled/default
+   ```
+
+3. **Pastikan hanya `backend-api` yang aktif:**
+   ```bash
+   sudo ls -la /etc/nginx/sites-enabled/
+   # Harus hanya ada: backend-api -> /etc/nginx/sites-available/backend-api
+   ```
+
+4. **Cek isi config untuk duplikasi:**
+   ```bash
+   sudo cat /etc/nginx/sites-available/backend-api
+   # Harus hanya ada 2 server block:
+   # - 1 untuk HTTP (port 80) dengan redirect
+   # - 1 untuk HTTPS (port 443) dengan proxy
+   ```
+
+5. **Test dan reload:**
+   ```bash
+   sudo nginx -t
+   sudo systemctl reload nginx
+   ```
+
+### Expected Result Setelah Fix
+
+```bash
+$ sudo nginx -t
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+# ✅ Tidak ada warning lagi!
+```
+

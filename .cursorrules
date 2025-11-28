@@ -1,14 +1,20 @@
 # Cursor Rules untuk Pedeve DMS App
 
-## Git Workflow
-- **JANGAN LANGSUNG PUSH** setiap commit ke branch `development` atau `main`
-- Buat commit lokal dulu, tunggu konfirmasi user sebelum push
+## Git Workflow - PENTING: BACA INI SEBELUM COMMIT/PUSH
+- **JANGAN PERNAH LANGSUNG PUSH** ke branch `development` atau `main` tanpa konfirmasi user
+- **SELALU MINTA IZIN DULU** sebelum push - TIDAK ADA EXCEPTION
+- Buat commit lokal dulu, TUNGGU KONFIRMASI USER sebelum push
 - Jika ada multiple commits, hanya push commit terakhir setelah user setuju
-- **SELALU MINTA IZIN** sebelum:
-  - Push ke branch `development` atau `main` (PENTING: SELALU MINTA IZIN DULU!)
-  - Trigger deployment via workflow
-  - Merge branch
-- **JANGAN PERNAH** push ke `development` tanpa konfirmasi eksplisit dari user
+- **CRITICAL RULES - JANGAN LANGSUNG PUSH:**
+  - ❌ JANGAN push ke `development` tanpa konfirmasi eksplisit dari user
+  - ❌ JANGAN push ke `main` tanpa konfirmasi eksplisit dari user
+  - ❌ JANGAN trigger deployment via workflow tanpa konfirmasi
+  - ❌ JANGAN merge branch tanpa konfirmasi
+- **WORKFLOW YANG BENAR:**
+  1. Buat commit lokal: `git commit -m "message"`
+  2. TUNGGU user konfirmasi: "push", "lanjutkan push", atau sejenisnya
+  3. Baru push: `git push origin development`
+- **JIKA USER TIDAK MENGATAKAN "push" atau "lanjutkan push", JANGAN PUSH**
 
 ## Deployment
 - Deployment ke GCP hanya dilakukan setelah konfirmasi eksplisit dari user

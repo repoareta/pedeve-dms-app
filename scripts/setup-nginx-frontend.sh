@@ -35,9 +35,11 @@ if [ -f /etc/nginx/sites-available/default ]; then
     
     # If SSL exists, check if config has HTTPS block
     if [ "$SSL_CERT_EXISTS" = true ]; then
-      if sudo grep -q "ssl_certificate.*pedeve-dev" /etc/nginx/sites-available/default; then
-        echo "✅ HTTPS config already present"
-        echo "⏭️  Skipping config update - existing config is correct"
+      if sudo grep -q "ssl_certificate.*pedeve-dev" /etc/nginx/sites-available/default && \
+         sudo grep -q "listen.*443" /etc/nginx/sites-available/default && \
+         sudo grep -q "server_name.*pedeve-dev.aretaamany.com" /etc/nginx/sites-available/default; then
+        echo "✅ HTTPS config already present and correct"
+        echo "⏭️  Skipping config update - preserving existing SSL configuration"
         # Just ensure it's enabled and reload
         sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
         sudo nginx -t && sudo systemctl reload nginx || true

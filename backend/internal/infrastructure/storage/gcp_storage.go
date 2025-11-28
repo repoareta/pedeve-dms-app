@@ -106,6 +106,16 @@ func (g *GCPStorageManager) UploadFile(bucketPath string, filename string, data 
 		return "", fmt.Errorf("failed to close writer: %w", err)
 	}
 
+	// Make object publicly readable
+	if err := obj.ACL().Set(g.ctx, storage.AllUsers, storage.RoleReader); err != nil {
+		zapLog.Warn("Failed to set public ACL on object (may need bucket-level IAM instead)",
+			zap.String("bucket", g.bucketName),
+			zap.String("object_path", objectPath),
+			zap.Error(err),
+		)
+		// Continue anyway, as bucket might use Uniform access control
+	}
+
 	// Generate public URL
 	// Format: https://storage.googleapis.com/{bucket}/{object_path}
 	publicURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", g.bucketName, objectPath)

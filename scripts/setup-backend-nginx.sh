@@ -19,9 +19,63 @@ if [ -f /etc/nginx/sites-available/default ]; then
   sudo cp /etc/nginx/sites-available/default /etc/nginx/sites-available/default.backup
 fi
 
-# Check if HTTPS config already exists (SSL already setup)
+# Check if config already exists and is correct
+CONFIG_EXISTS=false
+CONFIG_CORRECT=false
+SSL_CERT_EXISTS=false
+
+# Check if SSL certificate exists
 if [ -f /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/fullchain.pem ]; then
-  echo "✅ SSL certificate found, creating config with HTTPS..."
+  SSL_CERT_EXISTS=true
+  echo "✅ SSL certificate found"
+fi
+
+# Check if backend-api config already exists
+if [ -f /etc/nginx/sites-available/backend-api ]; then
+  CONFIG_EXISTS=true
+  echo "✅ Backend Nginx config already exists"
+  
+  # Check if config is correct (has correct server_name and proxy_pass)
+  if sudo grep -q "server_name api-pedeve-dev.aretaamany.com" /etc/nginx/sites-available/backend-api && \
+     sudo grep -q "proxy_pass http://127.0.0.1:8080" /etc/nginx/sites-available/backend-api; then
+    CONFIG_CORRECT=true
+    echo "✅ Backend Nginx config is correct"
+    
+    # If SSL exists, check if config has HTTPS block
+    if [ "$SSL_CERT_EXISTS" = true ]; then
+      if sudo grep -q "ssl_certificate.*api-pedeve-dev" /etc/nginx/sites-available/backend-api; then
+        echo "✅ HTTPS config already present"
+        echo "⏭️  Skipping config update - existing config is correct"
+        # Just ensure it's enabled and reload
+        sudo ln -sf /etc/nginx/sites-available/backend-api /etc/nginx/sites-enabled/backend-api
+        sudo nginx -t && sudo systemctl reload nginx || true
+        exit 0
+      else
+        echo "⚠️  SSL exists but config doesn't have HTTPS, will update..."
+      fi
+    else
+      # No SSL, check if config is HTTP-only (correct)
+      if ! sudo grep -q "ssl_certificate" /etc/nginx/sites-available/backend-api; then
+        echo "✅ HTTP-only config is correct (no SSL)"
+        echo "⏭️  Skipping config update - existing config is correct"
+        # Just ensure it's enabled and reload
+        sudo ln -sf /etc/nginx/sites-available/backend-api /etc/nginx/sites-enabled/backend-api
+        sudo nginx -t && sudo systemctl reload nginx || true
+        exit 0
+      fi
+    fi
+  fi
+fi
+
+# Only create/update config if needed
+if [ "$SSL_CERT_EXISTS" = true ]; then
+  echo "✅ SSL certificate found, creating/updating config with HTTPS..."
+  
+  # Backup existing config if it exists
+  if [ "$CONFIG_EXISTS" = true ]; then
+    sudo cp /etc/nginx/sites-available/backend-api /etc/nginx/sites-available/backend-api.backup.$(date +%Y%m%d_%H%M%S)
+    echo "📦 Backed up existing config"
+  fi
   
   # Create Nginx config with HTTPS
   sudo tee /etc/nginx/sites-available/backend-api > /dev/null <<'EOF'
@@ -75,7 +129,13 @@ server {
 }
 EOF
 else
-  echo "⚠️  SSL certificate not found, creating HTTP-only config..."
+  echo "⚠️  SSL certificate not found, creating/updating HTTP-only config..."
+  
+  # Backup existing config if it exists
+  if [ "$CONFIG_EXISTS" = true ]; then
+    sudo cp /etc/nginx/sites-available/backend-api /etc/nginx/sites-available/backend-api.backup.$(date +%Y%m%d_%H%M%S)
+    echo "📦 Backed up existing config"
+  fi
   
   # Create Nginx config for backend API reverse proxy (HTTP only)
   sudo tee /etc/nginx/sites-available/backend-api > /dev/null <<'EOF'
@@ -115,11 +175,17 @@ server {
 EOF
 fi
 
-# Hapus semua enabled sites untuk avoid conflict
-sudo rm -f /etc/nginx/sites-enabled/*
-
-# Enable backend-api site
-sudo ln -sf /etc/nginx/sites-available/backend-api /etc/nginx/sites-enabled/backend-api
+# Only remove conflicting enabled sites (not all)
+# Keep backend-api if it's already enabled
+if [ -L /etc/nginx/sites-enabled/backend-api ]; then
+  echo "✅ backend-api already enabled"
+else
+  # Remove only default and other conflicting sites
+  sudo rm -f /etc/nginx/sites-enabled/default
+  # Enable backend-api site
+  sudo ln -sf /etc/nginx/sites-available/backend-api /etc/nginx/sites-enabled/backend-api
+  echo "✅ Enabled backend-api site"
+fi
 
 # Hapus config frontend jika ter-copy (pastikan tidak ada conflict)
 # (tidak perlu, karena frontend pakai default)

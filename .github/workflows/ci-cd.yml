@@ -309,17 +309,8 @@ jobs:
                 exit 1
               fi
               
-              # Hapus config frontend jika ter-copy (pastikan tidak ada conflict)
-              sudo rm -f /etc/nginx/sites-enabled/default
-              
-              # Pastikan hanya backend-api yang enabled
-              sudo rm -f /etc/nginx/sites-enabled/default
-              sudo ln -sf /etc/nginx/sites-available/backend-api /etc/nginx/sites-enabled/backend-api
-              
-              # Verify config menggunakan certificate backend (api-pedeve-dev)
-              if ! sudo grep -q 'api-pedeve-dev' /etc/nginx/sites-available/backend-api 2>/dev/null; then
-                echo '⚠️  WARNING: Backend config may not have correct certificate path'
-              fi
+              # Script setup-backend-nginx.sh sudah idempotent dan handle config dengan benar
+              # Tidak perlu manual remove/update config di sini
               
               # Ensure Nginx is enabled and running
               sudo systemctl enable nginx
@@ -446,19 +437,8 @@ jobs:
                 exit 1
               fi
               
-              # Hapus config backend jika ter-copy (pastikan tidak ada conflict)
-              sudo rm -f /etc/nginx/sites-available/backend-api
-              sudo rm -f /etc/nginx/sites-enabled/backend-api
-              
-              # Pastikan hanya default yang enabled
-              sudo rm -f /etc/nginx/sites-enabled/*
-              sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
-              
-              # Verify config tidak ada mention api-pedeve-dev (backend certificate)
-              if sudo grep -r 'api-pedeve-dev' /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default 2>/dev/null; then
-                echo '❌ ERROR: Frontend config still has backend certificate path!'
-                exit 1
-              fi
+              # Script setup-nginx-frontend.sh sudah idempotent dan handle config dengan benar
+              # Tidak perlu manual remove/update config di sini
               
               # Ensure Nginx is enabled and running
               sudo systemctl enable nginx

@@ -11,9 +11,63 @@ if [ -f /etc/nginx/sites-available/default ]; then
   sudo cp /etc/nginx/sites-available/default /etc/nginx/sites-available/default.backup
 fi
 
-# Check if HTTPS config already exists (SSL already setup)
+# Check if config already exists and is correct
+CONFIG_EXISTS=false
+CONFIG_CORRECT=false
+SSL_CERT_EXISTS=false
+
+# Check if SSL certificate exists
 if [ -f /etc/letsencrypt/live/pedeve-dev.aretaamany.com/fullchain.pem ]; then
-  echo "✅ SSL certificate found, creating config with HTTPS..."
+  SSL_CERT_EXISTS=true
+  echo "✅ SSL certificate found"
+fi
+
+# Check if default config already exists
+if [ -f /etc/nginx/sites-available/default ]; then
+  CONFIG_EXISTS=true
+  echo "✅ Frontend Nginx config already exists"
+  
+  # Check if config is correct (has root /var/www/html and SPA routing)
+  if sudo grep -q "root /var/www/html" /etc/nginx/sites-available/default && \
+     sudo grep -q "try_files.*index.html" /etc/nginx/sites-available/default; then
+    CONFIG_CORRECT=true
+    echo "✅ Frontend Nginx config is correct"
+    
+    # If SSL exists, check if config has HTTPS block
+    if [ "$SSL_CERT_EXISTS" = true ]; then
+      if sudo grep -q "ssl_certificate.*pedeve-dev" /etc/nginx/sites-available/default; then
+        echo "✅ HTTPS config already present"
+        echo "⏭️  Skipping config update - existing config is correct"
+        # Just ensure it's enabled and reload
+        sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+        sudo nginx -t && sudo systemctl reload nginx || true
+        exit 0
+      else
+        echo "⚠️  SSL exists but config doesn't have HTTPS, will update..."
+      fi
+    else
+      # No SSL, check if config is HTTP-only (correct)
+      if ! sudo grep -q "ssl_certificate" /etc/nginx/sites-available/default; then
+        echo "✅ HTTP-only config is correct (no SSL)"
+        echo "⏭️  Skipping config update - existing config is correct"
+        # Just ensure it's enabled and reload
+        sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+        sudo nginx -t && sudo systemctl reload nginx || true
+        exit 0
+      fi
+    fi
+  fi
+fi
+
+# Only create/update config if needed
+if [ "$SSL_CERT_EXISTS" = true ]; then
+  echo "✅ SSL certificate found, creating/updating config with HTTPS..."
+  
+  # Backup existing config if it exists
+  if [ "$CONFIG_EXISTS" = true ]; then
+    sudo cp /etc/nginx/sites-available/default /etc/nginx/sites-available/default.backup.$(date +%Y%m%d_%H%M%S)
+    echo "📦 Backed up existing config"
+  fi
   
   # Create Nginx config with HTTPS
   sudo tee /etc/nginx/sites-available/default > /dev/null <<'EOF'
@@ -71,7 +125,13 @@ server {
 }
 EOF
 else
-  echo "⚠️  SSL certificate not found, creating HTTP-only config..."
+  echo "⚠️  SSL certificate not found, creating/updating HTTP-only config..."
+  
+  # Backup existing config if it exists
+  if [ "$CONFIG_EXISTS" = true ]; then
+    sudo cp /etc/nginx/sites-available/default /etc/nginx/sites-available/default.backup.$(date +%Y%m%d_%H%M%S)
+    echo "📦 Backed up existing config"
+  fi
   
   # Create Nginx config for SPA (HTTP only)
   sudo tee /etc/nginx/sites-available/default > /dev/null <<'EOF'
@@ -115,15 +175,23 @@ server {
 EOF
 fi
 
-# Hapus semua enabled sites untuk avoid conflict
-echo "🧹 Cleaning up enabled sites..."
-sudo rm -f /etc/nginx/sites-enabled/*
+# Only remove conflicting enabled sites (not all)
+# Keep default if it's already enabled
+if [ -L /etc/nginx/sites-enabled/default ]; then
+  echo "✅ default site already enabled"
+else
+  # Remove only backend-api and other conflicting sites
+  sudo rm -f /etc/nginx/sites-enabled/backend-api
+  # Enable default site
+  sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+  echo "✅ Enabled default site"
+fi
 
-# Hapus config backend jika ter-copy (pastikan tidak ada conflict)
-sudo rm -f /etc/nginx/sites-available/backend-api
-
-# Enable default site
-sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+# Remove backend config if it exists (shouldn't be on frontend VM)
+if [ -f /etc/nginx/sites-available/backend-api ]; then
+  echo "🧹 Removing backend config from frontend VM..."
+  sudo rm -f /etc/nginx/sites-available/backend-api
+fi
 
 # Test Nginx config
 echo "🧪 Testing Nginx configuration..."

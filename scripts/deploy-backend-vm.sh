@@ -75,27 +75,77 @@ sudo docker run -d \
   ${BACKEND_IMAGE}
 
 # Wait a moment for container to start
-sleep 5
+echo "⏳ Waiting for container to start..."
+sleep 10
 
 # Verify container is running
 echo "🔍 Verifying container status..."
-if sudo docker ps | grep -q dms-backend-prod; then
-  echo "✅ Backend container is running"
-  
-  # Check if container is healthy (listening on port 8080)
-  if sudo ss -tlnp | grep -q ':8080'; then
-    echo "✅ Backend is listening on port 8080"
+MAX_RETRIES=5
+RETRY_COUNT=0
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  if sudo docker ps | grep -q dms-backend-prod; then
+    echo "✅ Backend container is running"
+    
+    # Check if container is healthy (listening on port 8080)
+    if sudo ss -tlnp | grep -q ':8080'; then
+      echo "✅ Backend is listening on port 8080"
+      
+      # Final health check
+      if curl -s -f -m 5 http://127.0.0.1:8080/health > /dev/null 2>&1; then
+        echo "✅ Backend health check passed"
+        break
+      else
+        echo "⚠️  Backend is running but health check failed, retrying..."
+      fi
+    else
+      echo "⚠️  WARNING: Backend container is running but port 8080 is not listening yet"
+      echo "Container logs:"
+      sudo docker logs --tail 20 dms-backend-prod
+    fi
   else
-    echo "⚠️  WARNING: Backend container is running but port 8080 is not listening yet"
+    echo "❌ ERROR: Backend container is not running!"
     echo "Container logs:"
-    sudo docker logs --tail 20 dms-backend-prod
+    sudo docker logs --tail 50 dms-backend-prod 2>/dev/null || true
+    
+    # Try to start container again
+    echo "🔄 Attempting to restart container..."
+    sudo docker start dms-backend-prod 2>/dev/null || {
+      echo "❌ Failed to restart container. Checking status..."
+      sudo docker ps -a | grep dms-backend-prod
+      exit 1
+    }
+    sleep 5
   fi
-else
-  echo "❌ ERROR: Backend container failed to start!"
+  
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+    echo "⏳ Retrying in 5 seconds... ($RETRY_COUNT/$MAX_RETRIES)"
+    sleep 5
+  fi
+done
+
+if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+  echo "❌ ERROR: Backend container failed to start after $MAX_RETRIES attempts!"
+  echo "Container status:"
+  sudo docker ps -a | grep dms-backend-prod || echo "Container not found"
   echo "Container logs:"
-  sudo docker logs --tail 50 dms-backend-prod || true
+  sudo docker logs --tail 100 dms-backend-prod 2>/dev/null || true
+  exit 1
+fi
+
+# Ensure Docker service is enabled for auto-start
+echo "🔧 Ensuring Docker service is enabled..."
+sudo systemctl enable docker 2>/dev/null || true
+sudo systemctl start docker 2>/dev/null || true
+
+# Verify Docker is running
+if ! sudo systemctl is-active --quiet docker; then
+  echo "❌ ERROR: Docker service is not running!"
+  sudo systemctl status docker --no-pager -l
   exit 1
 fi
 
 echo "✅ Backend deployment completed successfully!"
+echo "✅ Container restart policy: unless-stopped (will auto-restart on VM reboot)"
 

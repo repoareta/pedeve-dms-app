@@ -299,7 +299,7 @@ jobs:
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --command="
-              chmod +x ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/verify-backend-deployment.sh
+              chmod +x ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/verify-backend-deployment.sh ~/ensure-services-running.sh
               if ! ~/deploy-backend-vm.sh ${{ secrets.GCP_PROJECT_ID }} ${BACKEND_IMAGE}; then
                 echo '❌ ERROR: deploy-backend-vm.sh failed!'
                 exit 1
@@ -310,12 +310,18 @@ jobs:
                 exit 1
               fi
               
+              # Ensure services are running
+              if ! ~/ensure-services-running.sh backend; then
+                echo '❌ ERROR: ensure-services-running.sh failed!'
+                exit 1
+              fi
+              
               if ! ~/verify-backend-deployment.sh; then
                 echo '❌ ERROR: verify-backend-deployment.sh failed!'
                 exit 1
               fi
               
-              rm -f ~/backend-image.tar ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/setup-backend-ssl.sh ~/verify-backend-deployment.sh
+              rm -f ~/backend-image.tar ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/setup-backend-ssl.sh ~/verify-backend-deployment.sh ~/ensure-services-running.sh
             "
 
       - name: Deploy Frontend to GCP VM
@@ -358,9 +364,15 @@ jobs:
               sudo chmod -R 755 /var/www/html
               
               # Setup Nginx config for SPA
-              chmod +x ~/setup-nginx-frontend.sh ~/verify-frontend-deployment.sh
+              chmod +x ~/setup-nginx-frontend.sh ~/verify-frontend-deployment.sh ~/ensure-services-running.sh
               if ! ~/setup-nginx-frontend.sh; then
                 echo '❌ ERROR: setup-nginx-frontend.sh failed!'
+                exit 1
+              fi
+              
+              # Ensure services are running
+              if ! ~/ensure-services-running.sh frontend; then
+                echo '❌ ERROR: ensure-services-running.sh failed!'
                 exit 1
               fi
               
@@ -370,7 +382,7 @@ jobs:
               fi
               
               # Cleanup
-              rm -f ~/frontend-dist.tar.gz ~/setup-nginx-frontend.sh ~/setup-frontend-ssl.sh ~/verify-frontend-deployment.sh
+              rm -f ~/frontend-dist.tar.gz ~/setup-nginx-frontend.sh ~/setup-frontend-ssl.sh ~/verify-frontend-deployment.sh ~/ensure-services-running.sh
               sudo rm -rf /tmp/dist
             "
 

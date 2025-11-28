@@ -115,6 +115,16 @@ server {
 EOF
 fi
 
+# Hapus semua enabled sites untuk avoid conflict
+echo "🧹 Cleaning up enabled sites..."
+sudo rm -f /etc/nginx/sites-enabled/*
+
+# Hapus config backend jika ter-copy (pastikan tidak ada conflict)
+sudo rm -f /etc/nginx/sites-available/backend-api
+
+# Enable default site
+sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+
 # Test Nginx config
 echo "🧪 Testing Nginx configuration..."
 sudo nginx -t

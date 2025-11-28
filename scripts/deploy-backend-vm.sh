@@ -55,8 +55,12 @@ echo "✅ DATABASE_URL length: ${#DATABASE_URL} characters"
 echo "✅ Password encoded successfully"
 
 # Start new container with all environment variables
-# Use --network host so container can access Cloud SQL Proxy on 127.0.0.1:5432
+# IMPORTANT: Use --network host so container can access Cloud SQL Proxy on 127.0.0.1:5432
+# DO NOT CHANGE network mode - it's required for Cloud SQL Proxy access
 echo "🚀 Starting new container..."
+echo "   - Network mode: host (required for Cloud SQL Proxy)"
+echo "   - Container name: dms-backend-prod"
+echo "   - Restart policy: unless-stopped"
 sudo docker run -d \
   --name dms-backend-prod \
   --restart unless-stopped \

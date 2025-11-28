@@ -17,9 +17,11 @@ CONFIG_CORRECT=false
 SSL_CERT_EXISTS=false
 
 # Check if SSL certificate exists
-if [ -f /etc/letsencrypt/live/pedeve-dev.aretaamany.com/fullchain.pem ]; then
+# IMPORTANT: Preserve existing SSL certificate - DO NOT OVERWRITE
+if [ -f /etc/letsencrypt/live/pedeve-dev.aretaamany.com/fullchain.pem ] && \
+   [ -f /etc/letsencrypt/live/pedeve-dev.aretaamany.com/privkey.pem ]; then
   SSL_CERT_EXISTS=true
-  echo "✅ SSL certificate found"
+  echo "✅ SSL certificate found (preserving existing certificate)"
 fi
 
 # Check if default config already exists
@@ -34,18 +36,24 @@ if [ -f /etc/nginx/sites-available/default ]; then
     echo "✅ Frontend Nginx config is correct"
     
     # If SSL exists, check if config has HTTPS block
+    # IMPORTANT: Preserve existing SSL configuration - DO NOT OVERWRITE if correct
     if [ "$SSL_CERT_EXISTS" = true ]; then
-      if sudo grep -q "ssl_certificate.*pedeve-dev" /etc/nginx/sites-available/default && \
-         sudo grep -q "listen.*443" /etc/nginx/sites-available/default && \
-         sudo grep -q "server_name.*pedeve-dev.aretaamany.com" /etc/nginx/sites-available/default; then
+      if sudo grep -q "ssl_certificate.*pedeve-dev.aretaamany.com" /etc/nginx/sites-available/default && \
+         sudo grep -q "listen.*443.*ssl" /etc/nginx/sites-available/default && \
+         sudo grep -q "server_name.*pedeve-dev.aretaamany.com" /etc/nginx/sites-available/default && \
+         sudo grep -q "ssl_certificate_key.*pedeve-dev.aretaamany.com" /etc/nginx/sites-available/default; then
         echo "✅ HTTPS config already present and correct"
         echo "⏭️  Skipping config update - preserving existing SSL configuration"
+        echo "   - SSL certificate: /etc/letsencrypt/live/pedeve-dev.aretaamany.com/"
+        echo "   - Port 443: configured"
+        echo "   - Server name: pedeve-dev.aretaamany.com"
         # Just ensure it's enabled and reload
         sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
         sudo nginx -t && sudo systemctl reload nginx || true
         exit 0
       else
         echo "⚠️  SSL exists but config doesn't have HTTPS, will update..."
+        echo "   - This is safe - we will add HTTPS block without removing existing config"
       fi
     else
       # No SSL, check if config is HTTP-only (correct)

@@ -25,9 +25,11 @@ CONFIG_CORRECT=false
 SSL_CERT_EXISTS=false
 
 # Check if SSL certificate exists
-if [ -f /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/fullchain.pem ]; then
+# IMPORTANT: Preserve existing SSL certificate - DO NOT OVERWRITE
+if [ -f /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/fullchain.pem ] && \
+   [ -f /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/privkey.pem ]; then
   SSL_CERT_EXISTS=true
-  echo "✅ SSL certificate found"
+  echo "✅ SSL certificate found (preserving existing certificate)"
 fi
 
 # Check if backend-api config already exists
@@ -42,18 +44,26 @@ if [ -f /etc/nginx/sites-available/backend-api ]; then
     echo "✅ Backend Nginx config is correct"
     
     # If SSL exists, check if config has HTTPS block
+    # IMPORTANT: Preserve existing SSL configuration - DO NOT OVERWRITE if correct
     if [ "$SSL_CERT_EXISTS" = true ]; then
-      if sudo grep -q "ssl_certificate.*api-pedeve-dev" /etc/nginx/sites-available/backend-api && \
-         sudo grep -q "listen.*443" /etc/nginx/sites-available/backend-api && \
-         sudo grep -q "server_name.*api-pedeve-dev.aretaamany.com" /etc/nginx/sites-available/backend-api; then
+      if sudo grep -q "ssl_certificate.*api-pedeve-dev.aretaamany.com" /etc/nginx/sites-available/backend-api && \
+         sudo grep -q "listen.*443.*ssl" /etc/nginx/sites-available/backend-api && \
+         sudo grep -q "server_name.*api-pedeve-dev.aretaamany.com" /etc/nginx/sites-available/backend-api && \
+         sudo grep -q "ssl_certificate_key.*api-pedeve-dev.aretaamany.com" /etc/nginx/sites-available/backend-api && \
+         sudo grep -q "proxy_pass.*127.0.0.1:8080" /etc/nginx/sites-available/backend-api; then
         echo "✅ HTTPS config already present and correct"
         echo "⏭️  Skipping config update - preserving existing SSL configuration"
+        echo "   - SSL certificate: /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/"
+        echo "   - Port 443: configured"
+        echo "   - Server name: api-pedeve-dev.aretaamany.com"
+        echo "   - Proxy pass: http://127.0.0.1:8080"
         # Just ensure it's enabled and reload
         sudo ln -sf /etc/nginx/sites-available/backend-api /etc/nginx/sites-enabled/backend-api
         sudo nginx -t && sudo systemctl reload nginx || true
         exit 0
       else
         echo "⚠️  SSL exists but config doesn't have HTTPS, will update..."
+        echo "   - This is safe - we will add HTTPS block without removing existing config"
       fi
     else
       # No SSL, check if config is HTTP-only (correct)

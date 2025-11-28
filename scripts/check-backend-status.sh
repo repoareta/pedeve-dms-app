@@ -1,76 +1,48 @@
 #!/bin/bash
-# Script untuk check status backend services
-# Jalankan langsung di backend VM: bash check-backend-status.sh
+set -euo pipefail
 
-echo "🔍 Checking Backend Services Status..."
+# Script untuk check backend status
+# Usage: ./check-backend-status.sh
+
+echo "🔍 Checking backend services..."
+
+# Check Docker container
 echo ""
+echo "📦 Docker Container:"
+if sudo docker ps | grep -q dms-backend-prod; then
+  echo "✅ Container is running"
+  sudo docker ps | grep dms-backend-prod
+else
+  echo "❌ Container is NOT running"
+  echo "Checking stopped containers:"
+  sudo docker ps -a | grep dms-backend-prod || echo "⚠️  Container not found"
+fi
 
-# Check Nginx status
-echo "=== Nginx Status ==="
-sudo systemctl status nginx --no-pager -l | head -15 || echo "❌ Nginx service not found"
-
+# Check Nginx
 echo ""
-echo "Nginx is-active:"
+echo "🌐 Nginx:"
 if sudo systemctl is-active --quiet nginx; then
-  echo "✅ Nginx is active"
+  echo "✅ Nginx is running"
+  sudo systemctl status nginx --no-pager | head -10
 else
-  echo "❌ Nginx is not active"
+  echo "❌ Nginx is NOT running"
+  sudo systemctl status nginx --no-pager | head -10
 fi
 
+# Check ports
 echo ""
-echo "Nginx is-enabled:"
-if sudo systemctl is-enabled --quiet nginx; then
-  echo "✅ Nginx is enabled"
-else
-  echo "❌ Nginx is not enabled"
-fi
+echo "🔍 Ports:"
+sudo ss -tlnp | grep -E ':(80|443|8080)' || echo "⚠️  No ports listening"
+
+# Check container logs
+echo ""
+echo "📋 Container logs (last 20 lines):"
+sudo docker logs --tail 20 dms-backend-prod 2>/dev/null || echo "⚠️  Cannot get logs"
+
+# Test health endpoint
+echo ""
+echo "🏥 Health check:"
+curl -s http://localhost:8080/health || echo "❌ Health check failed"
 
 echo ""
-echo "=== Nginx Listening Ports ==="
-sudo ss -tlnp | grep nginx || echo "❌ Nginx not listening on any port"
-
-echo ""
-echo "=== All Listening Ports (80, 443, 8080) ==="
-sudo ss -tlnp | grep -E ':(80|443|8080)' || echo "❌ No relevant ports listening"
-
-echo ""
-echo "=== Docker Container Status ==="
-sudo docker ps -a | grep dms-backend-prod || echo "❌ No backend container found"
-
-echo ""
-echo "=== Container Logs (last 20 lines) ==="
-sudo docker logs --tail 20 dms-backend-prod 2>/dev/null || echo "❌ Cannot get container logs"
-
-echo ""
-echo "=== Port 8080 Status ==="
-if sudo ss -tlnp | grep -q ':8080'; then
-  echo "✅ Port 8080 is listening"
-  sudo ss -tlnp | grep ':8080'
-else
-  echo "❌ Port 8080 is not listening"
-fi
-
-echo ""
-echo "=== Container Health Check ==="
-if curl -s -m 5 http://127.0.0.1:8080/health > /dev/null; then
-  echo "✅ Container health check passed"
-  curl -s http://127.0.0.1:8080/health
-else
-  echo "❌ Container health check failed"
-fi
-
-echo ""
-echo "=== Nginx Config Test ==="
-sudo nginx -t 2>&1 || echo "❌ Nginx config has errors"
-
-echo ""
-echo "=== Nginx Error Log (last 10 lines) ==="
-sudo tail -10 /var/log/nginx/error.log 2>/dev/null || echo "No error log found"
-
-echo ""
-echo "=== Nginx Access Log (last 5 lines) ==="
-sudo tail -5 /var/log/nginx/backend-api-access.log 2>/dev/null || echo "No access log found"
-
-echo ""
-echo "✅ Status check completed!"
-
+echo "✅ Status check complete!"

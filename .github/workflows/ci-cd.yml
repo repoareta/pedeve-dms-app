@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - development  # Tambah branch development untuk deployment ke GCP
     tags:
       - 'v*.*.*'  # Trigger on version tags (v1.0.0, v2.1.3, etc.)
   workflow_dispatch:  # 👉 memungkinkan run manual
@@ -53,29 +54,50 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
-      - name: Build frontend Docker image
-        id: build-frontend
+      - name: Build frontend static files
+        working-directory: frontend
+        env:
+          VITE_API_URL: https://api-pedeve-dev.aretaamany.com/api/v1
         run: |
-          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          FRONTEND_IMAGE="ghcr.io/${REPO_OWNER}/dms-frontend:${{ steps.version.outputs.version }}"
-          docker build \
-            -t ${FRONTEND_IMAGE} \
-            -t ghcr.io/${REPO_OWNER}/dms-frontend:latest \
-            ./frontend
-          echo "image=${FRONTEND_IMAGE}" >> $GITHUB_OUTPUT
+          npm run build
+          echo "Frontend build completed. Files in ./dist"
+          echo "API URL configured: https://api-pedeve-dev.aretaamany.com/api/v1"
+          
+      - name: Prepare frontend for deployment
+        run: |
+          # Create deployment archive
+          cd frontend
+          tar -czf ../frontend-dist.tar.gz dist/
+          echo "Frontend static files archived"
+          
+      - name: Upload frontend static files artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend-dist.tar.gz
+          retention-days: 1
 
       # ===== BACKEND =====
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
+          cache-dependency-path: backend/go.sum
 
       - name: Install Go linter
         run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
+      - name: Download Go dependencies
+        working-directory: backend
+        run: go mod download
+
+      - name: Build Go packages (for export data)
+        working-directory: backend
+        run: go build ./...
+
       - name: Lint backend
         working-directory: backend
-        run: golangci-lint run ./...
+        run: golangci-lint run --timeout=10m ./...
 
       - name: Test backend
         working-directory: backend
@@ -93,16 +115,8 @@ jobs:
           echo "image=${BACKEND_IMAGE}" >> $GITHUB_OUTPUT
 
       # ===== SECURITY SCAN =====
-      - name: Run Trivy vulnerability scanner on frontend image
-        id: trivy-frontend
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ steps.build-frontend.outputs.image }}
-          format: 'sarif'
-          output: 'trivy-results-frontend.sarif'
-          severity: 'CRITICAL,HIGH'
-        continue-on-error: true  # Don't fail pipeline on vulnerabilities, just report
-
+      # Note: Frontend tidak lagi menggunakan Docker image, hanya static files
+      # Jadi kita hanya scan backend image saja
       - name: Run Trivy vulnerability scanner on backend image
         id: trivy-backend
         uses: aquasecurity/trivy-action@master
@@ -116,14 +130,6 @@ jobs:
       - name: Check Trivy results exist
         id: check-trivy
         run: |
-          if [ -f "trivy-results-frontend.sarif" ]; then
-            echo "frontend_exists=true" >> $GITHUB_OUTPUT
-            echo "Frontend SARIF file found"
-          else
-            echo "frontend_exists=false" >> $GITHUB_OUTPUT
-            echo "Frontend SARIF file not found"
-          fi
-          
           if [ -f "trivy-results-backend.sarif" ]; then
             echo "backend_exists=true" >> $GITHUB_OUTPUT
             echo "Backend SARIF file found"
@@ -131,14 +137,6 @@ jobs:
             echo "backend_exists=false" >> $GITHUB_OUTPUT
             echo "Backend SARIF file not found"
           fi
-
-      - name: Upload Trivy results to GitHub Security (frontend)
-        uses: github/codeql-action/upload-sarif@v4
-        if: steps.check-trivy.outputs.frontend_exists == 'true'
-        with:
-          sarif_file: 'trivy-results-frontend.sarif'
-          category: 'trivy-frontend'
-          wait-for-processing: false
 
       - name: Upload Trivy results to GitHub Security (backend)
         uses: github/codeql-action/upload-sarif@v4
@@ -155,8 +153,7 @@ jobs:
       - name: Push Docker images
         run: |
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          docker push ghcr.io/${REPO_OWNER}/dms-frontend:${{ steps.version.outputs.version }}
-          docker push ghcr.io/${REPO_OWNER}/dms-frontend:latest
+          # Note: Frontend tidak lagi menggunakan Docker image, hanya backend
           docker push ghcr.io/${REPO_OWNER}/dms-backend:${{ steps.version.outputs.version }}
           docker push ghcr.io/${REPO_OWNER}/dms-backend:latest
 
@@ -205,3 +202,403 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ===== DEPLOY TO GCP (Development Branch) =====
+  deploy-gcp:
+    if: github.ref == 'refs/heads/development'
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for Workload Identity Federation
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download frontend static files artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: .
+
+      - name: Authenticate to Google Cloud using Workload Identity Federation
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          audience: https://github.com/repoareta/pedeve-dms-app
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker to use gcloud as a credential helper
+        run: |
+          gcloud auth configure-docker --quiet
+
+      - name: Pull Docker image for backend
+        run: |
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          docker pull ghcr.io/${REPO_OWNER}/dms-backend:latest
+
+      - name: Setup Backend Firewall Rules
+        run: |
+          echo "🔥 Setting up firewall rules for backend..."
+          
+          # Allow Backend API (port 8080)
+          gcloud compute firewall-rules create allow-backend-api \
+            --allow tcp:8080 \
+            --source-ranges 0.0.0.0/0 \
+            --target-tags backend-api-server \
+            --description "Allow Backend API traffic on port 8080" \
+            --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null || echo "⚠️  Firewall rule 'allow-backend-api' already exists or creation failed"
+          
+          # Apply tag to backend VM
+          gcloud compute instances add-tags backend-dev \
+            --tags backend-api-server \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null || echo "⚠️  Tags already applied or operation failed"
+          
+          echo "✅ Firewall rules setup completed"
+
+      - name: Deploy Backend to GCP VM
+        run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          BACKEND_IMAGE="ghcr.io/${REPO_OWNER}/dms-backend:latest"
+          
+          # Save image to tar file
+          docker save ${BACKEND_IMAGE} -o backend-image.tar
+          
+          # Copy image to backend VM
+          gcloud compute scp \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            backend-image.tar \
+            backend-dev:~/backend-image.tar
+          
+          # Copy deployment and nginx setup scripts to VM
+          gcloud compute scp \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            scripts/deploy-backend-vm.sh \
+            scripts/setup-backend-nginx.sh \
+            scripts/verify-backend-deployment.sh \
+            scripts/ensure-services-running.sh \
+            backend-dev:~/
+          
+          # Copy SSL setup script to VM (optional, run manually if needed)
+          gcloud compute scp \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            scripts/setup-backend-ssl.sh \
+            backend-dev:~/setup-backend-ssl.sh 2>/dev/null || echo "⚠️  SSL script copy failed (optional)"
+          
+          # SSH ke backend VM dan deploy
+          # IMPORTANT: This deployment preserves:
+          # - SSL certificates in /etc/letsencrypt/live/
+          # - Nginx config with SSL (if already configured correctly)
+          # - Docker container network mode (host)
+          # - All manual configurations
+          gcloud compute ssh backend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="
+              chmod +x ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/verify-backend-deployment.sh ~/ensure-services-running.sh
+              
+              # Deploy backend container (preserves network mode: host)
+              if ! ~/deploy-backend-vm.sh ${{ secrets.GCP_PROJECT_ID }} ${BACKEND_IMAGE}; then
+                echo '❌ ERROR: deploy-backend-vm.sh failed!'
+                exit 1
+              fi
+              
+              # Setup Nginx (preserves SSL config if already correct)
+              # Script will skip update if SSL certificate exists and config is correct
+              if ! ~/setup-backend-nginx.sh; then
+                echo '❌ ERROR: setup-backend-nginx.sh failed!'
+                exit 1
+              fi
+              
+              # Ensure services are running (container + Nginx)
+              if ! ~/ensure-services-running.sh backend; then
+                echo '❌ ERROR: ensure-services-running.sh failed!'
+                exit 1
+              fi
+              
+              # Verify deployment
+              if ! ~/verify-backend-deployment.sh; then
+                echo '❌ ERROR: verify-backend-deployment.sh failed!'
+                exit 1
+              fi
+              
+              # Cleanup: Only remove temporary deployment files (NOT configs or certificates)
+              rm -f ~/backend-image.tar ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/setup-backend-ssl.sh ~/verify-backend-deployment.sh ~/ensure-services-running.sh
+            "
+
+      - name: Deploy Frontend to GCP VM
+        run: |
+          # Copy static files to frontend VM
+          gcloud compute scp \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            frontend-dist.tar.gz \
+            frontend-dev:~/frontend-dist.tar.gz
+          
+          # Copy Nginx setup scripts to frontend VM
+          # NOTE: These scripts are idempotent and preserve existing configurations:
+          # - setup-nginx-frontend.sh: Preserves SSL certificates and HTTPS config if already correct
+          # - setup-frontend-ssl.sh: Optional, run manually if needed (SSL should be setup once)
+          gcloud compute scp \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            scripts/setup-nginx-frontend.sh \
+            scripts/setup-frontend-ssl.sh \
+            scripts/verify-frontend-deployment.sh \
+            scripts/ensure-services-running.sh \
+            frontend-dev:~/
+          
+          # SSH ke frontend VM dan deploy static files
+          # IMPORTANT: This deployment preserves:
+          # - SSL certificates in /etc/letsencrypt/live/
+          # - Nginx config with SSL (if already configured correctly)
+          # - All manual configurations
+          gcloud compute ssh frontend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="
+              # Install Nginx if not exists
+              if ! command -v nginx &> /dev/null; then
+                sudo apt-get update
+                sudo apt-get install -y nginx
+                sudo systemctl enable nginx
+              fi
+              
+              # Extract static files (ONLY updates static files, NOT configs or certificates)
+              # This is safe - only removes old static files, preserves Nginx config and SSL
+              sudo rm -rf /var/www/html/*
+              sudo tar -xzf ~/frontend-dist.tar.gz -C /tmp/
+              sudo cp -r /tmp/dist/* /var/www/html/
+              
+              # Set proper permissions
+              sudo chown -R www-data:www-data /var/www/html
+              sudo chmod -R 755 /var/www/html
+              
+              # Setup Nginx config for SPA (preserves SSL config if already correct)
+              # Script will skip update if SSL certificate exists and config is correct
+              chmod +x ~/setup-nginx-frontend.sh ~/verify-frontend-deployment.sh ~/ensure-services-running.sh
+              if ! ~/setup-nginx-frontend.sh; then
+                echo '❌ ERROR: setup-nginx-frontend.sh failed!'
+                exit 1
+              fi
+              
+              # Ensure services are running (Nginx)
+              if ! ~/ensure-services-running.sh frontend; then
+                echo '❌ ERROR: ensure-services-running.sh failed!'
+                exit 1
+              fi
+              
+              # Verify deployment
+              if ! ~/verify-frontend-deployment.sh; then
+                echo '❌ ERROR: verify-frontend-deployment.sh failed!'
+                exit 1
+              fi
+              
+              # Cleanup: Only remove temporary deployment files (NOT configs or certificates)
+              rm -f ~/frontend-dist.tar.gz ~/setup-nginx-frontend.sh ~/setup-frontend-ssl.sh ~/verify-frontend-deployment.sh ~/ensure-services-running.sh
+              sudo rm -rf /tmp/dist
+            "
+
+      - name: Verify Backend Container
+        run: |
+          echo "Verifying backend container status..."
+          gcloud compute ssh backend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="
+              echo 'Checking Docker container status...'
+              sudo docker ps -a | grep dms-backend-prod || echo 'Container not found'
+              sudo docker logs --tail 20 dms-backend-prod || echo 'Cannot get logs'
+            "
+
+      - name: Health Check Backend
+        run: |
+          echo "Waiting for backend to be ready (seeding may take time)..."
+          sleep 30  # Increased wait time for seeding to complete
+          
+          # Try health check with retry
+          # Health check dilakukan dari dalam VM karena firewall mungkin block akses dari GitHub Actions
+          MAX_RETRIES=10  # Increased retries
+          RETRY_DELAY=10  # Increased delay between retries
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Health check attempt $i/$MAX_RETRIES..."
+            
+            # Health check dari dalam VM (via SSH) untuk avoid firewall issues
+            HEALTH_RESULT=$(gcloud compute ssh backend-dev \
+              --zone=asia-southeast2-a \
+              --project=${{ secrets.GCP_PROJECT_ID }} \
+              --command="
+                # Check if container is running
+                if ! sudo docker ps | grep -q dms-backend-prod; then
+                  echo 'CONTAINER_NOT_RUNNING'
+                  exit 1
+                fi
+                
+                # Try health check from within VM
+                HTTP_CODE=\$(curl -s -o /dev/null -w '%{http_code}' -m 10 http://127.0.0.1:8080/health 2>/dev/null || echo '000')
+                
+                if [ \"\$HTTP_CODE\" = '200' ]; then
+                  RESPONSE=\$(curl -s -m 10 http://127.0.0.1:8080/health 2>/dev/null || echo '')
+                  echo \"SUCCESS:\$HTTP_CODE:\$RESPONSE\"
+                  exit 0
+                else
+                  echo \"FAILED:\$HTTP_CODE\"
+                  exit 1
+                fi
+              " 2>&1 || echo "SSH_FAILED")
+            
+            # Parse result
+            if echo "$HEALTH_RESULT" | grep -q "SUCCESS:"; then
+              HTTP_CODE=$(echo "$HEALTH_RESULT" | grep "SUCCESS:" | cut -d: -f2)
+              RESPONSE=$(echo "$HEALTH_RESULT" | grep "SUCCESS:" | cut -d: -f3-)
+              echo "✅ Backend health check passed! (HTTP $HTTP_CODE)"
+              echo "Response: $RESPONSE"
+              exit 0
+            elif echo "$HEALTH_RESULT" | grep -q "CONTAINER_NOT_RUNNING"; then
+              echo "❌ Container not running!"
+              exit 1
+            else
+              HTTP_CODE=$(echo "$HEALTH_RESULT" | grep "FAILED:" | cut -d: -f2 || echo "000")
+              echo "⏳ Backend not ready yet (HTTP $HTTP_CODE), waiting ${RETRY_DELAY}s before retry..."
+            fi
+            
+            if [ $i -lt $MAX_RETRIES ]; then
+              sleep $RETRY_DELAY
+            fi
+          done
+          
+          echo "❌ Backend health check failed after $MAX_RETRIES attempts"
+          echo "Checking container logs..."
+          gcloud compute ssh backend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="sudo docker logs --tail 100 dms-backend-prod" || true
+          
+          echo "Checking container and port status..."
+          gcloud compute ssh backend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="
+              echo 'Container status:'
+              sudo docker ps | grep dms-backend-prod || echo 'Container not found'
+              echo ''
+              echo 'Port 8080 status:'
+              sudo ss -tlnp | grep 8080 || echo 'Port 8080 not listening'
+            " || true
+          
+          exit 1
+
+      - name: Health Check Frontend
+        run: |
+          echo "Waiting for frontend to be ready..."
+          sleep 10
+          
+          # Try health check with retry
+          MAX_RETRIES=5
+          RETRY_DELAY=5
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Frontend health check attempt $i/$MAX_RETRIES..."
+            
+            # Check from within VM to avoid firewall issues
+            HEALTH_RESULT=$(gcloud compute ssh frontend-dev \
+              --zone=asia-southeast2-a \
+              --project=${{ secrets.GCP_PROJECT_ID }} \
+              --command="
+                # Check if Nginx is running
+                if ! sudo systemctl is-active --quiet nginx; then
+                  echo 'NGINX_NOT_RUNNING'
+                  exit 1
+                fi
+                
+                # Try health check from within VM
+                HTTP_CODE=\$(curl -s -o /dev/null -w '%{http_code}' -m 10 http://127.0.0.1/health 2>/dev/null || echo '000')
+                
+                if [ \"\$HTTP_CODE\" = '200' ]; then
+                  echo \"SUCCESS:\$HTTP_CODE\"
+                  exit 0
+                else
+                  echo \"FAILED:\$HTTP_CODE\"
+                  exit 1
+                fi
+              " 2>&1 || echo "SSH_FAILED")
+            
+            if echo "$HEALTH_RESULT" | grep -q "SUCCESS:"; then
+              HTTP_CODE=$(echo "$HEALTH_RESULT" | grep "SUCCESS:" | cut -d: -f2)
+              echo "✅ Frontend health check passed! (HTTP $HTTP_CODE)"
+              exit 0
+            elif echo "$HEALTH_RESULT" | grep -q "NGINX_NOT_RUNNING"; then
+              echo "❌ Nginx is not running on frontend VM!"
+              exit 1
+            else
+              HTTP_CODE=$(echo "$HEALTH_RESULT" | grep "FAILED:" | cut -d: -f2 || echo "000")
+              echo "⏳ Frontend not ready yet (HTTP $HTTP_CODE), waiting ${RETRY_DELAY}s before retry..."
+            fi
+            
+            if [ $i -lt $MAX_RETRIES ]; then
+              sleep $RETRY_DELAY
+            fi
+          done
+          
+          echo "❌ Frontend health check failed after $MAX_RETRIES attempts"
+          echo "Checking Nginx status..."
+          gcloud compute ssh frontend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="sudo systemctl status nginx --no-pager -l" || true
+          exit 1
+
+      - name: Final Service Verification
+        run: |
+          echo "🔍 Final verification: Ensuring all services are running..."
+          
+          # Verify Backend
+          echo "Checking backend services..."
+          gcloud compute ssh backend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="
+              echo '=== Backend Container Status ==='
+              sudo docker ps | grep dms-backend-prod || echo '❌ Container not running!'
+              
+              echo ''
+              echo '=== Backend Port Status ==='
+              sudo ss -tlnp | grep 8080 || echo '❌ Port 8080 not listening!'
+              
+              echo ''
+              echo '=== Nginx Status ==='
+              sudo systemctl is-active nginx && echo '✅ Nginx is active' || echo '❌ Nginx is not active'
+              sudo systemctl is-enabled nginx && echo '✅ Nginx is enabled' || echo '❌ Nginx is not enabled'
+            "
+          
+          # Verify Frontend
+          echo "Checking frontend services..."
+          gcloud compute ssh frontend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="
+              echo '=== Nginx Status ==='
+              sudo systemctl is-active nginx && echo '✅ Nginx is active' || echo '❌ Nginx is not active'
+              sudo systemctl is-enabled nginx && echo '✅ Nginx is enabled' || echo '❌ Nginx is not enabled'
+              
+              echo ''
+              echo '=== Frontend Files ==='
+              ls -la /var/www/html/ | head -5 || echo '❌ Files not found!'
+              
+              echo ''
+              echo '=== Port 80 Status ==='
+              sudo ss -tlnp | grep ':80 ' || echo '❌ Port 80 not listening!'
+            "
+          
+          echo "✅ Final verification completed!"

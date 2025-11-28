@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/storage"
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
 )
@@ -106,7 +106,12 @@ func UploadLogo(c *fiber.Ctx) error {
 	}
 
 	// Reset file pointer
-	src.Seek(0, 0)
+	if _, err := src.Seek(0, 0); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "seek_failed",
+			"message": "Failed to reset file pointer",
+		})
+	}
 
 	// Validasi MIME type
 	mimeType := http.DetectContentType(buffer)
@@ -134,43 +139,63 @@ func UploadLogo(c *fiber.Ctx) error {
 		})
 	}
 
-	// Buat direktori uploads jika belum ada
-	uploadDir := "uploads/logos"
-	if err := os.MkdirAll(uploadDir, 0755); err != nil {
-		zapLog.Error("Failed to create upload directory", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "upload_failed",
-			"message": "Gagal membuat direktori upload",
-		})
-	}
-
 	// Generate unique filename
 	timestamp := time.Now().Unix()
 	filename := fmt.Sprintf("%d_%s", timestamp, file.Filename)
-	filepath := filepath.Join(uploadDir, filename)
 
-	// Simpan file
-	dst, err := os.Create(filepath)
+	// Read file content
+	fileData := make([]byte, file.Size)
+	if _, err := src.Read(fileData); err != nil && err != io.EOF {
+		zapLog.Error("Failed to read file content", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "upload_failed",
+			"message": "Gagal membaca file",
+		})
+	}
+
+	// Get storage manager (GCP Storage atau Local)
+	storageManager, err := storage.GetStorageManager()
 	if err != nil {
-		zapLog.Error("Failed to create file", zap.Error(err))
+		zapLog.Error("Failed to initialize storage manager", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "upload_failed",
+			"message": "Gagal menginisialisasi storage",
+		})
+	}
+
+	// Upload file ke storage (GCP Storage atau Local)
+	bucketPath := "logos"
+	contentType := mimeType
+	fileURL, err := storageManager.UploadFile(bucketPath, filename, fileData, contentType)
+	if err != nil {
+		zapLog.Error("Failed to upload file to storage", zap.Error(err))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":   "upload_failed",
 			"message": "Gagal menyimpan file",
 		})
 	}
-	defer dst.Close()
 
-	// Copy file content
-	if _, err := io.Copy(dst, src); err != nil {
-		zapLog.Error("Failed to save file", zap.Error(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "upload_failed",
-			"message": "Gagal menyimpan file",
-		})
+	// Normalize file URL to use backend proxy endpoint
+	// This ensures consistent URL format for both GCP Storage and Local Storage
+	// Format: /api/v1/files/logos/filename.png
+	
+	// If using GCP Storage, return backend proxy URL instead of direct GCP URL
+	// This allows access without requiring public bucket access
+	if strings.HasPrefix(fileURL, "https://storage.googleapis.com/") {
+		// Extract path from GCP URL: https://storage.googleapis.com/bucket/logos/filename.png
+		// Convert to: /api/v1/files/logos/filename.png
+		parts := strings.SplitN(fileURL, "/", 5) // Split after bucket name
+		if len(parts) >= 5 {
+			// parts[4] contains "logos/filename.png"
+			fileURL = fmt.Sprintf("/api/v1/files/%s", parts[4])
+		}
+	} else if strings.HasPrefix(fileURL, "/") && !strings.HasPrefix(fileURL, "/api/v1/files/") {
+		// If using Local Storage, URL format is: /logos/filename.png
+		// Convert to: /api/v1/files/logos/filename.png
+		// Remove leading slash if present
+		pathWithoutSlash := strings.TrimPrefix(fileURL, "/")
+		fileURL = fmt.Sprintf("/api/v1/files/%s", pathWithoutSlash)
 	}
-
-	// Generate URL untuk file (relative path)
-	fileURL := fmt.Sprintf("/uploads/logos/%s", filename)
 
 	zapLog.Info("Logo uploaded successfully",
 		zap.String("filename", filename),

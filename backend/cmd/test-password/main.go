@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/database"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/password"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
-	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/password"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -25,7 +25,12 @@ func main() {
 	// Initialize logger
 	logger.InitLogger()
 	zapLog := logger.GetLogger()
-	defer zapLog.Sync()
+	defer func() {
+		if err := zapLog.Sync(); err != nil {
+			// Ignore sync errors on stdout/stderr
+			_ = err
+		}
+	}()
 
 	// Initialize database
 	database.InitDB()

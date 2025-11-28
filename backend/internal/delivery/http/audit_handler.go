@@ -3,11 +3,11 @@ package http
 import (
 	"strconv"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/audit"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/database"
-	"github.com/Fajarriswandi/dms-app/backend/internal/repository"
-	"github.com/Fajarriswandi/dms-app/backend/internal/usecase"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/audit"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
 	"github.com/gofiber/fiber/v2"
 )
 

@@ -155,7 +155,7 @@ const passwordRules = {
   confirmPassword: [
     { required: true, message: 'Konfirmasi password wajib diisi', trigger: 'blur' },
     {
-      validator: (_rule: any, value: string) => {
+      validator: (_rule: unknown, value: string) => {
         if (value !== passwordForm.value.newPassword) {
           return Promise.reject('Konfirmasi password tidak cocok')
         }
@@ -184,8 +184,9 @@ const handleUpdateEmail = async () => {
     localStorage.setItem('auth_user', JSON.stringify(updatedUser))
     message.success('Email berhasil diupdate')
     resetEmailForm()
-  } catch (error: any) {
-    message.error(error.response?.data?.message || 'Gagal mengupdate email')
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(axiosError.response?.data?.message || 'Gagal mengupdate email')
   } finally {
     emailLoading.value = false
   }
@@ -205,8 +206,9 @@ const handleChangePassword = async () => {
     )
     message.success('Password berhasil diubah')
     resetPasswordForm()
-  } catch (error: any) {
-    message.error(error.response?.data?.message || 'Gagal mengubah password')
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(axiosError.response?.data?.message || 'Gagal mengubah password')
   } finally {
     passwordLoading.value = false
   }

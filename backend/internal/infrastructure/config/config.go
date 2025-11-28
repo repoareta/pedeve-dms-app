@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"github.com/hashicorp/vault/api"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"

@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"github.com/hashicorp/vault/api"
 	"go.uber.org/zap"
 )
@@ -238,13 +238,32 @@ func getKeys(m map[string]interface{}) []string {
 
 // GetSecretManager mengembalikan SecretManager berdasarkan konfigurasi
 // Priority:
-// 1. Vault (jika VAULT_ADDR dan VAULT_TOKEN set)
-// 2. Environment Variable (ENCRYPTION_KEY)
-// 3. Default key untuk development
+// 1. GCP Secret Manager (jika GCP_SECRET_MANAGER_ENABLED=true dan GCP_PROJECT_ID set)
+// 2. Vault (jika VAULT_ADDR dan VAULT_TOKEN set)
+// 3. Environment Variable (ENCRYPTION_KEY)
+// 4. Default key untuk development
 func GetSecretManager() SecretManager {
 	zapLog := logger.GetLogger()
 
-	// Cek apakah Vault dikonfigurasi
+	// Priority 1: Cek apakah GCP Secret Manager dikonfigurasi
+	gcpEnabled := os.Getenv("GCP_SECRET_MANAGER_ENABLED")
+	gcpProjectID := os.Getenv("GCP_PROJECT_ID")
+	
+	if gcpEnabled == "true" && gcpProjectID != "" {
+		gcpManager, err := NewGCPSecretManager(gcpProjectID)
+		if err != nil {
+			zapLog.Warn("Failed to initialize GCP Secret Manager, falling back to other methods",
+				zap.Error(err),
+			)
+		} else {
+			zapLog.Info("Using GCP Secret Manager for secret management",
+				zap.String("project_id", gcpProjectID),
+			)
+			return gcpManager
+		}
+	}
+
+	// Priority 2: Cek apakah Vault dikonfigurasi
 	vaultAddr := os.Getenv("VAULT_ADDR")
 	vaultToken := os.Getenv("VAULT_TOKEN")
 	vaultPath := os.Getenv("VAULT_SECRET_PATH")
@@ -260,7 +279,7 @@ func GetSecretManager() SecretManager {
 		return NewVaultSecretManager(vaultAddr, vaultToken, vaultPath)
 	}
 
-	// Fallback ke environment variable
+	// Priority 3: Fallback ke environment variable
 	zapLog.Info("Using environment variable for secret management")
 	return &EnvSecretManager{}
 }

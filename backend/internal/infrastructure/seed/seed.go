@@ -5,12 +5,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/database"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/password"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/secrets"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/uuid"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/password"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/secrets"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/uuid"
 	"go.uber.org/zap"
 )
 

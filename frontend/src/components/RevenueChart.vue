@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -141,7 +141,7 @@ const chartOptions = ref({
       </div>
     </template>
     <div class="chart-container">
-      <Line :data="chartData" :options="chartOptions" />
+      <Line :data="chartData" :options="chartOptions as any" />
     </div>
   </a-card>
 </template>

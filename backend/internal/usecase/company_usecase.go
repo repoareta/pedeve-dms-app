@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Fajarriswandi/dms-app/backend/internal/domain"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/logger"
-	"github.com/Fajarriswandi/dms-app/backend/internal/infrastructure/uuid"
-	"github.com/Fajarriswandi/dms-app/backend/internal/repository"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/uuid"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
 	"go.uber.org/zap"
 )
 
@@ -26,6 +26,7 @@ type CompanyUseCase interface {
 	UpdateCompanyFull(id string, data *domain.CompanyUpdateRequest) (*domain.CompanyModel, error)
 	DeleteCompany(id string) error
 	ValidateCompanyAccess(userCompanyID, targetCompanyID string) (bool, error)
+	CountRootHoldings() (int64, error)
 }
 
 type companyUseCase struct {
@@ -52,6 +53,17 @@ func (uc *companyUseCase) CreateCompany(name, code, description string, parentID
 	existing, _ := uc.companyRepo.GetByCode(code)
 	if existing != nil {
 		return nil, errors.New("company code already exists")
+	}
+
+	// Validasi: hanya boleh ada satu holding (parent_id = NULL)
+	if parentID == nil {
+		count, err := uc.companyRepo.CountRootHoldings()
+		if err != nil {
+			return nil, fmt.Errorf("failed to check existing holdings: %w", err)
+		}
+		if count > 0 {
+			return nil, errors.New("holding company already exists. hanya boleh ada satu holding company. silakan pilih perusahaan induk")
+		}
 	}
 
 	// Determine level
@@ -137,6 +149,10 @@ func (uc *companyUseCase) ValidateCompanyAccess(userCompanyID, targetCompanyID s
 	return uc.companyRepo.IsDescendantOf(targetCompanyID, userCompanyID)
 }
 
+func (uc *companyUseCase) CountRootHoldings() (int64, error) {
+	return uc.companyRepo.CountRootHoldings()
+}
+
 func (uc *companyUseCase) CreateCompanyFull(data *domain.CompanyCreateRequest) (*domain.CompanyModel, error) {
 	zapLog := logger.GetLogger()
 
@@ -144,6 +160,17 @@ func (uc *companyUseCase) CreateCompanyFull(data *domain.CompanyCreateRequest) (
 	existing, _ := uc.companyRepo.GetByCode(data.Code)
 	if existing != nil {
 		return nil, errors.New("company code already exists")
+	}
+
+	// Validasi: hanya boleh ada satu holding (parent_id = NULL)
+	if data.ParentID == nil {
+		count, err := uc.companyRepo.CountRootHoldings()
+		if err != nil {
+			return nil, fmt.Errorf("failed to check existing holdings: %w", err)
+		}
+		if count > 0 {
+			return nil, errors.New("holding company already exists. hanya boleh ada satu holding company. silakan pilih perusahaan induk")
+		}
 	}
 
 	// Determine level
@@ -253,6 +280,47 @@ func (uc *companyUseCase) UpdateCompanyFull(id string, data *domain.CompanyUpdat
 		return nil, fmt.Errorf("company not found: %w", err)
 	}
 
+	// Handle perubahan parent_id (untuk mengubah holding)
+	if data.ParentID != nil {
+		// Jika mengubah jadi holding (parent_id = NULL)
+		if *data.ParentID == "" {
+			data.ParentID = nil
+		}
+		
+		// Validasi: hanya boleh ada satu holding
+		if data.ParentID == nil {
+			existingHolding, err := uc.companyRepo.GetRootHolding()
+			if err == nil && existingHolding != nil && existingHolding.ID != id {
+				// Ada holding lain, set holding lama jadi anak perusahaan dari holding baru
+				existingHolding.ParentID = &id
+				existingHolding.Level = 1
+				if err := uc.companyRepo.Update(existingHolding); err != nil {
+					zapLog.Error("Failed to update old holding", zap.Error(err))
+				}
+			}
+		}
+		
+		// Update parent_id dan level
+		oldParentID := company.ParentID
+		company.ParentID = data.ParentID
+		
+		// Recalculate level
+		if company.ParentID == nil {
+			company.Level = 0
+		} else {
+			parent, err := uc.companyRepo.GetByID(*company.ParentID)
+			if err != nil {
+				return nil, fmt.Errorf("parent company not found: %w", err)
+			}
+			company.Level = parent.Level + 1
+		}
+		
+		// Jika parent berubah, update level semua descendants akan dilakukan setelah company di-update
+		// Menggunakan recursive update query di updateDescendantsLevel
+		// Note: Perubahan parent akan terdeteksi setelah company di-update dan akan trigger updateDescendantsLevel
+		_ = oldParentID // Explicitly mark as used to avoid unused variable warning
+	}
+
 	// Update company fields
 	company.Name = data.Name
 	company.ShortName = data.ShortName
@@ -274,10 +342,23 @@ func (uc *companyUseCase) UpdateCompanyFull(id string, data *domain.CompanyUpdat
 		return nil, fmt.Errorf("failed to update company: %w", err)
 	}
 
+	// Jika parent_id berubah, update level semua descendants
+	if data.ParentID != nil {
+		if err := uc.updateDescendantsLevel(id); err != nil {
+			zapLog.Warn("Failed to update descendants level", zap.String("company_id", id), zap.Error(err))
+		}
+	}
+
 	// Delete existing related data
-	uc.shareholderRepo.DeleteByCompanyID(id)
-	uc.businessFieldRepo.DeleteByCompanyID(id)
-	uc.directorRepo.DeleteByCompanyID(id)
+	if err := uc.shareholderRepo.DeleteByCompanyID(id); err != nil {
+		zapLog.Warn("Failed to delete shareholders", zap.String("company_id", id), zap.Error(err))
+	}
+	if err := uc.businessFieldRepo.DeleteByCompanyID(id); err != nil {
+		zapLog.Warn("Failed to delete business fields", zap.String("company_id", id), zap.Error(err))
+	}
+	if err := uc.directorRepo.DeleteByCompanyID(id); err != nil {
+		zapLog.Warn("Failed to delete directors", zap.String("company_id", id), zap.Error(err))
+	}
 
 	// Create new shareholders
 	for _, sh := range data.Shareholders {

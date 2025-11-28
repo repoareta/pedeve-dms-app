@@ -159,11 +159,12 @@
                   </a-form-item>
                 </a-col>
                 <a-col v-if="!route.params.id" :xs="24" :md="12">
-                  <a-form-item label="Perusahaan Induk">
+                  <a-form-item label="Perusahaan Induk" :required="!isSuperAdmin">
                     <a-select
                       v-model:value="formData.parent_id"
-                      placeholder="Pilih perusahaan induk (opsional)"
+                      :placeholder="isSuperAdmin ? 'Pilih perusahaan induk (opsional - kosongkan untuk holding)' : 'Pilih perusahaan induk'"
                       allow-clear
+                      :disabled="!isSuperAdmin && userCompanyId ? true : false"
                     >
                       <a-select-option
                         v-for="company in availableCompanies"
@@ -173,6 +174,13 @@
                         {{ company.name }} ({{ getLevelLabel(company.level) }})
                       </a-select-option>
                     </a-select>
+                    <div v-if="!isSuperAdmin && userCompanyId" style="margin-top: 4px; color: #666; font-size: 12px">
+                      Akan otomatis menjadi anak perusahaan dari perusahaan Anda
+                    </div>
+                    <div v-else-if="isSuperAdmin" style="margin-top: 4px; color: #666; font-size: 12px">
+                      <span v-if="hasRootHolding">Pilih perusahaan induk (holding sudah ada)</span>
+                      <span v-else>Kosongkan untuk membuat holding/perusahaan induk (belum ada holding)</span>
+                    </div>
                   </a-form-item>
                 </a-col>
                 <a-col :xs="24" :md="12">
@@ -408,11 +416,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
-import { companyApi, uploadApi, type Company } from '../api/userManagement'
+import { companyApi, uploadApi, type Company, type Shareholder, type BusinessField, type Director } from '../api/userManagement'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import apiClient from '../api/client'
@@ -426,8 +434,19 @@ const authStore = useAuthStore()
 const currentStep = ref(0)
 const loading = ref(false)
 const availableCompanies = ref<Company[]>([])
-const logoFileList = ref<any[]>([])
+const logoFileList = ref<Array<{ uid: string; name: string; status?: string; url?: string }>>([])
 const uploadingLogo = ref(false)
+const hasRootHolding = ref(false)
+
+// Check if user is superadmin
+const isSuperAdmin = computed(() => {
+  return authStore.user?.role === 'superadmin'
+})
+
+// Get user's company ID
+const userCompanyId = computed(() => {
+  return authStore.user?.company_id || undefined
+})
 
 const formData = ref({
   // Step 1: Identitas Perusahaan
@@ -465,7 +484,7 @@ const formData = ref({
     kbli: '',
     main_business_activity: '',
     additional_activities: '',
-    start_operation_date: null as any,
+    start_operation_date: null as dayjs.Dayjs | null,
   },
   
   // Step 4: Pengurus/Dewan Direksi
@@ -475,7 +494,7 @@ const formData = ref({
     full_name: string
     ktp: string
     npwp: string
-    start_date: any
+    start_date: dayjs.Dayjs | null
     domicile_address: string
   }>,
 })
@@ -548,19 +567,28 @@ const handleLogoUpload = async (file: File): Promise<boolean> => {
   try {
     const response = await uploadApi.uploadLogo(file)
     formData.value.logo = response.url
-    // Get base URL tanpa /api/v1 untuk static files
-    const apiURL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
-    const baseURL = apiURL.replace(/\/api\/v1$/, '') // Hapus /api/v1 jika ada
+    // Cek apakah URL sudah full URL (dari GCP Storage) atau relative (local storage)
+    let logoUrl: string
+    if (response.url.startsWith('http://') || response.url.startsWith('https://')) {
+      // Full URL dari GCP Storage, langsung pakai
+      logoUrl = response.url
+    } else {
+      // Relative URL dari local storage, tambahkan baseURL
+      const apiURL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+      const baseURL = apiURL.replace(/\/api\/v1$/, '') // Hapus /api/v1 jika ada
+      logoUrl = `${baseURL}${response.url}`
+    }
     logoFileList.value = [{
       uid: '-1',
       name: file.name,
       status: 'done',
-      url: `${baseURL}${response.url}`,
+      url: logoUrl,
     }]
     message.success('Logo berhasil diupload')
     return false // Prevent default upload
-  } catch (error: any) {
-    message.error(error.response?.data?.message || 'Gagal upload logo')
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(axiosError.response?.data?.message || 'Gagal upload logo')
     return false
   } finally {
     uploadingLogo.value = false
@@ -590,6 +618,12 @@ const handleCancel = () => {
 }
 
 const handleSubmit = async () => {
+  // Validasi untuk superadmin: jika sudah ada holding, wajib pilih parent
+  if (isSuperAdmin.value && hasRootHolding.value && !formData.value.parent_id) {
+    message.error('Holding company sudah ada. Silakan pilih perusahaan induk.')
+    return
+  }
+
   loading.value = true
   try {
     // Prepare data untuk API - menggunakan snake_case sesuai JSON tag
@@ -608,7 +642,13 @@ const handleSubmit = async () => {
       website: formData.value.website,
       address: formData.value.address,
       operational_address: formData.value.operational_address,
-      parent_id: formData.value.parent_id || null,
+      // Set parent_id: 
+      // - Superadmin: jika belum ada holding, bisa null (jadi holding pertama)
+      // - Superadmin: jika sudah ada holding, wajib pilih parent
+      // - Non-superadmin: otomatis ke company mereka
+      parent_id: isSuperAdmin.value 
+        ? (hasRootHolding.value ? (formData.value.parent_id || null) : (formData.value.parent_id || null))
+        : (formData.value.parent_id || userCompanyId.value || null),
       main_parent_company: formData.value.main_parent_company || null,
       shareholders: formData.value.shareholders.map(sh => ({
         type: sh.type,
@@ -646,8 +686,9 @@ const handleSubmit = async () => {
     }
     
     router.push('/subsidiaries')
-  } catch (error: any) {
-    message.error('Gagal menyimpan: ' + (error.response?.data?.message || error.message))
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal menyimpan: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
   } finally {
     loading.value = false
   }
@@ -676,6 +717,8 @@ const getLevelLabel = (level: number): string => {
 const loadAvailableCompanies = async () => {
   try {
     availableCompanies.value = await companyApi.getAll()
+    // Check if there's a root holding (parent_id = null, level = 0)
+    hasRootHolding.value = availableCompanies.value.some(c => c.parent_id === null || c.parent_id === undefined)
   } catch (error) {
     console.error('Failed to load companies:', error)
   }
@@ -728,19 +771,26 @@ const loadCompanyData = async () => {
       formData.value.parent_id = company.parent_id
       // Ambil main_parent_company langsung dari response
       formData.value.main_parent_company = company.main_parent_company || undefined
-      formData.value.shareholders = (company.shareholders || []).map((sh: any) => ({
-        ...sh,
+      formData.value.shareholders = (company.shareholders || []).map((sh: Shareholder) => ({
+        id: sh.id,
+        type: sh.type,
+        name: sh.name,
+        identity_number: sh.identity_number,
         ownership_percent: sh.ownership_percent || 0,
         share_count: sh.share_count || 0,
+        is_main_parent: sh.is_main_parent ?? false,
       }))
       // Transform business_fields array to main_business (ambil yang is_main = true atau yang pertama)
       if (company.business_fields && company.business_fields.length > 0) {
-        const mainBusiness = company.business_fields.find((bf: any) => bf.is_main) || company.business_fields[0]
-        formData.value.main_business.industry_sector = mainBusiness.industry_sector || ''
-        formData.value.main_business.kbli = mainBusiness.kbli || ''
-        formData.value.main_business.main_business_activity = mainBusiness.main_business_activity || ''
-        formData.value.main_business.additional_activities = mainBusiness.additional_activities || ''
-        formData.value.main_business.start_operation_date = mainBusiness.start_operation_date ? dayjs(mainBusiness.start_operation_date) : null
+        const businessFieldsWithMain = company.business_fields as Array<BusinessField & { is_main?: boolean }>
+        const mainBusiness = businessFieldsWithMain.find((bf) => bf.is_main) || company.business_fields[0]
+        if (mainBusiness) {
+          formData.value.main_business.industry_sector = mainBusiness.industry_sector || ''
+          formData.value.main_business.kbli = mainBusiness.kbli || ''
+          formData.value.main_business.main_business_activity = mainBusiness.main_business_activity || ''
+          formData.value.main_business.additional_activities = mainBusiness.additional_activities || ''
+          formData.value.main_business.start_operation_date = mainBusiness.start_operation_date ? dayjs(mainBusiness.start_operation_date) : null
+        }
       } else if (company.main_business) {
         // Fallback untuk kompatibilitas jika ada main_business langsung
         formData.value.main_business.industry_sector = company.main_business.industry_sector || ''
@@ -749,11 +799,11 @@ const loadCompanyData = async () => {
         formData.value.main_business.additional_activities = company.main_business.additional_activities || ''
         formData.value.main_business.start_operation_date = company.main_business.start_operation_date ? dayjs(company.main_business.start_operation_date) : null
       }
-      formData.value.directors = (company.directors || []).map((d: any) => ({
+      formData.value.directors = (company.directors || []).map((d: Director) => ({
         ...d,
         start_date: d.start_date ? dayjs(d.start_date) : null,
       }))
-    } catch (error: any) {
+    } catch {
       message.error('Gagal memuat data perusahaan')
     } finally {
       loading.value = false

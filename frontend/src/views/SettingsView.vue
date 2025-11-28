@@ -57,7 +57,7 @@ const check2FAStatus = async () => {
     if (!status.enabled) {
       setupStep.value = 'idle'
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to get 2FA status:', error)
   } finally {
     loading.value = false
@@ -72,12 +72,13 @@ const handleEnable2FA = async () => {
     secret.value = response.secret
     setupStep.value = 'generate'
     message.success('QR Code berhasil di-generate. Silakan scan dengan authenticator app Anda.')
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error generating 2FA:', error)
+    const axiosError = error as { response?: { data?: { message?: string; Message?: string } }; message?: string }
     const errorMessage = 
-      error?.response?.data?.message || 
-      error?.response?.data?.Message ||
-      error?.message ||
+      axiosError.response?.data?.message || 
+      axiosError.response?.data?.Message ||
+      axiosError.message ||
       authStore.error ||
       'Gagal generate QR Code. Pastikan Anda sudah login dan coba lagi.'
     message.error({
@@ -102,8 +103,9 @@ const handleVerify2FA = async () => {
     is2FAEnabled.value = true
     setupStep.value = 'success'
     message.success('2FA berhasil diaktifkan!')
-  } catch (error: any) {
-    const errorMessage = error?.response?.data?.message || 'Kode verifikasi tidak valid'
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = axiosError.response?.data?.message || 'Kode verifikasi tidak valid'
     message.error(errorMessage)
   } finally {
     loading.value = false
@@ -153,11 +155,12 @@ const handleDisable2FA = async () => {
     is2FAEnabled.value = false
     setupStep.value = 'idle'
     message.success('2FA berhasil dinonaktifkan')
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string; Message?: string } }; message?: string }
     const errorMessage = 
-      error?.response?.data?.message || 
-      error?.response?.data?.Message ||
-      error?.message ||
+      axiosError.response?.data?.message || 
+      axiosError.response?.data?.Message ||
+      axiosError.message ||
       authStore.error ||
       'Gagal menonaktifkan 2FA'
     message.error({
@@ -175,7 +178,7 @@ const fetchAuditStats = async () => {
     auditStatsLoading.value = true
     const stats = await auditApi.getAuditLogStats()
     auditStats.value = stats
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to fetch audit stats:', error)
     // Set default values jika error
     if (!auditStats.value) {
@@ -212,7 +215,7 @@ const fetchAuditLogs = async (page: number = 1, pageSize: number = 10) => {
       total: response.total,
     }
     // Tidak refresh stats otomatis saat fetch logs, hanya saat user klik refresh atau auto-refresh interval
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to fetch audit logs:', error)
     message.error('Gagal mengambil audit logs')
   } finally {
@@ -220,7 +223,7 @@ const fetchAuditLogs = async (page: number = 1, pageSize: number = 10) => {
   }
 }
 
-const handleAuditTableChange = (pag: any) => {
+const handleAuditTableChange = (pag: { current?: number; pageSize?: number }) => {
   if (pag.current) {
     auditPagination.value.current = pag.current
   }

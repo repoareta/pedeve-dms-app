@@ -287,8 +287,9 @@ const loadCompanies = async () => {
     companies.value.forEach(company => {
       generateFinancialData(company.id)
     })
-  } catch (error: any) {
-    message.error('Gagal memuat perusahaan: ' + (error.response?.data?.message || error.message))
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal memuat perusahaan: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
   } finally {
     companiesLoading.value = false
   }

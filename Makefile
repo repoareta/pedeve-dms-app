@@ -1,4 +1,4 @@
-.PHONY: dev up down restart logs clean help
+.PHONY: dev up down restart logs clean help seed-companies
 
 # Default target
 .DEFAULT_GOAL := help
@@ -61,6 +61,11 @@ status:
 	@echo "📊 Service Status:"
 	docker-compose -f docker-compose.dev.yml ps
 
+# Seed companies
+seed-companies: ## Seed sample companies and users (10 subsidiaries with 3-layer hierarchy)
+	@echo "🌱 Seeding Companies and Users..."
+	@cd backend && DATABASE_URL="postgres://postgres:dms_password@localhost:5432/db_dms_pedeve?sslmode=disable" go run ./cmd/seed-companies
+
 # Help
 help:
 	@echo "DMS App - Development Commands"
@@ -80,6 +85,7 @@ help:
 	@echo "  clean         - Stop and remove all containers, volumes, networks"
 	@echo "  rebuild       - Rebuild and restart services"
 	@echo "  status        - Show service status"
+	@echo "  seed-companies - Seed sample companies and users (10 subsidiaries)"
 	@echo "  help          - Show this help message"
 	@echo ""
 	@echo "Examples:"

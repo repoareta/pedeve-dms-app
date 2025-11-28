@@ -274,6 +274,11 @@ func (l *LocalStorageManager) FileExists(bucketPath string, filename string) (bo
 	return true, nil
 }
 
+// GetBasePath returns the base path for local storage (for internal use)
+func (l *LocalStorageManager) GetBasePath() string {
+	return l.basePath
+}
+
 // GetStorageManager mengembalikan StorageManager berdasarkan konfigurasi
 // Priority:
 // 1. GCP Cloud Storage (jika GCP_STORAGE_ENABLED=true dan GCP_STORAGE_BUCKET set)

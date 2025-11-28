@@ -284,6 +284,7 @@ jobs:
             --project=${{ secrets.GCP_PROJECT_ID }} \
             scripts/deploy-backend-vm.sh \
             scripts/setup-backend-nginx.sh \
+            scripts/verify-backend-deployment.sh \
             backend-dev:~/
           
           # Copy SSL setup script to VM (optional, run manually if needed)
@@ -298,7 +299,7 @@ jobs:
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --command="
-              chmod +x ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh
+              chmod +x ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/verify-backend-deployment.sh
               if ! ~/deploy-backend-vm.sh ${{ secrets.GCP_PROJECT_ID }} ${BACKEND_IMAGE}; then
                 echo '❌ ERROR: deploy-backend-vm.sh failed!'
                 exit 1
@@ -309,87 +310,12 @@ jobs:
                 exit 1
               fi
               
-              # Script setup-backend-nginx.sh sudah idempotent dan handle config dengan benar
-              # Tidak perlu manual remove/update config di sini
-              
-              # Ensure Nginx is enabled and running
-              sudo systemctl enable nginx
-              sudo systemctl daemon-reload
-              sudo systemctl start nginx || sudo systemctl restart nginx
-              
-              # Wait for services to stabilize
-              sleep 5
-              
-              # Verify Nginx is running with retry
-              MAX_RETRIES=3
-              RETRY_COUNT=0
-              while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-                if sudo systemctl is-active --quiet nginx; then
-                  echo '✅ Nginx is running'
-                  break
-                else
-                  RETRY_COUNT=$(expr $RETRY_COUNT + 1)
-                  if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                    echo "⚠️  Nginx not running, retrying... attempt $RETRY_COUNT of $MAX_RETRIES"
-                    sudo systemctl restart nginx
-                    sleep 3
-                  else
-                    echo '❌ ERROR: Nginx failed to start after retries!'
-                    sudo systemctl status nginx --no-pager -l
-                    sudo tail -20 /var/log/nginx/error.log 2>/dev/null || true
-                    exit 1
-                  fi
-                fi
-              done
-              
-              # Ensure Nginx will auto-start on boot
-              if ! sudo systemctl is-enabled --quiet nginx; then
-                echo '⚠️  WARNING: Nginx is not enabled for auto-start, enabling now...'
-                sudo systemctl enable nginx
-              fi
-              
-              # Verify listening ports
-              echo 'Checking listening ports...'
-              if ! sudo ss -tlnp | grep -q ':80 '; then
-                echo '❌ ERROR: Port 80 is not listening!'
-                exit 1
-              fi
-              if ! sudo ss -tlnp | grep -q ':443 '; then
-                echo '⚠️  WARNING: Port 443 is not listening (HTTPS may not be configured)'
-                echo 'Checking SSL certificate...'
-                sudo certbot certificates 2>/dev/null | head -10 || true
-              else
-                echo '✅ Port 443 is listening'
-              fi
-              if ! sudo ss -tlnp | grep -q ':8080'; then
-                echo '❌ ERROR: Port 8080 is not listening!'
+              if ! ~/verify-backend-deployment.sh; then
+                echo '❌ ERROR: verify-backend-deployment.sh failed!'
                 exit 1
               fi
               
-              # Verify backend container is running
-              if ! sudo docker ps | grep -q dms-backend-prod; then
-                echo '❌ ERROR: Backend container is not running!'
-                sudo docker ps -a | grep dms-backend-prod
-                sudo docker logs --tail 30 dms-backend-prod 2>/dev/null || true
-                exit 1
-              fi
-              
-              echo '✅ Backend container is running'
-              echo '✅ Nginx is running and enabled'
-              
-              # SSL setup akan dijalankan manual (perlu interaksi untuk first-time setup)
-              # chmod +x ~/setup-backend-ssl.sh && ~/setup-backend-ssl.sh
-              
-              # Copy status check script untuk debugging (simplified to avoid syntax issues)
-              echo '#!/bin/bash' > ~/check-backend-status.sh
-              echo 'sudo systemctl status nginx --no-pager -l | head -10' >> ~/check-backend-status.sh
-              echo 'sudo docker ps | grep dms-backend-prod' >> ~/check-backend-status.sh
-              echo 'sudo ss -tlnp | grep 80' >> ~/check-backend-status.sh
-              echo 'sudo ss -tlnp | grep 443' >> ~/check-backend-status.sh
-              echo 'sudo ss -tlnp | grep 8080' >> ~/check-backend-status.sh
-              chmod +x ~/check-backend-status.sh
-              
-              rm -f ~/backend-image.tar ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/setup-backend-ssl.sh
+              rm -f ~/backend-image.tar ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/setup-backend-ssl.sh ~/verify-backend-deployment.sh
             "
 
       - name: Deploy Frontend to GCP VM
@@ -407,6 +333,7 @@ jobs:
             --project=${{ secrets.GCP_PROJECT_ID }} \
             scripts/setup-nginx-frontend.sh \
             scripts/setup-frontend-ssl.sh \
+            scripts/verify-frontend-deployment.sh \
             frontend-dev:~/
           
           # SSH ke frontend VM dan deploy static files
@@ -431,88 +358,19 @@ jobs:
               sudo chmod -R 755 /var/www/html
               
               # Setup Nginx config for SPA
-              chmod +x ~/setup-nginx-frontend.sh
+              chmod +x ~/setup-nginx-frontend.sh ~/verify-frontend-deployment.sh
               if ! ~/setup-nginx-frontend.sh; then
                 echo '❌ ERROR: setup-nginx-frontend.sh failed!'
                 exit 1
               fi
               
-              # Script setup-nginx-frontend.sh sudah idempotent dan handle config dengan benar
-              # Tidak perlu manual remove/update config di sini
-              
-              # Ensure Nginx is enabled and running
-              sudo systemctl enable nginx
-              sudo systemctl daemon-reload
-              sudo systemctl start nginx || sudo systemctl restart nginx
-              
-              # Wait for services to stabilize
-              sleep 5
-              
-              # Verify Nginx is running with retry
-              MAX_RETRIES=3
-              RETRY_COUNT=0
-              while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-                if sudo systemctl is-active --quiet nginx; then
-                  echo '✅ Nginx is running'
-                  break
-                else
-                  RETRY_COUNT=$(expr $RETRY_COUNT + 1)
-                  if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                    echo "⚠️  Nginx not running, retrying... attempt $RETRY_COUNT of $MAX_RETRIES"
-                    sudo systemctl restart nginx
-                    sleep 3
-                  else
-                    echo '❌ ERROR: Nginx failed to start after retries!'
-                    sudo systemctl status nginx --no-pager -l
-                    sudo tail -20 /var/log/nginx/error.log 2>/dev/null || true
-                    exit 1
-                  fi
-                fi
-              done
-              
-              # Ensure Nginx will auto-start on boot
-              if ! sudo systemctl is-enabled --quiet nginx; then
-                echo '⚠️  WARNING: Nginx is not enabled for auto-start, enabling now...'
-                sudo systemctl enable nginx
-              fi
-              
-              # Verify listening ports
-              echo 'Checking listening ports...'
-              if ! sudo ss -tlnp | grep -q ':80 '; then
-                echo '❌ ERROR: Port 80 is not listening!'
+              if ! ~/verify-frontend-deployment.sh; then
+                echo '❌ ERROR: verify-frontend-deployment.sh failed!'
                 exit 1
               fi
-              if ! sudo ss -tlnp | grep -q ':443 '; then
-                echo '⚠️  WARNING: Port 443 is not listening (HTTPS may not be configured)'
-                echo 'Checking SSL certificate...'
-                sudo certbot certificates 2>/dev/null | head -10 || true
-              else
-                echo '✅ Port 443 is listening'
-              fi
-              
-              # Verify files exist
-              if [ ! -f /var/www/html/index.html ]; then
-                echo '❌ ERROR: Frontend files not found!'
-                ls -la /var/www/html/ | head -10
-                exit 1
-              fi
-              
-              echo '✅ Nginx is running and enabled'
-              echo '✅ Frontend files deployed'
-              
-              # SSL setup akan dijalankan manual (perlu interaksi untuk first-time setup)
-              # chmod +x ~/setup-frontend-ssl.sh && ~/setup-frontend-ssl.sh
-              
-              # Copy status check script untuk debugging (simplified to avoid syntax issues)
-              echo '#!/bin/bash' > ~/check-frontend-status.sh
-              echo 'sudo systemctl status nginx --no-pager -l | head -10' >> ~/check-frontend-status.sh
-              echo 'sudo ss -tlnp | grep 80' >> ~/check-frontend-status.sh
-              echo 'sudo ss -tlnp | grep 443' >> ~/check-frontend-status.sh
-              echo 'ls -la /var/www/html/ | head -5' >> ~/check-frontend-status.sh
-              chmod +x ~/check-frontend-status.sh
               
               # Cleanup
-              rm -f ~/frontend-dist.tar.gz ~/setup-nginx-frontend.sh ~/setup-frontend-ssl.sh
+              rm -f ~/frontend-dist.tar.gz ~/setup-nginx-frontend.sh ~/setup-frontend-ssl.sh ~/verify-frontend-deployment.sh
               sudo rm -rf /tmp/dist
             "
 

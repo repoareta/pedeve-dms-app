@@ -54,6 +54,21 @@ func NewGCPStorageManagerWithCredentials(bucketName string, credentialsJSON []by
 	}, nil
 }
 
+// GetBucketName returns the bucket name
+func (g *GCPStorageManager) GetBucketName() string {
+	return g.bucketName
+}
+
+// GetClient returns the storage client (for internal use)
+func (g *GCPStorageManager) GetClient() *storage.Client {
+	return g.client
+}
+
+// GetContext returns the context (for internal use)
+func (g *GCPStorageManager) GetContext() context.Context {
+	return g.ctx
+}
+
 // Close menutup koneksi ke Storage client
 func (g *GCPStorageManager) Close() error {
 	if g.client != nil {

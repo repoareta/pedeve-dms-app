@@ -208,6 +208,10 @@ func main() {
 	// Route Upload (dilindungi)
 	protected.Post("/upload/logo", http.UploadLogo)
 
+	// Route File Serving (public, untuk serve file dari storage)
+	// Format: /api/v1/files/logos/filename.png
+	api.Get("/files/*", http.ServeFile)
+
 	// Route Company Management (dilindungi)
 	companyHandler := http.NewCompanyHandler(usecase.NewCompanyUseCase())
 	protected.Post("/companies", companyHandler.CreateCompany)

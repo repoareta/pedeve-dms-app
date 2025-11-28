@@ -175,6 +175,19 @@ func UploadLogo(c *fiber.Ctx) error {
 		})
 	}
 
+	// If using GCP Storage, return backend proxy URL instead of direct GCP URL
+	// This allows access without requiring public bucket access
+	// Format: /api/v1/files/logos/filename.png
+	if strings.HasPrefix(fileURL, "https://storage.googleapis.com/") {
+		// Extract path from GCP URL: https://storage.googleapis.com/bucket/logos/filename.png
+		// Convert to: /api/v1/files/logos/filename.png
+		parts := strings.SplitN(fileURL, "/", 5) // Split after bucket name
+		if len(parts) >= 5 {
+			// parts[4] contains "logos/filename.png"
+			fileURL = fmt.Sprintf("/api/v1/files/%s", parts[4])
+		}
+	}
+
 	zapLog.Info("Logo uploaded successfully",
 		zap.String("filename", filename),
 		zap.Int64("size", file.Size),

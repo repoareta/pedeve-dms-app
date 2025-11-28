@@ -301,6 +301,28 @@ jobs:
               chmod +x ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh
               ~/deploy-backend-vm.sh ${{ secrets.GCP_PROJECT_ID }} ${BACKEND_IMAGE}
               ~/setup-backend-nginx.sh
+              
+              # Ensure Nginx is enabled and running
+              sudo systemctl enable nginx
+              sudo systemctl start nginx || sudo systemctl restart nginx
+              
+              # Verify Nginx is running
+              if ! sudo systemctl is-active --quiet nginx; then
+                echo '❌ ERROR: Nginx failed to start!'
+                sudo systemctl status nginx --no-pager -l
+                exit 1
+              fi
+              
+              # Verify backend container is running
+              if ! sudo docker ps | grep -q dms-backend-prod; then
+                echo '❌ ERROR: Backend container is not running!'
+                sudo docker ps -a | grep dms-backend-prod
+                exit 1
+              fi
+              
+              echo '✅ Backend container is running'
+              echo '✅ Nginx is running and enabled'
+              
               # SSL setup akan dijalankan manual (perlu interaksi untuk first-time setup)
               # chmod +x ~/setup-backend-ssl.sh && ~/setup-backend-ssl.sh
               rm -f ~/backend-image.tar ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/setup-backend-ssl.sh
@@ -347,6 +369,19 @@ jobs:
               # Setup Nginx config for SPA
               chmod +x ~/setup-nginx-frontend.sh
               ~/setup-nginx-frontend.sh
+              
+              # Ensure Nginx is enabled and running
+              sudo systemctl enable nginx
+              sudo systemctl start nginx || sudo systemctl restart nginx
+              
+              # Verify Nginx is running
+              if ! sudo systemctl is-active --quiet nginx; then
+                echo '❌ ERROR: Nginx failed to start!'
+                sudo systemctl status nginx --no-pager -l
+                exit 1
+              fi
+              
+              echo '✅ Nginx is running and enabled'
               
               # SSL setup akan dijalankan manual (perlu interaksi untuk first-time setup)
               # chmod +x ~/setup-frontend-ssl.sh && ~/setup-frontend-ssl.sh
@@ -452,21 +487,100 @@ jobs:
           sleep 10
           
           # Try health check with retry
-          MAX_RETRIES=3
+          MAX_RETRIES=5
           RETRY_DELAY=5
           
           for i in $(seq 1 $MAX_RETRIES); do
             echo "Frontend health check attempt $i/$MAX_RETRIES..."
-            if curl -f -m 10 http://${{ secrets.GCP_FRONTEND_VM_IP }} 2>/dev/null; then
-              echo "✅ Frontend health check passed!"
+            
+            # Check from within VM to avoid firewall issues
+            HEALTH_RESULT=$(gcloud compute ssh frontend-dev \
+              --zone=asia-southeast2-a \
+              --project=${{ secrets.GCP_PROJECT_ID }} \
+              --command="
+                # Check if Nginx is running
+                if ! sudo systemctl is-active --quiet nginx; then
+                  echo 'NGINX_NOT_RUNNING'
+                  exit 1
+                fi
+                
+                # Try health check from within VM
+                HTTP_CODE=\$(curl -s -o /dev/null -w '%{http_code}' -m 10 http://127.0.0.1/health 2>/dev/null || echo '000')
+                
+                if [ \"\$HTTP_CODE\" = '200' ]; then
+                  echo \"SUCCESS:\$HTTP_CODE\"
+                  exit 0
+                else
+                  echo \"FAILED:\$HTTP_CODE\"
+                  exit 1
+                fi
+              " 2>&1 || echo "SSH_FAILED")
+            
+            if echo "$HEALTH_RESULT" | grep -q "SUCCESS:"; then
+              HTTP_CODE=$(echo "$HEALTH_RESULT" | grep "SUCCESS:" | cut -d: -f2)
+              echo "✅ Frontend health check passed! (HTTP $HTTP_CODE)"
               exit 0
+            elif echo "$HEALTH_RESULT" | grep -q "NGINX_NOT_RUNNING"; then
+              echo "❌ Nginx is not running on frontend VM!"
+              exit 1
+            else
+              HTTP_CODE=$(echo "$HEALTH_RESULT" | grep "FAILED:" | cut -d: -f2 || echo "000")
+              echo "⏳ Frontend not ready yet (HTTP $HTTP_CODE), waiting ${RETRY_DELAY}s before retry..."
             fi
             
             if [ $i -lt $MAX_RETRIES ]; then
-              echo "⏳ Frontend not ready yet, waiting ${RETRY_DELAY}s before retry..."
               sleep $RETRY_DELAY
             fi
           done
           
           echo "❌ Frontend health check failed after $MAX_RETRIES attempts"
+          echo "Checking Nginx status..."
+          gcloud compute ssh frontend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="sudo systemctl status nginx --no-pager -l" || true
           exit 1
+
+      - name: Final Service Verification
+        run: |
+          echo "🔍 Final verification: Ensuring all services are running..."
+          
+          # Verify Backend
+          echo "Checking backend services..."
+          gcloud compute ssh backend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="
+              echo '=== Backend Container Status ==='
+              sudo docker ps | grep dms-backend-prod || echo '❌ Container not running!'
+              
+              echo ''
+              echo '=== Backend Port Status ==='
+              sudo ss -tlnp | grep 8080 || echo '❌ Port 8080 not listening!'
+              
+              echo ''
+              echo '=== Nginx Status ==='
+              sudo systemctl is-active nginx && echo '✅ Nginx is active' || echo '❌ Nginx is not active'
+              sudo systemctl is-enabled nginx && echo '✅ Nginx is enabled' || echo '❌ Nginx is not enabled'
+            "
+          
+          # Verify Frontend
+          echo "Checking frontend services..."
+          gcloud compute ssh frontend-dev \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="
+              echo '=== Nginx Status ==='
+              sudo systemctl is-active nginx && echo '✅ Nginx is active' || echo '❌ Nginx is not active'
+              sudo systemctl is-enabled nginx && echo '✅ Nginx is enabled' || echo '❌ Nginx is not enabled'
+              
+              echo ''
+              echo '=== Frontend Files ==='
+              ls -la /var/www/html/ | head -5 || echo '❌ Files not found!'
+              
+              echo ''
+              echo '=== Port 80 Status ==='
+              sudo ss -tlnp | grep ':80 ' || echo '❌ Port 80 not listening!'
+            "
+          
+          echo "✅ Final verification completed!"

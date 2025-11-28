@@ -74,5 +74,28 @@ sudo docker run -d \
   -e CORS_ORIGIN=https://pedeve-dev.aretaamany.com,http://34.128.123.1,http://pedeve-dev.aretaamany.com \
   ${BACKEND_IMAGE}
 
-echo "✅ Backend container started successfully!"
+# Wait a moment for container to start
+sleep 5
+
+# Verify container is running
+echo "🔍 Verifying container status..."
+if sudo docker ps | grep -q dms-backend-prod; then
+  echo "✅ Backend container is running"
+  
+  # Check if container is healthy (listening on port 8080)
+  if sudo ss -tlnp | grep -q ':8080'; then
+    echo "✅ Backend is listening on port 8080"
+  else
+    echo "⚠️  WARNING: Backend container is running but port 8080 is not listening yet"
+    echo "Container logs:"
+    sudo docker logs --tail 20 dms-backend-prod
+  fi
+else
+  echo "❌ ERROR: Backend container failed to start!"
+  echo "Container logs:"
+  sudo docker logs --tail 50 dms-backend-prod || true
+  exit 1
+fi
+
+echo "✅ Backend deployment completed successfully!"
 

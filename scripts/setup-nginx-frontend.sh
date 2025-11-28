@@ -56,13 +56,29 @@ EOF
 echo "🧪 Testing Nginx configuration..."
 sudo nginx -t
 
+# Enable Nginx to start on boot
+echo "🔧 Enabling Nginx to start on boot..."
+sudo systemctl enable nginx
+
 # Reload Nginx
 echo "🔄 Reloading Nginx..."
 sudo systemctl reload nginx || sudo systemctl restart nginx
 
+# Ensure Nginx is running
+echo "▶️  Starting Nginx if not running..."
+sudo systemctl start nginx || true
+
 # Check Nginx status
 echo "📊 Nginx status:"
 sudo systemctl status nginx --no-pager -l || true
+
+# Verify Nginx is active
+if sudo systemctl is-active --quiet nginx; then
+  echo "✅ Nginx is running and enabled"
+else
+  echo "❌ ERROR: Nginx failed to start!"
+  exit 1
+fi
 
 echo "✅ Nginx setup completed!"
 echo ""

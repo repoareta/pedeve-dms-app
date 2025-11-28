@@ -306,18 +306,33 @@ jobs:
               sudo systemctl enable nginx
               sudo systemctl start nginx || sudo systemctl restart nginx
               
+              # Wait for services to stabilize
+              sleep 3
+              
               # Verify Nginx is running
               if ! sudo systemctl is-active --quiet nginx; then
                 echo '❌ ERROR: Nginx failed to start!'
                 sudo systemctl status nginx --no-pager -l
+                sudo tail -20 /var/log/nginx/error.log 2>/dev/null || true
                 exit 1
               fi
+              
+              # Verify listening ports
+              echo 'Checking listening ports...'
+              sudo ss -tlnp | grep -E ':(80|443|8080)' || echo 'No relevant ports listening'
               
               # Verify backend container is running
               if ! sudo docker ps | grep -q dms-backend-prod; then
                 echo '❌ ERROR: Backend container is not running!'
                 sudo docker ps -a | grep dms-backend-prod
+                sudo docker logs --tail 30 dms-backend-prod 2>/dev/null || true
                 exit 1
+              fi
+              
+              # Verify container is healthy
+              if ! sudo ss -tlnp | grep -q ':8080'; then
+                echo '⚠️  WARNING: Container running but port 8080 not listening'
+                sudo docker logs --tail 20 dms-backend-prod
               fi
               
               echo '✅ Backend container is running'
@@ -374,14 +389,30 @@ jobs:
               sudo systemctl enable nginx
               sudo systemctl start nginx || sudo systemctl restart nginx
               
+              # Wait for services to stabilize
+              sleep 3
+              
               # Verify Nginx is running
               if ! sudo systemctl is-active --quiet nginx; then
                 echo '❌ ERROR: Nginx failed to start!'
                 sudo systemctl status nginx --no-pager -l
+                sudo tail -20 /var/log/nginx/error.log 2>/dev/null || true
+                exit 1
+              fi
+              
+              # Verify listening ports
+              echo 'Checking listening ports...'
+              sudo ss -tlnp | grep -E ':(80|443)' || echo 'No relevant ports listening'
+              
+              # Verify files exist
+              if [ ! -f /var/www/html/index.html ]; then
+                echo '❌ ERROR: Frontend files not found!'
+                ls -la /var/www/html/ | head -10
                 exit 1
               fi
               
               echo '✅ Nginx is running and enabled'
+              echo '✅ Frontend files deployed'
               
               # SSL setup akan dijalankan manual (perlu interaksi untuk first-time setup)
               # chmod +x ~/setup-frontend-ssl.sh && ~/setup-frontend-ssl.sh

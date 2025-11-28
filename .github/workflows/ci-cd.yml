@@ -441,17 +441,38 @@ jobs:
               
               # Ensure Nginx is enabled and running
               sudo systemctl enable nginx
+              sudo systemctl daemon-reload
               sudo systemctl start nginx || sudo systemctl restart nginx
               
               # Wait for services to stabilize
               sleep 5
               
-              # Verify Nginx is running
-              if ! sudo systemctl is-active --quiet nginx; then
-                echo '❌ ERROR: Nginx failed to start!'
-                sudo systemctl status nginx --no-pager -l
-                sudo tail -20 /var/log/nginx/error.log 2>/dev/null || true
-                exit 1
+              # Verify Nginx is running with retry
+              MAX_RETRIES=3
+              RETRY_COUNT=0
+              while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                if sudo systemctl is-active --quiet nginx; then
+                  echo '✅ Nginx is running'
+                  break
+                else
+                  RETRY_COUNT=$((RETRY_COUNT + 1))
+                  if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                    echo "⚠️  Nginx not running, retrying... ($RETRY_COUNT/$MAX_RETRIES)"
+                    sudo systemctl restart nginx
+                    sleep 3
+                  else
+                    echo '❌ ERROR: Nginx failed to start after retries!'
+                    sudo systemctl status nginx --no-pager -l
+                    sudo tail -20 /var/log/nginx/error.log 2>/dev/null || true
+                    exit 1
+                  fi
+                fi
+              done
+              
+              # Ensure Nginx will auto-start on boot
+              if ! sudo systemctl is-enabled --quiet nginx; then
+                echo '⚠️  WARNING: Nginx is not enabled for auto-start, enabling now...'
+                sudo systemctl enable nginx
               fi
               
               # Verify listening ports

@@ -340,6 +340,7 @@ jobs:
             scripts/setup-nginx-frontend.sh \
             scripts/setup-frontend-ssl.sh \
             scripts/verify-frontend-deployment.sh \
+            scripts/ensure-services-running.sh \
             frontend-dev:~/
           
           # SSH ke frontend VM dan deploy static files

@@ -1,0 +1,22 @@
+# Cursor Rules untuk Pedeve DMS App
+
+## Git Workflow
+- **JANGAN LANGSUNG PUSH** setiap commit ke branch `development` atau `main`
+- Buat commit lokal dulu, tunggu konfirmasi user sebelum push
+- Jika ada multiple commits, hanya push commit terakhir setelah user setuju
+- **SELALU MINTA IZIN** sebelum:
+  - Push ke branch `development` atau `main` (PENTING: SELALU MINTA IZIN DULU!)
+  - Trigger deployment via workflow
+  - Merge branch
+- **JANGAN PERNAH** push ke `development` tanpa konfirmasi eksplisit dari user
+
+## Deployment
+- Deployment ke GCP hanya dilakukan setelah konfirmasi eksplisit dari user
+- Jangan trigger deployment otomatis pada setiap commit
+- Tunggu user meminta untuk deploy
+
+## Best Practices
+- Buat commit dengan message yang jelas dalam Bahasa Indonesia
+- Group related changes dalam satu commit jika memungkinkan
+- Test changes secara lokal sebelum commit jika memungkinkan
+

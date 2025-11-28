@@ -17,11 +17,12 @@ func SetSecureCookie(c *fiber.Ctx, name, value string) {
 	           os.Getenv("HTTPS") == "true" ||
 	           os.Getenv("FORCE_HTTPS") == "true"
 	
-	// SameSite: "Lax" untuk development (memungkinkan cookie terkirim dari cross-site navigation)
-	// "Strict" untuk production (lebih aman, tapi bisa memblokir beberapa use case)
+	// SameSite: "None" untuk cross-site requests (frontend dan backend di subdomain berbeda)
+	// "None" memerlukan Secure: true (HTTPS)
+	// Ini diperlukan karena frontend di pedeve-dev.aretaamany.com dan backend di api-pedeve-dev.aretaamany.com
 	sameSite := "Lax"
 	if isHTTPS {
-		sameSite = "Strict" // Production: gunakan Strict untuk keamanan maksimal
+		sameSite = "None" // Production: gunakan None untuk cross-site requests dengan Secure: true
 	}
 	
 	c.Cookie(&fiber.Cookie{
@@ -30,8 +31,8 @@ func SetSecureCookie(c *fiber.Ctx, name, value string) {
 		Path:     "/",
 		MaxAge:   cookieMaxAge,
 		HTTPOnly: true,              // Cegah serangan XSS
-		Secure:   isHTTPS,           // Hanya kirim melalui HTTPS di production
-		SameSite: sameSite,          // Lax untuk development, Strict untuk production
+		Secure:   isHTTPS,           // Hanya kirim melalui HTTPS di production (required untuk SameSite=None)
+		SameSite: sameSite,          // Lax untuk development, None untuk production cross-site
 	})
 }
 
@@ -50,10 +51,10 @@ func DeleteSecureCookie(c *fiber.Ctx, name string) {
 	           os.Getenv("HTTPS") == "true" ||
 	           os.Getenv("FORCE_HTTPS") == "true"
 	
-	// SameSite: "Lax" untuk development, "Strict" untuk production
+	// SameSite: "None" untuk cross-site requests (harus match dengan SetSecureCookie)
 	sameSite := "Lax"
 	if isHTTPS {
-		sameSite = "Strict"
+		sameSite = "None" // Production: gunakan None untuk cross-site requests
 	}
 	
 	c.Cookie(&fiber.Cookie{
@@ -62,7 +63,7 @@ func DeleteSecureCookie(c *fiber.Ctx, name string) {
 		Path:     "/",
 		MaxAge:   -1, // Hapus cookie
 		HTTPOnly: true,
-		Secure:   isHTTPS,
+		Secure:   isHTTPS, // Required untuk SameSite=None
 		SameSite: sameSite,
 	})
 }

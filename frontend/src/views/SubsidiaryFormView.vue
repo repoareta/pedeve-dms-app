@@ -567,14 +567,22 @@ const handleLogoUpload = async (file: File): Promise<boolean> => {
   try {
     const response = await uploadApi.uploadLogo(file)
     formData.value.logo = response.url
-    // Get base URL tanpa /api/v1 untuk static files
-    const apiURL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
-    const baseURL = apiURL.replace(/\/api\/v1$/, '') // Hapus /api/v1 jika ada
+    // Cek apakah URL sudah full URL (dari GCP Storage) atau relative (local storage)
+    let logoUrl: string
+    if (response.url.startsWith('http://') || response.url.startsWith('https://')) {
+      // Full URL dari GCP Storage, langsung pakai
+      logoUrl = response.url
+    } else {
+      // Relative URL dari local storage, tambahkan baseURL
+      const apiURL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+      const baseURL = apiURL.replace(/\/api\/v1$/, '') // Hapus /api/v1 jika ada
+      logoUrl = `${baseURL}${response.url}`
+    }
     logoFileList.value = [{
       uid: '-1',
       name: file.name,
       status: 'done',
-      url: `${baseURL}${response.url}`,
+      url: logoUrl,
     }]
     message.success('Logo berhasil diupload')
     return false // Prevent default upload

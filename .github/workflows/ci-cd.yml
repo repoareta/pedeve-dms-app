@@ -277,21 +277,23 @@ jobs:
             backend-image.tar \
             backend-dev:~/backend-image.tar
           
-          # Copy deployment script to VM
+          # Copy deployment and nginx setup scripts to VM
           gcloud compute scp \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             scripts/deploy-backend-vm.sh \
-            backend-dev:~/deploy-backend-vm.sh
+            scripts/setup-backend-nginx.sh \
+            backend-dev:~/
           
           # SSH ke backend VM dan deploy
           gcloud compute ssh backend-dev \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --command="
-              chmod +x ~/deploy-backend-vm.sh
+              chmod +x ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh
               ~/deploy-backend-vm.sh ${{ secrets.GCP_PROJECT_ID }} ${BACKEND_IMAGE}
-              rm -f ~/backend-image.tar ~/deploy-backend-vm.sh
+              ~/setup-backend-nginx.sh
+              rm -f ~/backend-image.tar ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh
             "
 
       - name: Deploy Frontend to GCP VM

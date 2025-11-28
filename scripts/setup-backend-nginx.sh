@@ -46,21 +46,49 @@ if [ -f /etc/nginx/sites-available/backend-api ]; then
     # If SSL exists, check if config has HTTPS block
     # IMPORTANT: Preserve existing SSL configuration - DO NOT OVERWRITE if correct
     if [ "$SSL_CERT_EXISTS" = true ]; then
+      # Comprehensive check for HTTPS config
       if sudo grep -q "ssl_certificate.*api-pedeve-dev.aretaamany.com" /etc/nginx/sites-available/backend-api && \
          sudo grep -q "listen.*443.*ssl" /etc/nginx/sites-available/backend-api && \
          sudo grep -q "server_name.*api-pedeve-dev.aretaamany.com" /etc/nginx/sites-available/backend-api && \
          sudo grep -q "ssl_certificate_key.*api-pedeve-dev.aretaamany.com" /etc/nginx/sites-available/backend-api && \
          sudo grep -q "proxy_pass.*127.0.0.1:8080" /etc/nginx/sites-available/backend-api; then
         echo "✅ HTTPS config already present and correct"
-        echo "⏭️  Skipping config update - preserving existing SSL configuration"
-        echo "   - SSL certificate: /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/"
-        echo "   - Port 443: configured"
-        echo "   - Server name: api-pedeve-dev.aretaamany.com"
-        echo "   - Proxy pass: http://127.0.0.1:8080"
-        # Just ensure it's enabled and reload
-        sudo ln -sf /etc/nginx/sites-available/backend-api /etc/nginx/sites-enabled/backend-api
-        sudo nginx -t && sudo systemctl reload nginx || true
-        exit 0
+        
+        # CRITICAL: Validate config syntax before skipping
+        echo "🧪 Validating existing Nginx config syntax..."
+        if sudo nginx -t 2>/dev/null; then
+          echo "✅ Nginx config syntax is valid"
+          echo "⏭️  SKIPPING config update - preserving existing SSL configuration"
+          echo "   - SSL certificate: /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/"
+          echo "   - Port 443: configured"
+          echo "   - Server name: api-pedeve-dev.aretaamany.com"
+          echo "   - Proxy pass: http://127.0.0.1:8080"
+          echo "   - Config file: /etc/nginx/sites-available/backend-api"
+          echo ""
+          echo "🔒 PRESERVATION MODE: Config will NOT be overwritten"
+          
+          # Just ensure it's enabled and reload
+          sudo ln -sf /etc/nginx/sites-available/backend-api /etc/nginx/sites-enabled/backend-api
+          
+          # Reload Nginx to ensure config is active
+          if sudo nginx -t 2>/dev/null; then
+            sudo systemctl reload nginx || sudo systemctl restart nginx
+            sleep 2
+            
+            # Verify port is listening
+            if sudo ss -tlnp | grep -q ':443 '; then
+              echo "✅ Port 443 is listening - SSL config is active"
+            else
+              echo "⚠️  WARNING: Port 443 not listening, but config is preserved"
+            fi
+          fi
+          
+          echo "✅ Existing configuration preserved successfully"
+          exit 0
+        else
+          echo "⚠️  Config exists but syntax is invalid, will fix..."
+          echo "   - This is safe - we will fix config while preserving SSL certificate paths"
+        fi
       else
         echo "⚠️  SSL exists but config doesn't have HTTPS, will update..."
         echo "   - This is safe - we will add HTTPS block without removing existing config"
@@ -69,11 +97,39 @@ if [ -f /etc/nginx/sites-available/backend-api ]; then
       # No SSL, check if config is HTTP-only (correct)
       if ! sudo grep -q "ssl_certificate" /etc/nginx/sites-available/backend-api; then
         echo "✅ HTTP-only config is correct (no SSL)"
-        echo "⏭️  Skipping config update - existing config is correct"
-        # Just ensure it's enabled and reload
-        sudo ln -sf /etc/nginx/sites-available/backend-api /etc/nginx/sites-enabled/backend-api
-        sudo nginx -t && sudo systemctl reload nginx || true
-        exit 0
+        
+        # CRITICAL: Validate config syntax before skipping
+        echo "🧪 Validating existing Nginx config syntax..."
+        if sudo nginx -t 2>/dev/null; then
+          echo "✅ Nginx config syntax is valid"
+          echo "⏭️  SKIPPING config update - existing config is correct"
+          echo "   - Server name: api-pedeve-dev.aretaamany.com"
+          echo "   - Proxy pass: http://127.0.0.1:8080"
+          echo "   - Config file: /etc/nginx/sites-available/backend-api"
+          echo ""
+          echo "🔒 PRESERVATION MODE: Config will NOT be overwritten"
+          
+          # Just ensure it's enabled and reload
+          sudo ln -sf /etc/nginx/sites-available/backend-api /etc/nginx/sites-enabled/backend-api
+          
+          # Reload Nginx to ensure config is active
+          if sudo nginx -t 2>/dev/null; then
+            sudo systemctl reload nginx || sudo systemctl restart nginx
+            sleep 2
+            
+            # Verify port is listening
+            if sudo ss -tlnp | grep -q ':80 '; then
+              echo "✅ Port 80 is listening - HTTP config is active"
+            else
+              echo "⚠️  WARNING: Port 80 not listening, but config is preserved"
+            fi
+          fi
+          
+          echo "✅ Existing configuration preserved successfully"
+          exit 0
+        else
+          echo "⚠️  Config exists but syntax is invalid, will fix..."
+        fi
       fi
     fi
   fi

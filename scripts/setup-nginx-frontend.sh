@@ -38,19 +38,50 @@ if [ -f /etc/nginx/sites-available/default ]; then
     # If SSL exists, check if config has HTTPS block
     # IMPORTANT: Preserve existing SSL configuration - DO NOT OVERWRITE if correct
     if [ "$SSL_CERT_EXISTS" = true ]; then
+      # Comprehensive check for HTTPS config
       if sudo grep -q "ssl_certificate.*pedeve-dev.aretaamany.com" /etc/nginx/sites-available/default && \
          sudo grep -q "listen.*443.*ssl" /etc/nginx/sites-available/default && \
          sudo grep -q "server_name.*pedeve-dev.aretaamany.com" /etc/nginx/sites-available/default && \
          sudo grep -q "ssl_certificate_key.*pedeve-dev.aretaamany.com" /etc/nginx/sites-available/default; then
         echo "✅ HTTPS config already present and correct"
-        echo "⏭️  Skipping config update - preserving existing SSL configuration"
-        echo "   - SSL certificate: /etc/letsencrypt/live/pedeve-dev.aretaamany.com/"
-        echo "   - Port 443: configured"
-        echo "   - Server name: pedeve-dev.aretaamany.com"
-        # Just ensure it's enabled and reload
-        sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
-        sudo nginx -t && sudo systemctl reload nginx || true
-        exit 0
+        
+        # CRITICAL: Validate config syntax before skipping
+        echo "🧪 Validating existing Nginx config syntax..."
+        if sudo nginx -t 2>/dev/null; then
+          echo "✅ Nginx config syntax is valid"
+          echo "⏭️  SKIPPING config update - preserving existing SSL configuration"
+          echo "   - SSL certificate: /etc/letsencrypt/live/pedeve-dev.aretaamany.com/"
+          echo "   - Port 443: configured"
+          echo "   - Server name: pedeve-dev.aretaamany.com"
+          echo "   - Config file: /etc/nginx/sites-available/default"
+          echo ""
+          echo "🔒 PRESERVATION MODE: Config will NOT be overwritten"
+          
+          # Just ensure it's enabled and reload
+          sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+          
+          # Reload Nginx to ensure config is active
+          if sudo nginx -t 2>/dev/null; then
+            sudo systemctl reload nginx || sudo systemctl restart nginx
+            sleep 2
+            
+            # Verify port is listening
+            if sudo ss -tlnp | grep -q ':443 '; then
+              echo "✅ Port 443 is listening - SSL config is active"
+            else
+              echo "⚠️  WARNING: Port 443 not listening, but config is preserved"
+            fi
+            if sudo ss -tlnp | grep -q ':80 '; then
+              echo "✅ Port 80 is listening - HTTP redirect is active"
+            fi
+          fi
+          
+          echo "✅ Existing configuration preserved successfully"
+          exit 0
+        else
+          echo "⚠️  Config exists but syntax is invalid, will fix..."
+          echo "   - This is safe - we will fix config while preserving SSL certificate paths"
+        fi
       else
         echo "⚠️  SSL exists but config doesn't have HTTPS, will update..."
         echo "   - This is safe - we will add HTTPS block without removing existing config"
@@ -59,11 +90,39 @@ if [ -f /etc/nginx/sites-available/default ]; then
       # No SSL, check if config is HTTP-only (correct)
       if ! sudo grep -q "ssl_certificate" /etc/nginx/sites-available/default; then
         echo "✅ HTTP-only config is correct (no SSL)"
-        echo "⏭️  Skipping config update - existing config is correct"
-        # Just ensure it's enabled and reload
-        sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
-        sudo nginx -t && sudo systemctl reload nginx || true
-        exit 0
+        
+        # CRITICAL: Validate config syntax before skipping
+        echo "🧪 Validating existing Nginx config syntax..."
+        if sudo nginx -t 2>/dev/null; then
+          echo "✅ Nginx config syntax is valid"
+          echo "⏭️  SKIPPING config update - existing config is correct"
+          echo "   - Server name: (default or configured)"
+          echo "   - Root: /var/www/html"
+          echo "   - Config file: /etc/nginx/sites-available/default"
+          echo ""
+          echo "🔒 PRESERVATION MODE: Config will NOT be overwritten"
+          
+          # Just ensure it's enabled and reload
+          sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+          
+          # Reload Nginx to ensure config is active
+          if sudo nginx -t 2>/dev/null; then
+            sudo systemctl reload nginx || sudo systemctl restart nginx
+            sleep 2
+            
+            # Verify port is listening
+            if sudo ss -tlnp | grep -q ':80 '; then
+              echo "✅ Port 80 is listening - HTTP config is active"
+            else
+              echo "⚠️  WARNING: Port 80 not listening, but config is preserved"
+            fi
+          fi
+          
+          echo "✅ Existing configuration preserved successfully"
+          exit 0
+        else
+          echo "⚠️  Config exists but syntax is invalid, will fix..."
+        fi
       fi
     fi
   fi

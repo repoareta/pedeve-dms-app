@@ -315,12 +315,13 @@ jobs:
             frontend-dist.tar.gz \
             frontend-dev:~/frontend-dist.tar.gz
           
-          # Copy Nginx setup script to frontend VM
+          # Copy Nginx setup scripts to frontend VM
           gcloud compute scp \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             scripts/setup-nginx-frontend.sh \
-            frontend-dev:~/setup-nginx-frontend.sh
+            scripts/setup-frontend-ssl.sh \
+            frontend-dev:~/
           
           # SSH ke frontend VM dan deploy static files
           gcloud compute ssh frontend-dev \
@@ -347,8 +348,11 @@ jobs:
               chmod +x ~/setup-nginx-frontend.sh
               ~/setup-nginx-frontend.sh
               
+              # SSL setup akan dijalankan manual (perlu interaksi untuk first-time setup)
+              # chmod +x ~/setup-frontend-ssl.sh && ~/setup-frontend-ssl.sh
+              
               # Cleanup
-              rm -f ~/frontend-dist.tar.gz ~/setup-nginx-frontend.sh
+              rm -f ~/frontend-dist.tar.gz ~/setup-nginx-frontend.sh ~/setup-frontend-ssl.sh
               sudo rm -rf /tmp/dist
             "
 

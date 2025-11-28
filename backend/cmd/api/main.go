@@ -148,8 +148,11 @@ func main() {
 		zapLog.Info("CORS origin configured", zap.String("origin", corsOrigin))
 	}
 	
+	// Split comma-separated origins into slice for Fiber CORS
+	// Fiber CORS AllowOrigins accepts comma-separated string or slice of strings
+	// Using comma-separated string is supported and will be parsed correctly
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     corsOrigin,
+		AllowOrigins:     corsOrigin, // Comma-separated string is supported by Fiber CORS
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS,PATCH",
 		AllowHeaders:     "Accept,Authorization,Content-Type,X-CSRF-Token,X-Requested-With",
 		ExposeHeaders:    "Link,X-Total-Count",

@@ -70,6 +70,7 @@ sudo docker run -d \
   -e ENCRYPTION_KEY="${ENCRYPTION_KEY}" \
   -e PORT=8080 \
   -e ENV=production \
+  -e DISABLE_RATE_LIMIT=true \
   -e CORS_ORIGIN=https://pedeve-dev.aretaamany.com,http://34.128.123.1,http://pedeve-dev.aretaamany.com \
   ${BACKEND_IMAGE}
 

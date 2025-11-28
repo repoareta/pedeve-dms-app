@@ -285,6 +285,7 @@ jobs:
             scripts/deploy-backend-vm.sh \
             scripts/setup-backend-nginx.sh \
             scripts/verify-backend-deployment.sh \
+            scripts/ensure-services-running.sh \
             backend-dev:~/
           
           # Copy SSL setup script to VM (optional, run manually if needed)

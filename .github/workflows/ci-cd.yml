@@ -61,6 +61,7 @@ jobs:
         run: |
           npm run build
           echo "Frontend build completed. Files in ./dist"
+          echo "API URL configured: https://api-pedeve-dev.aretaamany.com/api/v1"
           
       - name: Prepare frontend for deployment
         run: |
@@ -285,6 +286,13 @@ jobs:
             scripts/setup-backend-nginx.sh \
             backend-dev:~/
           
+          # Copy SSL setup script to VM (optional, run manually if needed)
+          gcloud compute scp \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            scripts/setup-backend-ssl.sh \
+            backend-dev:~/setup-backend-ssl.sh 2>/dev/null || echo "⚠️  SSL script copy failed (optional)"
+          
           # SSH ke backend VM dan deploy
           gcloud compute ssh backend-dev \
             --zone=asia-southeast2-a \
@@ -293,7 +301,9 @@ jobs:
               chmod +x ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh
               ~/deploy-backend-vm.sh ${{ secrets.GCP_PROJECT_ID }} ${BACKEND_IMAGE}
               ~/setup-backend-nginx.sh
-              rm -f ~/backend-image.tar ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh
+              # SSL setup akan dijalankan manual (perlu interaksi untuk first-time setup)
+              # chmod +x ~/setup-backend-ssl.sh && ~/setup-backend-ssl.sh
+              rm -f ~/backend-image.tar ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/setup-backend-ssl.sh
             "
 
       - name: Deploy Frontend to GCP VM

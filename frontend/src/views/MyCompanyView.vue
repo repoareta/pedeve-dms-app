@@ -487,15 +487,6 @@
             </a-table>
           </div>
         </div>
-
-        <!-- <template #footer>
-          <a-space>
-            <a-button @click="handleCancelAssignRole">Batal</a-button>
-            <a-button type="primary" :loading="assignRoleLoading" @click="handleAssignRole" :disabled="!assignRoleForm.userId || !assignRoleForm.roleId">
-              Assign Role
-            </a-button>
-          </a-space>
-        </template> -->
       </a-modal>
 
       <!-- Edit User Role Modal -->
@@ -908,11 +899,6 @@ const handleEdit = () => {
   message.info('Edit company feature coming soon')
 }
 
-// Check if user is superadmin
-const isSuperAdmin = computed(() => {
-  return authStore.user?.role?.toLowerCase() === 'superadmin'
-})
-
 // Assign Role functions
 const openAssignRoleModal = async () => {
   if (!company.value) {
@@ -1014,7 +1000,6 @@ const loadUsers = async () => {
 
 // Alias untuk backward compatibility
 const loadCompanyUsers = loadUsers
-const loadAllUsers = loadUsers
 
 const loadRoles = async () => {
   rolesLoading.value = true
@@ -1109,16 +1094,6 @@ const handleAssignRole = async () => {
   } finally {
     assignRoleLoading.value = false
   }
-}
-
-const handleCancelAssignRole = () => {
-  assignRoleModalVisible.value = false
-  assignRoleForm.value = {
-    userId: undefined,
-    roleId: undefined,
-  }
-  userSearchText.value = ''
-  roleSearchText.value = ''
 }
 
 // Edit User Role

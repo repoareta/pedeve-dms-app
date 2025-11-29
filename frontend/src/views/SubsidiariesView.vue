@@ -19,6 +19,24 @@
                 <IconifyIcon icon="mdi:magnify" width="20" />
               </template>
             </a-input>
+            <div class="view-mode-buttons">
+              <a-button 
+                :type="viewMode === 'grid' ? 'primary' : 'default'"
+                size="large"
+                @click="handleViewModeChange('grid')"
+                class="view-mode-btn"
+              >
+                <IconifyIcon icon="mdi:view-grid" width="20" />
+              </a-button>
+              <a-button 
+                :type="viewMode === 'list' ? 'primary' : 'default'"
+                size="large"
+                @click="handleViewModeChange('list')"
+                class="view-mode-btn"
+              >
+                <IconifyIcon icon="mdi:view-list" width="20" />
+              </a-button>
+            </div>
             <a-button type="primary" size="large" @click="handleCreateCompany" class="add-button">
               <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
               Add new Subsidiary
@@ -29,7 +47,7 @@
 
       <div class="mainContentPage">
         <!-- Subsidiary Cards Grid -->
-        <div class="subsidiary-cards-grid" v-if="!companiesLoading && filteredCompanies.length > 0">
+        <div class="subsidiary-cards-grid" v-if="viewMode === 'grid' && !companiesLoading && filteredCompanies.length > 0">
           <div v-for="company in paginatedCompanies" :key="company.id" class="subsidiary-card"
             @click="handleViewDetail(company.id)">
             <!-- Card Header -->
@@ -90,13 +108,83 @@
           </div>
         </div>
 
+        <!-- Subsidiary Table View -->
+        <div v-if="viewMode === 'list'">
+          <a-table
+            :columns="tableColumns"
+            :data-source="tableData"
+            :loading="companiesLoading || tableDataLoading"
+            :pagination="{
+              current: tablePagination.current,
+              pageSize: tablePagination.pageSize,
+              total: tablePagination.total,
+              showSizeChanger: true,
+              showTotal: (total: number) => `Total ${total} subsidiaries`,
+              pageSizeOptions: ['10', '20', '50', '100'],
+            }"
+            @change="handleTableChange"
+            row-key="id"
+            :scroll="{ x: 'max-content' }"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'logo'">
+                <div class="table-logo-cell">
+                  <img v-if="getCompanyLogo(record)" :src="getCompanyLogo(record)" :alt="record.name" class="table-logo" />
+                  <div v-else class="table-logo-placeholder" :style="{ backgroundColor: getIconColor(record.name) }">
+                    {{ getCompanyInitial(record.name) }}
+                  </div>
+                </div>
+              </template>
+              <template v-if="column.key === 'level'">
+                <a-tag :color="getLevelColor(record.level)">
+                  {{ getLevelLabel(record.level) }}
+                </a-tag>
+              </template>
+              <template v-if="column.key === 'status'">
+                <a-tag :color="record.is_active ? 'green' : 'red'">
+                  {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
+                </a-tag>
+              </template>
+              <template v-if="column.key === 'actions'">
+                <a-dropdown>
+                  <a-button type="link" size="small">
+                    Aksi
+                    <IconifyIcon icon="mdi:chevron-down" width="16" style="margin-left: 4px;" />
+                  </a-button>
+                  <template #overlay>
+                    <a-menu>
+                      <a-menu-item key="view" @click="handleViewDetail(record.id)">
+                        <IconifyIcon icon="mdi:eye" width="16" style="margin-right: 8px;" />
+                        Lihat Detail
+                      </a-menu-item>
+                      <a-menu-item key="edit" @click="handleEditCompany(record.id)">
+                        <IconifyIcon icon="mdi:pencil" width="16" style="margin-right: 8px;" />
+                        Edit
+                      </a-menu-item>
+                      <a-menu-item key="assign-role" @click="handleAssignRole(record.id)">
+                        <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
+                        Assign Role
+                      </a-menu-item>
+                      <a-menu-divider />
+                      <a-menu-item key="delete" danger @click="handleDeleteCompany(record.id)">
+                        <IconifyIcon icon="mdi:delete" width="16" style="margin-right: 8px;" />
+                        Hapus
+                      </a-menu-item>
+                    </a-menu>
+                  </template>
+                </a-dropdown>
+              </template>
+            </template>
+          </a-table>
+        </div>
+
         <!-- Loading State -->
-        <div v-if="companiesLoading" class="loading-container">
+        <div v-if="companiesLoading && viewMode === 'grid'" class="loading-container">
           <a-spin size="large" />
         </div>
 
         <!-- Empty State -->
-        <div v-if="!companiesLoading && companies.length === 0" class="empty-state">
+        <div v-if="viewMode === 'grid' && !companiesLoading && companies.length === 0" class="empty-state">
           <IconifyIcon icon="mdi:office-building-outline" width="64" style="color: #ccc; margin-bottom: 16px;" />
           <p>Belum ada data subsidiary</p>
           <a-button type="primary" @click="handleCreateCompany">
@@ -106,14 +194,14 @@
         </div>
 
         <!-- No Search Results -->
-        <div v-if="!companiesLoading && companies.length > 0 && filteredCompanies.length === 0" class="empty-state">
+        <div v-if="viewMode === 'grid' && !companiesLoading && companies.length > 0 && filteredCompanies.length === 0" class="empty-state">
           <IconifyIcon icon="mdi:magnify" width="64" style="color: #ccc; margin-bottom: 16px;" />
           <p>Tidak ada hasil untuk "{{ searchText }}"</p>
           <a-button type="default" @click="searchText = ''">Hapus Filter</a-button>
         </div>
 
-        <!-- Pagination -->
-        <div v-if="filteredCompanies.length > 0" class="pagination-container">
+        <!-- Pagination for Grid View -->
+        <div v-if="viewMode === 'grid' && filteredCompanies.length > 0" class="pagination-container">
           <a-pagination v-model:current="currentPage" v-model:page-size="pageSize" :total="filteredCompanies.length"
             :show-total="(total: number) => `Total ${total} subsidiaries`" :page-size-options="['8', '16', '24', '32']"
             show-size-changer @change="handlePageChange" />
@@ -129,23 +217,42 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { companyApi, type Company } from '../api/userManagement'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
+import type { TableColumnsType, TableProps } from 'ant-design-vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+// View Mode: 'grid' or 'list' - load from localStorage
+const getStoredViewMode = (): 'grid' | 'list' => {
+  const stored = localStorage.getItem('subsidiaries-view-mode')
+  return (stored === 'grid' || stored === 'list') ? stored : 'grid'
+}
+
+const viewMode = ref<'grid' | 'list'>(getStoredViewMode())
 
 // Companies
 const companies = ref<Company[]>([])
 const companiesLoading = ref(false)
 const searchText = ref('')
 
+// Table data loading state
+const tableDataLoading = ref(false)
+
 // Pagination
 const currentPage = ref(1)
 const pageSize = ref(8)
+
+// Table Pagination
+const tablePagination = ref({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+})
 
 // Sample financial data (RKAP & Opex) - akan diganti dengan data real jika ada
 const financialData = ref<Record<string, {
@@ -153,20 +260,28 @@ const financialData = ref<Record<string, {
   opex: { value: number; quarter: string; change: number }
 }>>({})
 
-// Computed untuk filtered companies berdasarkan search
+// Computed untuk filtered companies berdasarkan search, diurutkan berdasarkan waktu (paling baru di atas)
 const filteredCompanies = computed(() => {
-  if (!searchText.value.trim()) {
-    return companies.value
-  }
+  let filtered = companies.value
 
+  // Apply search filter
+  if (searchText.value.trim()) {
   const search = searchText.value.toLowerCase().trim()
-  return companies.value.filter(company =>
+    filtered = companies.value.filter(company =>
     company.name.toLowerCase().includes(search) ||
     company.code.toLowerCase().includes(search) ||
     (company.short_name && company.short_name.toLowerCase().includes(search)) ||
     (company.nib && company.nib.toLowerCase().includes(search)) ||
     (company.description && company.description.toLowerCase().includes(search))
   )
+  }
+
+  // Sort by updated_at (most recent first), fallback to created_at
+  return filtered.sort((a, b) => {
+    const dateA = new Date(a.updated_at || a.created_at || 0).getTime()
+    const dateB = new Date(b.updated_at || b.created_at || 0).getTime()
+    return dateB - dateA // Descending order (newest first)
+  })
 })
 
 // Computed untuk paginated companies dari filtered companies
@@ -313,8 +428,223 @@ const handleLogout = async () => {
   router.push('/login')
 }
 
-onMounted(() => {
-  loadCompanies()
+// View Mode Handler
+const handleViewModeChange = async (mode: 'grid' | 'list') => {
+  viewMode.value = mode
+  // Save to localStorage
+  localStorage.setItem('subsidiaries-view-mode', mode)
+  
+  // Lazy load table data only when switching to list view
+  // Check if companies are already loaded, if not load them
+  if (mode === 'list' && companies.value.length === 0) {
+    await loadTableData()
+  } else if (mode === 'list') {
+    // If companies are already loaded, just update pagination
+    tablePagination.value.total = filteredCompanies.value.length
+    tablePagination.value.current = 1
+  }
+}
+
+// Computed untuk table data dengan pagination
+const tableData = computed(() => {
+  const start = (tablePagination.value.current - 1) * tablePagination.value.pageSize
+  const end = start + tablePagination.value.pageSize
+  return filteredCompanies.value.slice(start, end)
+})
+
+// Load table data (lazy loading) - hanya set loading state
+const loadTableData = async () => {
+  if (companies.value.length === 0) {
+    await loadCompanies()
+  }
+  
+  tableDataLoading.value = true
+  try {
+    // Update pagination total
+    tablePagination.value.total = filteredCompanies.value.length
+    // Reset to first page
+    tablePagination.value.current = 1
+  } catch (error) {
+    message.error('Gagal memuat data table')
+  } finally {
+    tableDataLoading.value = false
+  }
+}
+
+// Watch for changes in filtered companies to update table pagination
+watch([filteredCompanies, viewMode], () => {
+  if (viewMode.value === 'list') {
+    tablePagination.value.total = filteredCompanies.value.length
+    // Reset to first page if current page is out of bounds
+    const maxPage = Math.ceil(filteredCompanies.value.length / tablePagination.value.pageSize)
+    if (tablePagination.value.current > maxPage && maxPage > 0) {
+      tablePagination.value.current = 1
+    }
+  }
+})
+
+// Table Columns
+const tableColumns: TableColumnsType = [
+  {
+    title: 'Logo',
+    key: 'logo',
+    width: 80,
+    fixed: 'left',
+  },
+  {
+    title: 'Nama Perusahaan',
+    dataIndex: 'name',
+    key: 'name',
+    sorter: (a: Company, b: Company) => a.name.localeCompare(b.name),
+    width: 250,
+  },
+  {
+    title: 'Kode',
+    dataIndex: 'code',
+    key: 'code',
+    sorter: (a: Company, b: Company) => a.code.localeCompare(b.code),
+    width: 120,
+  },
+  {
+    title: 'NIB',
+    dataIndex: 'nib',
+    key: 'nib',
+    sorter: (a: Company, b: Company) => (a.nib || '').localeCompare(b.nib || ''),
+    width: 150,
+  },
+  {
+    title: 'Tingkat',
+    dataIndex: 'level',
+    key: 'level',
+    sorter: (a: Company, b: Company) => a.level - b.level,
+    width: 150,
+    filters: [
+      { text: 'Holding (Induk)', value: 0 },
+      { text: 'Anak Perusahaan', value: 1 },
+      { text: 'Cucu Perusahaan', value: 2 },
+      { text: 'Cicit Perusahaan', value: 3 },
+    ],
+    onFilter: (value: number, record: Company) => record.level === value,
+  },
+  {
+    title: 'Status',
+    dataIndex: 'is_active',
+    key: 'status',
+    width: 120,
+    filters: [
+      { text: 'Aktif', value: true },
+      { text: 'Tidak Aktif', value: false },
+    ],
+    onFilter: (value: boolean, record: Company) => record.is_active === value,
+  },
+  {
+    title: 'Tanggal Dibuat',
+    dataIndex: 'created_at',
+    key: 'created_at',
+    sorter: (a: Company, b: Company) => {
+      const dateA = new Date(a.created_at || 0).getTime()
+      const dateB = new Date(b.created_at || 0).getTime()
+      return dateA - dateB
+    },
+    width: 180,
+    customRender: ({ text }: { text: string }) => {
+      if (!text) return '-'
+      const date = new Date(text)
+      return date.toLocaleDateString('id-ID', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    },
+  },
+  {
+    title: 'Aksi',
+    key: 'actions',
+    width: 120,
+    fixed: 'right',
+  },
+]
+
+// Table Change Handler
+const handleTableChange: TableProps['onChange'] = (pagination) => {
+  if (pagination) {
+    tablePagination.value.current = pagination.current || 1
+    tablePagination.value.pageSize = pagination.pageSize || 10
+  }
+}
+
+// Get Level Label
+const getLevelLabel = (level: number): string => {
+  switch (level) {
+    case 0:
+      return 'Holding (Induk)'
+    case 1:
+      return 'Anak Perusahaan'
+    case 2:
+      return 'Cucu Perusahaan'
+    case 3:
+      return 'Cicit Perusahaan'
+    default:
+      return `Level ${level}`
+  }
+}
+
+// Get Level Color
+const getLevelColor = (level: number): string => {
+  switch (level) {
+    case 0:
+      return 'purple'
+    case 1:
+      return 'blue'
+    case 2:
+      return 'cyan'
+    case 3:
+      return 'green'
+    default:
+      return 'default'
+  }
+}
+
+// Action Handlers
+const handleEditCompany = (id: string) => {
+  router.push(`/subsidiaries/${id}/edit`)
+}
+
+const handleAssignRole = (id: string) => {
+  router.push(`/subsidiaries/${id}`)
+  // TODO: Open assign role modal in detail page
+}
+
+const handleDeleteCompany = (id: string) => {
+  Modal.confirm({
+    title: 'Hapus Subsidiary',
+    content: 'Apakah Anda yakin ingin menghapus subsidiary ini? Tindakan ini tidak dapat dibatalkan.',
+    okText: 'Hapus',
+    okType: 'danger',
+    cancelText: 'Batal',
+    onOk: async () => {
+      try {
+        await companyApi.delete(id)
+        message.success('Subsidiary berhasil dihapus')
+        await loadCompanies()
+        if (viewMode.value === 'list') {
+          await loadTableData()
+        }
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+        message.error('Gagal menghapus subsidiary: ' + (axiosError.response?.data?.message || axiosError.message))
+      }
+    },
+  })
+}
+
+onMounted(async () => {
+  await loadCompanies()
+  
+  // If view mode is 'list', load table data
+  if (viewMode.value === 'list') {
+    await loadTableData()
+  }
 })
 </script>
 
@@ -376,6 +706,23 @@ onMounted(() => {
 
 .search-input :deep(.ant-input) {
   border-radius: 8px;
+}
+
+.view-mode-buttons {
+  display: flex;
+  gap: 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  padding: 4px;
+  background: #fafafa;
+}
+
+.view-mode-btn {
+  height: 36px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .add-button {
@@ -625,5 +972,31 @@ onMounted(() => {
   .subsidiary-cards-grid {
     grid-template-columns: repeat(4, 1fr);
   }
+}
+
+/* Table View Styles */
+.table-logo-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.table-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.table-logo-placeholder {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
 }
 </style>

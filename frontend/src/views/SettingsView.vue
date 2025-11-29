@@ -2,10 +2,11 @@
 import { ref, onMounted, onUnmounted, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import { auditApi, type AuditLog, type AuditLogsParams, type AuditLogStats } from '../api/audit'
+import developmentApi from '../api/development'
 import type { TableColumnsType } from 'ant-design-vue'
 
 const router = useRouter()
@@ -23,6 +24,12 @@ const qrCode = ref<string>('')
 const secret = ref<string>('')
 const twoFACode = ref('')
 const backupCodes = ref<string[]>([])
+
+// Development features
+const seederStatusLoading = ref(false)
+const seederStatus = ref<{ exists: boolean; message: string } | null>(null)
+const resetLoading = ref(false)
+const runSeederLoading = ref(false)
 
 // Audit logs
 const auditLogs = ref<AuditLog[]>([])
@@ -367,12 +374,83 @@ const parseDetails = (detailsJson: string) => {
   }
 }
 
+// Development functions
+const checkSeederStatus = async () => {
+  try {
+    seederStatusLoading.value = true
+    const status = await developmentApi.checkSeederStatus()
+    seederStatus.value = status
+  } catch (error: unknown) {
+    console.error('Failed to check seeder status:', error)
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal memeriksa status seeder'
+    message.error(errorMessage)
+  } finally {
+    seederStatusLoading.value = false
+  }
+}
+
+const handleResetSubsidiaryData = () => {
+  Modal.confirm({
+    title: 'Reset Data Subsidiary',
+    content: 'Apakah Anda yakin ingin menghapus semua data subsidiary dan user yang terkait? Tindakan ini tidak dapat dibatalkan!',
+    okText: 'Ya, Reset',
+    cancelText: 'Batal',
+    okType: 'danger',
+    onOk: async () => {
+      try {
+        resetLoading.value = true
+        await developmentApi.resetSubsidiaryData()
+        message.success('Data subsidiary berhasil di-reset')
+        // Refresh seeder status
+        await checkSeederStatus()
+      } catch (error: unknown) {
+        console.error('Failed to reset subsidiary data:', error)
+        const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+        const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal reset data subsidiary'
+        message.error(errorMessage)
+      } finally {
+        resetLoading.value = false
+      }
+    },
+  })
+}
+
+const handleRunSubsidiarySeeder = async () => {
+  try {
+    runSeederLoading.value = true
+    await developmentApi.runSubsidiarySeeder()
+    message.success('Seeder data subsidiary berhasil dijalankan')
+    // Refresh seeder status
+    await checkSeederStatus()
+  } catch (error: unknown) {
+    console.error('Failed to run seeder:', error)
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorCode = axiosError.response?.status
+    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal menjalankan seeder'
+    
+    if (errorCode === 409) {
+      // Conflict - data already exists
+      Modal.warning({
+        title: 'Data Seeder Sudah Tersedia',
+        content: errorMessage,
+        okText: 'OK',
+      })
+    } else {
+      message.error(errorMessage)
+    }
+  } finally {
+    runSeederLoading.value = false
+  }
+}
+
 onMounted(() => {
   check2FAStatus()
   // Only fetch audit logs if user is superadmin
   if (isSuperadmin.value) {
     fetchAuditLogs()
     fetchAuditStats()
+    checkSeederStatus()
     
     // Auto-refresh stats cards saja setiap 30 detik (hanya untuk audit stats, bukan seluruh halaman)
     // Interval akan dihentikan otomatis saat user keluar dari halaman (onUnmounted)
@@ -545,6 +623,82 @@ onUnmounted(() => {
                 </a-button>
               </a-popconfirm>
             </div>
+          </div>
+        </a-card>
+
+        <!-- Development Features Section (Superadmin Only) -->
+        <a-card v-if="isSuperadmin" class="development-card" style="margin-top: 24px;">
+          <template #title>
+            <div class="card-title">
+              <IconifyIcon icon="mdi:code-tags" width="24" height="24" />
+              <span>Fitur untuk Development</span>
+            </div>
+          </template>
+
+          <div class="development-section">
+            <div class="section-header">
+              <div>
+                <h3 class="section-title">Manajemen Data Subsidiary</h3>
+                <p class="section-description">
+                  Reset dan seed data subsidiary untuk kebutuhan development
+                </p>
+              </div>
+            </div>
+
+            <!-- Seeder Status -->
+            <div class="seeder-status" style="margin-bottom: 24px;">
+              <a-space size="middle" align="center">
+                <a-spin v-if="seederStatusLoading" size="small" />
+                <a-tag v-else-if="seederStatus?.exists" color="success">
+                  <IconifyIcon icon="mdi:check-circle" width="16" style="margin-right: 4px;" />
+                  Data Seeder Tersedia
+                </a-tag>
+                <a-tag v-else color="default">
+                  <IconifyIcon icon="mdi:alert-circle" width="16" style="margin-right: 4px;" />
+                  Data Seeder Belum Tersedia
+                </a-tag>
+                <a-button size="small" @click="checkSeederStatus" :loading="seederStatusLoading">
+                  <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
+                  Refresh Status
+                </a-button>
+              </a-space>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="development-actions">
+              <a-space size="large" direction="vertical" style="width: 100%;">
+                <a-button
+                  type="primary"
+                  danger
+                  size="large"
+                  block
+                  @click="handleResetSubsidiaryData"
+                  :loading="resetLoading"
+                >
+                  <IconifyIcon icon="mdi:delete-sweep" width="18" style="margin-right: 8px;" />
+                  Reset Data Subsidiary
+                </a-button>
+                <a-button
+                  type="primary"
+                  size="large"
+                  block
+                  @click="handleRunSubsidiarySeeder"
+                  :loading="runSeederLoading"
+                >
+                  <IconifyIcon icon="mdi:database-plus" width="18" style="margin-right: 8px;" />
+                  Jalankan Seeder Data Subsidiary
+                </a-button>
+              </a-space>
+            </div>
+
+            <!-- Info Alert -->
+            <a-alert
+              message="Informasi"
+              description="Reset Data Subsidiary akan menghapus semua data subsidiary dan user yang terkait. Jalankan Seeder akan membuat sample data subsidiary. Jika data sudah ada, proses seeder akan dibatalkan untuk mencegah duplikasi."
+              type="info"
+              show-icon
+              style="margin-top: 24px;"
+            />
           </div>
         </a-card>
 
@@ -973,6 +1127,47 @@ onUnmounted(() => {
       border-radius: 4px;
       text-align: center;
     }
+  }
+}
+
+.development-card {
+  .card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+}
+
+.development-section {
+  .section-header {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    color: #1a1a1a;
+  }
+
+  .section-description {
+    margin: 0;
+    color: #666;
+    font-size: 14px;
+  }
+
+  .seeder-status {
+    padding: 16px;
+    background: #f5f5f5;
+    border-radius: 6px;
+  }
+
+  .development-actions {
+    margin-top: 16px;
   }
 }
 

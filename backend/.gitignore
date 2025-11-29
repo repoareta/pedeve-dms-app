@@ -1,1 +1,36 @@
-backend/backend
+# Compiled binaries
+backend
+api
+seed-companies
+update-superadmin-password
+cmd/*/main
+cmd/*/*/main
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+dms.db
+
+# Logs
+*.log
+tmp/
+build-errors.log
+
+# Uploads (keep README.md)
+uploads/*
+!uploads/README.md
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Test files
+*.test
+*_test.go
+
+# Air (hot reload)
+.air.toml
+tmp/

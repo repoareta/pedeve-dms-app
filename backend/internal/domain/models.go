@@ -248,6 +248,14 @@ func (UserCompanyAssignmentModel) TableName() string {
 	return "user_company_assignments"
 }
 
+// UserCompanyResponse untuk response GetMyCompanies (company dengan role info)
+type UserCompanyResponse struct {
+	Company   CompanyModel `json:"company"`
+	RoleID    *string      `json:"role_id"`
+	Role      string       `json:"role"`       // Role name
+	RoleLevel int          `json:"role_level"` // Role level untuk sorting (0=superadmin, 1=admin, 2=manager, 3=staff)
+}
+
 // ShareholderRequest untuk request body (tanpa CreatedAt/UpdatedAt)
 type ShareholderRequest struct {
 	Type             string  `json:"type"`

@@ -233,6 +233,7 @@ func main() {
 	protected.Post("/users/:id/reset-password", userManagementHandler.ResetUserPassword)
 	protected.Post("/users/:id/assign-company", userManagementHandler.AssignUserToCompany)
 	protected.Post("/users/:id/unassign-company", userManagementHandler.UnassignUserFromCompany)
+	protected.Get("/users/me/companies", userManagementHandler.GetMyCompanies) // Get all companies assigned to current user
 	protected.Get("/users/:id", userManagementHandler.GetUser)
 	protected.Put("/users/:id", userManagementHandler.UpdateUser)
 	protected.Delete("/users/:id", userManagementHandler.DeleteUser)
@@ -255,6 +256,12 @@ func main() {
 	protected.Get("/permissions/:id", permissionManagementHandler.GetPermission)
 	protected.Put("/permissions/:id", permissionManagementHandler.UpdatePermission)
 	protected.Delete("/permissions/:id", permissionManagementHandler.DeletePermission)
+
+	// Route Development (hanya superadmin)
+	developmentHandler := http.NewDevelopmentHandler(usecase.NewDevelopmentUseCase())
+	protected.Post("/development/reset-subsidiary", developmentHandler.ResetSubsidiaryData)
+	protected.Post("/development/run-subsidiary-seeder", developmentHandler.RunSubsidiarySeeder)
+	protected.Get("/development/check-seeder-status", developmentHandler.CheckSeederDataExists)
 
 	// Swagger documentation dengan auto-reload
 	app.Get("/swagger/*", swagger.HandlerDefault)

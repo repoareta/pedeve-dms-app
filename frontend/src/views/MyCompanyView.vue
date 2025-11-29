@@ -4,69 +4,199 @@
 
     <div class="detail-content">
       <!-- Loading State -->
-      <div v-if="loading" class="loading-container">
+      <div v-if="loading || loadingCompanies" class="loading-container">
         <a-spin size="large" />
+      </div>
+
+      <!-- Company Selector (if multiple companies) -->
+      <div v-else-if="showCompanySelector && allUserCompanies.length > 1" class="company-selector-container">
+        <div class="selector-header">
+          <h1 class="selector-title">My Company</h1>
+          <p class="selector-description">Anda di-assign ke beberapa perusahaan. Pilih perusahaan yang ingin dilihat:</p>
+        </div>
+        <div class="company-cards-grid">
+          <div
+            v-for="comp in sortedUserCompanies"
+            :key="comp.company.id"
+            class="company-selector-card"
+            @click="selectCompany(comp.company.id)"
+          >
+            <!-- Card Header -->
+            <div class="selector-card-header">
+              <div class="selector-company-icon">
+                <img v-if="getCompanyLogo(comp.company)" :src="getCompanyLogo(comp.company)" :alt="comp.company.name" class="selector-logo" />
+                <div v-else class="selector-icon-placeholder" :style="{ backgroundColor: getIconColor(comp.company.name) }">
+                  {{ getCompanyInitial(comp.company.name) }}
+                </div>
+              </div>
+              <div class="selector-company-info">
+                <h3 class="selector-company-name">{{ comp.company.name }}</h3>
+                <p class="selector-company-reg">No Reg {{ comp.company.nib || 'N/A' }}</p>
+                <div class="selector-company-meta">
+                  <a-tag :color="getLevelColor(comp.company.level)" size="small">
+                    {{ getLevelLabel(comp.company.level) }}
+                  </a-tag>
+                  <a-tag v-if="comp.role" :color="getRoleColor(comp.role)" size="small">
+                    {{ comp.role }}
+                  </a-tag>
+                  <a-tag :color="comp.company.is_active ? 'green' : 'red'" size="small">
+                    {{ comp.company.is_active ? 'Aktif' : 'Tidak Aktif' }}
+                  </a-tag>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card Divider -->
+            <div class="selector-card-divider"></div>
+
+            <!-- Card Content -->
+            <div class="selector-card-content">
+              <div class="latest-month-header">
+                <IconifyIcon icon="mdi:information-outline" width="16" style="margin-right: 4px;" />
+                <span>Latest Month</span>
+              </div>
+
+              <div class="metrics-row">
+                <!-- RKAP vs Realization -->
+                <div class="metric-item">
+                  <div class="metric-value">{{ formatCurrency(getCompanyRKAP(comp.company.id)) }}</div>
+                  <div class="metric-meta">
+                    <span class="metric-year">{{ getCompanyRKAPYear(comp.company.id) }}</span>
+                    <span class="metric-change positive">+{{ getCompanyRKAPChange(comp.company.id) }}%</span>
+                  </div>
+                  <div class="metric-label">RKAP vs Realization</div>
+                </div>
+
+                <!-- Opex Trend -->
+                <div class="metric-item">
+                  <div class="metric-value">{{ formatCurrency(getCompanyOpex(comp.company.id)) }}</div>
+                  <div class="metric-meta">
+                    <span class="metric-quarter">{{ getCompanyOpexQuarter(comp.company.id) }}</span>
+                    <span class="metric-change negative">-{{ getCompanyOpexChange(comp.company.id) }}%</span>
+                  </div>
+                  <div class="metric-label">Opex Trend</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card Footer -->
+            <div class="selector-card-footer">
+              <a-button type="link" class="learn-more-link" @click.stop="selectCompany(comp.company.id)">
+                Learn more
+                <IconifyIcon icon="mdi:arrow-right" width="16" style="margin-left: 4px;" />
+              </a-button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Company Detail -->
       <div v-else-if="company" class="detail-card">
-        <div class="page-header-container container"
-          style="display:flex; flex-direction: column; flex-wrap: wrap;justify-content: center; align-items: start;">
+        <div class="page-header-container">
           <!-- Header Section -->
-          <div class="detail-header" style="width: 100%;">
-            <div class="company-icon-large">
-              <img v-if="getCompanyLogo(company)" :src="getCompanyLogo(company)" :alt="company.name"
-                class="logo-image-large" />
-              <div v-else class="icon-placeholder-large" :style="{ backgroundColor: getIconColor(company.name) }">
-                {{ getCompanyInitial(company.name) }}
+          <div class="detail-header">
+            <div class="header-left">
+              <div class="company-icon-large">
+                <img v-if="getCompanyLogo(company)" :src="getCompanyLogo(company)" :alt="company.name"
+                  class="logo-image-large" />
+                <div v-else class="icon-placeholder-large" :style="{ backgroundColor: getIconColor(company.name) }">
+                  {{ getCompanyInitial(company.name) }}
+                </div>
+              </div>
+              <div class="header-info">
+                <h1 class="company-title">{{ company.name }}</h1>
+                <p class="company-subtitle">{{ company.short_name || company.name }}</p>
+                <div class="company-meta">
+                  <a-tag :color="company.is_active ? 'green' : 'red'">
+                    {{ company.is_active ? 'Aktif' : 'Tidak Aktif' }}
+                  </a-tag>
+                  <a-tag :color="getLevelColor(company.level)">
+                    {{ getLevelLabel(company.level) }}
+                  </a-tag>
+                  <span v-if="company.code" class="meta-item">Kode: {{ company.code }}</span>
+                  <span v-if="company.nib" class="meta-item">No Reg {{ company.nib }}</span>
+                </div>
               </div>
             </div>
-            <div class="header-info">
-              <h1 class="company-title">{{ company.name }}</h1>
-              <p class="company-subtitle">{{ company.short_name || company.name }}</p>
-              <div class="company-meta">
-                <a-tag :color="company.is_active ? 'green' : 'red'">
-                  {{ company.is_active ? 'Aktif' : 'Tidak Aktif' }}
-                </a-tag>
-                <a-tag :color="getLevelColor(company.level)">
-                  {{ getLevelLabel(company.level) }}
-                </a-tag>
-                <span v-if="company.code" class="meta-item">Kode: {{ company.code }}</span>
-                <span v-if="company.nib" class="meta-item">No Reg {{ company.nib }}</span>
+            <div class="header-right">
+              <div class="header-actions-top">
+                <a-input-search placeholder="Cari..." style="width: 200px;" />
+                <a-button type="default">
+                  <IconifyIcon icon="mdi:view-grid" width="16" />
+                </a-button>
+                <a-button type="default">
+                  <IconifyIcon icon="mdi:format-list-bulleted" width="16" />
+                </a-button>
+                <a-button type="primary">
+                  <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
+                  Add Subsidiary
+                </a-button>
               </div>
-            </div>
-            <div class="header-actions">
-              <a-space>
-                <a-button @click="handleExportPDF">
-                  <IconifyIcon icon="mdi:file-pdf-box" width="16" style="margin-right: 8px;" />
-                  PDF
+              <div class="header-actions-bottom">
+                <a-button v-if="currentUserRole" type="link" size="small" class="role-button">
+                  <IconifyIcon icon="mdi:account-tie" width="16" style="margin-right: 4px;" />
+                  Role: {{ currentUserRole }}
                 </a-button>
-                <a-button @click="handleExportExcel">
-                  <IconifyIcon icon="mdi:file-excel" width="16" style="margin-right: 8px;" />
-                  Excel
-                </a-button>
-                <a-date-picker v-model:value="selectedPeriod" picker="month" placeholder="Select Periode"
-                  style="width: 150px;" />
-                <a-dropdown>
+                <a-dropdown v-if="allUserCompanies.length > 1" trigger="click">
                   <template #overlay>
-                    <a-menu @click="handleMenuClick">
-                      <a-menu-item key="edit">
-                        <IconifyIcon icon="mdi:pencil" width="16" style="margin-right: 8px;" />
-                        Edit
-                      </a-menu-item>
-                      <a-menu-item key="assign-role">
-                        <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
-                        Assign Role
+                    <a-menu @click="(e: { key: string }) => selectCompany(e.key)">
+                      <a-menu-item v-for="comp in sortedUserCompanies" :key="comp.company.id" :value="comp.company.id">
+                        {{ comp.company.name }}
+                        <a-tag :color="getLevelColor(comp.company.level)" style="margin-left: 8px;">
+                          {{ getLevelLabel(comp.company.level) }}
+                        </a-tag>
+                        <a-tag v-if="comp.role" :color="getRoleColor(comp.role)" style="margin-left: 4px;">
+                          {{ comp.role }}
+                        </a-tag>
                       </a-menu-item>
                     </a-menu>
                   </template>
-                  <a-button>
-                    <IconifyIcon icon="mdi:dots-vertical" width="16" style="margin-right: 8px;" />
-                    Options
+                  <a-button type="link" size="small">
+                    <IconifyIcon icon="mdi:swap-horizontal" width="16" style="margin-right: 4px;" />
+                    Ganti Company
+                    <IconifyIcon icon="mdi:chevron-down" width="16" style="margin-left: 4px;" />
                   </a-button>
                 </a-dropdown>
-              </a-space>
+                <a-button v-if="allUserCompanies.length > 1" type="link" size="small" @click="showSelector">
+                  <IconifyIcon icon="mdi:view-grid" width="16" style="margin-right: 4px;" />
+                  Lihat Semua
+                </a-button>
+              </div>
             </div>
+          </div>
+          
+          <!-- Action Buttons Row -->
+          <div class="action-buttons-row">
+            <a-space>
+              <a-button @click="handleExportPDF">
+                <IconifyIcon icon="mdi:file-pdf-box" width="16" style="margin-right: 8px;" />
+                PDF
+              </a-button>
+              <a-button @click="handleExportExcel">
+                <IconifyIcon icon="mdi:file-excel" width="16" style="margin-right: 8px;" />
+                Excel
+              </a-button>
+              <a-date-picker v-model:value="selectedPeriod" picker="month" placeholder="Select Periode"
+                style="width: 150px;" />
+              <a-dropdown>
+                <template #overlay>
+                  <a-menu @click="handleMenuClick">
+                    <a-menu-item key="edit">
+                      <IconifyIcon icon="mdi:pencil" width="16" style="margin-right: 8px;" />
+                      Edit
+                    </a-menu-item>
+                    <a-menu-item key="assign-role">
+                      <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
+                      Assign Role
+                    </a-menu-item>
+                  </a-menu>
+                </template>
+                <a-button>
+                  <IconifyIcon icon="mdi:dots-vertical" width="16" style="margin-right: 8px;" />
+                  Options
+                </a-button>
+              </a-dropdown>
+            </a-space>
           </div>
         </div>
 
@@ -243,109 +373,109 @@
 
             <a-tab-pane key="profile" tab="Profile">
               <!-- Profile Tab Content -->
-              <div class="profile-content">
-            <!-- Informasi Dasar -->
-            <div class="detail-section">
-              <h2 class="section-title">
-                <IconifyIcon icon="mdi:information" width="20" style="margin-right: 8px;" />
-                Informasi Dasar
-              </h2>
-              <a-descriptions :column="2" bordered>
-                <a-descriptions-item label="Nama Lengkap">{{ company.name }}</a-descriptions-item>
-                <a-descriptions-item label="Nama Singkat">{{ company.short_name || '-' }}</a-descriptions-item>
-                <a-descriptions-item label="Kode Perusahaan">{{ company.code }}</a-descriptions-item>
-                <a-descriptions-item label="Status">{{ company.status || '-' }}</a-descriptions-item>
-                <a-descriptions-item label="NPWP">{{ company.npwp || '-' }}</a-descriptions-item>
-                <a-descriptions-item label="NIB">{{ company.nib || '-' }}</a-descriptions-item>
-                <a-descriptions-item label="Deskripsi" :span="2">
-                  {{ company.description || '-' }}
-                </a-descriptions-item>
-              </a-descriptions>
-            </div>
+              <div v-if="company" class="profile-content">
+                <!-- Informasi Dasar -->
+                <div class="detail-section">
+                  <h2 class="section-title">
+                    <IconifyIcon icon="mdi:information" width="20" style="margin-right: 8px;" />
+                    Informasi Dasar
+                  </h2>
+                  <a-descriptions :column="2" bordered>
+                    <a-descriptions-item label="Nama Lengkap">{{ company.name }}</a-descriptions-item>
+                    <a-descriptions-item label="Nama Singkat">{{ company.short_name || '-' }}</a-descriptions-item>
+                    <a-descriptions-item label="Kode Perusahaan">{{ company.code }}</a-descriptions-item>
+                    <a-descriptions-item label="Status">{{ company.status || '-' }}</a-descriptions-item>
+                    <a-descriptions-item label="NPWP">{{ company.npwp || '-' }}</a-descriptions-item>
+                    <a-descriptions-item label="NIB">{{ company.nib || '-' }}</a-descriptions-item>
+                    <a-descriptions-item label="Deskripsi" :span="2">
+                      {{ company.description || '-' }}
+                    </a-descriptions-item>
+                  </a-descriptions>
+                </div>
 
-            <!-- Informasi Kontak -->
-            <div class="detail-section">
-              <h2 class="section-title">
-                <IconifyIcon icon="mdi:phone" width="20" style="margin-right: 8px;" />
-                Informasi Kontak
-              </h2>
-              <a-descriptions :column="2" bordered>
-                <a-descriptions-item label="Telepon">{{ company.phone || '-' }}</a-descriptions-item>
-                <a-descriptions-item label="Fax">{{ company.fax || '-' }}</a-descriptions-item>
-                <a-descriptions-item label="Email">{{ company.email || '-' }}</a-descriptions-item>
-                <a-descriptions-item label="Website">{{ company.website || '-' }}</a-descriptions-item>
-                <a-descriptions-item label="Alamat Perusahaan" :span="2">
-                  {{ company.address || '-' }}
-                </a-descriptions-item>
-                <a-descriptions-item label="Alamat Operasional" :span="2">
-                  {{ company.operational_address || '-' }}
-                </a-descriptions-item>
-              </a-descriptions>
-            </div>
+                <!-- Informasi Kontak -->
+                <div class="detail-section">
+                  <h2 class="section-title">
+                    <IconifyIcon icon="mdi:phone" width="20" style="margin-right: 8px;" />
+                    Informasi Kontak
+                  </h2>
+                  <a-descriptions :column="2" bordered>
+                    <a-descriptions-item label="Telepon">{{ company.phone || '-' }}</a-descriptions-item>
+                    <a-descriptions-item label="Fax">{{ company.fax || '-' }}</a-descriptions-item>
+                    <a-descriptions-item label="Email">{{ company.email || '-' }}</a-descriptions-item>
+                    <a-descriptions-item label="Website">{{ company.website || '-' }}</a-descriptions-item>
+                    <a-descriptions-item label="Alamat Perusahaan" :span="2">
+                      {{ company.address || '-' }}
+                    </a-descriptions-item>
+                    <a-descriptions-item label="Alamat Operasional" :span="2">
+                      {{ company.operational_address || '-' }}
+                    </a-descriptions-item>
+                  </a-descriptions>
+                </div>
 
-            <!-- Struktur Kepemilikan -->
-            <div v-if="company.shareholders && company.shareholders.length > 0" class="detail-section">
-              <h2 class="section-title">
-                <IconifyIcon icon="mdi:account-group" width="20" style="margin-right: 8px;" />
-                Struktur Kepemilikan
-              </h2>
-              <a-table :columns="shareholderColumns" :data-source="company.shareholders" :pagination="false"
-                row-key="id">
-                <template #bodyCell="{ column, record }">
-                  <template v-if="column.key === 'ownership_percent'">
-                    {{ record.ownership_percent }}%
-                  </template>
-                  <template v-if="column.key === 'share_count'">
-                    {{ record.share_count?.toLocaleString() || '-' }}
-                  </template>
-                  <template v-if="column.key === 'is_main_parent'">
-                    <a-tag v-if="record.is_main_parent" color="blue">Ya</a-tag>
-                    <span v-else>-</span>
-                  </template>
-                </template>
-              </a-table>
-            </div>
+                <!-- Struktur Kepemilikan -->
+                <div v-if="company.shareholders && company.shareholders.length > 0" class="detail-section">
+                  <h2 class="section-title">
+                    <IconifyIcon icon="mdi:account-group" width="20" style="margin-right: 8px;" />
+                    Struktur Kepemilikan
+                  </h2>
+                  <a-table :columns="shareholderColumns" :data-source="company.shareholders" :pagination="false"
+                    row-key="id">
+                    <template #bodyCell="{ column, record }">
+                      <template v-if="column.key === 'ownership_percent'">
+                        {{ record.ownership_percent }}%
+                      </template>
+                      <template v-if="column.key === 'share_count'">
+                        {{ record.share_count?.toLocaleString() || '-' }}
+                      </template>
+                      <template v-if="column.key === 'is_main_parent'">
+                        <a-tag v-if="record.is_main_parent" color="blue">Ya</a-tag>
+                        <span v-else>-</span>
+                      </template>
+                    </template>
+                  </a-table>
+                </div>
 
-            <!-- Bidang Usaha -->
-            <div v-if="company.main_business || (company.business_fields && company.business_fields.length > 0)"
-              class="detail-section">
-              <h2 class="section-title">
-                <IconifyIcon icon="mdi:briefcase" width="20" style="margin-right: 8px;" />
-                Bidang Usaha
-              </h2>
-              <a-descriptions :column="1" bordered>
-                <a-descriptions-item label="Sektor Industri">
-                  {{ getMainBusiness(company)?.industry_sector || '-' }}
-                </a-descriptions-item>
-                <a-descriptions-item label="KBLI">
-                  {{ getMainBusiness(company)?.kbli || '-' }}
-                </a-descriptions-item>
-                <a-descriptions-item label="Uraian Kegiatan Usaha Utama">
-                  {{ getMainBusiness(company)?.main_business_activity || '-' }}
-                </a-descriptions-item>
-                <a-descriptions-item label="Kegiatan Usaha Tambahan">
-                  {{ getMainBusiness(company)?.additional_activities || '-' }}
-                </a-descriptions-item>
-                <a-descriptions-item label="Tanggal Mulai Beroperasi">
-                  {{ formatDate(getMainBusiness(company)?.start_operation_date) }}
-                </a-descriptions-item>
-              </a-descriptions>
-            </div>
+                <!-- Bidang Usaha -->
+                <div v-if="company.main_business || (company.business_fields && company.business_fields.length > 0)"
+                  class="detail-section">
+                  <h2 class="section-title">
+                    <IconifyIcon icon="mdi:briefcase" width="20" style="margin-right: 8px;" />
+                    Bidang Usaha
+                  </h2>
+                  <a-descriptions :column="1" bordered>
+                    <a-descriptions-item label="Sektor Industri">
+                      {{ getMainBusiness(company)?.industry_sector || '-' }}
+                    </a-descriptions-item>
+                    <a-descriptions-item label="KBLI">
+                      {{ getMainBusiness(company)?.kbli || '-' }}
+                    </a-descriptions-item>
+                    <a-descriptions-item label="Uraian Kegiatan Usaha Utama">
+                      {{ getMainBusiness(company)?.main_business_activity || '-' }}
+                    </a-descriptions-item>
+                    <a-descriptions-item label="Kegiatan Usaha Tambahan">
+                      {{ getMainBusiness(company)?.additional_activities || '-' }}
+                    </a-descriptions-item>
+                    <a-descriptions-item label="Tanggal Mulai Beroperasi">
+                      {{ formatDate(getMainBusiness(company)?.start_operation_date) }}
+                    </a-descriptions-item>
+                  </a-descriptions>
+                </div>
 
-            <!-- Pengurus/Dewan Direksi -->
-            <div v-if="company.directors && company.directors.length > 0" class="detail-section">
-              <h2 class="section-title">
-                <IconifyIcon icon="mdi:account-tie" width="20" style="margin-right: 8px;" />
-                Pengurus/Dewan Direksi
-              </h2>
-              <a-table :columns="directorColumns" :data-source="company.directors" :pagination="false" row-key="id">
-                <template #bodyCell="{ column, record }">
-                  <template v-if="column.key === 'start_date'">
-                    {{ record.start_date ? formatDate(record.start_date) : '-' }}
-                  </template>
-                </template>
-              </a-table>
-            </div>
+                <!-- Pengurus/Dewan Direksi -->
+                <div v-if="company.directors && company.directors.length > 0" class="detail-section">
+                  <h2 class="section-title">
+                    <IconifyIcon icon="mdi:account-tie" width="20" style="margin-right: 8px;" />
+                    Pengurus/Dewan Direksi
+                  </h2>
+                  <a-table :columns="directorColumns" :data-source="company.directors" :pagination="false" row-key="id">
+                    <template #bodyCell="{ column, record }">
+                      <template v-if="column.key === 'start_date'">
+                        {{ record.start_date ? formatDate(record.start_date) : '-' }}
+                      </template>
+                    </template>
+                  </a-table>
+                </div>
               </div>
             </a-tab-pane>
           </a-tabs>
@@ -531,7 +661,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
-import { companyApi, userApi, roleApi, type Company, type BusinessField, type User, type Role } from '../api/userManagement'
+import { companyApi, userApi, roleApi, type Company, type BusinessField, type User, type Role, type UserCompanyResponse } from '../api/userManagement'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import dayjs from 'dayjs'
@@ -540,9 +670,13 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const company = ref<Company | null>(null)
+const currentUserRole = ref<string>('') // Role user di company yang sedang dilihat
+const allUserCompanies = ref<UserCompanyResponse[]>([]) // All companies assigned to user with role info
 const loading = ref(false)
+const loadingCompanies = ref(false) // Loading state for fetching user companies
 const activeTab = ref('performance')
 const selectedPeriod = ref<string | null>(null)
+const showCompanySelector = ref(false) // Show card selector if multiple companies
 
 // Assign Role Modal
 const assignRoleModalVisible = ref(false)
@@ -742,17 +876,62 @@ const reportColumns = [
   { title: '', key: 'action', width: 30 }
 ]
 
-const loadCompany = async () => {
-  const companyId = authStore.user?.company_id
-  if (!companyId) {
-    message.warning('Anda belum di-assign ke perusahaan')
-    loading.value = false
-    return
-  }
+// Computed: sorted companies by role level (highest role first)
+const sortedUserCompanies = computed(() => {
+  return [...allUserCompanies.value].sort((a, b) => {
+    // Sort by role_level (0=superadmin, 1=admin, 2=manager, 3=staff)
+    // Semakin kecil level, semakin tinggi role
+    return a.role_level - b.role_level
+  })
+})
 
+// Load all companies assigned to user
+const loadUserCompanies = async () => {
+  loadingCompanies.value = true
+  try {
+    allUserCompanies.value = await userApi.getMyCompanies()
+    
+    // If no companies, show warning
+    if (allUserCompanies.value.length === 0) {
+      message.warning('Anda belum di-assign ke perusahaan')
+      return
+    }
+    
+    // If only 1 company, load it directly
+    if (allUserCompanies.value.length === 1) {
+      const comp = allUserCompanies.value[0]!
+      await loadCompanyDetail(comp.company.id)
+      currentUserRole.value = comp.role
+      showCompanySelector.value = false
+    } else {
+      // Multiple companies: SELALU tampilkan selector (sesuai permintaan user)
+      showCompanySelector.value = true
+      company.value = null
+      currentUserRole.value = ''
+    }
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal memuat daftar perusahaan: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
+    allUserCompanies.value = []
+  } finally {
+    loadingCompanies.value = false
+  }
+}
+
+// Load company detail by ID
+const loadCompanyDetail = async (companyId: string) => {
   loading.value = true
   try {
     company.value = await companyApi.getById(companyId)
+    
+    // Find role user di company ini
+    const userCompany = allUserCompanies.value.find(c => c.company.id === companyId)
+    if (userCompany) {
+      currentUserRole.value = userCompany.role
+    } else {
+      currentUserRole.value = ''
+    }
+    
     // Generate financial data berdasarkan company ID
     if (company.value) {
       const hash = company.value.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
@@ -763,16 +942,33 @@ const loadCompany = async () => {
       npatData.value.value = (20 + (hash % 30)) * 1000000
       npatData.value.change = 10 + (hash % 10)
       
-      // Note: Company users will be loaded when modal is opened, not on initial page load
-      // This avoids unnecessary API calls and potential permission errors
+      // Save selected company to localStorage
+      localStorage.setItem('my-company-selected', companyId)
     }
   } catch (error: unknown) {
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     message.error('Gagal memuat data perusahaan: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
     company.value = null
+    currentUserRole.value = ''
   } finally {
     loading.value = false
   }
+}
+
+// Select company from selector
+const selectCompany = async (companyId: string) => {
+  await loadCompanyDetail(companyId)
+  showCompanySelector.value = false
+}
+
+// Show selector again
+const showSelector = () => {
+  showCompanySelector.value = true
+}
+
+// Legacy function for backward compatibility
+const loadCompany = async () => {
+  await loadUserCompanies()
 }
 
 const getMainBusiness = (company: Company): BusinessField | null => {
@@ -860,13 +1056,13 @@ const getLevelColor = (level: number): string => {
 
 const formatCurrency = (value: number): string => {
   if (value >= 1000000000) {
-    return `$${(value / 1000000000).toFixed(0)}B`
+    return `${(value / 1000000000).toFixed(0)}B`
   } else if (value >= 1000000) {
     return `${(value / 1000000).toFixed(0)}M`
   } else if (value >= 1000) {
     return `${(value / 1000).toFixed(0)}K`
   }
-  return `$${value.toFixed(0)}`
+  return `${value.toFixed(0)}`
 }
 
 const handleManageFiles = () => {
@@ -1171,6 +1367,38 @@ const getRoleColor = (role: string): string => {
   return 'default'
 }
 
+// Helper functions for company metrics in onboarding cards
+const getCompanyRKAP = (companyId: string): number => {
+  const hash = companyId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+  return (100 + (hash % 100)) * 1000000
+}
+
+const getCompanyRKAPYear = (companyId: string): string => {
+  const hash = companyId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+  return String(2024 + (hash % 2))
+}
+
+const getCompanyRKAPChange = (companyId: string): number => {
+  const hash = companyId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+  return 10 + (hash % 10)
+}
+
+const getCompanyOpex = (companyId: string): number => {
+  const hash = companyId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+  return (80 + (hash % 40)) * 1000000
+}
+
+const getCompanyOpexQuarter = (companyId: string): string => {
+  const hash = companyId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+  const quarters = ['Q1 2024', 'Q2 2024', 'Q3 2024', 'Q4 2024']
+  return quarters[hash % quarters.length]!
+}
+
+const getCompanyOpexChange = (companyId: string): number => {
+  const hash = companyId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+  return 3 + (hash % 8)
+}
+
 const handleLogout = async () => {
   await authStore.logout()
   router.push('/login')
@@ -1188,6 +1416,12 @@ onMounted(() => {
 
 .detail-content {
   margin: 0 auto;
+  padding: 24px;
+  max-width: 1400px;
+}
+
+.detail-card {
+  background: transparent;
 }
 
 .loading-container,
@@ -1206,11 +1440,58 @@ onMounted(() => {
   margin-bottom: 16px;
 }
 
+/* Page Header Container */
+.page-header-container {
+  padding: 24px;
+  background: white;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* Detail Header */
 .detail-header {
   display: flex;
   align-items: flex-start;
+  justify-content: space-between;
   gap: 24px;
-  width: 100%;
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  flex: 1;
+  min-width: 0;
+}
+
+.header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.header-actions-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-actions-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-buttons-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
 }
 
 .company-icon-large {
@@ -1222,6 +1503,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .logo-image-large {
@@ -1247,21 +1529,19 @@ onMounted(() => {
   min-width: 0;
 }
 
-.header-actions {
-  flex-shrink: 0;
-}
-
 .company-title {
   font-size: 32px;
   font-weight: 700;
   margin: 0 0 8px 0;
   color: #1a1a1a;
+  line-height: 1.2;
 }
 
 .company-subtitle {
   font-size: 18px;
   color: #666;
   margin: 0 0 16px 0;
+  line-height: 1.2;
 }
 
 .company-meta {
@@ -1278,7 +1558,10 @@ onMounted(() => {
 
 /* Tabs Container */
 .tabs-container {
-  margin-top: 24px;
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .tabs-container :deep(.ant-tabs-card) {
@@ -1295,9 +1578,8 @@ onMounted(() => {
 
 /* Performance Content */
 .performance-content {
-  padding: 24px;
-  background: white;
-  border-radius: 0 8px 8px 8px;
+  padding: 0;
+  background: transparent;
 }
 
 .trend-cards-row {
@@ -1405,9 +1687,8 @@ onMounted(() => {
 
 /* Profile Content */
 .profile-content {
-  padding: 24px;
-  background: white;
-  border-radius: 0 8px 8px 8px;
+  padding: 0;
+  background: transparent;
 }
 
 .detail-section {
@@ -1429,6 +1710,21 @@ onMounted(() => {
 }
 
 @media (max-width: 1024px) {
+  .detail-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .header-right {
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .header-actions-top {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
   .trend-cards-row {
     grid-template-columns: 1fr;
   }
@@ -1482,5 +1778,227 @@ onMounted(() => {
   .profile-content {
     padding: 16px;
   }
+}
+
+/* Company Selector Styles */
+.company-selector-container {
+  padding: 32px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.selector-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.selector-title {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  color: #1a1a1a;
+}
+
+.selector-description {
+  font-size: 16px;
+  color: #666;
+  margin: 0;
+}
+
+.company-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 24px;
+  margin-top: 32px;
+}
+
+.company-selector-card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.company-selector-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.selector-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.selector-company-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.selector-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.selector-icon-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 32px;
+  font-weight: 700;
+  border-radius: 12px;
+}
+
+.selector-company-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.selector-company-name {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+  color: #1a1a1a;
+  line-height: 1.3;
+}
+
+.selector-company-reg {
+  font-size: 13px;
+  color: #999;
+  margin: 0 0 12px 0;
+}
+
+.selector-company-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.selector-card-divider {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 16px 0;
+}
+
+.selector-card-content {
+  margin-bottom: 16px;
+}
+
+.latest-month-header {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 16px;
+}
+
+.metrics-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metric-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a1a;
+  line-height: 1.2;
+}
+
+.metric-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.metric-year,
+.metric-quarter {
+  font-size: 12px;
+  color: #666;
+}
+
+.metric-change {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: white;
+}
+
+.metric-change.positive {
+  background: #52c41a;
+}
+
+.metric-change.negative {
+  background: #ff4d4f;
+}
+
+.metric-label {
+  font-size: 12px;
+  color: #999;
+}
+
+.selector-card-footer {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.learn-more-link {
+  padding: 0;
+  height: auto;
+  font-size: 14px;
+  color: #1890ff;
+  display: flex;
+  align-items: center;
+}
+
+.learn-more-link:hover {
+  color: #40a9ff;
+}
+
+@media (max-width: 768px) {
+  .company-cards-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .selector-title {
+    font-size: 24px;
+  }
+}
+
+.role-button {
+  color: #1890ff;
+  font-weight: 500;
+  padding: 0;
+  height: auto;
+}
+
+.role-button:hover {
+  color: #40a9ff;
 }
 </style>

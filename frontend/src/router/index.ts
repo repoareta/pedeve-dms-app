@@ -64,6 +64,12 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Profil' },
     },
     {
+      path: '/my-company',
+      name: 'my-company',
+      component: () => import('../views/MyCompanyView.vue'),
+      meta: { requiresAuth: true, title: 'My Company' },
+    },
+    {
       path: '/users',
       name: 'users',
       component: () => import('../views/UserManagementView.vue'),
@@ -100,6 +106,18 @@ router.beforeEach(async (to, from, next) => {
     // Hanya validasi jika belum divalidasi baru-baru ini (untuk menghindari terlalu banyak API calls)
     try {
       await authStore.fetchProfile()
+      
+      // Validasi role - hanya izinkan role yang dikenali
+      const userRole = authStore.user?.role?.toLowerCase() || ''
+      const validRoles = ['superadmin', 'admin', 'manager', 'staff']
+      const isRoleValid = validRoles.includes(userRole)
+      
+      // Jika role tidak dikenali dan bukan di dashboard, redirect ke dashboard
+      if (!isRoleValid && to.name !== 'dashboard' && to.name !== 'profile' && to.name !== 'settings') {
+        next({ name: 'dashboard' })
+        return
+      }
+      
       // Token valid, izinkan akses
       next()
       return

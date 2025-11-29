@@ -17,12 +17,15 @@ type UserManagementUseCase interface {
 	CreateUser(username, email, password string, companyID, roleID *string) (*domain.UserModel, error)
 	GetUserByID(id string) (*domain.UserModel, error)
 	GetUsersByCompany(companyID string) ([]domain.UserModel, error)
+	GetUsersByCompanyHierarchy(companyID string) ([]domain.UserModel, error) // Get users from company and all descendants (RBAC)
 	GetUsersByRole(roleID string) ([]domain.UserModel, error)
 	GetAllUsers() ([]domain.UserModel, error)
 	UpdateUser(id, username, email string, companyID, roleID *string) (*domain.UserModel, error)
 	UpdateUserPassword(id, newPassword string) error
 	AssignUserToCompany(userID, companyID string) error
 	AssignUserToRole(userID, roleID string) error
+	AssignUserToRoleInCompany(userID, companyID, roleID string) error // Assign role in specific company via junction table
+	UnassignUserFromCompany(userID, companyID string) error           // Remove user from company via junction table
 	DeactivateUser(id string) error
 	ActivateUser(id string) error
 	ToggleUserStatus(id string) (*domain.UserModel, error)
@@ -32,17 +35,19 @@ type UserManagementUseCase interface {
 }
 
 type userManagementUseCase struct {
-	userRepo    repository.UserRepository
-	companyRepo repository.CompanyRepository
-	roleRepo    repository.RoleRepository
+	userRepo              repository.UserRepository
+	companyRepo           repository.CompanyRepository
+	roleRepo              repository.RoleRepository
+	assignmentRepo        repository.UserCompanyAssignmentRepository
 }
 
 // NewUserManagementUseCase creates a new user management use case
 func NewUserManagementUseCase() UserManagementUseCase {
 	return &userManagementUseCase{
-		userRepo:    repository.NewUserRepository(),
-		companyRepo: repository.NewCompanyRepository(),
-		roleRepo:    repository.NewRoleRepository(),
+		userRepo:       repository.NewUserRepository(),
+		companyRepo:    repository.NewCompanyRepository(),
+		roleRepo:       repository.NewRoleRepository(),
+		assignmentRepo: repository.NewUserCompanyAssignmentRepository(),
 	}
 }
 
@@ -84,12 +89,19 @@ func (uc *userManagementUseCase) CreateUser(username, email, password string, co
 	}
 
 	// Get role name for legacy field
-	roleName := "user"
+	// If no role provided, leave empty (standby mode) - DO NOT default to "user" or "superadmin"
+	var roleName string
 	if roleID != nil {
 		role, err := uc.roleRepo.GetByID(*roleID)
 		if err == nil {
 			roleName = role.Name
+		} else {
+			// If role ID provided but not found, use empty string (standby)
+			roleName = ""
 		}
+	} else {
+		// No role ID provided - user is in standby mode
+		roleName = ""
 	}
 
 	user := &domain.UserModel{
@@ -108,6 +120,41 @@ func (uc *userManagementUseCase) CreateUser(username, email, password string, co
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
+	// If companyID and roleID are provided, automatically create entry in junction table
+	// This ensures user appears in "My Company" and can be managed via "Assign Role"
+	if companyID != nil && roleID != nil {
+		assignment := &domain.UserCompanyAssignmentModel{
+			ID:        uuid.GenerateUUID(),
+			UserID:    user.ID,
+			CompanyID: *companyID,
+			RoleID:    roleID,
+			IsActive:  true,
+		}
+		if err := uc.assignmentRepo.Create(assignment); err != nil {
+			// Log error but don't fail - user is already created
+			// Junction table entry can be created later via "Assign Role"
+			zapLog.Warn("Failed to create junction table entry for new user", 
+				zap.String("user_id", user.ID),
+				zap.String("company_id", *companyID),
+				zap.Error(err))
+		}
+	} else if companyID != nil {
+		// If only companyID provided (no role), create assignment without role (standby)
+		assignment := &domain.UserCompanyAssignmentModel{
+			ID:        uuid.GenerateUUID(),
+			UserID:    user.ID,
+			CompanyID: *companyID,
+			RoleID:    nil, // No role assigned yet
+			IsActive:  true,
+		}
+		if err := uc.assignmentRepo.Create(assignment); err != nil {
+			zapLog.Warn("Failed to create junction table entry for new user (standby)", 
+				zap.String("user_id", user.ID),
+				zap.String("company_id", *companyID),
+				zap.Error(err))
+		}
+	}
+
 	return user, nil
 }
 
@@ -116,7 +163,150 @@ func (uc *userManagementUseCase) GetUserByID(id string) (*domain.UserModel, erro
 }
 
 func (uc *userManagementUseCase) GetUsersByCompany(companyID string) ([]domain.UserModel, error) {
-	return uc.userRepo.GetByCompanyID(companyID)
+	// Get users from junction table (supports multiple company assignments)
+	assignments, err := uc.assignmentRepo.GetByCompanyID(companyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get assignments: %w", err)
+	}
+
+	// Get unique user IDs
+	userIDs := make(map[string]bool)
+	for _, assignment := range assignments {
+		if assignment.IsActive {
+			userIDs[assignment.UserID] = true
+		}
+	}
+
+	// Get users by IDs
+	users := []domain.UserModel{}
+	for userID := range userIDs {
+		user, err := uc.userRepo.GetByID(userID)
+		if err != nil {
+			continue // Skip if user not found
+		}
+		
+		// Get role from assignment for this company
+		for _, assignment := range assignments {
+			if assignment.UserID == userID && assignment.CompanyID == companyID && assignment.RoleID != nil {
+				// Add role info from assignment
+				user.RoleID = assignment.RoleID
+				// Get role name
+				if role, err := uc.roleRepo.GetByID(*assignment.RoleID); err == nil {
+					user.Role = role.Name
+				}
+				break
+			}
+		}
+		
+		users = append(users, *user)
+	}
+
+	return users, nil
+}
+
+// GetUsersByCompanyHierarchy gets all users from a company and all its descendants (RBAC)
+// This is used for User Management to show only users that the current user has access to
+func (uc *userManagementUseCase) GetUsersByCompanyHierarchy(companyID string) ([]domain.UserModel, error) {
+	// Get company descendants (includes direct children and all nested descendants)
+	companyUseCase := NewCompanyUseCase()
+	descendants, err := companyUseCase.GetCompanyDescendants(companyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get company descendants: %w", err)
+	}
+	
+	// Include the company itself
+	allCompanyIDs := []string{companyID}
+	for _, desc := range descendants {
+		allCompanyIDs = append(allCompanyIDs, desc.ID)
+	}
+	
+	// Get all users from junction table for these companies
+	allUserIDs := make(map[string]bool)
+	userRoleMap := make(map[string]map[string]*string) // userID -> companyID -> roleID
+	
+	for _, compID := range allCompanyIDs {
+		assignments, err := uc.assignmentRepo.GetByCompanyID(compID)
+		if err != nil {
+			continue // Skip if error getting assignments
+		}
+		
+		for _, assignment := range assignments {
+			if assignment.IsActive {
+				allUserIDs[assignment.UserID] = true
+				if userRoleMap[assignment.UserID] == nil {
+					userRoleMap[assignment.UserID] = make(map[string]*string)
+				}
+				userRoleMap[assignment.UserID][compID] = assignment.RoleID
+			}
+		}
+	}
+	
+	// Also get users from UserModel.CompanyID as fallback (backward compatibility)
+	// This ensures users created before junction table implementation are still visible
+	for _, compID := range allCompanyIDs {
+		usersFromCompanyID, err := uc.userRepo.GetByCompanyID(compID)
+		if err == nil {
+			for _, user := range usersFromCompanyID {
+				// Only add if not already in junction table
+				if !allUserIDs[user.ID] {
+					allUserIDs[user.ID] = true
+					// Use role from UserModel if available
+					if user.RoleID != nil {
+						if userRoleMap[user.ID] == nil {
+							userRoleMap[user.ID] = make(map[string]*string)
+						}
+						userRoleMap[user.ID][compID] = user.RoleID
+					}
+				}
+			}
+		}
+	}
+	
+	// Get users by IDs
+	users := []domain.UserModel{}
+	for userID := range allUserIDs {
+		user, err := uc.userRepo.GetByID(userID)
+		if err != nil {
+			continue // Skip if user not found
+		}
+		
+		// Skip superadmin users for security
+		if user.Role == "superadmin" {
+			continue
+		}
+		
+		// Get role from assignment for the primary company (user's company)
+		// If user is assigned to multiple companies, use the role from the primary company
+		if roleMap, ok := userRoleMap[userID]; ok {
+			if roleID, ok := roleMap[companyID]; ok && roleID != nil {
+				user.RoleID = roleID
+				// Get role name
+				if role, err := uc.roleRepo.GetByID(*roleID); err == nil {
+					user.Role = role.Name
+				}
+			} else {
+				// If not found in primary company, use first available role
+				for _, roleID := range roleMap {
+					if roleID != nil {
+						user.RoleID = roleID
+						if role, err := uc.roleRepo.GetByID(*roleID); err == nil {
+							user.Role = role.Name
+						}
+						break
+					}
+				}
+			}
+		} else if user.RoleID != nil {
+			// Fallback: use role from UserModel if no junction table entry
+			if role, err := uc.roleRepo.GetByID(*user.RoleID); err == nil {
+				user.Role = role.Name
+			}
+		}
+		
+		users = append(users, *user)
+	}
+	
+	return users, nil
 }
 
 func (uc *userManagementUseCase) GetUsersByRole(roleID string) ([]domain.UserModel, error) {
@@ -205,8 +395,37 @@ func (uc *userManagementUseCase) AssignUserToCompany(userID, companyID string) e
 		return fmt.Errorf("company not found: %w", err)
 	}
 
-	user.CompanyID = &companyID
-	return uc.userRepo.Update(user)
+	// Check if assignment already exists
+	existingAssignment, err := uc.assignmentRepo.GetByUserAndCompany(userID, companyID)
+	if err == nil && existingAssignment != nil {
+		// Assignment already exists, just activate it
+		if !existingAssignment.IsActive {
+			existingAssignment.IsActive = true
+			return uc.assignmentRepo.Update(existingAssignment)
+		}
+		return nil // Already assigned
+	}
+
+	// Create new assignment in junction table (supports multiple company assignments)
+	assignment := &domain.UserCompanyAssignmentModel{
+		ID:        uuid.GenerateUUID(),
+		UserID:    userID,
+		CompanyID: companyID,
+		RoleID:    nil, // Role can be assigned separately via AssignUserToRoleInCompany
+		IsActive:  true,
+	}
+
+	if err := uc.assignmentRepo.Create(assignment); err != nil {
+		return fmt.Errorf("failed to create assignment: %w", err)
+	}
+
+	// Also update UserModel.CompanyID for backward compatibility (set as primary company if null)
+	if user.CompanyID == nil {
+		user.CompanyID = &companyID
+		return uc.userRepo.Update(user)
+	}
+
+	return nil
 }
 
 func (uc *userManagementUseCase) AssignUserToRole(userID, roleID string) error {
@@ -223,6 +442,104 @@ func (uc *userManagementUseCase) AssignUserToRole(userID, roleID string) error {
 	user.RoleID = &roleID
 	user.Role = role.Name // Update legacy field
 	return uc.userRepo.Update(user)
+}
+
+// AssignUserToRoleInCompany assigns a role to a user in a specific company via junction table
+// This allows the same user to have different roles in different companies
+func (uc *userManagementUseCase) AssignUserToRoleInCompany(userID, companyID, roleID string) error {
+	// Validate user exists
+	_, err := uc.userRepo.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("user not found: %w", err)
+	}
+
+	// Validate company exists
+	_, err = uc.companyRepo.GetByID(companyID)
+	if err != nil {
+		return fmt.Errorf("company not found: %w", err)
+	}
+
+	// Validate role exists
+	_, err = uc.roleRepo.GetByID(roleID)
+	if err != nil {
+		return fmt.Errorf("role not found: %w", err)
+	}
+
+	// Get role name for legacy field sync
+	role, err := uc.roleRepo.GetByID(roleID)
+	if err != nil {
+		return fmt.Errorf("role not found: %w", err)
+	}
+
+	// Get or create assignment
+	assignment, err := uc.assignmentRepo.GetByUserAndCompany(userID, companyID)
+	if err != nil {
+		// Assignment doesn't exist, create it
+		assignment = &domain.UserCompanyAssignmentModel{
+			ID:        uuid.GenerateUUID(),
+			UserID:    userID,
+			CompanyID: companyID,
+			RoleID:    &roleID,
+			IsActive:  true,
+		}
+		if err := uc.assignmentRepo.Create(assignment); err != nil {
+			return fmt.Errorf("failed to create assignment: %w", err)
+		}
+	} else {
+		// Assignment exists, update role
+		assignment.RoleID = &roleID
+		assignment.IsActive = true
+		if err := uc.assignmentRepo.Update(assignment); err != nil {
+			return fmt.Errorf("failed to update assignment: %w", err)
+		}
+	}
+
+	// Also update UserModel.Role and UserModel.RoleID for backward compatibility
+	// This ensures User Management and other parts that read from users table see the correct role
+	user, err := uc.userRepo.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("user not found: %w", err)
+	}
+	user.RoleID = &roleID
+	user.Role = role.Name // Update legacy field for backward compatibility
+	if err := uc.userRepo.Update(user); err != nil {
+		// Log error but don't fail - junction table is the source of truth
+		zapLog := logger.GetLogger()
+		zapLog.Warn("Failed to sync role to users table", zap.Error(err))
+	}
+
+	return nil
+}
+
+// UnassignUserFromCompany removes a user from a company via junction table
+// This allows user to be removed from one company while keeping assignments to other companies
+func (uc *userManagementUseCase) UnassignUserFromCompany(userID, companyID string) error {
+	// Validate user exists
+	_, err := uc.userRepo.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("user not found: %w", err)
+	}
+
+	// Validate company exists
+	_, err = uc.companyRepo.GetByID(companyID)
+	if err != nil {
+		return fmt.Errorf("company not found: %w", err)
+	}
+
+	// Remove assignment from junction table
+	if err := uc.assignmentRepo.DeleteByUserAndCompany(userID, companyID); err != nil {
+		return fmt.Errorf("failed to remove assignment: %w", err)
+	}
+
+	// Also check if this was the primary company (UserModel.CompanyID)
+	user, _ := uc.userRepo.GetByID(userID)
+	if user.CompanyID != nil && *user.CompanyID == companyID {
+		// This was the primary company, set to null
+		user.CompanyID = nil
+		return uc.userRepo.Update(user)
+	}
+
+	return nil
 }
 
 func (uc *userManagementUseCase) DeactivateUser(id string) error {

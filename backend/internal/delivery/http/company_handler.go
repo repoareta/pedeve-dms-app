@@ -387,6 +387,60 @@ func (h *CompanyHandler) GetAllCompanies(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(companies)
 }
 
+// GetCompanyUsers handles getting users assigned to a company
+// @Summary      Ambil Users di Company
+// @Description  Mengambil daftar users yang di-assign ke company tertentu (menggunakan junction table, support multiple assignments).
+// @Tags         Company Management
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Company ID"
+// @Success      200  {array}   domain.UserModel
+// @Failure      401  {object}  domain.ErrorResponse
+// @Failure      403  {object}  domain.ErrorResponse
+// @Failure      404  {object}  domain.ErrorResponse
+// @Router       /api/v1/companies/{id}/users [get]
+func (h *CompanyHandler) GetCompanyUsers(c *fiber.Ctx) error {
+	companyID := c.Params("id")
+	userCompanyID := c.Locals("companyID")
+	roleName := c.Locals("roleName").(string)
+
+	// Superadmin can access any company users
+	if roleName != "superadmin" && userCompanyID != nil {
+		var currentUserCompanyID string
+		if companyIDPtr, ok := userCompanyID.(*string); ok && companyIDPtr != nil {
+			currentUserCompanyID = *companyIDPtr
+		} else if companyIDStr, ok := userCompanyID.(string); ok {
+			currentUserCompanyID = companyIDStr
+		} else {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Invalid company ID format",
+			})
+		}
+
+		hasAccess, err := h.companyUseCase.ValidateCompanyAccess(currentUserCompanyID, companyID)
+		if err != nil || !hasAccess {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "You don't have access to this company's users",
+			})
+		}
+	}
+
+	// Get users from junction table (supports multiple company assignments)
+	userUseCase := usecase.NewUserManagementUseCase()
+	users, err := userUseCase.GetUsersByCompany(companyID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to get company users: " + err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(users)
+}
+
 // GetCompanyChildren handles getting company children
 // @Summary      Ambil Children Company
 // @Description  Mengambil daftar children (sub-companies) dari company tertentu.

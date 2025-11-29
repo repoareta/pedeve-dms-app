@@ -519,7 +519,8 @@ const getScopeColor = (scope: string): string => {
                 <span v-if="record.company_id">
                   {{ getCompanyName(record.company_id) || record.company_id }}
                 </span>
-                <a-tag v-else color="purple">Superadmin (Global)</a-tag>
+                <a-tag v-else-if="isUserSuperadmin(record)" color="purple">Superadmin (Global)</a-tag>
+                <span v-else class="text-muted">Belum di-assign</span>
               </template>
               <template v-if="column.key === 'is_active'">
                 <a-switch

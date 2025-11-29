@@ -13,13 +13,30 @@ const showUserMenu = ref(false)
 const showMobileMenu = ref(false)
 const isScrolled = ref(false)
 
-const menuItems = [
-  { label: 'Dashboard', key: 'dashboard', path: '/dashboard', icon: 'mdi:view-dashboard' },
-  { label: 'Anak Perusahaan', key: 'subsidiaries', path: '/subsidiaries', icon: 'mdi:office-building' },
-  { label: 'Dokumen', key: 'documents', path: '/documents', icon: 'mdi:file-document' },
-  { label: 'Laporan', key: 'reports', path: '/reports', icon: 'mdi:chart-box' },
-  { label: 'Manajemen Pengguna', key: 'users', path: '/users', icon: 'mdi:account-group' },
-]
+// Valid roles that can access the application
+const validRoles = ['superadmin', 'admin', 'manager', 'staff']
+
+// Check if user role is valid
+const isRoleValid = computed(() => {
+  const userRole = user.value?.role?.toLowerCase() || ''
+  return validRoles.includes(userRole)
+})
+
+// Menu items - only show for valid roles
+const menuItems = computed(() => {
+  // If role is not recognized, hide all menus except dashboard (which will show error)
+  if (!isRoleValid.value) {
+    return []
+  }
+  
+  return [
+    { label: 'Dashboard', key: 'dashboard', path: '/dashboard', icon: 'mdi:view-dashboard' },
+    { label: 'Anak Perusahaan', key: 'subsidiaries', path: '/subsidiaries', icon: 'mdi:office-building' },
+    { label: 'Dokumen', key: 'documents', path: '/documents', icon: 'mdi:file-document' },
+    { label: 'Laporan', key: 'reports', path: '/reports', icon: 'mdi:chart-box' },
+    { label: 'Manajemen Pengguna', key: 'users', path: '/users', icon: 'mdi:account-group' },
+  ]
+})
 
 const emit = defineEmits<{
   logout: []
@@ -146,7 +163,7 @@ onUnmounted(() => {
       </div>
 
       <div class="header-center">
-        <a-menu 
+          <a-menu 
           mode="horizontal" 
           :selected-keys="[route.name as string]"
           class="nav-menu desktop-menu"
@@ -160,6 +177,11 @@ onUnmounted(() => {
             {{ item.label }}
           </a-menu-item>
         </a-menu>
+        <!-- Show message if role is not recognized -->
+        <div v-if="!isRoleValid" class="role-warning-message">
+          <IconifyIcon icon="mdi:alert" width="18" style="margin-right: 8px; color: #faad14;" />
+          <span style="color: #faad14;">Role tidak dikenali</span>
+        </div>
       </div>
 
       <div class="header-right">
@@ -180,6 +202,10 @@ onUnmounted(() => {
               <a-menu-item key="profile" @click="handleMenuItemClick('/profile')">
                 <IconifyIcon icon="mdi:account" width="16" style="margin-right: 8px;" />
                 Profil
+              </a-menu-item>
+              <a-menu-item key="my-company" @click="handleMenuItemClick('/my-company')">
+                <IconifyIcon icon="mdi:office-building" width="16" style="margin-right: 8px;" />
+                My Company
               </a-menu-item>
               <a-menu-item key="settings" @click="handleMenuItemClick('/settings')">
                 <IconifyIcon icon="mdi:cog" width="16" style="margin-right: 8px;" />
@@ -220,6 +246,11 @@ onUnmounted(() => {
               <IconifyIcon :icon="item.icon" width="20" style="margin-right: 12px;" />
               {{ item.label }}
             </a-menu-item>
+            <!-- Show message if role is not recognized -->
+            <div v-if="!isRoleValid" class="role-warning-message-mobile" style="padding: 12px; color: #faad14;">
+              <IconifyIcon icon="mdi:alert" width="20" style="margin-right: 8px;" />
+              <span>Role tidak dikenali</span>
+            </div>
           </a-menu>
           <div class="mobile-menu-footer">
             <a-button type="text" block @click="handleLogout" class="mobile-logout-btn">

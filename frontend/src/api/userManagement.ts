@@ -166,6 +166,11 @@ export const companyApi = {
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/companies/${id}`)
   },
+
+  getUsers: async (id: string): Promise<User[]> => {
+    const response = await apiClient.get<User[]>(`/companies/${id}/users`)
+    return response.data
+  },
 }
 
 // User API
@@ -221,6 +226,13 @@ export const userApi = {
     const response = await apiClient.post<User>(`/users/${id}/assign-company`, {
       company_id: companyId,
       role_id: roleId,
+    })
+    return response.data
+  },
+
+  unassignFromCompany: async (id: string, companyId: string): Promise<User> => {
+    const response = await apiClient.post<User>(`/users/${id}/unassign-company`, {
+      company_id: companyId,
     })
     return response.data
   },

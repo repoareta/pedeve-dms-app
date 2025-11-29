@@ -98,9 +98,17 @@ func InitDB() {
 		&domain.ShareholderModel{},
 		&domain.BusinessFieldModel{},
 		&domain.DirectorModel{},
+		&domain.UserCompanyAssignmentModel{},
 	)
 	if err != nil {
 		zapLog.Fatal("Failed to migrate database", zap.Error(err))
+	}
+
+	// Ensure 'role' column on users table has no default value.
+	// This is important so that new users created without an explicit role
+	// don't accidentally get a default like 'user' or 'superadmin'.
+	if err := DB.Exec("ALTER TABLE users ALTER COLUMN role DROP DEFAULT").Error; err != nil {
+		zapLog.Warn("Failed to drop default for users.role (this may be expected on SQLite or if already dropped)", zap.Error(err))
 	}
 
 	// Create indexes untuk performance

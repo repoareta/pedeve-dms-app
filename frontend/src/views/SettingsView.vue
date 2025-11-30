@@ -2,11 +2,12 @@
 import { ref, onMounted, onUnmounted, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { message, Modal } from 'ant-design-vue'
+import { message, Modal, Card } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { Icon as IconifyIcon } from '@iconify/vue'
-import { auditApi, type AuditLog, type AuditLogsParams, type AuditLogStats } from '../api/audit'
+import { auditApi, type AuditLog, type AuditLogsParams, type AuditLogStats, type UserActivityLog, type UserActivityLogsParams, type UserActivityLogsResponse } from '../api/audit'
 import developmentApi from '../api/development'
+import { sonarqubeApi, type SonarQubeIssue, type SonarQubeIssuesResponse, type SonarQubeIssuesParams } from '../api/sonarqube'
 import type { TableColumnsType } from 'ant-design-vue'
 
 const router = useRouter()
@@ -15,6 +16,11 @@ const authStore = useAuthStore()
 // Check if user is superadmin
 const isSuperadmin = computed(() => {
   return authStore.user?.role?.toLowerCase() === 'superadmin'
+})
+
+// Check if user is admin
+const isAdmin = computed(() => {
+  return authStore.user?.role?.toLowerCase() === 'admin'
 })
 
 const loading = ref(false)
@@ -51,9 +57,51 @@ const selectedAuditLog = ref<AuditLog | null>(null)
 const detailModalVisible = ref(false)
 let auditStatsInterval: number | null = null
 
+// User Activity Logs (permanent logs untuk data penting)
+const userActivityLogs = ref<UserActivityLog[]>([])
+const userActivityLoading = ref(false)
+const userActivityPagination = ref({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+})
+const userActivityFilters = ref({
+  action: undefined as string | undefined,
+  resource: undefined as string | undefined,
+  status: undefined as string | undefined,
+})
+const selectedUserActivityLog = ref<UserActivityLog | null>(null)
+const userActivityDetailModalVisible = ref(false)
+
+// Tab state untuk audit logs
+const auditLogActiveTab = ref<string>('audit') // 'audit' atau 'user-activity'
+
+// SonarQube state
+const sonarqubeEnabled = ref(false) // Track if feature is enabled
+const sonarqubeIssues = ref<SonarQubeIssue[]>([])
+const sonarqubeLoading = ref(false)
+const sonarqubeExporting = ref(false)
+const sonarqubeTotal = ref(0)
+const sonarqubeFilters = ref<SonarQubeIssuesParams>({
+  severities: ['BLOCKER', 'CRITICAL', 'MAJOR'],
+  types: ['BUG', 'VULNERABILITY', 'CODE_SMELL'], // Include CODE_SMELL untuk melihat semua issues
+  statuses: ['OPEN', 'CONFIRMED', 'REOPENED'],
+})
+const sonarqubeComponents = ref<Record<string, string>>({})
+
+// Navigation state
+const selectedMenuKey = ref<string>('2fa') // Default: 2FA Setting
+const selectedKeys = ref<string[]>(['2fa']) // Array untuk v-model:selectedKeys
+const openKeys = ref<string[]>(['2fa']) // Default: 2FA Setting open
+const isMaximized = ref(false) // State untuk maximize/minimize
+
 const handleLogout = async () => {
   await authStore.logout()
   router.push('/login')
+}
+
+const handleToggleMaximize = (value: boolean) => {
+  isMaximized.value = value
 }
 
 const check2FAStatus = async () => {
@@ -270,22 +318,79 @@ const getStatusColor = (status: string) => {
   }
 }
 
+const getActionColor = (action: string) => {
+  if (action.includes('create') || action.includes('generate')) {
+    return 'green'
+  } else if (action.includes('update')) {
+    return 'blue'
+  } else if (action.includes('delete')) {
+    return 'red'
+  } else if (action.includes('view') || action.includes('export')) {
+    return 'cyan'
+  }
+  return 'default'
+}
+
 const getActionLabel = (action: string) => {
   const labels: Record<string, string> = {
+    // Authentication actions
     login: 'Login',
     logout: 'Logout',
     register: 'Register',
+    failed_login: 'Failed Login',
+    password_reset: 'Password Reset',
+    
+    // Generic CRUD actions
+    create: 'Create',
+    update: 'Update',
+    delete: 'Delete',
+    view: 'View',
+    
+    // User Management actions
     create_user: 'Create User',
     update_user: 'Update User',
     delete_user: 'Delete User',
+    
+    // Company/Subsidiary actions
+    create_company: 'Create Company',
+    update_company: 'Update Company',
+    delete_company: 'Delete Company',
+    
+    // Document actions
     create_document: 'Create Document',
     update_document: 'Update Document',
     delete_document: 'Delete Document',
     view_document: 'View Document',
+    
+    // File Management actions
+    create_file: 'Create File',
+    update_file: 'Update File',
+    delete_file: 'Delete File',
+    download_file: 'Download File',
+    view_file: 'View File',
+    upload_file: 'Upload File',
+    
+    // Report Management actions
+    generate_report: 'Generate Report',
+    view_report: 'View Report',
+    export_report: 'Export Report',
+    delete_report: 'Delete Report',
+    
+    // 2FA actions
     enable_2fa: 'Enable 2FA',
     disable_2fa: 'Disable 2FA',
-    failed_login: 'Failed Login',
-    password_reset: 'Password Reset',
+    
+    // Other actions
+    assign_user_to_company: 'Assign User to Company',
+    unassign_user_from_company: 'Unassign User from Company',
+    reset_user_password: 'Reset User Password',
+    update_email: 'Update Email',
+    change_password: 'Change Password',
+    change_password_failed: 'Change Password Failed',
+    assign_permission: 'Assign Permission',
+    revoke_permission: 'Revoke Permission',
+    
+    // Technical errors
     system_error: 'System Error',
     database_error: 'Database Error',
     validation_error: 'Validation Error',
@@ -365,6 +470,58 @@ const closeDetailModal = () => {
   selectedAuditLog.value = null
 }
 
+// Fungsi user activity logs (permanent logs)
+const fetchUserActivityLogs = async (page: number = 1, pageSize: number = 10) => {
+  try {
+    userActivityLoading.value = true
+    const params: UserActivityLogsParams = {
+      page,
+      pageSize,
+      action: userActivityFilters.value.action,
+      resource: userActivityFilters.value.resource,
+      status: userActivityFilters.value.status,
+    }
+    
+    const response = await auditApi.getUserActivityLogs(params)
+    userActivityLogs.value = response.data
+    userActivityPagination.value = {
+      current: response.page,
+      pageSize: response.pageSize,
+      total: response.total,
+    }
+  } catch (error: unknown) {
+    console.error('Failed to fetch user activity logs:', error)
+    message.error('Gagal mengambil user activity logs')
+  } finally {
+    userActivityLoading.value = false
+  }
+}
+
+const handleUserActivityTableChange = (pag: { current?: number; pageSize?: number }) => {
+  if (pag.current) {
+    userActivityPagination.value.current = pag.current
+  }
+  if (pag.pageSize) {
+    userActivityPagination.value.pageSize = pag.pageSize
+  }
+  fetchUserActivityLogs(userActivityPagination.value.current, userActivityPagination.value.pageSize)
+}
+
+const handleUserActivityFilterChange = () => {
+  userActivityPagination.value.current = 1
+  fetchUserActivityLogs(1, userActivityPagination.value.pageSize)
+}
+
+const showUserActivityDetailModal = (log: UserActivityLog) => {
+  selectedUserActivityLog.value = log
+  userActivityDetailModalVisible.value = true
+}
+
+const closeUserActivityDetailModal = () => {
+  userActivityDetailModalVisible.value = false
+  selectedUserActivityLog.value = null
+}
+
 const parseDetails = (detailsJson: string) => {
   if (!detailsJson) return null
   try {
@@ -373,6 +530,182 @@ const parseDetails = (detailsJson: string) => {
     return null
   }
 }
+
+// SonarQube functions
+const checkSonarQubeStatus = async () => {
+  try {
+    const status = await sonarqubeApi.getStatus()
+    sonarqubeEnabled.value = status.enabled
+  } catch (error) {
+    // If check fails, assume feature is disabled
+    sonarqubeEnabled.value = false
+    console.warn('SonarQube Monitor status check failed:', error)
+  }
+}
+
+const fetchSonarQubeIssues = async () => {
+  try {
+    sonarqubeLoading.value = true
+    const response = await sonarqubeApi.getIssues(sonarqubeFilters.value)
+    
+    // Debug logging
+    console.log('SonarQube API Response:', {
+      total: response.total,
+      issuesCount: response.issues?.length || 0,
+      componentsCount: response.components?.length || 0,
+      issues: response.issues,
+      components: response.components,
+    })
+    
+    sonarqubeIssues.value = response.issues || []
+    sonarqubeTotal.value = response.total || 0
+    
+    // Build component map for display
+    const componentMap: Record<string, string> = {}
+    if (response.components) {
+      response.components.forEach(comp => {
+        componentMap[comp.key] = comp.name || comp.key
+      })
+    }
+    sonarqubeComponents.value = componentMap
+    
+    if (response.total > 0) {
+      message.success(`Berhasil mengambil ${response.total} issues dari SonarCloud (${response.issues?.length || 0} ditampilkan)`)
+    } else {
+      message.warning('Tidak ada issues yang ditemukan dengan filter yang dipilih')
+    }
+  } catch (error: unknown) {
+    console.error('Failed to fetch SonarQube issues:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Gagal mengambil issues dari SonarCloud'
+    message.error({
+      content: errorMessage,
+      duration: 5,
+    })
+    sonarqubeIssues.value = []
+  } finally {
+    sonarqubeLoading.value = false
+  }
+}
+
+const handleSonarQubeFilterChange = () => {
+  // Filter change handler - bisa digunakan untuk auto-refresh jika diperlukan
+  // Untuk sekarang, user harus klik Refresh button
+}
+
+const exportSonarQubeIssues = async () => {
+  try {
+    sonarqubeExporting.value = true
+    const blob = await sonarqubeApi.exportIssues(sonarqubeFilters.value)
+    
+    // Create download link
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `sonarqube-issues-${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    message.success('Berhasil export issues ke JSON')
+  } catch (error: unknown) {
+    console.error('Failed to export SonarQube issues:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Gagal export issues'
+    message.error({
+      content: errorMessage,
+      duration: 5,
+    })
+  } finally {
+    sonarqubeExporting.value = false
+  }
+}
+
+const getSeverityCount = (severity: string) => {
+  return sonarqubeIssues.value.filter(issue => issue.severity === severity).length
+}
+
+const getSeverityColor = (severity: string) => {
+  switch (severity) {
+    case 'BLOCKER':
+      return 'red'
+    case 'CRITICAL':
+      return 'volcano'
+    case 'MAJOR':
+      return 'orange'
+    case 'MINOR':
+      return 'blue'
+    case 'INFO':
+      return 'default'
+    default:
+      return 'default'
+  }
+}
+
+const getTypeColor = (type: string) => {
+  switch (type) {
+    case 'BUG':
+      return 'red'
+    case 'VULNERABILITY':
+      return 'volcano'
+    case 'CODE_SMELL':
+      return 'orange'
+    default:
+      return 'default'
+  }
+}
+
+const getComponentName = (componentKey: string) => {
+  return sonarqubeComponents.value[componentKey] || componentKey.split(':').pop() || componentKey
+}
+
+const sonarqubeColumns: TableColumnsType = [
+  {
+    title: 'Severity',
+    dataIndex: 'severity',
+    key: 'severity',
+    width: 100,
+    fixed: 'left',
+  },
+  {
+    title: 'Type',
+    dataIndex: 'type',
+    key: 'type',
+    width: 120,
+  },
+  {
+    title: 'Component',
+    dataIndex: 'component',
+    key: 'component',
+    width: 200,
+    ellipsis: true,
+  },
+  {
+    title: 'Message',
+    dataIndex: 'message',
+    key: 'message',
+    width: 300,
+    ellipsis: true,
+  },
+  {
+    title: 'Line',
+    dataIndex: 'line',
+    key: 'line',
+    width: 80,
+  },
+  {
+    title: 'Status',
+    dataIndex: 'status',
+    key: 'status',
+    width: 100,
+  },
+  {
+    title: 'Rule',
+    dataIndex: 'rule',
+    key: 'rule',
+    width: 150,
+    ellipsis: true,
+  },
+]
 
 // Development functions
 const checkSeederStatus = async () => {
@@ -444,6 +777,15 @@ const handleRunSubsidiarySeeder = async () => {
   }
 }
 
+const handleMenuClick = (e: { key: string }) => {
+  selectedMenuKey.value = e.key
+  selectedKeys.value = [e.key]
+}
+
+const handleOpenChange = (keys: string[]) => {
+  openKeys.value = keys
+}
+
 onMounted(() => {
   check2FAStatus()
   // Only fetch audit logs if user is superadmin
@@ -451,6 +793,11 @@ onMounted(() => {
     fetchAuditLogs()
     fetchAuditStats()
     checkSeederStatus()
+    
+    // Check SonarQube Monitor status (only for superadmin/admin)
+    if (isSuperadmin.value || isAdmin.value) {
+      checkSonarQubeStatus()
+    }
     
     // Auto-refresh stats cards saja setiap 30 detik (hanya untuk audit stats, bukan seluruh halaman)
     // Interval akan dihentikan otomatis saat user keluar dari halaman (onUnmounted)
@@ -471,23 +818,81 @@ onUnmounted(() => {
 
 <template>
   <div class="settings-page">
-    <DashboardHeader @logout="handleLogout" />
+    <DashboardHeader @logout="handleLogout" @toggleMaximize="handleToggleMaximize" />
 
-    <div class="settings-content">
-      <div class="settings-container">
-        <h1 class="settings-title">Settings</h1>
+    <div class="settings-wrapper-layout">
+      <!-- Page Header Section -->
+      <div class="page-header-container">
+        <div class="page-header">
+          <div class="header-left">
+            <h1 class="page-title">Settings</h1>
+            <p class="page-description">
+              Kelola pengaturan akun, keamanan, dan konfigurasi sistem Anda.
+            </p>
+          </div>
+        </div>
+      </div>
 
-        <!-- Security Section -->
-        <a-card class="security-card" :loading="loading">
-          <template #title>
-            <div class="card-title">
-              <IconifyIcon icon="mdi:shield-lock" width="24" height="24" />
-              <span>Security</span>
+      <!-- Main Content -->
+      <div class="mainContentPage">
+        <a-layout-content class="settings-content">
+          <div class="settings-container">
+            <a-card class="settings-wrapper-card">
+          <div class="settings-wrapper">
+            <!-- Sidebar Navigation -->
+            <div class="settings-sidebar" :class="{ 'sidebar-hidden': isMaximized }">
+              <a-menu
+                v-model:selectedKeys="selectedKeys"
+                v-model:openKeys="openKeys"
+                mode="inline"
+                @click="handleMenuClick"
+                @openChange="handleOpenChange"
+                class="settings-menu"
+              >
+                <a-menu-item key="2fa">
+                  <template #icon>
+                    <IconifyIcon icon="mdi:shield-lock" width="20" />
+                  </template>
+                  <span>2FA Setting</span>
+                </a-menu-item>
+                
+                <a-menu-item v-if="isSuperadmin" key="development">
+                  <template #icon>
+                    <IconifyIcon icon="mdi:code-tags" width="20" />
+                  </template>
+                  <span>Fitur untuk Development</span>
+                </a-menu-item>
+                
+                <a-menu-item v-if="isSuperadmin" key="audit">
+                  <template #icon>
+                    <IconifyIcon icon="mdi:file-document-outline" width="20" />
+                  </template>
+                  <span>Audit Log</span>
+                </a-menu-item>
+                
+                <a-menu-item v-if="(isSuperadmin || isAdmin) && sonarqubeEnabled" key="sonarqube">
+                  <template #icon>
+                    <IconifyIcon icon="mdi:code-tags-check" width="20" />
+                  </template>
+                  <span>SonarQube Monitor</span>
+                </a-menu-item>
+              </a-menu>
             </div>
-          </template>
 
-          <!-- Two-Factor Authentication -->
-          <div class="security-section">
+            <!-- Main Content Area -->
+            <div class="settings-main-content" :class="{ 'content-maximized': isMaximized }">
+          <!-- 2FA Setting Content -->
+          <div v-if="selectedMenuKey === '2fa'" class="settings-section">
+            <a-card class="security-card" :loading="loading">
+              <template #title>
+                <div class="card-title">
+                  <IconifyIcon icon="mdi:shield-lock" width="24" height="24" />
+                  <span>Security</span>
+                </div>
+              </template>
+
+              <!-- Two-Factor Authentication -->
+              <div class="security-section">
             <div class="section-header">
               <div>
                 <h3 class="section-title">Two-Factor Authentication (2FA)</h3>
@@ -623,19 +1028,21 @@ onUnmounted(() => {
                 </a-button>
               </a-popconfirm>
             </div>
+              </div>
+            </a-card>
           </div>
-        </a-card>
 
-        <!-- Development Features Section (Superadmin Only) -->
-        <a-card v-if="isSuperadmin" class="development-card" style="margin-top: 24px;">
-          <template #title>
-            <div class="card-title">
-              <IconifyIcon icon="mdi:code-tags" width="24" height="24" />
-              <span>Fitur untuk Development</span>
-            </div>
-          </template>
+          <!-- Development Features Content -->
+          <div v-if="selectedMenuKey === 'development' && isSuperadmin" class="settings-section">
+            <a-card class="development-card">
+              <template #title>
+                <div class="card-title">
+                  <IconifyIcon icon="mdi:code-tags" width="24" height="24" />
+                  <span>Fitur untuk Development</span>
+                </div>
+              </template>
 
-          <div class="development-section">
+              <div class="development-section">
             <div class="section-header">
               <div>
                 <h3 class="section-title">Manajemen Data Subsidiary</h3>
@@ -699,46 +1106,104 @@ onUnmounted(() => {
               show-icon
               style="margin-top: 24px;"
             />
-          </div>
-        </a-card>
-
-        <!-- Audit Logs Section (Superadmin Only) -->
-        <a-card v-if="isSuperadmin" class="audit-logs-card" style="margin-top: 24px;">
-          <template #title>
-            <div class="card-title">
-              <IconifyIcon icon="mdi:file-document-outline" width="24" height="24" />
-              <span>Audit Logs</span>
-            </div>
-          </template>
-
-          <div class="audit-logs-section">
-            <div class="section-header">
-              <div>
-                <h3 class="section-title">Activity Log</h3>
-                <p class="section-description">
-                  Riwayat aktivitas dan akses ke sistem
-                </p>
               </div>
-            </div>
+            </a-card>
+          </div>
 
-            <!-- Filters -->
-            <div class="audit-filters">
+          <!-- Audit Logs Content -->
+          <div v-if="selectedMenuKey === 'audit' && isSuperadmin" class="settings-section">
+            <a-card class="audit-logs-card">
+              <template #title>
+                <div class="card-title">
+                  <IconifyIcon icon="mdi:file-document-outline" width="24" height="24" />
+                  <span>Audit Logs</span>
+                </div>
+              </template>
+
+              <!-- Tabs untuk Audit Logs dan User Activity -->
+              <a-tabs v-model:activeKey="auditLogActiveTab" class="audit-tabs">
+                <a-tab-pane key="audit" tab="Audit Logs">
+                  <div class="audit-logs-section">
+                <!-- Fixed Header Section -->
+                <div class="section-header-fixed">
+                  <div class="section-header-content">
+                    <div>
+                      <h3 class="section-title">Activity Log</h3>
+                      <p class="section-description">
+                        Riwayat aktivitas dan akses ke sistem
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Scrollable Content -->
+                <div class="audit-logs-content">
+
+                  <!-- Filters -->
+                  <div class="audit-filters">
               <a-space size="middle" wrap>
                 <a-select
                   v-model:value="auditFilters.action"
                   placeholder="Filter by Action"
                   allow-clear
-                  style="width: 180px"
+                  style="width: 220px"
                   @change="handleFilterChange"
+                  show-search
+                  :filter-option="(input: string, option: any) => 
+                    option.children.toLowerCase().includes(input.toLowerCase())"
                 >
+                  <!-- Authentication Actions -->
                   <a-select-option value="login">Login</a-select-option>
                   <a-select-option value="logout">Logout</a-select-option>
-                  <a-select-option value="enable_2fa">Enable 2FA</a-select-option>
-                  <a-select-option value="disable_2fa">Disable 2FA</a-select-option>
+                  <a-select-option value="register">Register</a-select-option>
                   <a-select-option value="failed_login">Failed Login</a-select-option>
+                  <a-select-option value="password_reset">Password Reset</a-select-option>
+                  
+                  <!-- User Management -->
+                  <a-select-option value="create_user">Create User</a-select-option>
+                  <a-select-option value="update_user">Update User</a-select-option>
+                  <a-select-option value="delete_user">Delete User</a-select-option>
+                  <a-select-option value="reset_user_password">Reset User Password</a-select-option>
+                  <a-select-option value="assign_user_to_company">Assign User to Company</a-select-option>
+                  <a-select-option value="unassign_user_from_company">Unassign User from Company</a-select-option>
+                  <a-select-option value="update_email">Update Email</a-select-option>
+                  <a-select-option value="change_password">Change Password</a-select-option>
+                  
+                  <!-- Company/Subsidiary -->
+                  <a-select-option value="create_company">Create Company</a-select-option>
+                  <a-select-option value="update_company">Update Company</a-select-option>
+                  <a-select-option value="delete_company">Delete Company</a-select-option>
+                  
+                  <!-- Document -->
                   <a-select-option value="create_document">Create Document</a-select-option>
                   <a-select-option value="update_document">Update Document</a-select-option>
                   <a-select-option value="delete_document">Delete Document</a-select-option>
+                  <a-select-option value="view_document">View Document</a-select-option>
+                  
+                  <!-- File Management -->
+                  <a-select-option value="create_file">Create File</a-select-option>
+                  <a-select-option value="update_file">Update File</a-select-option>
+                  <a-select-option value="delete_file">Delete File</a-select-option>
+                  <a-select-option value="upload_file">Upload File</a-select-option>
+                  <a-select-option value="download_file">Download File</a-select-option>
+                  <a-select-option value="view_file">View File</a-select-option>
+                  
+                  <!-- Report Management -->
+                  <a-select-option value="generate_report">Generate Report</a-select-option>
+                  <a-select-option value="view_report">View Report</a-select-option>
+                  <a-select-option value="export_report">Export Report</a-select-option>
+                  <a-select-option value="delete_report">Delete Report</a-select-option>
+                  
+                  <!-- Role & Permission -->
+                  <a-select-option value="create">Create Role/Permission</a-select-option>
+                  <a-select-option value="update">Update Role/Permission</a-select-option>
+                  <a-select-option value="delete">Delete Role/Permission</a-select-option>
+                  <a-select-option value="assign_permission">Assign Permission</a-select-option>
+                  <a-select-option value="revoke_permission">Revoke Permission</a-select-option>
+                  
+                  <!-- 2FA -->
+                  <a-select-option value="enable_2fa">Enable 2FA</a-select-option>
+                  <a-select-option value="disable_2fa">Disable 2FA</a-select-option>
                 </a-select>
 
                 <a-select
@@ -750,7 +1215,12 @@ onUnmounted(() => {
                 >
                   <a-select-option value="auth">Auth</a-select-option>
                   <a-select-option value="user">User</a-select-option>
+                  <a-select-option value="company">Company</a-select-option>
                   <a-select-option value="document">Document</a-select-option>
+                  <a-select-option value="file">File</a-select-option>
+                  <a-select-option value="report">Report</a-select-option>
+                  <a-select-option value="role">Role</a-select-option>
+                  <a-select-option value="permission">Permission</a-select-option>
                 </a-select>
 
                 <a-select
@@ -783,25 +1253,25 @@ onUnmounted(() => {
               </a-space>
             </div>
 
-            <!-- Summary Stats Cards -->
-            <div class="audit-stats-cards" style="margin-bottom: 24px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <h4 style="margin: 0;">Audit Log Statistics</h4>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <a-spin v-if="auditStatsLoading" size="small" />
-                  <span v-if="auditStatsLoading" style="font-size: 12px; color: #8c8c8c;">Refreshing...</span>
-                  <a-button 
-                    size="small" 
-                    type="text" 
-                    @click="fetchAuditStats"
-                    :loading="auditStatsLoading"
-                    style="padding: 0 8px;"
-                  >
-                    <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
-                    Refresh Stats
-                  </a-button>
-                </div>
-              </div>
+                  <!-- Summary Stats Cards -->
+                  <div class="audit-stats-cards">
+                    <div class="stats-header">
+                      <h4>Audit Log Statistics</h4>
+                      <div class="stats-header-actions">
+                        <a-spin v-if="auditStatsLoading" size="small" />
+                        <span v-if="auditStatsLoading" class="refreshing-text">Refreshing...</span>
+                        <a-button 
+                          size="small" 
+                          type="text" 
+                          @click="fetchAuditStats"
+                          :loading="auditStatsLoading"
+                          class="refresh-stats-btn"
+                        >
+                          <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
+                          Refresh Stats
+                        </a-button>
+                      </div>
+                    </div>
               <a-row :gutter="[16, 16]">
                 <a-col :xs="24" :sm="12" :md="6">
                   <a-card :loading="auditStatsLoading" size="small">
@@ -862,13 +1332,15 @@ onUnmounted(() => {
                   </a-card>
                 </a-col>
               </a-row>
-              <div style="margin-top: 12px; font-size: 12px; color: #8c8c8c; text-align: center;">
-                Stats akan auto-refresh setiap 30 detik
-              </div>
-            </div>
+                    <div class="stats-footer">
+                      <span class="auto-refresh-note">Stats akan auto-refresh setiap 30 detik</span>
+                      <span class="retention-info">Retention: 90d/30d</span>
+                    </div>
+                  </div>
 
             <!-- Table -->
-            <div class="audit-table">
+                  <!-- Audit Table -->
+                  <div class="audit-table">
               <a-table
                 :columns="auditColumns"
                 :data-source="auditLogs"
@@ -892,9 +1364,313 @@ onUnmounted(() => {
                   </template>
                 </template>
               </a-table>
+                  </div>
+                </div>
+              </div>
+                </a-tab-pane>
+
+                <!-- Tab User Activity -->
+                <a-tab-pane key="user-activity" tab="User Activity">
+                  <div class="audit-logs-section">
+                    <!-- Fixed Header Section -->
+                    <div class="section-header-fixed">
+                      <div class="section-header-content">
+                        <div>
+                          <h3 class="section-title">User Activity Logs</h3>
+                          <p class="section-description">
+                            Riwayat aktivitas permanen untuk data penting: Report, Document, Subsidiary, dan User Management
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Scrollable Content -->
+                    <div class="audit-logs-content">
+                      <!-- Filters -->
+                      <div class="audit-filters">
+                        <a-space size="middle" wrap>
+                          <a-select
+                            v-model:value="userActivityFilters.action"
+                            placeholder="Filter by Action"
+                            allow-clear
+                            style="width: 220px"
+                            @change="handleUserActivityFilterChange"
+                            show-search
+                            :filter-option="(input: string, option: any) => 
+                              option.children.toLowerCase().includes(input.toLowerCase())"
+                          >
+                            <!-- Report Actions -->
+                            <a-select-option value="generate_report">Generate Report</a-select-option>
+                            <a-select-option value="view_report">View Report</a-select-option>
+                            <a-select-option value="export_report">Export Report</a-select-option>
+                            <a-select-option value="delete_report">Delete Report</a-select-option>
+                            
+                            <!-- Document Actions -->
+                            <a-select-option value="create_document">Create Document</a-select-option>
+                            <a-select-option value="update_document">Update Document</a-select-option>
+                            <a-select-option value="delete_document">Delete Document</a-select-option>
+                            <a-select-option value="view_document">View Document</a-select-option>
+                            
+                            <!-- Company/Subsidiary Actions -->
+                            <a-select-option value="create_company">Create Company</a-select-option>
+                            <a-select-option value="update_company">Update Company</a-select-option>
+                            <a-select-option value="delete_company">Delete Company</a-select-option>
+                            
+                            <!-- User Management Actions -->
+                            <a-select-option value="create_user">Create User</a-select-option>
+                            <a-select-option value="update_user">Update User</a-select-option>
+                            <a-select-option value="delete_user">Delete User</a-select-option>
+                          </a-select>
+
+                          <a-select
+                            v-model:value="userActivityFilters.resource"
+                            placeholder="Filter by Resource"
+                            allow-clear
+                            style="width: 180px"
+                            @change="handleUserActivityFilterChange"
+                          >
+                            <a-select-option value="report">Report</a-select-option>
+                            <a-select-option value="document">Document</a-select-option>
+                            <a-select-option value="company">Company</a-select-option>
+                            <a-select-option value="user">User</a-select-option>
+                          </a-select>
+
+                          <a-select
+                            v-model:value="userActivityFilters.status"
+                            placeholder="Filter by Status"
+                            allow-clear
+                            style="width: 150px"
+                            @change="handleUserActivityFilterChange"
+                          >
+                            <a-select-option value="success">Success</a-select-option>
+                            <a-select-option value="failure">Failure</a-select-option>
+                            <a-select-option value="error">Error</a-select-option>
+                          </a-select>
+
+                          <a-button @click="handleUserActivityFilterChange">
+                            <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
+                            Refresh
+                          </a-button>
+                        </a-space>
+                      </div>
+
+                      <!-- Info Alert -->
+                      <a-alert
+                        message="Permanent Storage"
+                        description="Data ini disimpan secara permanen (tidak ada retention policy) untuk keperluan compliance dan legal. Hanya menampilkan aktivitas untuk resource: Report, Document, Company, dan User Management."
+                        type="info"
+                        show-icon
+                        style="margin-top: 16px; margin-bottom: 16px;"
+                      />
+
+                      <!-- User Activity Table -->
+                      <div class="audit-table">
+                        <a-table
+                          :columns="auditColumns.filter(col => col.key !== 'log_type')"
+                          :data-source="userActivityLogs"
+                          :loading="userActivityLoading"
+                          :pagination="{
+                            current: userActivityPagination.current,
+                            pageSize: userActivityPagination.pageSize,
+                            total: userActivityPagination.total,
+                            showSizeChanger: true,
+                            showTotal: (total: number) => `Total ${total} logs`,
+                            pageSizeOptions: ['10', '20', '50', '100'],
+                          }"
+                          :scroll="{ x: 800 }"
+                          @change="handleUserActivityTableChange"
+                        >
+                          <template #bodyCell="{ column, record }">
+                            <template v-if="column.key === 'action_buttons'">
+                              <a-button type="link" size="small" @click="showUserActivityDetailModal(record)">
+                                Detail
+                              </a-button>
+                            </template>
+                          </template>
+                        </a-table>
+                      </div>
+                    </div>
+                  </div>
+                </a-tab-pane>
+              </a-tabs>
+            </a-card>
+          </div>
+
+          <!-- SonarQube Monitor Content -->
+          <div v-if="selectedMenuKey === 'sonarqube' && (isSuperadmin || isAdmin) && sonarqubeEnabled" class="settings-section">
+            <a-card class="sonarqube-card">
+              <template #title>
+                <div class="card-title">
+                  <IconifyIcon icon="mdi:code-tags-check" width="24" height="24" />
+                  <span>SonarQube Monitor</span>
+                </div>
+              </template>
+
+              <div class="sonarqube-section">
+                <!-- Fixed Header Section -->
+                <div class="section-header-fixed">
+                  <div class="section-header-content">
+                    <div>
+                      <h3 class="section-title">Code Quality Issues</h3>
+                      <p class="section-description">
+                        Monitor dan analisis issues dari SonarCloud untuk kebutuhan VAPT
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Scrollable Content -->
+                <div class="sonarqube-content">
+                  <!-- Filters -->
+                  <div class="sonarqube-filters">
+                    <a-space size="middle" wrap>
+                      <a-select
+                        v-model:value="sonarqubeFilters.severities"
+                        placeholder="Filter by Severity"
+                        allow-clear
+                        mode="multiple"
+                        style="width: 200px"
+                        @change="handleSonarQubeFilterChange"
+                      >
+                        <a-select-option value="BLOCKER">BLOCKER</a-select-option>
+                        <a-select-option value="CRITICAL">CRITICAL</a-select-option>
+                        <a-select-option value="MAJOR">MAJOR</a-select-option>
+                        <a-select-option value="MINOR">MINOR</a-select-option>
+                        <a-select-option value="INFO">INFO</a-select-option>
+                      </a-select>
+
+                      <a-select
+                        v-model:value="sonarqubeFilters.types"
+                        placeholder="Filter by Type"
+                        allow-clear
+                        mode="multiple"
+                        style="width: 200px"
+                        @change="handleSonarQubeFilterChange"
+                      >
+                        <a-select-option value="BUG">BUG</a-select-option>
+                        <a-select-option value="VULNERABILITY">VULNERABILITY</a-select-option>
+                        <a-select-option value="CODE_SMELL">CODE_SMELL</a-select-option>
+                      </a-select>
+
+                      <a-select
+                        v-model:value="sonarqubeFilters.statuses"
+                        placeholder="Filter by Status"
+                        allow-clear
+                        mode="multiple"
+                        style="width: 200px"
+                        @change="handleSonarQubeFilterChange"
+                      >
+                        <a-select-option value="OPEN">OPEN</a-select-option>
+                        <a-select-option value="CONFIRMED">CONFIRMED</a-select-option>
+                        <a-select-option value="REOPENED">REOPENED</a-select-option>
+                        <a-select-option value="RESOLVED">RESOLVED</a-select-option>
+                      </a-select>
+
+                      <a-button type="primary" @click="fetchSonarQubeIssues" :loading="sonarqubeLoading">
+                        <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
+                        Refresh
+                      </a-button>
+
+                      <a-button @click="exportSonarQubeIssues" :loading="sonarqubeExporting" :disabled="sonarqubeIssues.length === 0">
+                        <IconifyIcon icon="mdi:download" width="16" style="margin-right: 4px;" />
+                        Export JSON
+                      </a-button>
+                    </a-space>
+                  </div>
+
+                  <!-- Summary Stats -->
+                  <div v-if="sonarqubeIssues.length > 0" class="sonarqube-stats" style="margin-bottom: 20px;">
+                    <a-row :gutter="[16, 16]">
+                      <a-col :xs="24" :sm="12" :md="6">
+                        <a-card size="small">
+                          <a-statistic
+                            title="Total Issues"
+                            :value="sonarqubeIssues.length"
+                            :value-style="{ color: '#1890ff' }"
+                          >
+                            <template #prefix>
+                              <IconifyIcon icon="mdi:alert-circle" width="20" />
+                            </template>
+                          </a-statistic>
+                        </a-card>
+                      </a-col>
+                      <a-col :xs="24" :sm="12" :md="6">
+                        <a-card size="small">
+                          <a-statistic
+                            title="BLOCKER"
+                            :value="getSeverityCount('BLOCKER')"
+                            :value-style="{ color: '#ff4d4f' }"
+                          />
+                        </a-card>
+                      </a-col>
+                      <a-col :xs="24" :sm="12" :md="6">
+                        <a-card size="small">
+                          <a-statistic
+                            title="CRITICAL"
+                            :value="getSeverityCount('CRITICAL')"
+                            :value-style="{ color: '#ff7875' }"
+                          />
+                        </a-card>
+                      </a-col>
+                      <a-col :xs="24" :sm="12" :md="6">
+                        <a-card size="small">
+                          <a-statistic
+                            title="MAJOR"
+                            :value="getSeverityCount('MAJOR')"
+                            :value-style="{ color: '#faad14' }"
+                          />
+                        </a-card>
+                      </a-col>
+                    </a-row>
+                  </div>
+
+                  <!-- Issues Table -->
+                  <div class="sonarqube-table">
+                    <a-table
+                      :columns="sonarqubeColumns"
+                      :data-source="sonarqubeIssues"
+                      :loading="sonarqubeLoading"
+                      :pagination="{
+                        current: 1,
+                        pageSize: 20,
+                        total: sonarqubeTotal,
+                        showSizeChanger: true,
+                        showTotal: (total: number) => `Total ${total} issues`,
+                        pageSizeOptions: ['10', '20', '50', '100'],
+                      }"
+                      :scroll="{ x: 1000 }"
+                    >
+                      <template #bodyCell="{ column, record }">
+                        <template v-if="column.key === 'severity'">
+                          <a-tag :color="getSeverityColor(record.severity)">
+                            {{ record.severity }}
+                          </a-tag>
+                        </template>
+                        <template v-if="column.key === 'type'">
+                          <a-tag :color="getTypeColor(record.type)">
+                            {{ record.type }}
+                          </a-tag>
+                        </template>
+                        <template v-if="column.key === 'status'">
+                          <a-tag :color="getStatusColor(record.status)">
+                            {{ record.status }}
+                          </a-tag>
+                        </template>
+                        <template v-if="column.key === 'component'">
+                          <code>{{ getComponentName(record.component) }}</code>
+                        </template>
+                      </template>
+                    </a-table>
+                  </div>
+                </div>
+              </div>
+            </a-card>
+          </div>
             </div>
           </div>
         </a-card>
+          </div>
+        </a-layout-content>
       </div>
     </div>
 
@@ -954,6 +1730,58 @@ onUnmounted(() => {
         </div>
       </div>
     </a-modal>
+
+    <!-- User Activity Log Detail Modal (Superadmin Only) -->
+    <a-modal
+      v-if="isSuperadmin"
+      v-model:open="userActivityDetailModalVisible"
+      title="Detail User Activity Log"
+      width="800px"
+      :footer="null"
+      @cancel="closeUserActivityDetailModal"
+    >
+      <div v-if="selectedUserActivityLog" class="audit-log-detail">
+        <a-descriptions bordered :column="1" size="small">
+          <a-descriptions-item label="ID">
+            {{ selectedUserActivityLog.id }}
+          </a-descriptions-item>
+          <a-descriptions-item label="User ID">
+            {{ selectedUserActivityLog.user_id }}
+          </a-descriptions-item>
+          <a-descriptions-item label="Username">
+            {{ selectedUserActivityLog.username }}
+          </a-descriptions-item>
+          <a-descriptions-item label="Action">
+            <a-tag :color="getActionColor(selectedUserActivityLog.action)">
+              {{ getActionLabel(selectedUserActivityLog.action) }}
+            </a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item label="Resource">
+            <a-tag color="blue">{{ selectedUserActivityLog.resource }}</a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item label="Resource ID">
+            {{ selectedUserActivityLog.resource_id || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="Status">
+            <a-tag :color="getStatusColor(selectedUserActivityLog.status)">
+              {{ selectedUserActivityLog.status.toUpperCase() }}
+            </a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item label="IP Address">
+            {{ selectedUserActivityLog.ip_address || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="User Agent">
+            {{ selectedUserActivityLog.user_agent || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="Created At">
+            {{ formatDate(selectedUserActivityLog.created_at) }}
+          </a-descriptions-item>
+          <a-descriptions-item label="Details" v-if="selectedUserActivityLog.details">
+            <pre class="details-json">{{ parseDetails(selectedUserActivityLog.details) }}</pre>
+          </a-descriptions-item>
+        </a-descriptions>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -963,18 +1791,133 @@ onUnmounted(() => {
   background: #f5f5f5;
 }
 
+.settings-wrapper-layout {
+  width: 100%;
+}
+
 .settings-content {
-  padding: 24px;
-  max-width: 1200px;
-  margin: 0 auto;
+  padding: 0;
+  background: #f5f5f5;
+  overflow-y: auto;
 }
 
 .settings-container {
-  .settings-title {
-    font-size: 28px;
-    font-weight: 600;
-    margin-bottom: 24px;
-    color: #1a1a1a;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0;
+}
+
+.settings-wrapper-card {
+background: white;
+  :deep(.ant-card-body) {
+    padding: 0;
+  }
+}
+
+.settings-wrapper {
+  display: flex;
+  min-height: 600px;
+  gap: 0;
+}
+
+.settings-sidebar {
+  width: 300px;
+  background: #fff;
+  border-right: 1px solid #e8e8e8;
+  padding: 16px;
+  flex-shrink: 0;
+  border-top-left-radius: 20px;
+  border-bottom-left-radius: 20px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  min-width: 300px;
+
+  &.sidebar-hidden {
+    width: 0 !important;
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+    border-right: none;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .settings-menu {
+    border-right: none;
+    background: transparent;
+    height: 100%;
+
+    :deep(.ant-menu-item) {
+      margin: 4px 8px;
+      border-radius: 6px;
+      height: 40px;
+      line-height: 40px;
+      
+      &:hover {
+        background: #f0f7ff;
+      }
+
+      &.ant-menu-item-selected {
+        background: #e6f4ff;
+        color: #035CAB;
+        font-weight: 500;
+
+        &::after {
+          display: none;
+        }
+      }
+    }
+
+    :deep(.ant-menu-item-icon) {
+      margin-right: 12px;
+    }
+  }
+}
+
+.settings-main-content {
+  flex: 1;
+  padding: 24px;
+  background: transparent;
+  overflow-y: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  &.content-maximized {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  &::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  
+  &::-webkit-scrollbar-track {
+    display: none;
+  }
+}
+
+.settings-section {
+  width: 100%;
+
+  :deep(.ant-card) {
+    border-radius: 12px;
+    // box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border: 1px solid #f0f0f0;
+  }
+
+  :deep(.ant-card-head) {
+    padding: 20px 24px;
+    border-bottom: 1px solid #f0f0f0;
+    background: #fafafa;
+    border-radius: 12px 12px 0 0;
+  }
+
+  :deep(.ant-card-body) {
+    padding: 24px;
   }
 }
 
@@ -994,21 +1937,23 @@ onUnmounted(() => {
     justify-content: space-between;
     align-items: flex-start;
     margin-bottom: 24px;
-    padding-bottom: 16px;
+    padding-bottom: 20px;
     border-bottom: 1px solid #f0f0f0;
   }
 
   .section-title {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 600;
-    margin: 0 0 4px 0;
+    margin: 0 0 8px 0;
     color: #1a1a1a;
+    line-height: 1.4;
   }
 
   .section-description {
     margin: 0;
     color: #666;
     font-size: 14px;
+    line-height: 1.5;
   }
 }
 
@@ -1143,31 +2088,46 @@ onUnmounted(() => {
 .development-section {
   .section-header {
     margin-bottom: 24px;
-    padding-bottom: 16px;
+    padding-bottom: 20px;
     border-bottom: 1px solid #f0f0f0;
   }
 
   .section-title {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 600;
-    margin: 0 0 4px 0;
+    margin: 0 0 8px 0;
     color: #1a1a1a;
+    line-height: 1.4;
   }
 
   .section-description {
     margin: 0;
     color: #666;
     font-size: 14px;
+    line-height: 1.5;
   }
 
   .seeder-status {
     padding: 16px;
-    background: #f5f5f5;
-    border-radius: 6px;
+    background: #fafafa;
+    border-radius: 8px;
+    border: 1px solid #f0f0f0;
+    margin-bottom: 20px;
   }
 
   .development-actions {
-    margin-top: 16px;
+    margin-top: 20px;
+    margin-bottom: 0;
+
+    :deep(.ant-space) {
+      width: 100%;
+    }
+
+    :deep(.ant-btn) {
+      height: 44px;
+      font-size: 15px;
+      border-radius: 8px;
+    }
   }
 }
 
@@ -1182,39 +2142,269 @@ onUnmounted(() => {
 }
 
 .audit-logs-section {
-  .section-header {
-    margin-bottom: 24px;
-    padding-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+
+  // Fixed Header Section
+  .section-header-fixed {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #fff;
+    padding: 20px 0 16px 0;
+    margin-bottom: 20px;
     border-bottom: 1px solid #f0f0f0;
+
+    .section-header-content {
+      .section-title {
+        font-size: 20px;
+        font-weight: 600;
+        margin: 0 0 6px 0;
+        color: #1a1a1a;
+        line-height: 1.4;
+      }
+
+      .section-description {
+        margin: 0;
+        color: #666;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+    }
   }
 
-  .section-title {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 0 0 4px 0;
-    color: #1a1a1a;
-  }
-
-  .section-description {
-    margin: 0;
-    color: #666;
-    font-size: 14px;
+  // Scrollable Content
+  .audit-logs-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 4px;
+    
+    // Hide scrollbar but keep functionality
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
   }
 
   .audit-filters {
-    margin-bottom: 16px;
+    margin-bottom: 20px;
     padding: 16px;
-    background: #f5f5f5;
-    border-radius: 6px;
+    background: #fafafa;
+    border-radius: 8px;
+    border: 1px solid #f0f0f0;
+  }
+
+  .audit-stats-cards {
+    margin-bottom: 24px;
+
+    .stats-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+
+      h4 {
+        font-size: 16px;
+        font-weight: 600;
+        margin: 0;
+        color: #1a1a1a;
+      }
+
+      .stats-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        .refreshing-text {
+          font-size: 12px;
+          color: #8c8c8c;
+        }
+
+        .refresh-stats-btn {
+          padding: 0 8px;
+          height: auto;
+        }
+      }
+    }
+
+    .stats-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #f0f0f0;
+      flex-wrap: wrap;
+      gap: 8px;
+
+      .auto-refresh-note {
+        font-size: 12px;
+        color: #8c8c8c;
+      }
+
+      .retention-info {
+        font-size: 12px;
+        color: #8c8c8c;
+        font-weight: 500;
+      }
+    }
+
+    :deep(.ant-row) {
+      margin: 0 -8px;
+    }
+
+    :deep(.ant-col) {
+      padding: 0 8px;
+      margin-bottom: 16px;
+    }
+
+    :deep(.ant-card) {
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+      transition: all 0.3s ease;
+      border: 1px solid #f0f0f0;
+
+      &:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        transform: translateY(-2px);
+      }
+    }
   }
 
   .audit-table {
+    margin-top: 0;
+
     .text-ellipsis {
       display: block;
       max-width: 300px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    :deep(.ant-table) {
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    :deep(.ant-table-thead > tr > th) {
+      background: #fafafa;
+      font-weight: 600;
+      border-bottom: 2px solid #f0f0f0;
+    }
+  }
+}
+
+.sonarqube-card {
+  .card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+}
+
+.sonarqube-section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+
+  // Fixed Header Section
+  .section-header-fixed {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #fff;
+    padding: 20px 0 16px 0;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #f0f0f0;
+
+    .section-header-content {
+      .section-title {
+        font-size: 20px;
+        font-weight: 600;
+        margin: 0 0 6px 0;
+        color: #1a1a1a;
+        line-height: 1.4;
+      }
+
+      .section-description {
+        margin: 0;
+        color: #666;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+    }
+  }
+
+  // Scrollable Content
+  .sonarqube-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 4px;
+    
+    // Hide scrollbar but keep functionality
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+  }
+
+  .sonarqube-filters {
+    margin-bottom: 20px;
+    padding: 16px;
+    background: #fafafa;
+    border-radius: 8px;
+    border: 1px solid #f0f0f0;
+  }
+
+  .sonarqube-stats {
+    :deep(.ant-row) {
+      margin: 0 -8px;
+    }
+
+    :deep(.ant-col) {
+      padding: 0 8px;
+      margin-bottom: 16px;
+    }
+
+    :deep(.ant-card) {
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+      transition: all 0.3s ease;
+      border: 1px solid #f0f0f0;
+
+      &:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        transform: translateY(-2px);
+      }
+    }
+  }
+
+  .sonarqube-table {
+    margin-top: 0;
+
+    :deep(.ant-table) {
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    :deep(.ant-table-thead > tr > th) {
+      background: #fafafa;
+      font-weight: 600;
+      border-bottom: 2px solid #f0f0f0;
     }
   }
 }
@@ -1254,22 +2444,79 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .settings-content {
+  .settings-wrapper {
+    flex-direction: column;
+  }
+
+  .settings-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #e8e8e8;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    border-bottom-left-radius: 0;
+    padding: 12px;
+  }
+
+  .settings-main-content {
     padding: 16px;
+  }
+
+  .settings-content {
+    padding: 0;
+  }
+
+  .settings-container {
+    padding: 0;
+  }
+
+  .audit-logs-section {
+    .section-header-fixed {
+      padding: 16px 0 12px 0;
+      margin-bottom: 16px;
+    }
+
+    .audit-filters {
+      padding: 12px;
+      margin-bottom: 16px;
+
+      :deep(.ant-space) {
+        width: 100%;
+      }
+
+      :deep(.ant-select),
+      :deep(.ant-btn) {
+        width: 100%;
+      }
+    }
+
+    .audit-stats-cards {
+      margin-bottom: 20px;
+
+      .stats-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      :deep(.ant-col) {
+        margin-bottom: 12px;
+      }
+    }
+  }
+
+  .security-section,
+  .development-section {
+    .section-header {
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+    }
   }
 
   .backup-codes-list {
     grid-template-columns: 1fr !important;
-  }
-
-  .audit-filters {
-    :deep(.ant-space) {
-      width: 100%;
-    }
-
-    :deep(.ant-select) {
-      width: 100% !important;
-    }
   }
 }
 </style>

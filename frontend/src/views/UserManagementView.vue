@@ -542,10 +542,23 @@ const getScopeColor = (scope: string): string => {
   <div class="user-management-layout">
     <DashboardHeader @logout="handleLogout" />
 
-    <div class="user-management-content">
-      <h1 class="page-title">Manajemen Pengguna</h1>
+    <div class="user-management-wrapper">
+      <!-- Page Header Section -->
+      <div class="page-header-container">
+        <div class="page-header">
+          <div class="header-left">
+            <h1 class="page-title">Manajemen Pengguna</h1>
+            <p class="page-description">
+              Kelola pengguna, peran, dan izin akses dalam sistem.
+            </p>
+          </div>
+        </div>
+      </div>
 
-      <a-tabs v-model:activeKey="activeTab" class="management-tabs">
+      <!-- Main Content -->
+      <div class="mainContentPage">
+        <div class="user-management-content">
+          <a-tabs v-model:activeKey="activeTab" class="management-tabs">
         <!-- Users Tab -->
         <a-tab-pane key="users" tab="Pengguna">
           <div class="table-header">
@@ -875,9 +888,9 @@ const getScopeColor = (scope: string): string => {
                 {{ role.name }}
               </a-select-option>
             </a-select>
-            <div class="form-help-text">
+            <!-- <div class="form-help-text">
               <small>Role Superadmin tidak tersedia untuk dibuat dari antarmuka ini</small>
-            </div>
+            </div> -->
           </a-form-item>
         </a-form>
       </a-modal>
@@ -915,6 +928,8 @@ const getScopeColor = (scope: string): string => {
           />
         </a-form>
       </a-modal>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -922,30 +937,21 @@ const getScopeColor = (scope: string): string => {
 <style scoped>
 .user-management-layout {
   min-height: 100vh;
-  /* background: #b03131; */
+}
+
+.user-management-wrapper {
+  width: 100%;
 }
 
 .user-management-content {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 16px;
-}
-
-.page-title {
-  font-size: 20px;
-  font-weight: 600;
-  margin-bottom: 16px;
-  color: #333;
+  padding: 24px;
 }
 
 @media (min-width: 768px) {
   .user-management-content {
     padding: 24px;
-  }
-  
-  .page-title {
-    font-size: 24px;
-    margin-bottom: 24px;
   }
 }
 

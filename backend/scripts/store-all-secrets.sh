@@ -46,6 +46,11 @@ DATABASE_PASSWORD="${DATABASE_PASSWORD:-dms_password}"
 CSRF_SECRET="${CSRF_SECRET:-csrf-secret-key-for-token-generation-32!}"
 SUPERADMIN_PASSWORD="${SUPERADMIN_PASSWORD:-Pedeve123}"
 
+# SonarCloud configuration (optional, bisa di-set via environment)
+SONARCLOUD_URL="${SONARCLOUD_URL:-https://sonarcloud.io}"
+SONARCLOUD_TOKEN="${SONARCLOUD_TOKEN:-}"
+SONARCLOUD_PROJECT_KEY="${SONARCLOUD_PROJECT_KEY:-}"
+
 # Rate limit config (default)
 RATE_LIMIT_CONFIG='{"general":{"rps":500,"burst":500},"auth":{"rpm":5,"burst":5},"strict":{"rpm":50,"burst":50}}'
 
@@ -57,6 +62,13 @@ echo "  - database_password: ${DATABASE_PASSWORD:0:5}..."
 echo "  - csrf_secret: ${CSRF_SECRET:0:10}... (32 bytes)"
 echo "  - superadmin_password: ${SUPERADMIN_PASSWORD:0:5}... (min 8 chars)"
 echo "  - rate_limit: (JSON config)"
+if [ -n "$SONARCLOUD_TOKEN" ]; then
+    echo "  - SONARCLOUD_URL: $SONARCLOUD_URL"
+    echo "  - SONARCLOUD_TOKEN: ${SONARCLOUD_TOKEN:0:10}... (hidden)"
+    echo "  - SONARCLOUD_PROJECT_KEY: $SONARCLOUD_PROJECT_KEY"
+else
+    echo "  - SonarCloud secrets: (not set, skipping)"
+fi
 echo ""
 
 # Store all secrets in one command
@@ -66,15 +78,24 @@ echo ""
 
 # Store all secrets - KV v2 format uses /data/ in path
 # Vault kv put automatically handles KV v2 format when path contains /data/
-$VAULT_CMD kv put "$VAULT_SECRET_PATH" \
-    encryption_key="$ENCRYPTION_KEY" \
-    jwt_secret="$JWT_SECRET" \
-    database_url="$DATABASE_URL" \
-    database_password="$DATABASE_PASSWORD" \
-    csrf_secret="$CSRF_SECRET" \
-    superadmin_password="$SUPERADMIN_PASSWORD" \
-    rate_limit="$RATE_LIMIT_CONFIG" \
-    2>&1
+VAULT_PUT_CMD="$VAULT_CMD kv put \"$VAULT_SECRET_PATH\" \
+    encryption_key=\"$ENCRYPTION_KEY\" \
+    jwt_secret=\"$JWT_SECRET\" \
+    database_url=\"$DATABASE_URL\" \
+    database_password=\"$DATABASE_PASSWORD\" \
+    csrf_secret=\"$CSRF_SECRET\" \
+    superadmin_password=\"$SUPERADMIN_PASSWORD\" \
+    rate_limit=\"$RATE_LIMIT_CONFIG\""
+
+# Add SonarCloud secrets if provided
+if [ -n "$SONARCLOUD_TOKEN" ] && [ -n "$SONARCLOUD_PROJECT_KEY" ]; then
+    VAULT_PUT_CMD="$VAULT_PUT_CMD \
+    SONARCLOUD_URL=\"$SONARCLOUD_URL\" \
+    SONARCLOUD_TOKEN=\"$SONARCLOUD_TOKEN\" \
+    SONARCLOUD_PROJECT_KEY=\"$SONARCLOUD_PROJECT_KEY\""
+fi
+
+eval $VAULT_PUT_CMD 2>&1
 
 if [ $? -eq 0 ]; then
     echo "✅ All secrets stored successfully"
@@ -100,7 +121,18 @@ echo "  ✅ database_password"
 echo "  ✅ csrf_secret"
 echo "  ✅ superadmin_password"
 echo "  ✅ rate_limit"
+if [ -n "$SONARCLOUD_TOKEN" ] && [ -n "$SONARCLOUD_PROJECT_KEY" ]; then
+    echo "  ✅ SONARCLOUD_URL"
+    echo "  ✅ SONARCLOUD_TOKEN"
+    echo "  ✅ SONARCLOUD_PROJECT_KEY"
+fi
 echo ""
 echo "Backend will automatically load these secrets on startup."
+echo ""
+echo "To add SonarCloud secrets later, run:"
+echo "  export SONARCLOUD_URL=https://sonarcloud.io"
+echo "  export SONARCLOUD_TOKEN=your-token"
+echo "  export SONARCLOUD_PROJECT_KEY=your-project-key"
+echo "  ./scripts/store-all-secrets.sh"
 echo ""
 

@@ -2,17 +2,6 @@
 
 Aplikasi Document Management System untuk manajemen dokumen dan perusahaan dengan hierarki multi-level.
 
-## 🛠️ Tech Stack
-
-- **Frontend**: Vue 3 + TypeScript + Vite + Pinia + Vue Router + Ant Design Vue
-- **Backend**: Go 1.25 + Fiber v2 (fasthttp) + GORM + Clean Architecture
-- **Database**: PostgreSQL (production) / SQLite (development)
-- **Storage**: Google Cloud Storage (production) / Local filesystem (development)
-- **Authentication**: JWT dengan httpOnly cookies + 2FA (TOTP)
-- **Security**: CSRF protection, Rate limiting, Audit logging
-- **CI/CD**: GitHub Actions dengan Docker + GCP deployment
-- **API Docs**: Swagger/OpenAPI dengan auto-reload
-
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -216,15 +205,6 @@ Swagger UI menyediakan:
 - ✅ Request/Response examples
 - ✅ Schema definitions
 
-### Health Check
-
-```bash
-# Backend health check
-curl http://localhost:8080/health
-
-# Expected response: {"status": "OK", "service": "dms-backend"}
-```
-
 ### API Endpoints
 
 **Authentication:**
@@ -255,6 +235,11 @@ curl http://localhost:8080/health
 - `POST /api/v1/development/run-subsidiary-seeder` - Run company seeder
 - `GET /api/v1/development/check-seeder-status` - Check seeder status
 
+**Audit Logs:**
+- `GET /api/v1/audit-logs` - Get audit logs (dengan retention policy: 90 hari user actions, 30 hari technical errors)
+- `GET /api/v1/audit-logs/stats` - Get audit log statistics
+- `GET /api/v1/user-activity-logs` - Get user activity logs (permanent storage untuk data penting: report, document, company, user)
+
 **Documents:**
 - `GET /api/v1/documents` - Get all documents
 - `GET /api/v1/documents/{id}` - Get document by ID
@@ -266,29 +251,7 @@ curl http://localhost:8080/health
 - `POST /api/v1/upload/logo` - Upload company logo
 - `GET /api/v1/files/*` - Serve files (proxy dari GCP Storage atau local)
 
-**Test dengan curl:**
-```bash
-# Health check
-curl http://localhost:8080/health
 
-# Get CSRF token (untuk POST/PUT/DELETE)
-curl http://localhost:8080/api/v1/csrf-token
-
-# Login (dengan CSRF token)
-curl -X POST http://localhost:8080/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -H "X-CSRF-Token: <token>" \
-  -d '{"username":"superadmin","password":"Pedeve123"}' \
-  -c cookies.txt
-```
-
-## 📦 Port Configuration
-
-- **Frontend (Dev)**: 5173
-- **Frontend (Prod)**: 3000
-- **Backend API**: 8080
-
-**Note**: Pastikan port-port ini tidak digunakan oleh aplikasi lain.
 
 ## 🛠️ Troubleshooting
 
@@ -329,7 +292,7 @@ docker-compose -f docker-compose.dev.yml up --build
 - Gunakan fitur "Jalankan Seeder Data Subsidiary" di Settings (superadmin only)
 - Atau jalankan manual: `cd backend && go run ./cmd/seed-companies`
 
-## 📚 Tech Stack Detail
+## 🛠️ Tech Stack
 
 ### Frontend
 - **Framework**: Vue 3 (Composition API)
@@ -363,7 +326,10 @@ docker-compose -f docker-compose.dev.yml up --build
 - ✅ **Rate Limiting**: 100 req/s (general), 5 req/min (auth endpoints)
 - ✅ **Security Headers**: X-Content-Type-Options, X-XSS-Protection, CSP, HSTS
 - ✅ **2FA Support**: TOTP-based dengan backup codes
-- ✅ **Audit Logging**: Semua aksi user dan error teknis
+- ✅ **Audit Logging**: 
+  - Comprehensive audit logging untuk semua aksi user dan error teknis
+  - Retention policy: 90 hari untuk user actions, 30 hari untuk technical errors
+  - **Permanent Audit Log**: Data penting (Report, Document, Company, User Management) disimpan permanen tanpa retention policy untuk compliance
 - ✅ **JWT Security**: httpOnly cookies untuk mencegah XSS
 - ✅ **Input Validation**: Comprehensive validation dengan sanitization
 - ✅ **Password Security**: bcrypt hashing
@@ -407,11 +373,13 @@ docker-compose -f docker-compose.dev.yml up --build
 - ✅ Seeder status check
 
 ### Security & Monitoring
-- ✅ Comprehensive audit logging
+- ✅ Comprehensive audit logging dengan retention policy
+- ✅ **Permanent Audit Log**: User Activity Logs untuk data penting (Report, Document, Company, User) - disimpan permanen tanpa retention
 - ✅ Rate limiting (per endpoint type)
 - ✅ Security headers (CSP, HSTS, XSS protection)
 - ✅ Input validation & sanitization
 - ✅ Error logging dengan stack trace
+- ✅ Audit log UI dengan tab terpisah untuk "Audit Logs" dan "User Activity"
 
 ## 🤝 Contributing
 
@@ -428,7 +396,15 @@ docker-compose -f docker-compose.dev.yml up --build
 - **Manual Fixes**: `documentations/MANUAL_FIXES_DOCUMENTATION.md`
 - **Backend Architecture**: Clean Architecture dengan struktur `cmd/`, `internal/`
 
-## 📄 License
+## 📦 Build Version
 
-[Your License Here]
+**Build Date**: 2025-11-30 15:30:00 +0700  
+**Commit**: Latest (permanent audit log implementation)  
+**Version**: 1.0.0
+
+### Recent Updates
+- ✅ Implementasi permanent audit log untuk data penting (Report, Document, Company, User Management)
+- ✅ Tab "User Activity" di halaman Settings untuk melihat permanent logs
+- ✅ Differentiated retention policy: permanent storage untuk data penting, retention 90/30 hari untuk data biasa
+- ✅ Table terpisah `user_activity_logs` untuk permanent storage tanpa retention policy
 

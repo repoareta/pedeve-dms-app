@@ -143,3 +143,88 @@ func GetAuditLogStatsHandler(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(stats)
 }
 
+// GetUserActivityLogsHandler menangani request GET untuk user activity logs (permanent)
+// @Summary      Ambil User Activity Logs
+// @Description  Mengambil user activity logs (permanent) untuk resource penting: report, document, company, user. Data ini tidak akan dihapus (permanent storage). User reguler hanya bisa melihat logs mereka sendiri, sedangkan admin/superadmin bisa melihat semua logs.
+// @Tags         Audit
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        page      query     int     false  "Nomor halaman (default: 1)"
+// @Param        pageSize  query     int     false  "Jumlah item per halaman (default: 10, maksimal: 100)"
+// @Param        action    query     string  false  "Filter berdasarkan action"
+// @Param        resource  query     string  false  "Filter berdasarkan resource (report, document, company, user)"
+// @Param        status    query     string  false  "Filter berdasarkan status (success, failure, error)"
+// @Success      200       {object}  map[string]interface{}
+// @Failure      401       {object}  domain.ErrorResponse
+// @Failure      500       {object}  domain.ErrorResponse
+// @Router       /api/v1/user-activity-logs [get]
+func GetUserActivityLogsHandler(c *fiber.Ctx) error {
+	// Ambil user saat ini dari locals
+	userIDVal := c.Locals("userID")
+	if userIDVal == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+	}
+
+	currentUserID := userIDVal.(string)
+
+	// Parse parameter query
+	page := 1
+	pageSize := 10
+	action := c.Query("action")
+	resource := c.Query("resource")
+	status := c.Query("status")
+
+	if pageStr := c.Query("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	if pageSizeStr := c.Query("pageSize"); pageSizeStr != "" {
+		if ps, err := strconv.Atoi(pageSizeStr); err == nil && ps > 0 && ps <= 100 {
+			pageSize = ps
+		}
+	}
+
+	// Ambil user dari database untuk cek role
+	var currentUser domain.UserModel
+	if err := database.GetDB().First(&currentUser, "id = ?", currentUserID).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
+			Error:   "user_not_found",
+			Message: "User not found",
+		})
+	}
+
+	// User reguler hanya bisa lihat logs mereka sendiri
+	filterUserID := currentUserID
+	if currentUser.Role == "admin" || currentUser.Role == "superadmin" {
+		// Admin bisa lihat semua logs
+		filterUserID = ""
+	}
+
+	// Hitung offset
+	offset := (page - 1) * pageSize
+
+	// Ambil user activity logs
+	logs, total, err := repository.GetUserActivityLogs(filterUserID, action, resource, status, pageSize, offset)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to get user activity logs",
+		})
+	}
+
+	// Kembalikan response
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"data":       logs,
+		"total":      total,
+		"page":       page,
+		"pageSize":   pageSize,
+		"totalPages": (total + int64(pageSize) - 1) / int64(pageSize),
+	})
+}
+

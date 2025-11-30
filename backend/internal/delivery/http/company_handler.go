@@ -95,7 +95,7 @@ func (h *CompanyHandler) CreateCompany(c *fiber.Ctx) error {
 	}
 
 	// Audit log
-	audit.LogAction(userID, username, audit.ActionCreateUser, audit.ResourceCompany, company.ID, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+	audit.LogAction(userID, username, audit.ActionCreateCompany, audit.ResourceCompany, company.ID, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
 
 	return c.Status(fiber.StatusCreated).JSON(company)
 }
@@ -175,7 +175,7 @@ func (h *CompanyHandler) CreateCompanyFull(c *fiber.Ctx) error {
 	fullCompany, _ := h.companyUseCase.GetCompanyByID(company.ID)
 
 	// Audit log
-	audit.LogAction(userID, username, audit.ActionCreateUser, audit.ResourceCompany, company.ID, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+	audit.LogAction(userID, username, audit.ActionCreateCompany, audit.ResourceCompany, company.ID, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
 
 	return c.Status(fiber.StatusCreated).JSON(fullCompany)
 }
@@ -249,7 +249,7 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 	// Audit log
 	userID := c.Locals("userID").(string)
 	username := c.Locals("username").(string)
-	audit.LogAction(userID, username, audit.ActionUpdateUser, audit.ResourceCompany, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+	audit.LogAction(userID, username, audit.ActionUpdateCompany, audit.ResourceCompany, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
 
 	return c.Status(fiber.StatusOK).JSON(fullCompany)
 }
@@ -554,7 +554,7 @@ func (h *CompanyHandler) UpdateCompany(c *fiber.Ctx) error {
 	// Audit log
 	userID := c.Locals("userID").(string)
 	username := c.Locals("username").(string)
-	audit.LogAction(userID, username, audit.ActionUpdateUser, audit.ResourceCompany, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+	audit.LogAction(userID, username, audit.ActionUpdateCompany, audit.ResourceCompany, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
 
 	return c.Status(fiber.StatusOK).JSON(company)
 }
@@ -617,7 +617,7 @@ func (h *CompanyHandler) DeleteCompany(c *fiber.Ctx) error {
 	// Audit log
 	userID := c.Locals("userID").(string)
 	username := c.Locals("username").(string)
-	audit.LogAction(userID, username, audit.ActionDeleteUser, audit.ResourceCompany, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+	audit.LogAction(userID, username, audit.ActionDeleteCompany, audit.ResourceCompany, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Company deleted successfully",

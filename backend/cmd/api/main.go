@@ -197,6 +197,7 @@ func main() {
 	// Route audit logs
 	protected.Get("/audit-logs", http.GetAuditLogsHandler)
 	protected.Get("/audit-logs/stats", http.GetAuditLogStatsHandler)
+	protected.Get("/user-activity-logs", http.GetUserActivityLogsHandler) // Permanent logs untuk data penting
 
 	// Route documents (dilindungi)
 	protected.Get("/documents", http.GetDocumentsHandler)
@@ -262,6 +263,41 @@ func main() {
 	protected.Post("/development/reset-subsidiary", developmentHandler.ResetSubsidiaryData)
 	protected.Post("/development/run-subsidiary-seeder", developmentHandler.RunSubsidiarySeeder)
 	protected.Get("/development/check-seeder-status", developmentHandler.CheckSeederDataExists)
+
+	// Route SonarQube (hanya superadmin/admin)
+	// Feature flag: ENABLE_SONARQUBE_MONITOR (default: true untuk local, false untuk production/development server)
+	enableSonarQubeMonitor := os.Getenv("ENABLE_SONARQUBE_MONITOR")
+	// Default: enable di local development (ENV != "production"), disable di production/development server
+	// Set ENABLE_SONARQUBE_MONITOR=true untuk force enable, false untuk force disable
+	shouldEnableSonarQube := true
+	if enableSonarQubeMonitor != "" {
+		shouldEnableSonarQube = enableSonarQubeMonitor == "true"
+	} else if env == "production" {
+		// Default: disable di production (bisa di-override dengan env var)
+		shouldEnableSonarQube = false
+	}
+	
+	// SonarQube handler (dibuat terlepas dari enable/disable untuk status endpoint)
+	sonarqubeHandler := http.NewSonarQubeHandler()
+	
+	// Status endpoint (public untuk frontend check, tidak perlu auth)
+	api.Get("/sonarqube/status", sonarqubeHandler.GetStatus)
+	
+	if shouldEnableSonarQube {
+		protected.Get("/sonarqube/issues", sonarqubeHandler.GetIssues)
+		protected.Get("/sonarqube/issues/export", sonarqubeHandler.ExportIssues)
+		protected.Get("/sonarqube/quality", sonarqubeHandler.GetSoftwareQualityMetrics)
+		zapLog.Info("SonarQube Monitor enabled",
+			zap.String("env", env),
+			zap.String("enable_flag", enableSonarQubeMonitor),
+		)
+	} else {
+		zapLog.Info("SonarQube Monitor disabled",
+			zap.String("env", env),
+			zap.String("enable_flag", enableSonarQubeMonitor),
+			zap.String("reason", "ENABLE_SONARQUBE_MONITOR not set to 'true' or running in production"),
+		)
+	}
 
 	// Swagger documentation dengan auto-reload
 	app.Get("/swagger/*", swagger.HandlerDefault)

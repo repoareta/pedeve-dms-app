@@ -108,6 +108,28 @@ func (AuditLog) TableName() string {
 	return "audit_logs"
 }
 
+// UserActivityLog merepresentasikan permanent audit log untuk data penting
+// Data ini tidak akan dihapus (permanent storage) untuk compliance dan legal purposes
+// Resource: report, document, company, user
+type UserActivityLog struct {
+	ID         string    `gorm:"primaryKey" json:"id"`
+	UserID     string    `gorm:"index" json:"user_id"`
+	Username   string    `gorm:"index" json:"username"`
+	Action     string    `gorm:"index;not null" json:"action"`   // create_report, update_document, dll
+	Resource   string    `gorm:"index;not null" json:"resource"` // report, document, company, user
+	ResourceID string    `gorm:"index" json:"resource_id"`       // ID dari resource yang dioperasikan
+	IPAddress  string    `json:"ip_address"`
+	UserAgent  string    `json:"user_agent"`
+	Details    string    `gorm:"type:text" json:"details"`     // JSON string untuk detail tambahan
+	Status     string    `gorm:"index;not null" json:"status"` // success, failure, error
+	CreatedAt  time.Time `gorm:"index" json:"created_at"`
+}
+
+// TableName menentukan nama tabel untuk UserActivityLog
+func (UserActivityLog) TableName() string {
+	return "user_activity_logs"
+}
+
 // Document merepresentasikan sebuah document (domain model)
 type Document struct {
 	ID          string `json:"id"`

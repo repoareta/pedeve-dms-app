@@ -17,6 +17,7 @@ const loadingCompaniesCount = ref(false)
 const showUserMenu = ref(false)
 const showMobileMenu = ref(false)
 const isScrolled = ref(false)
+const isMaximized = ref(false)
 
 // Valid roles that can access the application
 const validRoles = ['superadmin', 'admin', 'manager', 'staff']
@@ -45,11 +46,59 @@ const menuItems = computed(() => {
 
 const emit = defineEmits<{
   logout: []
+  toggleMaximize: [value: boolean]
 }>()
 
 const handleLogout = () => {
   emit('logout')
 }
+
+const handleToggleMaximize = () => {
+  // Check if browser supports fullscreen API
+  if (document.fullscreenElement) {
+    // Exit fullscreen
+    document.exitFullscreen().then(() => {
+      isMaximized.value = false
+      emit('toggleMaximize', false)
+    }).catch(() => {
+      // Fallback: try to minimize window (if in Electron or similar)
+      if ((window as any).electron?.minimize) {
+        (window as any).electron.minimize()
+      }
+    })
+  } else {
+    // Enter fullscreen
+    const element = document.documentElement
+    if (element.requestFullscreen) {
+      element.requestFullscreen().then(() => {
+        isMaximized.value = true
+        emit('toggleMaximize', true)
+      }).catch(() => {
+        // Fallback: try to maximize window (if in Electron or similar)
+        if ((window as any).electron?.maximize) {
+          (window as any).electron.maximize()
+          isMaximized.value = true
+          emit('toggleMaximize', true)
+        }
+      })
+    }
+  }
+}
+
+// Listen for fullscreen changes
+onMounted(() => {
+  const handleFullscreenChange = () => {
+    isMaximized.value = !!document.fullscreenElement
+  }
+  
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
+  document.addEventListener('mozfullscreenchange', handleFullscreenChange)
+  document.addEventListener('MSFullscreenChange', handleFullscreenChange)
+  
+  // Store handler for cleanup
+  ;(window as any).__fullscreenHandler = handleFullscreenChange
+})
 
 const handleMenuItemClick = (path: string) => {
   router.push(path)
@@ -162,6 +211,7 @@ onUnmounted(() => {
 //   console.log('🛑 DashboardHeader unmounting, removing listeners')
   interface WindowWithScrollHandler extends Window {
     __dashboardHeaderScrollHandler?: () => void
+    __fullscreenHandler?: () => void
   }
   const handler = (window as WindowWithScrollHandler).__dashboardHeaderScrollHandler
   if (handler) {
@@ -171,6 +221,16 @@ onUnmounted(() => {
       document.body.removeEventListener('scroll', handler)
     }
     delete (window as WindowWithScrollHandler).__dashboardHeaderScrollHandler
+  }
+  
+  // Remove fullscreen listeners
+  const fullscreenHandler = (window as WindowWithScrollHandler).__fullscreenHandler
+  if (fullscreenHandler) {
+    document.removeEventListener('fullscreenchange', fullscreenHandler)
+    document.removeEventListener('webkitfullscreenchange', fullscreenHandler)
+    document.removeEventListener('mozfullscreenchange', fullscreenHandler)
+    document.removeEventListener('MSFullscreenChange', fullscreenHandler)
+    delete (window as WindowWithScrollHandler).__fullscreenHandler
   }
 })
 </script>
@@ -208,6 +268,19 @@ onUnmounted(() => {
       </div>
 
       <div class="header-right">
+        <a-button 
+          type="text" 
+          class="icon-btn desktop-icon"
+          @click="handleToggleMaximize"
+          :title="isMaximized ? 'Exit Fullscreen' : 'Fullscreen'"
+        >
+          <IconifyIcon 
+            :icon="isMaximized ? 'ant-design:fullscreen-exit-outlined' : 'ant-design:fullscreen-outlined'" 
+            width="20" 
+            height="20" 
+          />
+        </a-button>
+
         <a-button type="text" class="icon-btn desktop-icon">
           <IconifyIcon icon="mdi:bell-outline" width="20" height="20" />
         </a-button>

@@ -3,11 +3,16 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
+import { userApi, type UserCompanyResponse } from '../api/userManagement'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const user = computed(() => authStore.user)
+
+// User companies count for badge
+const userCompaniesCount = ref(0)
+const loadingCompaniesCount = ref(false)
 
 const showUserMenu = ref(false)
 const showMobileMenu = ref(false)
@@ -72,7 +77,25 @@ const updateScrollState = () => {
   }
 }
 
+// Load user companies count
+const loadUserCompaniesCount = async () => {
+  if (!authStore.isAuthenticated) return
+  
+  loadingCompaniesCount.value = true
+  try {
+    const companies = await userApi.getMyCompanies()
+    userCompaniesCount.value = companies.length
+  } catch (error) {
+    // Silently fail - badge is not critical
+    console.warn('Failed to load user companies count:', error)
+    userCompaniesCount.value = 0
+  } finally {
+    loadingCompaniesCount.value = false
+  }
+}
+
 onMounted(() => {
+  loadUserCompaniesCount()
 //   console.log('🚀 DashboardHeader mounted')
   
   // Check initial scroll position
@@ -206,6 +229,7 @@ onUnmounted(() => {
               <a-menu-item key="my-company" @click="handleMenuItemClick('/my-company')">
                 <IconifyIcon icon="mdi:office-building" width="16" style="margin-right: 8px;" />
                 My Company
+                <a-badge v-if="userCompaniesCount > 1" :count="userCompaniesCount" :number-style="{ backgroundColor: '#52c41a' }" style="margin-left: 8px;" />
               </a-menu-item>
               <a-menu-item key="settings" @click="handleMenuItemClick('/settings')">
                 <IconifyIcon icon="mdi:cog" width="16" style="margin-right: 8px;" />

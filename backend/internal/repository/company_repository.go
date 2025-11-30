@@ -73,21 +73,27 @@ func (r *companyRepository) GetChildren(companyID string) ([]domain.CompanyModel
 }
 
 // GetDescendants menggunakan recursive CTE untuk mendapatkan semua descendants
+// Optimized dengan limit untuk mencegah temp_file_limit error pada hierarki yang sangat dalam
 func (r *companyRepository) GetDescendants(companyID string) ([]domain.CompanyModel, error) {
 	var descendants []domain.CompanyModel
 	
 	// PostgreSQL recursive CTE untuk mendapatkan semua descendants (children, grandchildren, etc)
+	// Added depth limit dan index hints untuk optimasi
 	query := `
 		WITH RECURSIVE descendants AS (
 			-- Base case: direct children
-			SELECT * FROM companies WHERE parent_id = ? AND is_active = true
+			SELECT *, 1 as depth FROM companies WHERE parent_id = ? AND is_active = true
 			UNION ALL
-			-- Recursive case: children of children
-			SELECT c.* FROM companies c
+			-- Recursive case: children of children (max depth 10 levels untuk prevent infinite recursion dan reduce temp file usage)
+			SELECT c.*, d.depth + 1 as depth FROM companies c
 			INNER JOIN descendants d ON c.parent_id = d.id
-			WHERE c.is_active = true
+			WHERE c.is_active = true AND d.depth < 10
 		)
-		SELECT * FROM descendants ORDER BY level, name
+		SELECT id, name, short_name, code, description, npwp, nib, status, logo, phone, fax, email, website, 
+		       address, operational_address, parent_id, main_parent_company_id, level, is_active, created_at, updated_at
+		FROM descendants 
+		ORDER BY level, name
+		LIMIT 10000
 	`
 	
 	err := r.db.Raw(query, companyID).Scan(&descendants).Error

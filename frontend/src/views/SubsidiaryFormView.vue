@@ -2,7 +2,9 @@
   <div class="subsidiary-form-layout">
     <DashboardHeader @logout="handleLogout" />
 
-    <div class="form-content">
+    <!-- Loading Overlay -->
+    <a-spin :spinning="loading" tip="Menyimpan data perusahaan, harap tunggu..." size="large" style="min-height: 400px;">
+      <div class="form-content">
       <a-card class="form-card">
         <!-- Progress Steps -->
         <a-steps :current="currentStep" class="form-steps">
@@ -404,14 +406,26 @@
               Next
               <IconifyIcon icon="mdi:arrow-right" width="16" style="margin-left: 4px;" />
             </a-button>
-            <a-button v-if="currentStep === 3" type="primary" @click="handleSubmit">
-              Finish
-              <IconifyIcon icon="mdi:arrow-right" width="16" style="margin-left: 4px;" />
+            <a-button 
+              v-if="currentStep === 3" 
+              type="primary" 
+              @click="handleSubmit"
+              :loading="loading"
+              :disabled="loading"
+            >
+              <template v-if="!loading">
+                Finish
+                <IconifyIcon icon="mdi:arrow-right" width="16" style="margin-left: 4px;" />
+              </template>
+              <template v-else>
+                Menyimpan...
+              </template>
             </a-button>
           </a-space>
         </div>
       </a-card>
-    </div>
+      </div>
+    </a-spin>
   </div>
 </template>
 
@@ -618,6 +632,11 @@ const handleCancel = () => {
 }
 
 const handleSubmit = async () => {
+  // Prevent multiple submissions
+  if (loading.value) {
+    return
+  }
+
   // Validasi untuk superadmin: jika sudah ada holding, wajib pilih parent
   if (isSuperAdmin.value && hasRootHolding.value && !formData.value.parent_id) {
     message.error('Holding company sudah ada. Silakan pilih perusahaan induk.')

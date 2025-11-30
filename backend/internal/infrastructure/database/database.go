@@ -87,10 +87,14 @@ func InitDB() {
 	}
 
 	// Auto migrate schema
+	// Catatan: AutoMigrate akan otomatis sync schema (tambah kolom, index, dll) saat aplikasi start
+	// Ini berarti setiap kali deploy ke GCP, schema akan otomatis ter-update sesuai model terbaru
+	// TAPI: Data di local TIDAK ikut ter-copy ke production, hanya schema/structure yang di-sync
 	err = DB.AutoMigrate(
 		&domain.UserModel{},
 		&domain.TwoFactorAuth{},
 		&domain.AuditLog{},
+		&domain.UserActivityLog{}, // Permanent audit log untuk data penting (report, document, company, user)
 		&domain.CompanyModel{},
 		&domain.RoleModel{},
 		&domain.PermissionModel{},

@@ -248,23 +248,6 @@ func (h *SonarQubeHandler) ExportIssues(c *fiber.Ctx) error {
 	return c.JSON(issuesResp)
 }
 
-// parseQueryArray parses comma-separated query parameter into array
-func parseQueryArray(query string) []string {
-	if query == "" {
-		return []string{}
-	}
-
-	var result []string
-	parts := strings.Split(query, ",")
-	for _, part := range parts {
-		trimmed := strings.TrimSpace(part)
-		if trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
-}
-
 // GetSoftwareQualityMetrics fetches Software Quality metrics from SonarCloud
 // @Summary      Get Software Quality Metrics
 // @Description  Mengambil metrics Software Quality (Security, Reliability, Maintainability) dari SonarCloud (hanya superadmin/admin)

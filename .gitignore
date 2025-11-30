@@ -1,0 +1,90 @@
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+backend/dms.db
+
+# Compiled binaries
+backend/api
+backend/backend
+backend/seed-companies
+backend/update-superadmin-password
+backend/tmp/
+backend/cmd/*/main
+backend/cmd/*/*/main
+
+# Uploads (keep README.md only)
+backend/uploads/*
+!backend/uploads/README.md
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+frontend/.vitest/
+frontend/coverage/
+frontend/.eslintcache
+frontend/*.tsbuildinfo
+
+# Backend
+backend/vendor/
+backend/tmp/
+backend/*.test
+backend/*_test.go
+
+# Docker
+.dockerignore
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test coverage
+coverage/
+*.out
+
+# Air (hot reload)
+tmp/
+.air.toml
+
+# Swagger generated (optional - uncomment if you want to ignore)
+# backend/docs/

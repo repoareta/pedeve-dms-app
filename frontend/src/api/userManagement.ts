@@ -31,6 +31,13 @@ export interface Company {
   updated_at: string
 }
 
+export interface UserCompanyResponse {
+  company: Company
+  role_id?: string
+  role: string
+  role_level: number // 0=superadmin, 1=admin, 2=manager, 3=staff
+}
+
 export interface Shareholder {
   id?: string
   type: string
@@ -166,6 +173,11 @@ export const companyApi = {
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/companies/${id}`)
   },
+
+  getUsers: async (id: string): Promise<User[]> => {
+    const response = await apiClient.get<User[]>(`/companies/${id}/users`)
+    return response.data
+  },
 }
 
 // User API
@@ -194,7 +206,7 @@ export const userApi = {
   update: async (id: string, data: {
     username?: string
     email?: string
-    company_id?: string
+    company_id?: string | null
     role_id?: string
   }): Promise<User> => {
     const response = await apiClient.put<User>(`/users/${id}`, data)
@@ -222,6 +234,18 @@ export const userApi = {
       company_id: companyId,
       role_id: roleId,
     })
+    return response.data
+  },
+
+  unassignFromCompany: async (id: string, companyId: string): Promise<User> => {
+    const response = await apiClient.post<User>(`/users/${id}/unassign-company`, {
+      company_id: companyId,
+    })
+    return response.data
+  },
+
+  getMyCompanies: async (): Promise<UserCompanyResponse[]> => {
+    const response = await apiClient.get<UserCompanyResponse[]>('/users/me/companies')
     return response.data
   },
 }

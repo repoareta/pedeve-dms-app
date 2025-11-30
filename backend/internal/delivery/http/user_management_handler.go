@@ -274,7 +274,7 @@ func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 	var req struct {
 		Username  string  `json:"username"`
 		Email     string  `json:"email"`
-		CompanyID *string `json:"company_id"`
+		CompanyID *string `json:"company_id"` // nil = no change, empty string "" = unassign, non-empty = assign
 		RoleID    *string `json:"role_id"`
 	}
 
@@ -285,11 +285,22 @@ func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	companyID := c.Locals("companyID")
+	// Safe type assertion for companyID (can be *string or nil)
+	var userCompanyID string
+	companyIDVal := c.Locals("companyID")
+	if companyIDVal != nil {
+		switch v := companyIDVal.(type) {
+		case string:
+			userCompanyID = v
+		case *string:
+			if v != nil {
+				userCompanyID = *v
+			}
+		}
+	}
 
 	// Check access
-	if roleName != "superadmin" && companyID != nil {
-		userCompanyID := companyID.(string)
+	if roleName != "superadmin" && userCompanyID != "" {
 		hasAccess, err := h.userUseCase.ValidateUserAccess(userCompanyID, id)
 		if err != nil || !hasAccess {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
@@ -794,5 +805,38 @@ func (h *UserManagementHandler) UnassignUserFromCompany(c *fiber.Ctx) error {
 	})
 
 	return c.Status(fiber.StatusOK).JSON(updatedUser)
+}
+
+// GetMyCompanies handles getting all companies assigned to the current user
+// @Summary      Ambil Companies User Saat Ini
+// @Description  Mengambil daftar semua companies yang di-assign ke user yang sedang login (dari junction table, support multiple assignments).
+// @Tags         User Management
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}   domain.UserCompanyResponse
+// @Failure      401  {object}  domain.ErrorResponse
+// @Failure      500  {object}  domain.ErrorResponse
+// @Router       /api/v1/users/me/companies [get]
+func (h *UserManagementHandler) GetMyCompanies(c *fiber.Ctx) error {
+	// Get user ID from JWT token (stored in locals by middleware)
+	userID, ok := c.Locals("userID").(string)
+	if !ok || userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User ID not found in token",
+		})
+	}
+
+	// Get all companies assigned to this user
+	companies, err := h.userUseCase.GetUserCompanies(userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to get user companies: " + err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(companies)
 }
 

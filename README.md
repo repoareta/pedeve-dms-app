@@ -1,9 +1,17 @@
-# DMS App - Document Management System
+# Pedeve DMS App - Document Management System
 
-Aplikasi Document Management System dengan stack:
-- **Frontend**: Vue 3 + TypeScript + Vite
-- **Backend**: Go (Golang)
-- **CI/CD**: GitHub Actions dengan Docker
+Aplikasi Document Management System untuk manajemen dokumen dan perusahaan dengan hierarki multi-level.
+
+## 🛠️ Tech Stack
+
+- **Frontend**: Vue 3 + TypeScript + Vite + Pinia + Vue Router + Ant Design Vue
+- **Backend**: Go 1.25 + Fiber v2 (fasthttp) + GORM + Clean Architecture
+- **Database**: PostgreSQL (production) / SQLite (development)
+- **Storage**: Google Cloud Storage (production) / Local filesystem (development)
+- **Authentication**: JWT dengan httpOnly cookies + 2FA (TOTP)
+- **Security**: CSRF protection, Rate limiting, Audit logging
+- **CI/CD**: GitHub Actions dengan Docker + GCP deployment
+- **API Docs**: Swagger/OpenAPI dengan auto-reload
 
 ## 🚀 Quick Start
 
@@ -55,7 +63,7 @@ docker-compose -f docker-compose.postgres.yml up --build
 ```bash
 cd backend
 go mod download
-go run main.go
+go run ./cmd/api/main.go
 ```
 
 **Frontend:**
@@ -68,18 +76,35 @@ npm run dev
 ## 📁 Project Structure
 
 ```
-dms-app/
-├── backend/          # Go backend API
-│   ├── main.go      # Entry point
-│   ├── go.mod       # Go dependencies
-│   └── Dockerfile   # Production Docker image
-├── frontend/         # Vue 3 frontend
-│   ├── src/         # Source code
-│   ├── package.json # Node dependencies
-│   └── Dockerfile   # Production Docker image
+pedeve-dms-app/
+├── backend/                    # Go backend API (Clean Architecture)
+│   ├── cmd/
+│   │   ├── api/               # API server entry point
+│   │   │   └── main.go
+│   │   └── seed-companies/    # Company seeder
+│   ├── internal/
+│   │   ├── domain/            # Domain models & entities
+│   │   ├── infrastructure/    # External dependencies (DB, JWT, Storage, etc)
+│   │   ├── delivery/          # HTTP handlers (Fiber)
+│   │   ├── middleware/        # HTTP middleware (Auth, CSRF, Rate limit, etc)
+│   │   ├── repository/        # Data access layer
+│   │   └── usecase/           # Business logic layer
+│   ├── go.mod
+│   └── Dockerfile
+├── frontend/                   # Vue 3 frontend
+│   ├── src/
+│   │   ├── api/               # API clients
+│   │   ├── components/        # Vue components
+│   │   ├── views/             # Page views
+│   │   ├── stores/            # Pinia stores
+│   │   └── router/            # Vue Router
+│   ├── package.json
+│   └── Dockerfile
 ├── .github/
-│   └── workflows/   # CI/CD pipelines
-└── docker-compose.yml # Local development setup
+│   └── workflows/             # CI/CD pipelines
+├── scripts/                   # Deployment scripts
+├── documentations/            # Documentation files
+└── docker-compose.dev.yml     # Local development setup
 ```
 
 ## 🔧 Development Commands
@@ -105,12 +130,12 @@ make help          # Show all commands
 **Backend:**
 ```bash
 cd backend
-go run main.go          # Run server (local, tanpa Docker)
-go test ./...           # Run tests
-golangci-lint run       # Lint code
+go run ./cmd/api/main.go    # Run server (local, tanpa Docker)
+go test ./...               # Run tests
+golangci-lint run           # Lint code
 
 # Generate Swagger docs (setelah update annotations)
-go run github.com/swaggo/swag/cmd/swag@latest init
+swag init -g cmd/api/main.go --output docs
 ```
 
 **Frontend:**
@@ -202,23 +227,59 @@ curl http://localhost:8080/health
 
 ### API Endpoints
 
-**Documents API:**
+**Authentication:**
+- `POST /api/v1/auth/login` - Login (dengan 2FA support)
+- `POST /api/v1/auth/logout` - Logout
+- `GET /api/v1/auth/profile` - Get user profile
+- `POST /api/v1/auth/2fa/generate` - Generate 2FA QR code
+- `POST /api/v1/auth/2fa/verify` - Verify 2FA code
+
+**Company Management:**
+- `GET /api/v1/companies` - Get all companies (dengan hierarki)
+- `GET /api/v1/companies/{id}` - Get company detail
+- `POST /api/v1/companies` - Create company
+- `PUT /api/v1/companies/{id}` - Update company
+- `DELETE /api/v1/companies/{id}` - Delete company (soft delete)
+- `GET /api/v1/companies/{id}/users` - Get users assigned to company
+
+**User Management:**
+- `GET /api/v1/users` - Get all users (dengan RBAC filtering)
+- `GET /api/v1/users/{id}` - Get user detail
+- `POST /api/v1/users` - Create user
+- `PUT /api/v1/users/{id}` - Update user
+- `POST /api/v1/users/{id}/assign-company` - Assign user to company
+- `POST /api/v1/users/{id}/unassign-company` - Unassign user from company
+
+**Development (Superadmin Only):**
+- `POST /api/v1/development/reset-subsidiary` - Reset subsidiary data
+- `POST /api/v1/development/run-subsidiary-seeder` - Run company seeder
+- `GET /api/v1/development/check-seeder-status` - Check seeder status
+
+**Documents:**
 - `GET /api/v1/documents` - Get all documents
 - `GET /api/v1/documents/{id}` - Get document by ID
 - `POST /api/v1/documents` - Create new document
 - `PUT /api/v1/documents/{id}` - Update document
 - `DELETE /api/v1/documents/{id}` - Delete document
 
+**File Upload:**
+- `POST /api/v1/upload/logo` - Upload company logo
+- `GET /api/v1/files/*` - Serve files (proxy dari GCP Storage atau local)
+
 **Test dengan curl:**
 ```bash
-# Get all documents
-curl http://localhost:8080/api/v1/documents
-
-# Get single document
-curl http://localhost:8080/api/v1/documents/1
-
 # Health check
 curl http://localhost:8080/health
+
+# Get CSRF token (untuk POST/PUT/DELETE)
+curl http://localhost:8080/api/v1/csrf-token
+
+# Login (dengan CSRF token)
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -H "X-CSRF-Token: <token>" \
+  -d '{"username":"superadmin","password":"Pedeve123"}' \
+  -c cookies.txt
 ```
 
 ## 📦 Port Configuration
@@ -237,37 +298,135 @@ curl http://localhost:8080/health
 lsof -i :8080
 lsof -i :5173
 
-# Atau ubah port di docker-compose.yml
+# Atau ubah port di docker-compose.dev.yml
 ```
 
 ### Docker build error
 ```bash
 # Clean build
-docker-compose down
+docker-compose -f docker-compose.dev.yml down
 docker system prune -f
-docker-compose up --build
+docker-compose -f docker-compose.dev.yml up --build
 ```
 
 ### Frontend tidak connect ke backend
-- Pastikan `VITE_API_URL` di frontend sesuai dengan backend URL
-- Cek CORS settings di backend jika diperlukan
+- Pastikan `VITE_API_URL` atau `VITE_API_BASE_URL` di frontend sesuai dengan backend URL
+- Cek CORS settings di backend (default: localhost:5173, localhost:3000)
+- Pastikan backend sudah running di port 8080
 
-## 📚 Tech Stack
+### CSRF Token Error
+- Pastikan frontend menggunakan `apiClient` dari `frontend/src/api/client.ts`
+- `apiClient` otomatis menambahkan CSRF token untuk POST/PUT/DELETE/PATCH
+- Jika masih error, coba logout dan login ulang untuk refresh token
 
-- **Frontend**: Vue 3, TypeScript, Vite, Pinia, Vue Router
-- **Backend**: Go 1.23, Chi Router, Swagger/OpenAPI
+### Database Connection Error
+- Untuk PostgreSQL: Pastikan `DATABASE_URL` sudah di-set dengan benar
+- Untuk SQLite: File database akan dibuat otomatis di `backend/dms.db`
+- Cek koneksi database di `backend/internal/infrastructure/database/database.go`
+
+### Seeder tidak jalan
+- Pastikan role "admin" sudah ada di database (auto-created saat startup)
+- Gunakan fitur "Jalankan Seeder Data Subsidiary" di Settings (superadmin only)
+- Atau jalankan manual: `cd backend && go run ./cmd/seed-companies`
+
+## 📚 Tech Stack Detail
+
+### Frontend
+- **Framework**: Vue 3 (Composition API)
+- **Language**: TypeScript
+- **Build Tool**: Vite 7
+- **State Management**: Pinia
+- **Routing**: Vue Router 4
+- **UI Library**: Ant Design Vue 4
+- **HTTP Client**: Axios
+- **Charts**: Chart.js + Vue-ChartJS
+- **Icons**: Iconify Vue
+- **Date**: Day.js
+
+### Backend
+- **Language**: Go 1.25
+- **Web Framework**: Fiber v2 (fasthttp-based, high performance)
+- **Architecture**: Clean Architecture (Domain, Infrastructure, Delivery, Usecase, Repository)
+- **ORM**: GORM
+- **Database**: PostgreSQL (production) / SQLite (development)
+- **Authentication**: JWT (golang-jwt/jwt/v5) dengan httpOnly cookies
+- **2FA**: TOTP (pquerna/otp)
+- **Password**: bcrypt (golang.org/x/crypto)
+- **Logging**: Zap (go.uber.org/zap)
+- **Validation**: go-playground/validator
+- **Storage**: Google Cloud Storage / Local filesystem
+- **Secrets**: GCP Secret Manager / HashiCorp Vault
+- **API Docs**: Swagger/OpenAPI (swaggo/swag)
+
+### Security Features
+- ✅ **CSRF Protection**: Double-submit cookie pattern
+- ✅ **Rate Limiting**: 100 req/s (general), 5 req/min (auth endpoints)
+- ✅ **Security Headers**: X-Content-Type-Options, X-XSS-Protection, CSP, HSTS
+- ✅ **2FA Support**: TOTP-based dengan backup codes
+- ✅ **Audit Logging**: Semua aksi user dan error teknis
+- ✅ **JWT Security**: httpOnly cookies untuk mencegah XSS
+- ✅ **Input Validation**: Comprehensive validation dengan sanitization
+- ✅ **Password Security**: bcrypt hashing
+
+### Infrastructure
 - **Container**: Docker, Docker Compose
 - **CI/CD**: GitHub Actions
-- **Security**: Trivy Scanner
-- **API Docs**: Swagger UI
+- **Deployment**: Google Cloud Platform (GCP)
+- **Storage**: Google Cloud Storage
+- **Secrets**: GCP Secret Manager
+- **Security Scan**: Trivy Scanner
+- **API Docs**: Swagger UI dengan auto-reload
+
+## 🎯 Fitur Utama
+
+### Authentication & Authorization
+- ✅ JWT-based authentication dengan httpOnly cookies
+- ✅ Two-Factor Authentication (2FA) dengan TOTP
+- ✅ Role-Based Access Control (RBAC)
+- ✅ Company hierarchy-based access control
+- ✅ CSRF protection untuk state-changing requests
+
+### Company Management
+- ✅ Multi-level company hierarchy (Holding → Level 1 → Level 2 → Level 3)
+- ✅ Company CRUD dengan validasi hierarki
+- ✅ Company detail dengan shareholders, business fields, directors
+- ✅ Company logo upload (GCP Storage / Local)
+- ✅ "My Company" view untuk melihat company user yang di-assign
+
+### User Management
+- ✅ User CRUD dengan RBAC
+- ✅ Multiple company assignments per user (junction table)
+- ✅ Flexible role assignment per company
+- ✅ User status management (active/inactive)
+- ✅ Password reset functionality
+- ✅ Standby users (tanpa company/role assignment)
+
+### Development Tools
+- ✅ Reset subsidiary data (superadmin only)
+- ✅ Run company seeder via UI (superadmin only)
+- ✅ Seeder status check
+
+### Security & Monitoring
+- ✅ Comprehensive audit logging
+- ✅ Rate limiting (per endpoint type)
+- ✅ Security headers (CSP, HSTS, XSS protection)
+- ✅ Input validation & sanitization
+- ✅ Error logging dengan stack trace
 
 ## 🤝 Contributing
 
-1. Buat branch dari `main`
-2. Develop fitur
-3. Test & lint
-4. Push dan buat PR
-5. Setelah merge, CI/CD akan otomatis build
+1. Buat branch dari `development` (untuk fitur baru) atau `main` (untuk hotfix)
+2. Develop fitur dengan mengikuti Clean Architecture pattern
+3. Test & lint (frontend: `npm run lint`, backend: `golangci-lint run`)
+4. Push dan buat PR ke branch `development`
+5. Setelah merge, CI/CD akan otomatis build dan deploy ke GCP
+
+## 📖 Dokumentasi Tambahan
+
+- **API Documentation**: http://localhost:8080/swagger/index.html
+- **Seeder Documentation**: `backend/cmd/seed-companies/README.md`
+- **Manual Fixes**: `documentations/MANUAL_FIXES_DOCUMENTATION.md`
+- **Backend Architecture**: Clean Architecture dengan struktur `cmd/`, `internal/`
 
 ## 📄 License
 

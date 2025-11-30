@@ -165,6 +165,24 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 	}
 	zapLog.Info("Deleted companies (soft delete)", zap.Int("company_count", len(companyIDs)))
 
+	// 7. CRITICAL: Reset holding company level to 0 dan ensure parent_id is NULL
+	// Ini penting untuk memastikan holding level tidak kacau setelah reset
+	holding, err := uc.companyRepo.GetByCode("PDV")
+	if err == nil && holding != nil {
+		// Reset holding level to 0 dan pastikan parent_id is NULL
+		if err := tx.Model(&domain.CompanyModel{}).
+			Where("code = ?", "PDV").
+			Updates(map[string]interface{}{
+				"level":     0,
+				"parent_id": nil,
+				"is_active": true, // Ensure holding is active
+			}).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to reset holding level: %w", err)
+		}
+		zapLog.Info("Reset holding company level to 0", zap.String("holding_id", holding.ID))
+	}
+
 	// Commit transaction
 	if err := tx.Commit().Error; err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
@@ -228,6 +246,7 @@ func (uc *developmentUseCase) RunSubsidiarySeeder() (bool, error) {
 	}
 
 	// 1. Create or Update Holding Company
+	// CRITICAL: Pastikan holding selalu level 0 dan parent_id NULL
 	var holdingID string
 	existingHolding, _ := uc.companyRepo.GetByCode("PDV")
 	if existingHolding != nil {
@@ -236,11 +255,39 @@ func (uc *developmentUseCase) RunSubsidiarySeeder() (bool, error) {
 		existingHolding.ShortName = "Pedeve"
 		existingHolding.Description = "Perusahaan Holding Induk Pedeve Pertamina"
 		existingHolding.Status = "Aktif"
-		existingHolding.ParentID = nil
-		existingHolding.Level = 0
+		existingHolding.ParentID = nil // CRITICAL: Must be NULL for holding
+		existingHolding.Level = 0      // CRITICAL: Must be 0 for holding
 		existingHolding.IsActive = true
+		
+		// Log before update untuk debugging
+		zapLog.Info("Updating holding company",
+			zap.String("holding_id", holdingID),
+			zap.Int("old_level", existingHolding.Level),
+			zap.Bool("old_parent_is_null", existingHolding.ParentID == nil),
+		)
+		
 		if err := uc.companyRepo.Update(existingHolding); err != nil {
 			return false, fmt.Errorf("failed to update holding: %w", err)
+		}
+		
+		// Double check: Verify holding level after update
+		updatedHolding, _ := uc.companyRepo.GetByID(holdingID)
+		if updatedHolding != nil {
+			if updatedHolding.Level != 0 {
+				zapLog.Error("Holding level is not 0 after update!",
+					zap.String("holding_id", holdingID),
+					zap.Int("actual_level", updatedHolding.Level),
+					zap.Int("expected_level", 0),
+				)
+				// Force fix: Update directly via repository
+				updatedHolding.Level = 0
+				updatedHolding.ParentID = nil
+				if err := uc.companyRepo.Update(updatedHolding); err != nil {
+					zapLog.Error("Failed to fix holding level", zap.Error(err))
+				} else {
+					zapLog.Info("Fixed holding level to 0")
+				}
+			}
 		}
 	} else {
 		holdingID = uuid.GenerateUUID()

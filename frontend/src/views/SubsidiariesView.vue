@@ -407,8 +407,7 @@ const canDelete = computed(() => isAdmin.value || isSuperAdmin.value)
 // RBAC: Edit untuk semua role (staff, manager, admin, superadmin)
 const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value)
 
-// Check if any menu item is available (to show/hide Actions dropdown)
-const hasAnyMenuOption = computed(() => canEdit.value || canAssignRole.value || canDelete.value)
+// Note: Actions dropdown always shown because "Lihat Detail" menu is always available
 
 // View Mode: 'grid' or 'list' - load from localStorage
 const getStoredViewMode = (): 'grid' | 'list' => {
@@ -647,7 +646,7 @@ const loadTableData = async () => {
     tablePagination.value.total = filteredCompanies.value.length
     // Reset to first page
     tablePagination.value.current = 1
-  } catch (error) {
+  } catch {
     message.error('Gagal memuat data table')
   } finally {
     tableDataLoading.value = false

@@ -463,7 +463,6 @@ const handleCompanyChange = async (user: User, newCompanyId: string | null | und
   // Normalize nilai (convert undefined ke null)
   const normalizedNewCompanyId = newCompanyId || null
   
-  const oldCompanyName = oldCompanyId ? getCompanyName(oldCompanyId) : 'tidak ada perusahaan'
   const newCompanyName = normalizedNewCompanyId ? getCompanyName(normalizedNewCompanyId) : 'tidak ada perusahaan'
   
   // Jika tidak ada perubahan, return
@@ -488,10 +487,9 @@ const handleCompanyChange = async (user: User, newCompanyId: string | null | und
         } else {
           // Unassign dari company - kirim empty string untuk unassign
           // Backend akan menangani empty string sebagai unassign
-          const updateData: { company_id: string } = {
+          await userApi.update(user.id, {
             company_id: '',
-          }
-          await userApi.update(user.id, updateData as any)
+          })
           message.success(`User "${user.username}" berhasil di-unassign dari perusahaan`)
         }
         

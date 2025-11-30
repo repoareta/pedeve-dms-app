@@ -104,7 +104,17 @@ jobs:
 
       - name: Test backend
         working-directory: backend
-        run: go test ./... -v
+        run: |
+          echo "🧪 Running backend tests..."
+          go test ./... -v -coverprofile=coverage.out
+          echo "📊 Test coverage:"
+          go tool cover -func=coverage.out | grep total || echo "No coverage data"
+          # Fail if critical tests fail (coverage check is optional for now)
+          if [ $? -ne 0 ]; then
+            echo "❌ Tests failed!"
+            exit 1
+          fi
+          echo "✅ All tests passed!"
 
       - name: Build backend Docker image
         id: build-backend

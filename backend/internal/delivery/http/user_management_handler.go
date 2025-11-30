@@ -299,6 +299,18 @@ func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 		}
 	}
 
+	// CRITICAL: Block admin from changing their own role to non-admin
+	if roleName == "admin" && id == currentUserID && req.RoleID != nil {
+		roleUseCase := usecase.NewRoleManagementUseCase()
+		newRole, err := roleUseCase.GetRoleByID(*req.RoleID)
+		if err == nil && newRole != nil && newRole.Name != "admin" {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Admin tidak dapat mengubah role mereka sendiri menjadi non-admin. Hanya superadmin yang dapat mengubah role admin.",
+			})
+		}
+	}
+
 	// Check access
 	if roleName != "superadmin" && userCompanyID != "" {
 		hasAccess, err := h.userUseCase.ValidateUserAccess(userCompanyID, id)

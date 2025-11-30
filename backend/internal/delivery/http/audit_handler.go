@@ -84,6 +84,44 @@ func GetAuditLogsHandler(c *fiber.Ctx) error {
 		// Admin bisa lihat semua logs, jangan filter berdasarkan userID
 		filterUserID = ""
 	}
+	
+	// CRITICAL: Admin holding hanya bisa lihat user activity logs (bukan technical logs)
+	// Filter out technical_error logs untuk admin (superadmin bisa lihat semua)
+	if currentUser.Role == "admin" && logType == audit.LogTypeTechnicalError {
+		// Admin tidak boleh lihat technical logs, return empty
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"data":       []interface{}{},
+			"total":      0,
+			"page":       page,
+			"pageSize":   pageSize,
+			"totalPages": 0,
+		})
+	}
+	
+	// Jika admin tidak specify logType, default ke user_action (bukan technical_error)
+	if currentUser.Role == "admin" && logType == "" {
+		// Admin default hanya lihat user_action logs
+		logType = audit.LogTypeUserAction
+	}
+	
+	// CRITICAL: Admin holding hanya bisa lihat user activity logs (bukan technical logs)
+	// Filter out technical_error logs untuk admin (superadmin bisa lihat semua)
+	if currentUser.Role == "admin" && logType == "technical_error" {
+		// Admin tidak boleh lihat technical logs, return empty
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"data":       []interface{}{},
+			"total":      0,
+			"page":       page,
+			"pageSize":   pageSize,
+			"totalPages": 0,
+		})
+	}
+	
+	// Jika admin tidak specify logType, default ke user_action (bukan technical_error)
+	if currentUser.Role == "admin" && logType == "" {
+		// Admin default hanya lihat user_action logs
+		logType = audit.LogTypeUserAction
+	}
 
 	// Hitung offset
 	offset := (page - 1) * pageSize

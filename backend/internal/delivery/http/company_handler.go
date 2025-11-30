@@ -234,19 +234,28 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 			})
 		}
 		
-		// CRITICAL: For admin, prevent updating holding company (code = "PDV")
-		// Admin should not be able to modify holding structure
+		// CRITICAL: For admin, check holding company access
+		// Admin holding boleh edit holding mereka sendiri, tapi tidak boleh edit holding lain
 		targetCompany, err := h.companyUseCase.GetCompanyByID(id)
 		if err == nil && targetCompany != nil && targetCompany.Code == "PDV" {
-			zapLog.Warn("Admin attempted to update holding company, blocking",
+			// Allow admin holding to edit their own holding
+			if userCompanyID != targetCompany.ID {
+				// Admin holding lain tidak bisa edit holding
+				zapLog.Warn("Admin attempted to update holding company (not their own), blocking",
+					zap.String("user_company_id", userCompanyID),
+					zap.String("target_company_id", id),
+					zap.String("target_company_code", targetCompany.Code),
+				)
+				return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+					Error:   "forbidden",
+					Message: "Admin tidak dapat mengupdate holding company lain. Hanya admin holding yang di-assign di holding tersebut yang dapat mengupdate holding mereka sendiri.",
+				})
+			}
+			// Admin holding bisa edit holding mereka sendiri - continue to access check
+			zapLog.Info("Admin holding updating their own holding",
 				zap.String("user_company_id", userCompanyID),
 				zap.String("target_company_id", id),
-				zap.String("target_company_code", targetCompany.Code),
 			)
-			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
-				Error:   "forbidden",
-				Message: "Admin tidak dapat mengupdate holding company. Hanya superadmin yang dapat mengupdate holding.",
-			})
 		}
 		
 		hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, id)
@@ -630,11 +639,32 @@ func (h *CompanyHandler) DeleteCompany(c *fiber.Ctx) error {
 			})
 		}
 
-		// User tidak boleh menghapus perusahaan mereka sendiri
+		// CRITICAL: Admin tidak boleh menghapus perusahaan mereka sendiri (termasuk holding)
+		// Superadmin bisa delete, tapi admin tidak bisa
 		if id == userCompanyID {
+			zapLog := logger.GetLogger()
+			zapLog.Warn("Admin attempted to delete their own company, blocking",
+				zap.String("user_company_id", userCompanyID),
+				zap.String("role", roleName),
+			)
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
-				Message: "You cannot delete your own company",
+				Message: "Admin tidak dapat menghapus perusahaan mereka sendiri. Hanya superadmin yang dapat menghapus perusahaan.",
+			})
+		}
+		
+		// CRITICAL: Admin tidak boleh menghapus holding company (bahkan jika bukan perusahaan mereka sendiri)
+		targetCompany, err := h.companyUseCase.GetCompanyByID(id)
+		if err == nil && targetCompany != nil && targetCompany.Code == "PDV" {
+			zapLog := logger.GetLogger()
+			zapLog.Warn("Admin attempted to delete holding company, blocking",
+				zap.String("user_company_id", userCompanyID),
+				zap.String("target_company_id", id),
+				zap.String("role", roleName),
+			)
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Admin tidak dapat menghapus holding company. Hanya superadmin yang dapat menghapus holding.",
 			})
 		}
 

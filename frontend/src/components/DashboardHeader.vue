@@ -3,7 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
-import { userApi, type UserCompanyResponse } from '../api/userManagement'
+import { userApi } from '../api/userManagement'
 
 const router = useRouter()
 const route = useRoute()

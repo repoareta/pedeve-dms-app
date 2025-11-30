@@ -213,6 +213,13 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 	companyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
 
+	// CRITICAL: Log access check untuk debugging
+	zapLog.Info("UpdateCompanyFull access check",
+		zap.String("company_id", id),
+		zap.String("role", roleName),
+		zap.Any("user_company_id", companyID),
+	)
+
 	// Check access
 	if roleName != "superadmin" && companyID != nil {
 		var userCompanyID string
@@ -226,8 +233,29 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 				Message: "Invalid company ID format",
 			})
 		}
+		
+		// CRITICAL: For admin, prevent updating holding company (code = "PDV")
+		// Admin should not be able to modify holding structure
+		targetCompany, err := h.companyUseCase.GetCompanyByID(id)
+		if err == nil && targetCompany != nil && targetCompany.Code == "PDV" {
+			zapLog.Warn("Admin attempted to update holding company, blocking",
+				zap.String("user_company_id", userCompanyID),
+				zap.String("target_company_id", id),
+				zap.String("target_company_code", targetCompany.Code),
+			)
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Admin tidak dapat mengupdate holding company. Hanya superadmin yang dapat mengupdate holding.",
+			})
+		}
+		
 		hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, id)
 		if err != nil || !hasAccess {
+			zapLog.Warn("Access denied for company update",
+				zap.String("user_company_id", userCompanyID),
+				zap.String("target_company_id", id),
+				zap.Error(err),
+			)
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
 				Message: "You don't have access to update this company",
@@ -379,9 +407,22 @@ func (h *CompanyHandler) GetAllCompanies(c *fiber.Ctx) error {
 			})
 		}
 
-		// Combine user's company with all descendants
-		// Note: descendants already includes direct children, so we just combine them
-		companies = append([]domain.CompanyModel{*userCompany}, descendants...)
+		// CRITICAL: Remove duplicates by ID to prevent duplicate entries in response
+		// This is a safety measure in case GetDescendants returns duplicates
+		companyMap := make(map[string]domain.CompanyModel)
+		companyMap[userCompany.ID] = *userCompany
+		for _, desc := range descendants {
+			// Skip if already exists (prevent duplicate)
+			if _, exists := companyMap[desc.ID]; !exists {
+				companyMap[desc.ID] = desc
+			}
+		}
+
+		// Convert map back to slice
+		companies = make([]domain.CompanyModel, 0, len(companyMap))
+		for _, comp := range companyMap {
+			companies = append(companies, comp)
+		}
 	}
 
 	return c.Status(fiber.StatusOK).JSON(companies)

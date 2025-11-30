@@ -277,7 +277,11 @@ func (uc *companyUseCase) UpdateCompanyFull(id string, data *domain.CompanyUpdat
 	zapLog := logger.GetLogger()
 
 	// Log update attempt untuk debugging duplicate issue
-	zapLog.Info("UpdateCompanyFull called", zap.String("company_id", id), zap.String("name", data.Name))
+	zapLog.Info("UpdateCompanyFull called", 
+		zap.String("company_id", id), 
+		zap.String("name", data.Name),
+		zap.Any("parent_id", data.ParentID),
+	)
 
 	company, err := uc.companyRepo.GetByID(id)
 	if err != nil {
@@ -287,6 +291,16 @@ func (uc *companyUseCase) UpdateCompanyFull(id string, data *domain.CompanyUpdat
 	// Prevent update jika company sudah di-delete (soft delete)
 	if !company.IsActive {
 		return nil, fmt.Errorf("cannot update inactive company")
+	}
+
+	// CRITICAL: Prevent holding (code = "PDV") from being updated to have parent_id
+	// Holding must always have parent_id = NULL and level = 0
+	if company.Code == "PDV" && data.ParentID != nil && *data.ParentID != "" {
+		zapLog.Warn("Attempt to set parent_id for holding company, ignoring",
+			zap.String("company_id", id),
+			zap.String("company_code", company.Code),
+		)
+		data.ParentID = nil // Force parent_id to NULL for holding
 	}
 
 	// Handle perubahan parent_id (untuk mengubah holding)
@@ -315,13 +329,38 @@ func (uc *companyUseCase) UpdateCompanyFull(id string, data *domain.CompanyUpdat
 		
 		// Recalculate level
 		if company.ParentID == nil {
+			// CRITICAL: If parent_id is NULL, must be holding (level 0)
+			// Force level to 0 untuk prevent level corruption
 			company.Level = 0
+			zapLog.Info("Company set as holding (parent_id = NULL), forcing level to 0",
+				zap.String("company_id", id),
+				zap.String("company_code", company.Code),
+			)
 		} else {
 			parent, err := uc.companyRepo.GetByID(*company.ParentID)
 			if err != nil {
 				return nil, fmt.Errorf("parent company not found: %w", err)
 			}
-			company.Level = parent.Level + 1
+			
+			// CRITICAL: Safety check - if parent level is invalid (> 10), cap it
+			expectedLevel := parent.Level + 1
+			if expectedLevel > 10 {
+				zapLog.Warn("Calculated level exceeds maximum, capping at 10",
+					zap.String("company_id", id),
+					zap.Int("parent_level", parent.Level),
+					zap.Int("calculated_level", expectedLevel),
+				)
+				expectedLevel = 10
+			}
+			
+			company.Level = expectedLevel
+			zapLog.Info("Updated company level",
+				zap.String("company_id", id),
+				zap.String("company_code", company.Code),
+				zap.Int("old_level", company.Level),
+				zap.Int("new_level", expectedLevel),
+				zap.Int("parent_level", parent.Level),
+			)
 		}
 		
 		// Jika parent berubah, update level semua descendants akan dilakukan setelah company di-update
@@ -352,10 +391,20 @@ func (uc *companyUseCase) UpdateCompanyFull(id string, data *domain.CompanyUpdat
 	}
 
 	// Jika parent_id berubah, update level semua descendants
-	if data.ParentID != nil {
+	// CRITICAL: Only update descendants if parent_id actually changed AND company is not holding
+	if data.ParentID != nil && company.Code != "PDV" {
+		zapLog.Info("Parent ID changed, updating descendants level",
+			zap.String("company_id", id),
+			zap.String("company_code", company.Code),
+		)
 		if err := uc.updateDescendantsLevel(id); err != nil {
 			zapLog.Warn("Failed to update descendants level", zap.String("company_id", id), zap.Error(err))
 		}
+	} else if company.Code == "PDV" {
+		zapLog.Info("Skipping updateDescendantsLevel for holding company",
+			zap.String("company_id", id),
+			zap.String("company_code", company.Code),
+		)
 	}
 
 	// Delete existing related data

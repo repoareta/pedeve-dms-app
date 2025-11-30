@@ -706,7 +706,12 @@ const tableColumns: TableColumnsType = [
       { text: 'Cucu Perusahaan', value: 2 },
       { text: 'Cicit Perusahaan', value: 3 },
     ],
-    onFilter: (value: number, record: Company) => record.level === value,
+    onFilter: (value: string | number | boolean, record: Company) => {
+      if (typeof value === 'number') {
+        return record.level === value
+      }
+      return false
+    },
   },
   {
     title: 'Status',
@@ -717,7 +722,12 @@ const tableColumns: TableColumnsType = [
       { text: 'Aktif', value: true },
       { text: 'Tidak Aktif', value: false },
     ],
-    onFilter: (value: boolean, record: Company) => record.is_active === value,
+    onFilter: (value: string | number | boolean, record: Company) => {
+      if (typeof value === 'boolean') {
+        return record.is_active === value
+      }
+      return false
+    },
   },
   {
     title: 'Tanggal Dibuat',

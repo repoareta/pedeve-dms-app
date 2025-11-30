@@ -425,7 +425,7 @@ const handleRunSubsidiarySeeder = async () => {
     await checkSeederStatus()
   } catch (error: unknown) {
     console.error('Failed to run seeder:', error)
-    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const axiosError = error as { response?: { status?: number; data?: { message?: string } }; message?: string }
     const errorCode = axiosError.response?.status
     const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal menjalankan seeder'
     

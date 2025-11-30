@@ -13,6 +13,17 @@ Seeder untuk membuat sample data companies dengan hierarki 3 layer dan user admi
 
 Setiap company memiliki 1 user admin dengan password: `admin123`
 
+## Implementasi
+
+Seeder ini menggunakan sistem **junction table** (`user_company_assignments`) untuk mengelola hubungan many-to-many antara users dan companies. Setiap user yang dibuat akan memiliki:
+- Entry di tabel `users` dengan role "admin"
+- Entry di tabel `user_company_assignments` yang menghubungkan user dengan company dan role-nya
+
+Ini memungkinkan:
+- Satu user dapat di-assign ke multiple companies dengan role berbeda
+- Fleksibilitas dalam manajemen user-company assignments
+- Kompatibilitas dengan sistem RBAC yang sudah ada
+
 ## Cara Menjalankan
 
 ### Prerequisites
@@ -49,25 +60,77 @@ go run ./cmd/seed-companies
 
 ### Catatan
 
-- Seeder akan skip jika holding company sudah ada
-- Jika ingin re-seed, hapus semua companies terlebih dahulu atau gunakan fresh database
+- Seeder akan skip jika holding company sudah ada (dicek berdasarkan code "PDV")
+- Jika ingin re-seed, gunakan fitur "Reset Data Subsidiary" di Settings (hanya superadmin) atau hapus semua companies terlebih dahulu
 - Semua user memiliki password default: `admin123`
+- Seeder menggunakan junction table `user_company_assignments` untuk user-company relationships
+- Seeder akan otomatis membuat entry di junction table untuk setiap user yang dibuat
 
-## Struktur Hierarki
+## Struktur Hierarki Lengkap
 
 ```
 Pedeve Pertamina (Holding - Level 0)
+│   Code: PDV
+│   User: admin.pedeve
+│
 ├── PT Energi Nusantara (Level 1)
+│   │   Code: ENU
+│   │   User: admin.enu
+│   │
 │   ├── PT ENU Exploration (Level 2)
+│   │   │   Code: ENU-EXP
+│   │   │   User: admin.enu.exp
+│   │   │
 │   │   └── PT ENU-EXP Drilling (Level 3)
+│   │       │   Code: ENU-EXP-DRL
+│   │       │   User: admin.enu.exp.drl
+│   │
 │   └── PT ENU Production (Level 2)
+│       │   Code: ENU-PRO
+│       │   User: admin.enu.pro
+│       │
 │       └── PT ENU-PRO Refinery (Level 3)
+│           │   Code: ENU-PRO-REF
+│           │   User: admin.enu.pro.ref
+│
 ├── PT Pertamina Gas (Level 1)
+│   │   Code: PTG
+│   │   User: admin.ptg
+│   │
 │   └── PT PTG Distribution (Level 2)
+│       │   Code: PTG-DIST
+│       │   User: admin.ptg.dist
+│
 ├── PT Pertamina Lubricants (Level 1)
+│   │   Code: PLB
+│   │   User: admin.plb
+│
 ├── PT Pertamina Retail (Level 1)
+│   │   Code: PRT
+│   │   User: admin.prt
+│
 └── PT Pertamina Shipping (Level 1)
+    │   Code: PSH
+    │   User: admin.psh
 ```
+
+### Detail Per Level
+
+**Level 0 (Holding):**
+- 1 company: Pedeve Pertamina (PDV)
+- 1 user: admin.pedeve
+
+**Level 1 (Anak Perusahaan):**
+- 5 companies: ENU, PTG, PLB, PRT, PSH
+- 5 users: admin.enu, admin.ptg, admin.plb, admin.prt, admin.psh
+
+**Level 2 (Cucu Perusahaan):**
+- 3 companies: ENU-EXP, ENU-PRO, PTG-DIST
+- 3 users: admin.enu.exp, admin.enu.pro, admin.ptg.dist
+
+**Level 3 (Cicit Perusahaan):**
+- 2 companies: ENU-EXP-DRL, ENU-PRO-REF
+- 2 users: admin.enu.exp.drl, admin.enu.pro.ref
 
 ## Users yang Dibuat
 
@@ -84,4 +147,31 @@ Pedeve Pertamina (Holding - Level 0)
 11. `admin.enu.pro.ref` - Admin untuk PT ENU-PRO Refinery
 
 **Password untuk semua user: `admin123`**
+
+## Cara Menggunakan via UI (Recommended)
+
+Seeder sekarang dapat dijalankan melalui UI di halaman **Settings** (hanya superadmin):
+
+1. Login sebagai superadmin
+2. Buka halaman **Settings**
+3. Scroll ke card **"Fitur untuk Development"**
+4. Klik **"Jalankan Seeder Data Subsidiary"** untuk membuat sample data
+5. Klik **"Reset Data Subsidiary"** untuk menghapus semua data subsidiary (jika perlu re-seed)
+
+**Catatan:**
+- Seeder akan otomatis mengecek apakah data sudah ada
+- Jika data sudah ada, proses akan dibatalkan untuk mencegah duplikasi
+- Reset data akan menghapus semua subsidiary dan user terkait (kecuali superadmin)
+
+## Database Schema
+
+Seeder membuat data di tabel berikut:
+- `companies` - Data perusahaan dengan hierarki
+- `users` - Data user admin untuk setiap company
+- `user_company_assignments` - Junction table untuk user-company relationships
+
+**Junction Table Structure:**
+- Setiap user yang dibuat akan memiliki entry di `user_company_assignments`
+- Entry ini menghubungkan user dengan company dan role-nya
+- Memungkinkan satu user di-assign ke multiple companies dengan role berbeda
 

@@ -44,6 +44,7 @@ func main() {
 	companyRepo := repository.NewCompanyRepository()
 	userRepo := repository.NewUserRepository()
 	roleRepo := repository.NewRoleRepository()
+	assignmentRepo := repository.NewUserCompanyAssignmentRepository()
 
 	fmt.Println("✅ Connected to database")
 	fmt.Println()
@@ -109,13 +110,25 @@ func main() {
 	}
 
 	// Create admin user for holding (check if exists first)
+	adminRoleID := adminRole.ID
 	existingHoldingUser, _ := userRepo.GetByUsername("admin.pedeve")
+	
+	var holdingAdminID string
 	if existingHoldingUser != nil {
-		fmt.Printf("   ⚠️  User admin.pedeve already exists (skipping)\n")
+		// User already exists - update CompanyID and RoleID, then create/update assignment
+		holdingAdminID = existingHoldingUser.ID
+		existingHoldingUser.CompanyID = &holdingID
+		existingHoldingUser.RoleID = &adminRoleID
+		existingHoldingUser.Role = "admin"
+		if err := userRepo.Update(existingHoldingUser); err != nil {
+			fmt.Printf("   ⚠️  Failed to update holding admin user: %v\n", err)
+		} else {
+			fmt.Printf("   ⚠️  User admin.pedeve already exists (updated company assignment)\n")
+		}
 	} else {
-		holdingAdminID := uuid.GenerateUUID()
+		// Create new user
+		holdingAdminID = uuid.GenerateUUID()
 		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-		adminRoleID := adminRole.ID
 		holdingAdmin := &domain.UserModel{
 			ID:        holdingAdminID,
 			Username:  "admin.pedeve",
@@ -130,6 +143,29 @@ func main() {
 			fmt.Printf("   ⚠️  Failed to create holding admin user: %v\n", err)
 		} else {
 			fmt.Printf("   ✅ Created user: %s (password: admin123)\n", holdingAdmin.Username)
+		}
+	}
+	
+	// Create or update entry in junction table for user-company assignment
+	existingAssignment, _ := assignmentRepo.GetByUserAndCompany(holdingAdminID, holdingID)
+	if existingAssignment != nil {
+		// Assignment exists - update it
+		existingAssignment.RoleID = &adminRoleID
+		existingAssignment.IsActive = true
+		if err := assignmentRepo.Update(existingAssignment); err != nil {
+			fmt.Printf("      ⚠️  Failed to update assignment for user admin.pedeve: %v\n", err)
+		}
+	} else {
+		// Create new assignment
+		assignment := &domain.UserCompanyAssignmentModel{
+			ID:        uuid.GenerateUUID(),
+			UserID:    holdingAdminID,
+			CompanyID: holdingID,
+			RoleID:    &adminRoleID,
+			IsActive:  true,
+		}
+		if err := assignmentRepo.Create(assignment); err != nil {
+			fmt.Printf("      ⚠️  Failed to create assignment for user admin.pedeve: %v\n", err)
 		}
 	}
 	fmt.Println()
@@ -195,13 +231,25 @@ func main() {
 
 		// Create admin user (check if exists first)
 		companyIDToUse := level1IDs[i]
+		adminRoleID := adminRole.ID
 		existingUser, _ := userRepo.GetByUsername(comp.username)
+		
+		var userID string
 		if existingUser != nil {
-			fmt.Printf("      ⚠️  User %s already exists (skipping)\n", comp.username)
+			// User already exists - update CompanyID and RoleID, then create/update assignment
+			userID = existingUser.ID
+			existingUser.CompanyID = &companyIDToUse
+			existingUser.RoleID = &adminRoleID
+			existingUser.Role = "admin"
+			if err := userRepo.Update(existingUser); err != nil {
+				fmt.Printf("      ⚠️  Failed to update user %s: %v\n", comp.username, err)
+			} else {
+				fmt.Printf("      ⚠️  User %s already exists (updated company assignment)\n", comp.username)
+			}
 		} else {
-			userID := uuid.GenerateUUID()
+			// Create new user
+			userID = uuid.GenerateUUID()
 			hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-			adminRoleID := adminRole.ID
 			user := &domain.UserModel{
 				ID:        userID,
 				Username:  comp.username,
@@ -214,8 +262,31 @@ func main() {
 			}
 			if err := userRepo.Create(user); err != nil {
 				fmt.Printf("   ⚠️  Failed to create user %s: %v\n", comp.username, err)
-			} else {
-				fmt.Printf("      ✅ User: %s (password: admin123)\n", comp.username)
+				continue // Skip assignment if user creation failed
+			}
+			fmt.Printf("      ✅ User: %s (password: admin123)\n", comp.username)
+		}
+		
+		// Create or update entry in junction table for user-company assignment
+		existingAssignment, _ := assignmentRepo.GetByUserAndCompany(userID, companyIDToUse)
+		if existingAssignment != nil {
+			// Assignment exists - update it
+			existingAssignment.RoleID = &adminRoleID
+			existingAssignment.IsActive = true
+			if err := assignmentRepo.Update(existingAssignment); err != nil {
+				fmt.Printf("      ⚠️  Failed to update assignment for user %s: %v\n", comp.username, err)
+			}
+		} else {
+			// Create new assignment
+			assignment := &domain.UserCompanyAssignmentModel{
+				ID:        uuid.GenerateUUID(),
+				UserID:    userID,
+				CompanyID: companyIDToUse,
+				RoleID:    &adminRoleID,
+				IsActive:  true,
+			}
+			if err := assignmentRepo.Create(assignment); err != nil {
+				fmt.Printf("      ⚠️  Failed to create assignment for user %s: %v\n", comp.username, err)
 			}
 		}
 	}
@@ -280,13 +351,25 @@ func main() {
 
 		// Create admin user (check if exists first)
 		companyIDToUse := level2IDs[i]
+		adminRoleID := adminRole.ID
 		existingUser, _ := userRepo.GetByUsername(comp.username)
+		
+		var userID string
 		if existingUser != nil {
-			fmt.Printf("      ⚠️  User %s already exists (skipping)\n", comp.username)
+			// User already exists - update CompanyID and RoleID, then create/update assignment
+			userID = existingUser.ID
+			existingUser.CompanyID = &companyIDToUse
+			existingUser.RoleID = &adminRoleID
+			existingUser.Role = "admin"
+			if err := userRepo.Update(existingUser); err != nil {
+				fmt.Printf("      ⚠️  Failed to update user %s: %v\n", comp.username, err)
+			} else {
+				fmt.Printf("      ⚠️  User %s already exists (updated company assignment)\n", comp.username)
+			}
 		} else {
-			userID := uuid.GenerateUUID()
+			// Create new user
+			userID = uuid.GenerateUUID()
 			hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-			adminRoleID := adminRole.ID
 			user := &domain.UserModel{
 				ID:        userID,
 				Username:  comp.username,
@@ -299,8 +382,31 @@ func main() {
 			}
 			if err := userRepo.Create(user); err != nil {
 				fmt.Printf("   ⚠️  Failed to create user %s: %v\n", comp.username, err)
-			} else {
-				fmt.Printf("      ✅ User: %s (password: admin123)\n", comp.username)
+				continue // Skip assignment if user creation failed
+			}
+			fmt.Printf("      ✅ User: %s (password: admin123)\n", comp.username)
+		}
+		
+		// Create or update entry in junction table for user-company assignment
+		existingAssignment, _ := assignmentRepo.GetByUserAndCompany(userID, companyIDToUse)
+		if existingAssignment != nil {
+			// Assignment exists - update it
+			existingAssignment.RoleID = &adminRoleID
+			existingAssignment.IsActive = true
+			if err := assignmentRepo.Update(existingAssignment); err != nil {
+				fmt.Printf("      ⚠️  Failed to update assignment for user %s: %v\n", comp.username, err)
+			}
+		} else {
+			// Create new assignment
+			assignment := &domain.UserCompanyAssignmentModel{
+				ID:        uuid.GenerateUUID(),
+				UserID:    userID,
+				CompanyID: companyIDToUse,
+				RoleID:    &adminRoleID,
+				IsActive:  true,
+			}
+			if err := assignmentRepo.Create(assignment); err != nil {
+				fmt.Printf("      ⚠️  Failed to create assignment for user %s: %v\n", comp.username, err)
 			}
 		}
 	}
@@ -362,13 +468,25 @@ func main() {
 
 		// Create admin user (check if exists first)
 		companyIDToUse := companyID
+		adminRoleID := adminRole.ID
 		existingUser, _ := userRepo.GetByUsername(comp.username)
+		
+		var userID string
 		if existingUser != nil {
-			fmt.Printf("      ⚠️  User %s already exists (skipping)\n", comp.username)
+			// User already exists - update CompanyID and RoleID, then create/update assignment
+			userID = existingUser.ID
+			existingUser.CompanyID = &companyIDToUse
+			existingUser.RoleID = &adminRoleID
+			existingUser.Role = "admin"
+			if err := userRepo.Update(existingUser); err != nil {
+				fmt.Printf("      ⚠️  Failed to update user %s: %v\n", comp.username, err)
+			} else {
+				fmt.Printf("      ⚠️  User %s already exists (updated company assignment)\n", comp.username)
+			}
 		} else {
-			userID := uuid.GenerateUUID()
+			// Create new user
+			userID = uuid.GenerateUUID()
 			hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-			adminRoleID := adminRole.ID
 			user := &domain.UserModel{
 				ID:        userID,
 				Username:  comp.username,
@@ -381,8 +499,31 @@ func main() {
 			}
 			if err := userRepo.Create(user); err != nil {
 				fmt.Printf("   ⚠️  Failed to create user %s: %v\n", comp.username, err)
-			} else {
-				fmt.Printf("      ✅ User: %s (password: admin123)\n", comp.username)
+				continue // Skip assignment if user creation failed
+			}
+			fmt.Printf("      ✅ User: %s (password: admin123)\n", comp.username)
+		}
+		
+		// Create or update entry in junction table for user-company assignment
+		existingAssignment, _ := assignmentRepo.GetByUserAndCompany(userID, companyIDToUse)
+		if existingAssignment != nil {
+			// Assignment exists - update it
+			existingAssignment.RoleID = &adminRoleID
+			existingAssignment.IsActive = true
+			if err := assignmentRepo.Update(existingAssignment); err != nil {
+				fmt.Printf("      ⚠️  Failed to update assignment for user %s: %v\n", comp.username, err)
+			}
+		} else {
+			// Create new assignment
+			assignment := &domain.UserCompanyAssignmentModel{
+				ID:        uuid.GenerateUUID(),
+				UserID:    userID,
+				CompanyID: companyIDToUse,
+				RoleID:    &adminRoleID,
+				IsActive:  true,
+			}
+			if err := assignmentRepo.Create(assignment); err != nil {
+				fmt.Printf("      ⚠️  Failed to create assignment for user %s: %v\n", comp.username, err)
 			}
 		}
 	}

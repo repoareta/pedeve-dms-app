@@ -213,14 +213,14 @@ func Login(c *fiber.Ctx) error {
 	// Set cookie aman dengan token JWT (httpOnly cookie untuk keamanan yang lebih baik)
 	cookie.SetSecureCookie(c, cookie.GetAuthTokenCookieName(), token)
 
-	// Kembalikan response
+	// Kembalikan response dengan role tertinggi dari GetUserAuthInfo
 	return c.Status(fiber.StatusOK).JSON(domain.AuthResponse{
 		Token: token,
 		User: domain.User{
 			ID:        userModel.ID,
 			Username:  userModel.Username,
 			Email:     userModel.Email,
-			Role:      userModel.Role,
+			Role:      roleName, // Gunakan roleName dari GetUserAuthInfo (role tertinggi)
 			CreatedAt: userModel.CreatedAt,
 			UpdatedAt: userModel.UpdatedAt,
 		},

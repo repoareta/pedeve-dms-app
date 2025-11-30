@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { companyApi, userApi, roleApi, permissionApi, type Company, type User, type Role, type Permission } from '../api/userManagement'
 import { useAuthStore } from '../stores/auth'
@@ -110,10 +110,29 @@ const availableRoles = computed(() => {
   return roles.value.filter(r => r.name !== 'superadmin')
 })
 
-// Check if current user is superadmin
+// Computed: Check user roles
+const userRole = computed(() => {
+  return authStore.user?.role?.toLowerCase() || ''
+})
+
+const isSuperAdmin = computed(() => userRole.value === 'superadmin')
+const isAdmin = computed(() => userRole.value === 'admin')
+const isManager = computed(() => userRole.value === 'manager')
+const isStaff = computed(() => userRole.value === 'staff')
+
+// Check if current user is superadmin (for backward compatibility)
 const isCurrentUserSuperadmin = computed(() => {
   return authStore.user?.role === 'superadmin'
 })
+
+// RBAC: Edit untuk semua role (staff, manager, admin, superadmin)
+const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value)
+
+// RBAC: Delete hanya untuk admin
+const canDelete = computed(() => isAdmin.value || isSuperAdmin.value)
+
+// RBAC: Create User hanya untuk admin
+const canCreateUser = computed(() => isAdmin.value || isSuperAdmin.value)
 
 // Check if user is superadmin (for edit/delete protection)
 const isUserSuperadmin = (user: User) => {
@@ -436,6 +455,61 @@ const getCompanyName = (companyId: string): string => {
   return company?.name || ''
 }
 
+// Handler untuk perubahan company assignment
+const handleCompanyChange = async (user: User, newCompanyId: string | null | undefined) => {
+  // Simpan nilai lama untuk revert jika dibatalkan
+  const oldCompanyId = user.company_id
+  
+  // Normalize nilai (convert undefined ke null)
+  const normalizedNewCompanyId = newCompanyId || null
+  
+  const newCompanyName = normalizedNewCompanyId ? getCompanyName(normalizedNewCompanyId) : 'tidak ada perusahaan'
+  
+  // Jika tidak ada perubahan, return
+  if (oldCompanyId === normalizedNewCompanyId) {
+    return
+  }
+  
+  // Tampilkan konfirmasi
+  Modal.confirm({
+    title: 'Konfirmasi Assign User ke Perusahaan',
+    content: `Apakah Anda yakin ingin mengassign user "${user.username}" ${normalizedNewCompanyId ? `ke perusahaan "${newCompanyName}"` : 'dari perusahaan (unassign)'}?`,
+    okText: normalizedNewCompanyId ? 'Ya, Assign' : 'Ya, Unassign',
+    cancelText: 'Batal',
+    onOk: async () => {
+      try {
+        if (normalizedNewCompanyId) {
+          // Assign ke company baru
+          await userApi.update(user.id, {
+            company_id: normalizedNewCompanyId,
+          })
+          message.success(`User "${user.username}" berhasil di-assign ke perusahaan "${newCompanyName}"`)
+        } else {
+          // Unassign dari company - kirim empty string untuk unassign
+          // Backend akan menangani empty string sebagai unassign
+          await userApi.update(user.id, {
+            company_id: '',
+          })
+          message.success(`User "${user.username}" berhasil di-unassign dari perusahaan`)
+        }
+        
+        // Reload users untuk refresh data
+        await loadUsers()
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+        message.error('Gagal mengassign user: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
+        
+        // Reload users untuk revert perubahan di UI jika gagal
+        await loadUsers()
+      }
+    },
+    onCancel: () => {
+      // Reload users untuk revert perubahan di UI jika user membatalkan
+      loadUsers()
+    }
+  })
+}
+
 // Helper untuk scope label
 const getScopeLabel = (scope: string): string => {
   switch (scope) {
@@ -475,7 +549,7 @@ const getScopeColor = (scope: string): string => {
         <!-- Users Tab -->
         <a-tab-pane key="users" tab="Pengguna">
           <div class="table-header">
-            <a-button type="primary" @click="handleCreateUser">
+            <a-button v-if="canCreateUser" type="primary" @click="handleCreateUser">
               <template #icon>
                 <span>+</span>
               </template>
@@ -516,10 +590,27 @@ const getScopeColor = (scope: string): string => {
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'company_id'">
-                <span v-if="record.company_id">
-                  {{ getCompanyName(record.company_id) || record.company_id }}
-                </span>
-                <a-tag v-else color="purple">Superadmin (Global)</a-tag>
+                <a-select
+                  :value="record.company_id"
+                  :placeholder="record.company_id ? 'Pilih perusahaan' : 'Belum di-assign'"
+                  style="width: 200px;"
+                  :disabled="isUserSuperadmin(record)"
+                  @change="(value: string | null | undefined) => handleCompanyChange(record, value)"
+                  allow-clear
+                  show-search
+                  :filter-option="(input: string, option: any) => 
+                    (option?.label || '').toLowerCase().includes(input.toLowerCase())"
+                >
+                  <a-select-option 
+                    v-for="company in companies" 
+                    :key="company.id" 
+                    :value="company.id"
+                    :label="company.name"
+                  >
+                    {{ company.name }}
+                  </a-select-option>
+                </a-select>
+                <a-tag v-if="isUserSuperadmin(record)" color="purple" style="margin-left: 8px;">Superadmin (Global)</a-tag>
               </template>
               <template v-if="column.key === 'is_active'">
                 <a-switch
@@ -533,6 +624,7 @@ const getScopeColor = (scope: string): string => {
               <template v-if="column.key === 'actions'">
                 <a-space v-if="!isCurrentUser(record) || !isUserSuperadmin(record)">
                   <a-button 
+                    v-if="canEdit"
                     type="link" 
                     size="small" 
                     @click="handleEditUser(record)"
@@ -548,6 +640,7 @@ const getScopeColor = (scope: string): string => {
                     Atur Ulang Password
                   </a-button>
                   <a-popconfirm
+                    v-if="canDelete"
                     title="Apakah Anda yakin ingin menghapus user ini?"
                     @confirm="handleDeleteUser(record.id)"
                   >

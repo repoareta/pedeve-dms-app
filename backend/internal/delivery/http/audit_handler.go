@@ -13,7 +13,7 @@ import (
 
 // GetAuditLogsHandler menangani request GET untuk audit logs (untuk Fiber)
 // @Summary      Ambil Audit Logs
-// @Description  Mengambil audit logs dengan pagination dan filter. User reguler hanya bisa melihat audit logs mereka sendiri, sedangkan admin/superadmin bisa melihat semua audit logs. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).
+// @Description  Mengambil audit logs dengan pagination dan filter. Data ini memiliki retention policy: 90 hari untuk user actions, 30 hari untuk technical errors. User reguler hanya bisa melihat audit logs mereka sendiri, sedangkan admin/superadmin bisa melihat semua audit logs. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only). Catatan: Data penting (report, document, company, user) disimpan di endpoint /user-activity-logs dengan permanent storage.
 // @Tags         Audit
 // @Accept       json
 // @Produce      json
@@ -21,7 +21,7 @@ import (
 // @Param        page      query     int     false  "Nomor halaman (default: 1)"
 // @Param        pageSize  query     int     false  "Jumlah item per halaman (default: 10, maksimal: 100)"
 // @Param        action    query     string  false  "Filter berdasarkan action (contoh: login, logout, create_document)"
-// @Param        resource  query     string  false  "Filter berdasarkan resource (contoh: auth, document, user)"
+// @Param        resource  query     string  false  "Filter berdasarkan resource (contoh: auth, document, user, company, report)"
 // @Param        status    query     string  false  "Filter berdasarkan status (success, failure, error)"
 // @Param        logType   query     string  false  "Filter berdasarkan tipe log (user_action atau technical_error)"
 // @Success      200       {object}  map[string]interface{}  "Audit logs berhasil diambil. Response berisi data (array audit logs), total, page, pageSize, dan totalPages"
@@ -33,8 +33,10 @@ import (
 // @note         1. Authentication: Memerlukan JWT token valid dalam httpOnly cookie (auth_token) atau Authorization header
 // @note         2. CSRF Protection: Endpoint ini tidak memerlukan CSRF token karena menggunakan GET method (read-only)
 // @note         3. Authorization: User reguler hanya melihat logs sendiri, admin/superadmin melihat semua logs
-// @note         4. Pagination: Default page=1, pageSize=10, maksimal pageSize=100
-// @note         5. Filtering: Filter dapat dikombinasikan untuk hasil yang lebih spesifik
+// @note         4. Retention Policy: User actions (90 hari), Technical errors (30 hari) - data akan dihapus otomatis setelah periode tersebut
+// @note         5. Permanent Storage: Untuk data penting (report, document, company, user), gunakan endpoint /user-activity-logs
+// @note         6. Pagination: Default page=1, pageSize=10, maksimal pageSize=100
+// @note         7. Filtering: Filter dapat dikombinasikan untuk hasil yang lebih spesifik
 func GetAuditLogsHandler(c *fiber.Ctx) error {
 	// Ambil user saat ini dari locals
 	userIDVal := c.Locals("userID")
@@ -145,20 +147,29 @@ func GetAuditLogStatsHandler(c *fiber.Ctx) error {
 
 // GetUserActivityLogsHandler menangani request GET untuk user activity logs (permanent)
 // @Summary      Ambil User Activity Logs
-// @Description  Mengambil user activity logs (permanent) untuk resource penting: report, document, company, user. Data ini tidak akan dihapus (permanent storage). User reguler hanya bisa melihat logs mereka sendiri, sedangkan admin/superadmin bisa melihat semua logs.
+// @Description  Mengambil user activity logs (permanent) untuk resource penting: report, document, company, user. Data ini tidak akan dihapus (permanent storage tanpa retention policy) untuk keperluan compliance dan legal. User reguler hanya bisa melihat logs mereka sendiri, sedangkan admin/superadmin bisa melihat semua logs. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).
 // @Tags         Audit
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
 // @Param        page      query     int     false  "Nomor halaman (default: 1)"
 // @Param        pageSize  query     int     false  "Jumlah item per halaman (default: 10, maksimal: 100)"
-// @Param        action    query     string  false  "Filter berdasarkan action"
+// @Param        action    query     string  false  "Filter berdasarkan action (contoh: create_report, update_document, create_company, create_user)"
 // @Param        resource  query     string  false  "Filter berdasarkan resource (report, document, company, user)"
 // @Param        status    query     string  false  "Filter berdasarkan status (success, failure, error)"
-// @Success      200       {object}  map[string]interface{}
-// @Failure      401       {object}  domain.ErrorResponse
-// @Failure      500       {object}  domain.ErrorResponse
+// @Success      200       {object}  map[string]interface{}  "User activity logs berhasil diambil. Response berisi data (array user activity logs), total, page, pageSize, dan totalPages"
+// @Failure      401       {object}  domain.ErrorResponse  "Token tidak valid atau user tidak terautentikasi"
+// @Failure      404       {object}  domain.ErrorResponse  "User tidak ditemukan di database"
+// @Failure      500       {object}  domain.ErrorResponse  "Gagal mengambil user activity logs"
 // @Router       /api/v1/user-activity-logs [get]
+// @note         Catatan Teknis:
+// @note         1. Authentication: Memerlukan JWT token valid dalam httpOnly cookie (auth_token) atau Authorization header
+// @note         2. CSRF Protection: Endpoint ini tidak memerlukan CSRF token karena menggunakan GET method (read-only)
+// @note         3. Authorization: User reguler hanya melihat logs sendiri, admin/superadmin melihat semua logs
+// @note         4. Permanent Storage: Data ini disimpan permanen tanpa retention policy untuk compliance
+// @note         5. Resources: Hanya menampilkan logs untuk resource penting: report, document, company, user
+// @note         6. Pagination: Default page=1, pageSize=10, maksimal pageSize=100
+// @note         7. Filtering: Filter dapat dikombinasikan untuk hasil yang lebih spesifik
 func GetUserActivityLogsHandler(c *fiber.Ctx) error {
 	// Ambil user saat ini dari locals
 	userIDVal := c.Locals("userID")

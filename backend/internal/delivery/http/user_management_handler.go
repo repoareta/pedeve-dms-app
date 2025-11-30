@@ -274,7 +274,7 @@ func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 	var req struct {
 		Username  string  `json:"username"`
 		Email     string  `json:"email"`
-		CompanyID *string `json:"company_id"`
+		CompanyID *string `json:"company_id"` // nil = no change, empty string "" = unassign, non-empty = assign
 		RoleID    *string `json:"role_id"`
 	}
 

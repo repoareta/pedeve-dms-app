@@ -17,6 +17,7 @@ type UserCompanyAssignmentRepository interface {
 	Update(assignment *domain.UserCompanyAssignmentModel) error
 	Delete(id string) error
 	DeleteByUserAndCompany(userID, companyID string) error
+	DeleteByUserID(userID string) error // Delete all assignments for a user
 }
 
 type userCompanyAssignmentRepository struct {
@@ -80,5 +81,9 @@ func (r *userCompanyAssignmentRepository) Delete(id string) error {
 
 func (r *userCompanyAssignmentRepository) DeleteByUserAndCompany(userID, companyID string) error {
 	return r.db.Where("user_id = ? AND company_id = ?", userID, companyID).Delete(&domain.UserCompanyAssignmentModel{}).Error
+}
+
+func (r *userCompanyAssignmentRepository) DeleteByUserID(userID string) error {
+	return r.db.Where("user_id = ?", userID).Delete(&domain.UserCompanyAssignmentModel{}).Error
 }
 

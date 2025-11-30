@@ -206,7 +206,7 @@ export const userApi = {
   update: async (id: string, data: {
     username?: string
     email?: string
-    company_id?: string
+    company_id?: string | null
     role_id?: string
   }): Promise<User> => {
     const response = await apiClient.put<User>(`/users/${id}`, data)

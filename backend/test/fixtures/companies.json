@@ -1,0 +1,39 @@
+{
+  "holding": {
+    "id": "test-holding-id",
+    "code": "PDV",
+    "name": "Pedeve Pertamina",
+    "level": 0,
+    "parent_id": null,
+    "is_active": true
+  },
+  "child_companies": [
+    {
+      "id": "test-child-1",
+      "code": "CHILD1",
+      "name": "Child Company 1",
+      "level": 1,
+      "parent_id": "test-holding-id",
+      "is_active": true
+    },
+    {
+      "id": "test-child-2",
+      "code": "CHILD2",
+      "name": "Child Company 2",
+      "level": 1,
+      "parent_id": "test-holding-id",
+      "is_active": true
+    }
+  ],
+  "grandchild_companies": [
+    {
+      "id": "test-grandchild-1",
+      "code": "GRANDCHILD1",
+      "name": "Grandchild Company 1",
+      "level": 2,
+      "parent_id": "test-child-1",
+      "is_active": true
+    }
+  ]
+}
+

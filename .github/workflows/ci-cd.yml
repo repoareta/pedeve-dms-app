@@ -59,6 +59,9 @@ jobs:
         env:
           VITE_API_URL: https://api-pedeve-dev.aretaamany.com/api/v1
         run: |
+          # Clear cache untuk memastikan build fresh tanpa cache lama
+          rm -rf node_modules/.vite
+          rm -rf dist
           npm run build
           echo "Frontend build completed. Files in ./dist"
           echo "API URL configured: https://api-pedeve-dev.aretaamany.com/api/v1"

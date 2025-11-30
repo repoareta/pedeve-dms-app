@@ -55,7 +55,7 @@ export const sonarqubeApi = {
     try {
       const response = await apiClient.get<SonarQubeStatus>('/sonarqube/status')
       return response.data
-    } catch (error) {
+    } catch {
       // If endpoint doesn't exist or returns error, feature is disabled
       return { enabled: false }
     }

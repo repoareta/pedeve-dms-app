@@ -2,12 +2,12 @@
 import { ref, onMounted, onUnmounted, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { message, Modal, Card } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { Icon as IconifyIcon } from '@iconify/vue'
-import { auditApi, type AuditLog, type AuditLogsParams, type AuditLogStats, type UserActivityLog, type UserActivityLogsParams, type UserActivityLogsResponse } from '../api/audit'
+import { auditApi, type AuditLog, type AuditLogsParams, type AuditLogStats, type UserActivityLog, type UserActivityLogsParams } from '../api/audit'
 import developmentApi from '../api/development'
-import { sonarqubeApi, type SonarQubeIssue, type SonarQubeIssuesResponse, type SonarQubeIssuesParams } from '../api/sonarqube'
+import { sonarqubeApi, type SonarQubeIssue, type SonarQubeIssuesParams } from '../api/sonarqube'
 import type { TableColumnsType } from 'ant-design-vue'
 
 const router = useRouter()

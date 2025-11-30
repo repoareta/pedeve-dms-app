@@ -62,8 +62,15 @@ const handleToggleMaximize = () => {
       emit('toggleMaximize', false)
     }).catch(() => {
       // Fallback: try to minimize window (if in Electron or similar)
-      if ((window as any).electron?.minimize) {
-        (window as any).electron.minimize()
+      interface WindowWithElectron extends Window {
+        electron?: {
+          minimize?: () => void
+          maximize?: () => void
+        }
+      }
+      const win = window as WindowWithElectron
+      if (win.electron?.minimize) {
+        win.electron.minimize()
       }
     })
   } else {
@@ -75,8 +82,15 @@ const handleToggleMaximize = () => {
         emit('toggleMaximize', true)
       }).catch(() => {
         // Fallback: try to maximize window (if in Electron or similar)
-        if ((window as any).electron?.maximize) {
-          (window as any).electron.maximize()
+        interface WindowWithElectron extends Window {
+          electron?: {
+            minimize?: () => void
+            maximize?: () => void
+          }
+        }
+        const win = window as WindowWithElectron
+        if (win.electron?.maximize) {
+          win.electron.maximize()
           isMaximized.value = true
           emit('toggleMaximize', true)
         }
@@ -97,7 +111,10 @@ onMounted(() => {
   document.addEventListener('MSFullscreenChange', handleFullscreenChange)
   
   // Store handler for cleanup
-  ;(window as any).__fullscreenHandler = handleFullscreenChange
+  interface WindowWithFullscreenHandler extends Window {
+    __fullscreenHandler?: () => void
+  }
+  ;(window as WindowWithFullscreenHandler).__fullscreenHandler = handleFullscreenChange
 })
 
 const handleMenuItemClick = (path: string) => {

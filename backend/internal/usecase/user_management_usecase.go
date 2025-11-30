@@ -232,11 +232,14 @@ func (uc *userManagementUseCase) GetUsersByCompanyHierarchy(companyID string) ([
 		}
 		
 		for _, assignment := range assignments {
+			// Include both active and inactive assignments
+			// This ensures users who were unassigned still appear in the list
+			allUserIDs[assignment.UserID] = true
+			if userRoleMap[assignment.UserID] == nil {
+				userRoleMap[assignment.UserID] = make(map[string]*string)
+			}
+			// Only set role if assignment is active, otherwise keep nil to indicate unassigned
 			if assignment.IsActive {
-				allUserIDs[assignment.UserID] = true
-				if userRoleMap[assignment.UserID] == nil {
-					userRoleMap[assignment.UserID] = make(map[string]*string)
-				}
 				userRoleMap[assignment.UserID][compID] = assignment.RoleID
 			}
 		}
@@ -287,7 +290,7 @@ func (uc *userManagementUseCase) GetUsersByCompanyHierarchy(companyID string) ([
 				}
 			} else {
 				// If not found in primary company, use first available role
-				for _, roleID := range roleMap {
+				for compID, roleID := range roleMap {
 					if roleID != nil {
 						user.RoleID = roleID
 						if role, err := uc.roleRepo.GetByID(*roleID); err == nil {
@@ -295,6 +298,13 @@ func (uc *userManagementUseCase) GetUsersByCompanyHierarchy(companyID string) ([
 						}
 						break
 					}
+					_ = compID // Suppress unused variable warning
+				}
+				// If no active role found, check if user was unassigned
+				// User will appear without role or with empty role
+				if user.RoleID == nil && user.Role == "" {
+					// User was unassigned - keep role empty
+					user.Role = ""
 				}
 			}
 		} else if user.RoleID != nil {
@@ -302,6 +312,9 @@ func (uc *userManagementUseCase) GetUsersByCompanyHierarchy(companyID string) ([
 			if role, err := uc.roleRepo.GetByID(*user.RoleID); err == nil {
 				user.Role = role.Name
 			}
+		} else {
+			// No role found anywhere - user is in standby/unassigned state
+			user.Role = ""
 		}
 		
 		users = append(users, *user)
@@ -344,13 +357,19 @@ func (uc *userManagementUseCase) UpdateUser(id, username, email string, companyI
 		user.Email = email
 	}
 
-	// Validate company if provided
+	// Handle company assignment/unassignment
 	if companyID != nil {
-		_, err := uc.companyRepo.GetByID(*companyID)
-		if err != nil {
-			return nil, fmt.Errorf("company not found: %w", err)
+		if *companyID == "" {
+			// Unassign from company (empty string means unassign)
+			user.CompanyID = nil
+		} else {
+			// Assign to company
+			_, err := uc.companyRepo.GetByID(*companyID)
+			if err != nil {
+				return nil, fmt.Errorf("company not found: %w", err)
+			}
+			user.CompanyID = companyID
 		}
-		user.CompanyID = companyID
 	}
 
 	// Validate role if provided
@@ -369,7 +388,8 @@ func (uc *userManagementUseCase) UpdateUser(id, username, email string, companyI
 
 	// Update junction table if companyID and/or roleID changed
 	zapLog := logger.GetLogger()
-	if companyID != nil {
+	if companyID != nil && *companyID != "" {
+		// Assign to company - update/create junction table entry
 		// Check if assignment already exists for this user-company pair
 		existingAssignment, err := uc.assignmentRepo.GetByUserAndCompany(id, *companyID)
 		if err == nil && existingAssignment != nil {
@@ -407,6 +427,22 @@ func (uc *userManagementUseCase) UpdateUser(id, username, email string, companyI
 					zap.String("user_id", id),
 					zap.String("company_id", *companyID),
 					zap.Error(err))
+			}
+		}
+	} else if companyID != nil && *companyID == "" {
+		// Unassign from company - deactivate all assignments
+		assignments, err := uc.assignmentRepo.GetByUserID(id)
+		if err == nil {
+			for i := range assignments {
+				if assignments[i].IsActive {
+					assignments[i].IsActive = false
+					if err := uc.assignmentRepo.Update(&assignments[i]); err != nil {
+						zapLog.Warn("Failed to deactivate assignment", 
+							zap.String("user_id", id),
+							zap.String("assignment_id", assignments[i].ID),
+							zap.Error(err))
+					}
+				}
 			}
 		}
 	} else if roleID != nil {
@@ -681,7 +717,23 @@ func (uc *userManagementUseCase) ToggleUserStatus(id string) (*domain.UserModel,
 }
 
 func (uc *userManagementUseCase) DeleteUser(id string) error {
-	return uc.userRepo.Delete(id)
+	zapLog := logger.GetLogger()
+	
+	// First, delete all user-company assignments from junction table
+	// This prevents foreign key constraint violation
+	if err := uc.assignmentRepo.DeleteByUserID(id); err != nil {
+		zapLog.Warn("Failed to delete user company assignments", 
+			zap.String("user_id", id),
+			zap.Error(err))
+		// Continue even if assignment deletion fails - user might not have any assignments
+	}
+	
+	// Then delete the user
+	if err := uc.userRepo.Delete(id); err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+	
+	return nil
 }
 
 func (uc *userManagementUseCase) ValidateUserAccess(userCompanyID, targetUserID string) (bool, error) {

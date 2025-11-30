@@ -157,16 +157,16 @@
                         <IconifyIcon icon="mdi:eye" width="16" style="margin-right: 8px;" />
                         Lihat Detail
                       </a-menu-item>
-                      <a-menu-item key="edit" @click="handleEditCompany(record.id)">
+                      <a-menu-item v-if="canEdit" key="edit" @click="handleEditCompany(record.id)">
                         <IconifyIcon icon="mdi:pencil" width="16" style="margin-right: 8px;" />
                         Edit
                       </a-menu-item>
-                      <a-menu-item key="assign-role" @click="handleAssignRole(record.id)">
+                      <a-menu-item v-if="canAssignRole" key="assign-role" @click="handleAssignRole(record.id)">
                         <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
                         Assign Role
                       </a-menu-item>
-                      <a-menu-divider />
-                      <a-menu-item key="delete" danger @click="handleDeleteCompany(record.id)">
+                      <a-menu-divider v-if="canDelete && (canEdit || canAssignRole)" />
+                      <a-menu-item v-if="canDelete" key="delete" danger @click="handleDeleteCompany(record.id)">
                         <IconifyIcon icon="mdi:delete" width="16" style="margin-right: 8px;" />
                         Hapus
                       </a-menu-item>
@@ -208,8 +208,169 @@
         </div>
       </div>
 
+      <!-- Assign Role Modal -->
+      <a-modal
+        v-model:open="assignRoleModalVisible"
+        title="Assign Role - Kelola Pengurus"
+        :confirm-loading="assignRoleLoading"
+        width="900px"
+        :footer="null"
+      >
+        <div class="assign-role-container">
+          <!-- Form Assign Role Baru -->
+          <div class="assign-new-section">
+            <h3 class="section-header">
+              <IconifyIcon icon="mdi:account-plus" width="20" style="margin-right: 8px;" />
+              Assign Role Baru
+            </h3>
+            <a-form :model="assignRoleForm" layout="vertical">
+              <a-row :gutter="16">
+                <a-col :span="12">
+                  <a-form-item label="Cari User" required>
+                    <a-select
+                      v-model:value="assignRoleForm.userId"
+                      show-search
+                      placeholder="Cari user berdasarkan nama atau email"
+                      :filter-option="filterUserOption"
+                      :loading="usersLoading"
+                      @search="handleUserSearch"
+                      allow-clear
+                      :disabled="usersLoading"
+                    >
+                      <a-select-option
+                        v-for="user in filteredUsers"
+                        :key="user.id"
+                        :value="user.id"
+                        :disabled="companyUsers.some(u => u.id === user.id)"
+                      >
+                        {{ user.username }} ({{ user.email }})
+                        <span v-if="companyUsers.some(u => u.id === user.id)" class="text-muted"> - Sudah menjadi pengurus</span>
+                      </a-select-option>
+                    </a-select>
+                    <small v-if="usersLoading" class="text-muted">Memuat daftar user...</small>
+                    <small v-else-if="allUsers.length === 0 && !usersLoading" class="text-muted">
+                      Tidak ada user yang tersedia untuk di-assign.
+                    </small>
+                  </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                  <a-form-item label="Pilih Role" required>
+                    <a-select
+                      v-model:value="assignRoleForm.roleId"
+                      show-search
+                      placeholder="Cari role"
+                      :filter-option="filterRoleOption"
+                      :loading="rolesLoading"
+                      @search="handleRoleSearch"
+                      allow-clear
+                      :disabled="rolesLoading"
+                    >
+                      <a-select-option
+                        v-for="role in filteredRoles"
+                        :key="role.id"
+                        :value="role.id"
+                      >
+                        {{ role.name }}
+                      </a-select-option>
+                    </a-select>
+                    <small v-if="rolesLoading" class="text-muted">Memuat daftar role...</small>
+                  </a-form-item>
+                </a-col>
+              </a-row>
+              
+              <a-form-item>
+                <a-button 
+                  type="primary" 
+                  :loading="assignRoleLoading" 
+                  @click="handleAssignRoleSubmit" 
+                  :disabled="!assignRoleForm.userId || !assignRoleForm.roleId"
+                >
+                  <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
+                  Assign Role
+                </a-button>
+              </a-form-item>
+            </a-form>
+          </div>
 
+          <a-divider>Pengurus Saat Ini</a-divider>
 
+          <!-- List Pengurus Saat Ini -->
+          <div class="current-users-section">
+            <h3 class="section-header">
+              <IconifyIcon icon="mdi:account-group" width="20" style="margin-right: 8px;" />
+              Pengurus Saat Ini
+            </h3>
+            <a-table
+              :columns="userColumns"
+              :data-source="companyUsers"
+              :loading="usersLoading"
+              :pagination="{ pageSize: 10 }"
+              row-key="id"
+              size="middle"
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'role'">
+                  <a-tag v-if="record.role" :color="getRoleColor(record.role)">
+                    {{ record.role }}
+                  </a-tag>
+                  <span v-else class="text-muted">-</span>
+                </template>
+                <template v-if="column.key === 'status'">
+                  <a-tag :color="record.is_active ? 'green' : 'red'">
+                    {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
+                  </a-tag>
+                </template>
+                <template v-if="column.key === 'action'">
+                  <a-space>
+                    <a-button type="link" size="small" @click="handleEditUserRole(record)">
+                      <IconifyIcon icon="mdi:pencil" width="16" />
+                      Ubah Role
+                    </a-button>
+                    <a-button type="link" size="small" danger @click="handleRemoveUser(record)">
+                      <IconifyIcon icon="mdi:delete" width="16" />
+                      Hapus
+                    </a-button>
+                  </a-space>
+                </template>
+              </template>
+            </a-table>
+          </div>
+        </div>
+      </a-modal>
+
+      <!-- Edit User Role Modal -->
+      <a-modal
+        v-model:open="editingUserRoleModalVisible"
+        title="Ubah Role Pengurus"
+        :confirm-loading="editingRoleLoading"
+        @ok="handleSaveUserRole"
+        @cancel="handleCancelEditUserRole"
+        width="500px"
+      >
+        <a-form layout="vertical" v-if="editingUserRole">
+          <a-form-item label="User">
+            <a-input :value="getUserById(editingUserRole.userId)?.username" disabled />
+          </a-form-item>
+          <a-form-item label="Pilih Role Baru" required>
+            <a-select
+              v-model:value="editingUserRole.roleId"
+              show-search
+              placeholder="Cari role"
+              :filter-option="filterRoleOption"
+              :loading="rolesLoading"
+              @search="handleRoleSearch"
+            >
+              <a-select-option
+                v-for="role in filteredRoles"
+                :key="role.id"
+                :value="role.id"
+              >
+                {{ role.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-form>
+      </a-modal>
     </div>
   </div>
 </template>
@@ -219,13 +380,35 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
-import { companyApi, type Company } from '../api/userManagement'
+import { companyApi, userApi, roleApi, type Company, type User, type Role } from '../api/userManagement'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+// Computed: Check user roles
+const userRole = computed(() => {
+  return authStore.user?.role?.toLowerCase() || ''
+})
+
+const isSuperAdmin = computed(() => userRole.value === 'superadmin')
+const isAdmin = computed(() => userRole.value === 'admin')
+const isManager = computed(() => userRole.value === 'manager')
+const isStaff = computed(() => userRole.value === 'staff')
+
+// RBAC: Assign Role hanya untuk admin
+const canAssignRole = computed(() => isAdmin.value || isSuperAdmin.value)
+
+// RBAC: Delete hanya untuk admin
+const canDelete = computed(() => isAdmin.value || isSuperAdmin.value)
+
+// RBAC: Edit untuk semua role (staff, manager, admin, superadmin)
+const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value)
+
+// Check if any menu item is available (to show/hide Actions dropdown)
+const hasAnyMenuOption = computed(() => canEdit.value || canAssignRole.value || canDelete.value)
 
 // View Mode: 'grid' or 'list' - load from localStorage
 const getStoredViewMode = (): 'grid' | 'list' => {
@@ -610,9 +793,72 @@ const handleEditCompany = (id: string) => {
   router.push(`/subsidiaries/${id}/edit`)
 }
 
-const handleAssignRole = (id: string) => {
-  router.push(`/subsidiaries/${id}`)
-  // TODO: Open assign role modal in detail page
+// Assign Role Modal State
+const assignRoleModalVisible = ref(false)
+const assignRoleLoading = ref(false)
+const selectedCompanyId = ref<string | null>(null)
+const assignRoleForm = ref({
+  userId: undefined as string | undefined,
+  roleId: undefined as string | undefined,
+})
+
+// Company Users (Pengurus)
+const companyUsers = ref<User[]>([])
+const allUsers = ref<User[]>([])
+const allRoles = ref<Role[]>([])
+const usersLoading = ref(false)
+const rolesLoading = ref(false)
+const userSearchText = ref('')
+const roleSearchText = ref('')
+
+// Editing user role
+const editingUserRole = ref<{ userId: string; roleId: string | undefined } | null>(null)
+const editingUserRoleModalVisible = ref(false)
+const editingRoleLoading = ref(false)
+
+// User columns for table
+const userColumns = [
+  { title: 'Username', dataIndex: 'username', key: 'username' },
+  { title: 'Email', dataIndex: 'email', key: 'email' },
+  { title: 'Role', key: 'role' },
+  { title: 'Status', key: 'status' },
+  { title: 'Aksi', key: 'action', width: 200 },
+]
+
+// Filtered users and roles
+const filteredUsers = computed(() => {
+  // Filter out users that are already pengurus
+  const availableUsers = allUsers.value.filter(
+    user => !companyUsers.value.some(cu => cu.id === user.id)
+  )
+  
+  if (!userSearchText.value) {
+    return availableUsers.slice(0, 20) // Limit to 20 for performance
+  }
+  const search = userSearchText.value.toLowerCase()
+  return availableUsers.filter(
+    user => 
+      user.username.toLowerCase().includes(search) ||
+      user.email.toLowerCase().includes(search)
+  ).slice(0, 20)
+})
+
+const filteredRoles = computed(() => {
+  // Filter out superadmin role - hanya untuk developer, bukan untuk user pengguna
+  const nonSuperadminRoles = allRoles.value.filter(role => role.name.toLowerCase() !== 'superadmin')
+  
+  if (!roleSearchText.value) {
+    return nonSuperadminRoles
+  }
+  const search = roleSearchText.value.toLowerCase()
+  return nonSuperadminRoles.filter(
+    role => role.name.toLowerCase().includes(search)
+  )
+})
+
+const handleAssignRole = async (id: string) => {
+  selectedCompanyId.value = id
+  await openAssignRoleModal(id)
 }
 
 const handleDeleteCompany = (id: string) => {
@@ -636,6 +882,238 @@ const handleDeleteCompany = (id: string) => {
       }
     },
   })
+}
+
+// Assign Role Modal Functions
+const openAssignRoleModal = async (companyId: string) => {
+  if (!companyId) {
+    message.error('Company ID tidak ditemukan')
+    return
+  }
+  
+  selectedCompanyId.value = companyId
+  assignRoleModalVisible.value = true
+  assignRoleForm.value = {
+    userId: undefined,
+    roleId: undefined,
+  }
+  
+  // Load users and roles
+  await Promise.all([
+    loadUsers(companyId),
+    loadRoles()
+  ])
+}
+
+const loadUsers = async (companyId: string) => {
+  if (!companyId) return
+  
+  usersLoading.value = true
+  try {
+    // Load all users (backend will filter based on access) - for dropdown selection
+    const allUsersData = await userApi.getAll()
+    allUsers.value = allUsersData
+    
+    // Load company users from junction table (supports multiple company assignments)
+    try {
+      const companyUsersData = await companyApi.getUsers(companyId)
+      companyUsers.value = companyUsersData
+    } catch (error: unknown) {
+      // Fallback: if endpoint doesn't exist yet, filter from allUsers
+      console.warn('Failed to load company users from endpoint, using fallback:', error)
+      companyUsers.value = allUsersData.filter(user => user.company_id === companyId)
+    }
+  } catch (error: unknown) {
+    const axiosError = error as { 
+      response?: { 
+        status?: number
+        data?: { 
+          message?: string
+          error?: string
+        }
+      }
+      message?: string
+      code?: string
+    }
+    
+    const statusCode = axiosError.response?.status
+    const errorMessage = axiosError.response?.data?.message || 
+                        axiosError.response?.data?.error || 
+                        axiosError.message || 
+                        'Unknown error'
+    
+    // Handle different error scenarios
+    if (statusCode === 403 || statusCode === 401) {
+      console.warn('Access denied to users endpoint (status:', statusCode, '):', errorMessage)
+      allUsers.value = []
+      companyUsers.value = []
+    } else if (statusCode === 404) {
+      console.warn('Users endpoint not found:', errorMessage)
+      allUsers.value = []
+      companyUsers.value = []
+    } else if (statusCode && statusCode >= 500) {
+      console.error('Server error loading users:', errorMessage)
+      message.error('Gagal memuat daftar user: Server error')
+      allUsers.value = []
+      companyUsers.value = []
+    } else if (axiosError.code === 'ECONNABORTED' || axiosError.code === 'NETWORK_ERROR') {
+      console.error('Network error loading users:', errorMessage)
+      message.error('Gagal memuat daftar user: Masalah koneksi')
+      allUsers.value = []
+      companyUsers.value = []
+    } else {
+      console.error('Error loading users:', error)
+      if (statusCode !== 403 && statusCode !== 401) {
+        message.error('Gagal memuat daftar user: ' + errorMessage)
+      }
+      allUsers.value = []
+      companyUsers.value = []
+    }
+  } finally {
+    usersLoading.value = false
+  }
+}
+
+const loadRoles = async () => {
+  rolesLoading.value = true
+  try {
+    allRoles.value = await roleApi.getAll()
+  } catch {
+    message.error('Gagal memuat daftar role')
+  } finally {
+    rolesLoading.value = false
+  }
+}
+
+const handleUserSearch = (value: string) => {
+  userSearchText.value = value
+}
+
+const handleRoleSearch = (value: string) => {
+  roleSearchText.value = value
+}
+
+const filterUserOption = (input: string, option: unknown) => {
+  const opt = option as { value: string }
+  const user = allUsers.value.find(u => u.id === opt.value)
+  if (!user) return false
+  const search = input.toLowerCase()
+  return user.username.toLowerCase().includes(search) || 
+         user.email.toLowerCase().includes(search)
+}
+
+const filterRoleOption = (input: string, option: unknown) => {
+  const opt = option as { value: string }
+  const role = allRoles.value.find(r => r.id === opt.value)
+  if (!role) return false
+  return role.name.toLowerCase().includes(input.toLowerCase())
+}
+
+const handleAssignRoleSubmit = async () => {
+  if (!selectedCompanyId.value || !assignRoleForm.value.userId || !assignRoleForm.value.roleId) {
+    message.error('Harap pilih user dan role')
+    return
+  }
+  
+  assignRoleLoading.value = true
+  try {
+    await userApi.assignToCompany(
+      assignRoleForm.value.userId,
+      selectedCompanyId.value,
+      assignRoleForm.value.roleId
+    )
+    message.success('User berhasil diassign sebagai pengurus')
+    assignRoleForm.value = {
+      userId: undefined,
+      roleId: undefined,
+    }
+    // Reload company users
+    await loadUsers(selectedCompanyId.value)
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(axiosError.response?.data?.message || 'Gagal mengassign user')
+  } finally {
+    assignRoleLoading.value = false
+  }
+}
+
+// Edit User Role
+const handleEditUserRole = async (user: User) => {
+  editingUserRole.value = {
+    userId: user.id,
+    roleId: user.role_id || undefined,
+  }
+  editingUserRoleModalVisible.value = true
+  await loadRoles()
+}
+
+const handleCancelEditUserRole = () => {
+  editingUserRoleModalVisible.value = false
+  editingUserRole.value = null
+}
+
+const handleSaveUserRole = async () => {
+  if (!editingUserRole.value || !editingUserRole.value.roleId || !selectedCompanyId.value) {
+    message.error('Harap pilih role')
+    return
+  }
+  
+  editingRoleLoading.value = true
+  try {
+    await userApi.assignToCompany(
+      editingUserRole.value.userId,
+      selectedCompanyId.value,
+      editingUserRole.value.roleId
+    )
+    message.success('Role pengurus berhasil diubah')
+    editingUserRoleModalVisible.value = false
+    editingUserRole.value = null
+    // Reload company users
+    await loadUsers(selectedCompanyId.value)
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(axiosError.response?.data?.message || 'Gagal mengubah role')
+  } finally {
+    editingRoleLoading.value = false
+  }
+}
+
+// Remove User
+const handleRemoveUser = async (user: User) => {
+  if (!selectedCompanyId.value) return
+  
+  // Show confirmation
+  Modal.confirm({
+    title: 'Hapus Pengurus',
+    content: `Apakah Anda yakin ingin menghapus ${user.username} dari pengurus?`,
+    okText: 'Hapus',
+    okType: 'danger',
+    cancelText: 'Batal',
+    onOk: async () => {
+      try {
+        // Remove user from company using unassign endpoint (supports multiple company assignments)
+        await userApi.unassignFromCompany(user.id, selectedCompanyId.value!)
+        message.success('Pengurus berhasil dihapus')
+        // Reload company users
+        await loadUsers(selectedCompanyId.value!)
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+        message.error(axiosError.response?.data?.message || 'Gagal menghapus pengurus')
+      }
+    },
+  })
+}
+
+const getUserById = (userId: string): User | undefined => {
+  return companyUsers.value.find(u => u.id === userId) || allUsers.value.find(u => u.id === userId)
+}
+
+const getRoleColor = (role: string): string => {
+  const roleLower = role.toLowerCase()
+  if (roleLower.includes('admin')) return 'red'
+  if (roleLower.includes('manager')) return 'blue'
+  if (roleLower.includes('staff')) return 'green'
+  return 'default'
 }
 
 onMounted(async () => {
@@ -998,5 +1476,30 @@ onMounted(async () => {
   color: white;
   font-size: 14px;
   font-weight: 600;
+}
+
+/* Assign Role Modal Styles */
+.assign-role-container {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.current-users-section,
+.assign-new-section {
+  margin-bottom: 24px;
+}
+
+.section-header {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  color: #1a1a1a;
+}
+
+.text-muted {
+  color: #999;
+  font-size: 12px;
 }
 </style>

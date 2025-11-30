@@ -127,10 +127,6 @@
                 <a-button type="default">
                   <IconifyIcon icon="mdi:format-list-bulleted" width="16" />
                 </a-button>
-                <a-button type="primary">
-                  <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
-                  Add Subsidiary
-                </a-button>
               </div>
               <div class="header-actions-bottom">
                 <a-button v-if="currentUserRole" type="link" size="small" class="role-button">
@@ -178,14 +174,18 @@
               </a-button>
               <a-date-picker v-model:value="selectedPeriod" picker="month" placeholder="Select Periode"
                 style="width: 150px;" />
-              <a-dropdown>
+              <a-dropdown v-if="hasAnyMenuOption">
                 <template #overlay>
                   <a-menu @click="handleMenuClick">
-                    <a-menu-item key="edit">
+                    <a-menu-item v-if="canAddSubsidiary" key="add-subsidiary">
+                      <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
+                      Add Subsidiary
+                    </a-menu-item>
+                    <a-menu-item v-if="canEdit" key="edit">
                       <IconifyIcon icon="mdi:pencil" width="16" style="margin-right: 8px;" />
                       Edit
                     </a-menu-item>
-                    <a-menu-item key="assign-role">
+                    <a-menu-item v-if="canAssignRole" key="assign-role">
                       <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
                       Assign Role
                     </a-menu-item>
@@ -669,6 +669,28 @@ import dayjs from 'dayjs'
 const router = useRouter()
 const authStore = useAuthStore()
 
+// Computed: Check user roles (from authStore - global role)
+const userRole = computed(() => {
+  return authStore.user?.role?.toLowerCase() || ''
+})
+
+const isSuperAdmin = computed(() => userRole.value === 'superadmin')
+const isAdmin = computed(() => userRole.value === 'admin')
+const isManager = computed(() => userRole.value === 'manager')
+const isStaff = computed(() => userRole.value === 'staff')
+
+// RBAC: Assign Role hanya untuk admin
+const canAssignRole = computed(() => isAdmin.value || isSuperAdmin.value)
+
+// RBAC: Edit untuk semua role (staff, manager, admin, superadmin)
+const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value)
+
+// RBAC: Add Subsidiary hanya untuk admin
+const canAddSubsidiary = computed(() => isAdmin.value || isSuperAdmin.value)
+
+// Check if any menu item is available (to show/hide Options dropdown)
+const hasAnyMenuOption = computed(() => canEdit.value || canAssignRole.value || canAddSubsidiary.value)
+
 const company = ref<Company | null>(null)
 const currentUserRole = ref<string>('') // Role user di company yang sedang dilihat
 const allUserCompanies = ref<UserCompanyResponse[]>([]) // All companies assigned to user with role info
@@ -1084,15 +1106,25 @@ const handleExportExcel = () => {
 
 // Menu click handler
 const handleMenuClick = ({ key }: { key: string }) => {
-  if (key === 'edit') {
+  if (key === 'add-subsidiary') {
+    handleAddSubsidiary()
+  } else if (key === 'edit') {
     handleEdit()
   } else if (key === 'assign-role') {
     openAssignRoleModal()
   }
 }
 
+const handleAddSubsidiary = () => {
+  router.push('/subsidiaries/new')
+}
+
 const handleEdit = () => {
-  message.info('Edit company feature coming soon')
+  if (!company.value) {
+    message.error('Company tidak ditemukan')
+    return
+  }
+  router.push(`/subsidiaries/${company.value.id}/edit`)
 }
 
 // Assign Role functions

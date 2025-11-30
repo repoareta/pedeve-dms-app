@@ -77,29 +77,67 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 
 	zapLog.Info("Resetting subsidiary data", zap.Int("company_count", len(companyIDs)))
 
-	// 2. Delete all user_company_assignments for these companies
-	if err := tx.Where("company_id IN ?", companyIDs).Delete(&domain.UserCompanyAssignmentModel{}).Error; err != nil {
+	// 2. First, collect all user IDs that will be affected BEFORE deleting assignments
+	// Get user IDs from junction table assignments
+	var assignments []domain.UserCompanyAssignmentModel
+	if err := tx.Where("company_id IN ?", companyIDs).Find(&assignments).Error; err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to delete user company assignments: %w", err)
+		return fmt.Errorf("failed to get user company assignments: %w", err)
 	}
-	zapLog.Info("Deleted user company assignments", zap.Int("company_count", len(companyIDs)))
-
-	// 3. Get all users assigned to these companies (from junction table or CompanyID)
-	var usersToDelete []domain.UserModel
-	if err := tx.Where("company_id IN ?", companyIDs).Find(&usersToDelete).Error; err != nil {
+	
+	// Collect unique user IDs from assignments
+	userIDsFromAssignments := make(map[string]bool)
+	for _, assignment := range assignments {
+		userIDsFromAssignments[assignment.UserID] = true
+	}
+	
+	// Also get users from UserModel.CompanyID
+	var usersFromCompanyID []domain.UserModel
+	if err := tx.Where("company_id IN ?", companyIDs).Find(&usersFromCompanyID).Error; err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to get users: %w", err)
+		return fmt.Errorf("failed to get users from company_id: %w", err)
+	}
+	
+	// Combine user IDs from both sources
+	allUserIDs := make(map[string]bool)
+	for userID := range userIDsFromAssignments {
+		allUserIDs[userID] = true
+	}
+	for _, user := range usersFromCompanyID {
+		allUserIDs[user.ID] = true
 	}
 
 	// Filter out superadmin users
 	userIDsToDelete := make([]string, 0)
-	for _, user := range usersToDelete {
+	for userID := range allUserIDs {
+		// Get user to check if superadmin
+		var user domain.UserModel
+		if err := tx.Where("id = ?", userID).First(&user).Error; err != nil {
+			continue // Skip if user not found
+		}
 		if user.Role != "superadmin" && user.Username != "superadmin" {
-			userIDsToDelete = append(userIDsToDelete, user.ID)
+			userIDsToDelete = append(userIDsToDelete, userID)
 		}
 	}
 
-	// 4. Delete users (hard delete for development reset)
+	// 3. Delete all user_company_assignments for these companies (by company_id)
+	if err := tx.Where("company_id IN ?", companyIDs).Delete(&domain.UserCompanyAssignmentModel{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete user company assignments: %w", err)
+	}
+	zapLog.Info("Deleted user company assignments by company_id", zap.Int("company_count", len(companyIDs)))
+
+	// 4. Delete all remaining assignments for users that will be deleted (by user_id)
+	// This handles edge cases where user might have assignments in other companies
+	if len(userIDsToDelete) > 0 {
+		if err := tx.Where("user_id IN ?", userIDsToDelete).Delete(&domain.UserCompanyAssignmentModel{}).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to delete user assignments by user_id: %w", err)
+		}
+		zapLog.Info("Deleted user assignments by user_id", zap.Int("user_count", len(userIDsToDelete)))
+	}
+
+	// 5. Delete users (hard delete for development reset)
 	if len(userIDsToDelete) > 0 {
 		if err := tx.Where("id IN ?", userIDsToDelete).Delete(&domain.UserModel{}).Error; err != nil {
 			tx.Rollback()
@@ -108,7 +146,7 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 		zapLog.Info("Deleted users", zap.Int("user_count", len(userIDsToDelete)))
 	}
 
-	// 5. Delete all companies (soft delete: set is_active = false)
+	// 6. Delete all companies (soft delete: set is_active = false)
 	if err := tx.Model(&domain.CompanyModel{}).Where("id IN ?", companyIDs).Update("is_active", false).Error; err != nil {
 		tx.Rollback()
 		return fmt.Errorf("failed to delete companies: %w", err)
@@ -211,34 +249,59 @@ func (uc *developmentUseCase) RunSubsidiarySeeder() (bool, error) {
 	}
 
 	// Create admin user for holding
+	adminRoleID := adminRole.ID
 	existingHoldingUser, _ := uc.userRepo.GetByUsername("admin.pedeve")
-	if existingHoldingUser == nil {
-		holdingAdminID := uuid.GenerateUUID()
+	
+	var holdingAdminID string
+	if existingHoldingUser != nil {
+		// User already exists - update CompanyID and RoleID, then create/update assignment
+		holdingAdminID = existingHoldingUser.ID
+		existingHoldingUser.CompanyID = &holdingID
+		existingHoldingUser.RoleID = &adminRoleID
+		existingHoldingUser.Role = "admin"
+		if err := uc.userRepo.Update(existingHoldingUser); err != nil {
+			zapLog.Warn("Failed to update holding admin user", zap.Error(err))
+		}
+	} else {
+		// Create new user
+		holdingAdminID = uuid.GenerateUUID()
 		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-		adminRoleID := adminRole.ID
 		holdingAdmin := &domain.UserModel{
-			ID:       holdingAdminID,
-			Username: "admin.pedeve",
-			Email:    "admin.pedeve@pedeve.com",
-			Password: string(hashedPassword),
-			Role:     "admin",
-			RoleID:   &adminRoleID,
-			IsActive: true,
+			ID:        holdingAdminID,
+			Username:  "admin.pedeve",
+			Email:     "admin.pedeve@pedeve.com",
+			Password:  string(hashedPassword),
+			Role:      "admin",
+			RoleID:    &adminRoleID,
+			CompanyID: &holdingID,
+			IsActive:  true,
 		}
 		if err := uc.userRepo.Create(holdingAdmin); err != nil {
 			zapLog.Warn("Failed to create holding admin user", zap.Error(err))
+		}
+	}
+	
+	// Create or update entry in junction table for user-company assignment
+	if holdingAdminID != "" {
+		existingAssignment, _ := uc.userCompanyAssignmentRepo.GetByUserAndCompany(holdingAdminID, holdingID)
+		if existingAssignment != nil {
+			// Assignment exists - update it
+			existingAssignment.RoleID = &adminRoleID
+			existingAssignment.IsActive = true
+			if err := uc.userCompanyAssignmentRepo.Update(existingAssignment); err != nil {
+				zapLog.Warn("Failed to update assignment for holding admin", zap.Error(err))
+			}
 		} else {
-			// Create assignment in junction table
-			assignmentID := uuid.GenerateUUID()
+			// Create new assignment
 			assignment := &domain.UserCompanyAssignmentModel{
-				ID:        assignmentID,
+				ID:        uuid.GenerateUUID(),
 				UserID:    holdingAdminID,
 				CompanyID: holdingID,
 				RoleID:    &adminRoleID,
 				IsActive:  true,
 			}
 			if err := uc.userCompanyAssignmentRepo.Create(assignment); err != nil {
-				zapLog.Warn("Failed to create user company assignment", zap.Error(err))
+				zapLog.Warn("Failed to create assignment for holding admin", zap.Error(err))
 			}
 		}
 	}
@@ -295,34 +358,61 @@ func (uc *developmentUseCase) RunSubsidiarySeeder() (bool, error) {
 		}
 
 		// Create admin user
+		companyIDToUse := level1IDs[i]
+		adminRoleID := adminRole.ID
 		existingUser, _ := uc.userRepo.GetByUsername(comp.username)
-		if existingUser == nil {
-			userID := uuid.GenerateUUID()
+		
+		var userID string
+		if existingUser != nil {
+			// User already exists - update CompanyID and RoleID, then create/update assignment
+			userID = existingUser.ID
+			existingUser.CompanyID = &companyIDToUse
+			existingUser.RoleID = &adminRoleID
+			existingUser.Role = "admin"
+			if err := uc.userRepo.Update(existingUser); err != nil {
+				zapLog.Warn("Failed to update user", zap.String("username", comp.username), zap.Error(err))
+			}
+		} else {
+			// Create new user
+			userID = uuid.GenerateUUID()
 			hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-			adminRoleID := adminRole.ID
 			user := &domain.UserModel{
-				ID:       userID,
-				Username: comp.username,
-				Email:    comp.email,
-				Password: string(hashedPassword),
-				Role:     "admin",
-				RoleID:   &adminRoleID,
-				IsActive: true,
+				ID:        userID,
+				Username:  comp.username,
+				Email:     comp.email,
+				Password:  string(hashedPassword),
+				Role:      "admin",
+				RoleID:    &adminRoleID,
+				CompanyID: &companyIDToUse,
+				IsActive:  true,
 			}
 			if err := uc.userRepo.Create(user); err != nil {
 				zapLog.Warn("Failed to create user", zap.String("username", comp.username), zap.Error(err))
+				continue // Skip assignment if user creation failed
+			}
+		}
+		
+		// Create or update entry in junction table for user-company assignment
+		if userID != "" {
+			existingAssignment, _ := uc.userCompanyAssignmentRepo.GetByUserAndCompany(userID, companyIDToUse)
+			if existingAssignment != nil {
+				// Assignment exists - update it
+				existingAssignment.RoleID = &adminRoleID
+				existingAssignment.IsActive = true
+				if err := uc.userCompanyAssignmentRepo.Update(existingAssignment); err != nil {
+					zapLog.Warn("Failed to update assignment", zap.String("username", comp.username), zap.Error(err))
+				}
 			} else {
-				// Create assignment in junction table
-				assignmentID := uuid.GenerateUUID()
+				// Create new assignment
 				assignment := &domain.UserCompanyAssignmentModel{
-					ID:        assignmentID,
+					ID:        uuid.GenerateUUID(),
 					UserID:    userID,
-					CompanyID: level1IDs[i],
+					CompanyID: companyIDToUse,
 					RoleID:    &adminRoleID,
 					IsActive:  true,
 				}
 				if err := uc.userCompanyAssignmentRepo.Create(assignment); err != nil {
-					zapLog.Warn("Failed to create user company assignment", zap.Error(err))
+					zapLog.Warn("Failed to create assignment", zap.String("username", comp.username), zap.Error(err))
 				}
 			}
 		}
@@ -380,34 +470,61 @@ func (uc *developmentUseCase) RunSubsidiarySeeder() (bool, error) {
 		}
 
 		// Create admin user
+		companyIDToUse := level2IDs[i]
+		adminRoleID := adminRole.ID
 		existingUser, _ := uc.userRepo.GetByUsername(comp.username)
-		if existingUser == nil {
-			userID := uuid.GenerateUUID()
+		
+		var userID string
+		if existingUser != nil {
+			// User already exists - update CompanyID and RoleID, then create/update assignment
+			userID = existingUser.ID
+			existingUser.CompanyID = &companyIDToUse
+			existingUser.RoleID = &adminRoleID
+			existingUser.Role = "admin"
+			if err := uc.userRepo.Update(existingUser); err != nil {
+				zapLog.Warn("Failed to update user", zap.String("username", comp.username), zap.Error(err))
+			}
+		} else {
+			// Create new user
+			userID = uuid.GenerateUUID()
 			hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-			adminRoleID := adminRole.ID
 			user := &domain.UserModel{
-				ID:       userID,
-				Username: comp.username,
-				Email:    comp.email,
-				Password: string(hashedPassword),
-				Role:     "admin",
-				RoleID:   &adminRoleID,
-				IsActive: true,
+				ID:        userID,
+				Username:  comp.username,
+				Email:     comp.email,
+				Password:  string(hashedPassword),
+				Role:      "admin",
+				RoleID:    &adminRoleID,
+				CompanyID: &companyIDToUse,
+				IsActive:  true,
 			}
 			if err := uc.userRepo.Create(user); err != nil {
 				zapLog.Warn("Failed to create user", zap.String("username", comp.username), zap.Error(err))
+				continue // Skip assignment if user creation failed
+			}
+		}
+		
+		// Create or update entry in junction table for user-company assignment
+		if userID != "" {
+			existingAssignment, _ := uc.userCompanyAssignmentRepo.GetByUserAndCompany(userID, companyIDToUse)
+			if existingAssignment != nil {
+				// Assignment exists - update it
+				existingAssignment.RoleID = &adminRoleID
+				existingAssignment.IsActive = true
+				if err := uc.userCompanyAssignmentRepo.Update(existingAssignment); err != nil {
+					zapLog.Warn("Failed to update assignment", zap.String("username", comp.username), zap.Error(err))
+				}
 			} else {
-				// Create assignment in junction table
-				assignmentID := uuid.GenerateUUID()
+				// Create new assignment
 				assignment := &domain.UserCompanyAssignmentModel{
-					ID:        assignmentID,
+					ID:        uuid.GenerateUUID(),
 					UserID:    userID,
-					CompanyID: level2IDs[i],
+					CompanyID: companyIDToUse,
 					RoleID:    &adminRoleID,
 					IsActive:  true,
 				}
 				if err := uc.userCompanyAssignmentRepo.Create(assignment); err != nil {
-					zapLog.Warn("Failed to create user company assignment", zap.Error(err))
+					zapLog.Warn("Failed to create assignment", zap.String("username", comp.username), zap.Error(err))
 				}
 			}
 		}
@@ -464,34 +581,61 @@ func (uc *developmentUseCase) RunSubsidiarySeeder() (bool, error) {
 		}
 
 		// Create admin user
+		companyIDToUse := companyID
+		adminRoleID := adminRole.ID
 		existingUser, _ := uc.userRepo.GetByUsername(comp.username)
-		if existingUser == nil {
-			userID := uuid.GenerateUUID()
+		
+		var userID string
+		if existingUser != nil {
+			// User already exists - update CompanyID and RoleID, then create/update assignment
+			userID = existingUser.ID
+			existingUser.CompanyID = &companyIDToUse
+			existingUser.RoleID = &adminRoleID
+			existingUser.Role = "admin"
+			if err := uc.userRepo.Update(existingUser); err != nil {
+				zapLog.Warn("Failed to update user", zap.String("username", comp.username), zap.Error(err))
+			}
+		} else {
+			// Create new user
+			userID = uuid.GenerateUUID()
 			hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-			adminRoleID := adminRole.ID
 			user := &domain.UserModel{
-				ID:       userID,
-				Username: comp.username,
-				Email:    comp.email,
-				Password: string(hashedPassword),
-				Role:     "admin",
-				RoleID:   &adminRoleID,
-				IsActive: true,
+				ID:        userID,
+				Username:  comp.username,
+				Email:     comp.email,
+				Password:  string(hashedPassword),
+				Role:      "admin",
+				RoleID:    &adminRoleID,
+				CompanyID: &companyIDToUse,
+				IsActive:  true,
 			}
 			if err := uc.userRepo.Create(user); err != nil {
 				zapLog.Warn("Failed to create user", zap.String("username", comp.username), zap.Error(err))
+				continue // Skip assignment if user creation failed
+			}
+		}
+		
+		// Create or update entry in junction table for user-company assignment
+		if userID != "" {
+			existingAssignment, _ := uc.userCompanyAssignmentRepo.GetByUserAndCompany(userID, companyIDToUse)
+			if existingAssignment != nil {
+				// Assignment exists - update it
+				existingAssignment.RoleID = &adminRoleID
+				existingAssignment.IsActive = true
+				if err := uc.userCompanyAssignmentRepo.Update(existingAssignment); err != nil {
+					zapLog.Warn("Failed to update assignment", zap.String("username", comp.username), zap.Error(err))
+				}
 			} else {
-				// Create assignment in junction table
-				assignmentID := uuid.GenerateUUID()
+				// Create new assignment
 				assignment := &domain.UserCompanyAssignmentModel{
-					ID:        assignmentID,
+					ID:        uuid.GenerateUUID(),
 					UserID:    userID,
-					CompanyID: companyID,
+					CompanyID: companyIDToUse,
 					RoleID:    &adminRoleID,
 					IsActive:  true,
 				}
 				if err := uc.userCompanyAssignmentRepo.Create(assignment); err != nil {
-					zapLog.Warn("Failed to create user company assignment", zap.Error(err))
+					zapLog.Warn("Failed to create assignment", zap.String("username", comp.username), zap.Error(err))
 				}
 			}
 		}
@@ -500,4 +644,5 @@ func (uc *developmentUseCase) RunSubsidiarySeeder() (bool, error) {
 	zapLog.Info("Subsidiary seeder completed successfully")
 	return false, nil
 }
+
 

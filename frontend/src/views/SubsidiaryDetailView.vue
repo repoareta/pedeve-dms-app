@@ -54,19 +54,19 @@
                 </a-button>
                 <a-date-picker v-model:value="selectedPeriod" picker="month" placeholder="Select Periode"
                   style="width: 150px;" />
-                <a-dropdown>
+                <a-dropdown v-if="hasAnyMenuOption">
                   <template #overlay>
                     <a-menu @click="handleMenuClick">
-                      <a-menu-item key="edit">
+                      <a-menu-item v-if="canEdit" key="edit">
                         <IconifyIcon icon="mdi:pencil" width="16" style="margin-right: 8px;" />
                         Edit
                       </a-menu-item>
-                      <a-menu-item key="assign-role">
+                      <a-menu-item v-if="canAssignRole" key="assign-role">
                         <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
                         Assign Role
                       </a-menu-item>
-                      <a-menu-divider />
-                      <a-menu-item key="delete" danger>
+                      <a-menu-divider v-if="canDelete && (canEdit || canAssignRole)" />
+                      <a-menu-item v-if="canDelete" key="delete" danger>
                         <IconifyIcon icon="mdi:delete" width="16" style="margin-right: 8px;" />
                         Hapus
                       </a-menu-item>
@@ -588,10 +588,27 @@ const userColumns = [
   { title: 'Aksi', key: 'action', width: 200 },
 ]
 
-// Computed: Check if user is superadmin
-const isSuperAdmin = computed(() => {
-  return authStore.user?.role === 'superadmin'
+// Computed: Check user roles
+const userRole = computed(() => {
+  return authStore.user?.role?.toLowerCase() || ''
 })
+
+const isSuperAdmin = computed(() => userRole.value === 'superadmin')
+const isAdmin = computed(() => userRole.value === 'admin')
+const isManager = computed(() => userRole.value === 'manager')
+const isStaff = computed(() => userRole.value === 'staff')
+
+// RBAC: Assign Role hanya untuk admin
+const canAssignRole = computed(() => isAdmin.value || isSuperAdmin.value)
+
+// RBAC: Delete hanya untuk admin
+const canDelete = computed(() => isAdmin.value || isSuperAdmin.value)
+
+// RBAC: Edit untuk semua role (staff, manager, admin, superadmin)
+const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value)
+
+// Check if any menu item is available (to show/hide Options dropdown)
+const hasAnyMenuOption = computed(() => canEdit.value || canAssignRole.value || canDelete.value)
 
 // Filtered users and roles
 const filteredUsers = computed(() => {

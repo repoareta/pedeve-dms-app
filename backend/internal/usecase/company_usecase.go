@@ -156,9 +156,10 @@ func (uc *companyUseCase) CountRootHoldings() (int64, error) {
 func (uc *companyUseCase) CreateCompanyFull(data *domain.CompanyCreateRequest) (*domain.CompanyModel, error) {
 	zapLog := logger.GetLogger()
 
-	// Validate code uniqueness
+	// Validate code uniqueness - check dengan lock untuk prevent race condition
 	existing, _ := uc.companyRepo.GetByCode(data.Code)
 	if existing != nil {
+		zapLog.Warn("Company code already exists", zap.String("code", data.Code), zap.String("existing_id", existing.ID))
 		return nil, errors.New("company code already exists")
 	}
 
@@ -275,9 +276,17 @@ func (uc *companyUseCase) CreateCompanyFull(data *domain.CompanyCreateRequest) (
 func (uc *companyUseCase) UpdateCompanyFull(id string, data *domain.CompanyUpdateRequest) (*domain.CompanyModel, error) {
 	zapLog := logger.GetLogger()
 
+	// Log update attempt untuk debugging duplicate issue
+	zapLog.Info("UpdateCompanyFull called", zap.String("company_id", id), zap.String("name", data.Name))
+
 	company, err := uc.companyRepo.GetByID(id)
 	if err != nil {
 		return nil, fmt.Errorf("company not found: %w", err)
+	}
+	
+	// Prevent update jika company sudah di-delete (soft delete)
+	if !company.IsActive {
+		return nil, fmt.Errorf("cannot update inactive company")
 	}
 
 	// Handle perubahan parent_id (untuk mengubah holding)

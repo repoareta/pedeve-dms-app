@@ -406,9 +406,10 @@
               Next
               <IconifyIcon icon="mdi:arrow-right" width="16" style="margin-left: 4px;" />
             </a-button>
-            <a-button 
+            <a-button
               v-if="currentStep === 3" 
-              type="primary" 
+              type="primary"
+              class="finish-button"
               @click="handleSubmit"
               :loading="loading"
               :disabled="loading"
@@ -632,8 +633,9 @@ const handleCancel = () => {
 }
 
 const handleSubmit = async () => {
-  // Prevent multiple submissions
+  // Prevent multiple submissions - check di awal dan set loading immediately
   if (loading.value) {
+    console.warn('Submit already in progress, ignoring duplicate call')
     return
   }
 
@@ -643,7 +645,15 @@ const handleSubmit = async () => {
     return
   }
 
+  // Set loading IMMEDIATELY sebelum async operations untuk prevent race condition
   loading.value = true
+  
+  // Disable button immediately (redundant check tapi lebih aman)
+  const submitButton = document.querySelector('.finish-button') as HTMLButtonElement
+  if (submitButton) {
+    submitButton.disabled = true
+  }
+  
   try {
     // Prepare data untuk API - menggunakan snake_case sesuai JSON tag
     const submitData = {
@@ -704,12 +714,19 @@ const handleSubmit = async () => {
       message.success('Perusahaan berhasil dibuat')
     }
     
+    // Success - redirect setelah delay kecil untuk memastikan state ter-update
+    await new Promise(resolve => setTimeout(resolve, 100))
     router.push('/subsidiaries')
   } catch (error: unknown) {
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     message.error('Gagal menyimpan: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
   } finally {
+    // Re-enable button dan reset loading state
     loading.value = false
+    const submitButton = document.querySelector('.finish-button') as HTMLButtonElement
+    if (submitButton) {
+      submitButton.disabled = false
+    }
   }
 }
 

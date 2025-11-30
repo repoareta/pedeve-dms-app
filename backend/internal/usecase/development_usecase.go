@@ -56,12 +56,24 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 		}
 	}()
 
-	// 1. Get all companies except root holding (parent_id IS NULL)
+	// 1. Get all companies except root holding
+	// IMPORTANT: Exclude holding by BOTH parent_id IS NULL AND code != 'PDV' untuk safety
+	// Ini memastikan holding tidak terhapus meskipun ada bug di data
 	var allCompanies []domain.CompanyModel
-	if err := tx.Where("parent_id IS NOT NULL").Find(&allCompanies).Error; err != nil {
+	if err := tx.Where("parent_id IS NOT NULL AND code != ?", "PDV").Find(&allCompanies).Error; err != nil {
 		tx.Rollback()
 		return fmt.Errorf("failed to get companies: %w", err)
 	}
+	
+	// Double check: juga exclude holding by code untuk extra safety
+	// Filter out any company with code 'PDV' (holding) just in case
+	filteredCompanies := make([]domain.CompanyModel, 0)
+	for _, comp := range allCompanies {
+		if comp.Code != "PDV" {
+			filteredCompanies = append(filteredCompanies, comp)
+		}
+	}
+	allCompanies = filteredCompanies
 
 	if len(allCompanies) == 0 {
 		tx.Rollback()

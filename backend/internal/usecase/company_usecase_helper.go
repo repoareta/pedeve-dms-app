@@ -17,6 +17,23 @@ func (uc *companyUseCase) updateDescendantsLevel(companyID string) error {
 	maxIterations := 10
 	maxLevel := 10 // Maximum allowed level to prevent infinite growth
 	
+	// CRITICAL: Get company first to check if it's holding (code = "PDV")
+	// Holding should NEVER have its level updated by this function
+	baseCompany, err := uc.companyRepo.GetByID(companyID)
+	if err != nil {
+		return fmt.Errorf("failed to get base company: %w", err)
+	}
+	
+	// Safety check: If updating holding (code = "PDV"), skip updateDescendantsLevel
+	// Holding level should always be 0 and never change
+	if baseCompany.Code == "PDV" || baseCompany.ParentID == nil {
+		zapLog.Warn("updateDescendantsLevel called on holding company, skipping to prevent level corruption",
+			zap.String("company_id", companyID),
+			zap.String("company_code", baseCompany.Code),
+		)
+		return nil
+	}
+	
 	for i := 0; i < maxIterations; i++ {
 		descendants, err := uc.companyRepo.GetDescendants(companyID)
 		if err != nil {
@@ -31,6 +48,14 @@ func (uc *companyUseCase) updateDescendantsLevel(companyID string) error {
 		// Update each descendant's level based on its parent
 		updated := 0
 		for _, desc := range descendants {
+			// CRITICAL: Skip holding company (code = "PDV") - should never be updated
+			if desc.Code == "PDV" || desc.ParentID == nil {
+				zapLog.Warn("Skipping holding company in updateDescendantsLevel",
+					zap.String("descendant_id", desc.ID),
+					zap.String("descendant_code", desc.Code),
+				)
+				continue
+			}
 			// Get parent to determine correct level
 			if desc.ParentID == nil {
 				// If no parent, should be level 0 (holding)

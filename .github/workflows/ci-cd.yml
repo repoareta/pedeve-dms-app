@@ -297,16 +297,10 @@ jobs:
             --project=${{ secrets.GCP_PROJECT_ID }} \
             scripts/deploy-backend-vm.sh \
             scripts/setup-backend-nginx.sh \
+            scripts/setup-backend-ssl.sh \
             scripts/verify-backend-deployment.sh \
             scripts/ensure-services-running.sh \
             backend-dev:~/
-          
-          # Copy SSL setup script to VM (optional, run manually if needed)
-          gcloud compute scp \
-            --zone=asia-southeast2-a \
-            --project=${{ secrets.GCP_PROJECT_ID }} \
-            scripts/setup-backend-ssl.sh \
-            backend-dev:~/setup-backend-ssl.sh 2>/dev/null || echo "⚠️  SSL script copy failed (optional)"
           
           # SSH ke backend VM dan deploy
           # IMPORTANT: This deployment preserves:
@@ -318,7 +312,7 @@ jobs:
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
             --command="
-              chmod +x ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/verify-backend-deployment.sh ~/ensure-services-running.sh
+              chmod +x ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/setup-backend-ssl.sh ~/verify-backend-deployment.sh ~/ensure-services-running.sh
               
               # Deploy backend container (preserves network mode: host)
               if ! ~/deploy-backend-vm.sh ${{ secrets.GCP_PROJECT_ID }} ${BACKEND_IMAGE}; then
@@ -326,8 +320,17 @@ jobs:
                 exit 1
               fi
               
+              # Setup SSL certificate if not exists (idempotent - safe to run multiple times)
+              # Script will skip if certificate already exists
+              echo '🔒 Checking SSL certificate...'
+              if ! ~/setup-backend-ssl.sh; then
+                echo '⚠️  WARNING: SSL setup may have failed, but continuing...'
+                echo '   This is normal if certificate already exists or DNS is not configured'
+              fi
+              
               # Setup Nginx (preserves SSL config if already correct)
-              # Script will skip update if SSL certificate exists and config is correct
+              # Script will automatically use SSL if certificate exists
+              # Script will also try to setup SSL if certificate doesn't exist
               if ! ~/setup-backend-nginx.sh; then
                 echo '❌ ERROR: setup-backend-nginx.sh failed!'
                 exit 1
@@ -361,7 +364,7 @@ jobs:
           # Copy Nginx setup scripts to frontend VM
           # NOTE: These scripts are idempotent and preserve existing configurations:
           # - setup-nginx-frontend.sh: Preserves SSL certificates and HTTPS config if already correct
-          # - setup-frontend-ssl.sh: Optional, run manually if needed (SSL should be setup once)
+          # - setup-frontend-ssl.sh: Idempotent - safe to run multiple times, will skip if certificate exists
           gcloud compute scp \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
@@ -397,9 +400,18 @@ jobs:
               sudo chown -R www-data:www-data /var/www/html
               sudo chmod -R 755 /var/www/html
               
+              # Setup SSL certificate if not exists (idempotent - safe to run multiple times)
+              # Script will skip if certificate already exists
+              chmod +x ~/setup-nginx-frontend.sh ~/setup-frontend-ssl.sh ~/verify-frontend-deployment.sh ~/ensure-services-running.sh
+              echo '🔒 Checking SSL certificate...'
+              if ! ~/setup-frontend-ssl.sh; then
+                echo '⚠️  WARNING: SSL setup may have failed, but continuing...'
+                echo '   This is normal if certificate already exists or DNS is not configured'
+              fi
+              
               # Setup Nginx config for SPA (preserves SSL config if already correct)
-              # Script will skip update if SSL certificate exists and config is correct
-              chmod +x ~/setup-nginx-frontend.sh ~/verify-frontend-deployment.sh ~/ensure-services-running.sh
+              # Script will automatically use SSL if certificate exists
+              # Script will also try to setup SSL if certificate doesn't exist
               if ! ~/setup-nginx-frontend.sh; then
                 echo '❌ ERROR: setup-nginx-frontend.sh failed!'
                 exit 1

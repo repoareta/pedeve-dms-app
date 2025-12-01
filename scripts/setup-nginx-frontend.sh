@@ -128,6 +128,40 @@ if [ -f /etc/nginx/sites-available/default ]; then
   fi
 fi
 
+# If SSL certificate doesn't exist, try to setup SSL first
+if [ "$SSL_CERT_EXISTS" = false ]; then
+  echo "⚠️  SSL certificate not found, attempting to setup SSL..."
+  
+  # Check if SSL setup script exists
+  if [ -f ~/setup-frontend-ssl.sh ]; then
+    echo "🔒 Running SSL setup script..."
+    chmod +x ~/setup-frontend-ssl.sh
+    if ~/setup-frontend-ssl.sh; then
+      echo "✅ SSL setup completed"
+      # Re-check if certificate now exists
+      if [ -f /etc/letsencrypt/live/pedeve-dev.aretaamany.com/fullchain.pem ] && \
+         [ -f /etc/letsencrypt/live/pedeve-dev.aretaamany.com/privkey.pem ]; then
+        SSL_CERT_EXISTS=true
+        echo "✅ SSL certificate now exists after setup"
+      else
+        echo "⚠️  SSL setup completed but certificate not found yet"
+        echo "   This might be normal if DNS is not configured or Let's Encrypt rate limit"
+      fi
+    else
+      echo "⚠️  SSL setup script failed or certificate already exists"
+      # Re-check if certificate exists (might have been created)
+      if [ -f /etc/letsencrypt/live/pedeve-dev.aretaamany.com/fullchain.pem ] && \
+         [ -f /etc/letsencrypt/live/pedeve-dev.aretaamany.com/privkey.pem ]; then
+        SSL_CERT_EXISTS=true
+        echo "✅ SSL certificate found after setup attempt"
+      fi
+    fi
+  else
+    echo "⚠️  SSL setup script not found, will create HTTP-only config"
+    echo "   To enable HTTPS, run setup-frontend-ssl.sh manually"
+  fi
+fi
+
 # Only create/update config if needed
 if [ "$SSL_CERT_EXISTS" = true ]; then
   echo "✅ SSL certificate found, creating/updating config with HTTPS..."

@@ -17,10 +17,53 @@ const (
 	LogTypeTechnicalError = "technical_error"
 )
 
+// isSuspiciousPath mengecek apakah path adalah request mencurigakan (bot/scanner)
+// Request ini biasanya tidak perlu di-log sebagai technical error untuk mengurangi noise
+func isSuspiciousPath(path string) bool {
+	suspiciousPatterns := []string{
+		"/boaform/",      // Router/device admin panels
+		"/wp-admin/",     // WordPress admin
+		"/wp-login.php",  // WordPress login
+		"/.env",          // Environment file access
+		"/.git/",         // Git directory access
+		"/phpmyadmin/",   // phpMyAdmin
+		"/admin.php",     // Generic admin panels
+		"/administrator/", // Joomla admin
+		"/manager/",      // Tomcat manager
+		"/solr/",         // Apache Solr
+		"/actuator/",     // Spring Boot actuator
+		"/.well-known/",  // Well-known paths (some are legit, but many bots scan this)
+		"/phpinfo",       // PHP info
+		"/config.php",    // Config files
+		"/web.config",    // IIS config
+	}
+
+	for _, pattern := range suspiciousPatterns {
+		if len(path) >= len(pattern) && path[:len(pattern)] == pattern {
+			return true
+		}
+	}
+
+	return false
+}
+
 // LogTechnicalError mencatat error teknis ke audit log (untuk Fiber)
 func LogTechnicalError(err error, c *fiber.Ctx, details map[string]interface{}) {
 	if err == nil {
 		return
+	}
+
+	// Skip logging untuk request mencurigakan (bot/scanner) yang jelas bukan dari aplikasi legit
+	// Ini mengurangi noise di audit log untuk 404 errors dari bot/scanner
+	path := c.Path()
+	statusCode := 500
+	if sc, ok := details["status_code"].(int); ok {
+		statusCode = sc
+	}
+
+	// Untuk 404 errors, skip logging jika path mencurigakan
+	if statusCode == 404 && isSuspiciousPath(path) {
+		return // Skip logging untuk bot/scanner requests
 	}
 
 	// Ambil stack trace

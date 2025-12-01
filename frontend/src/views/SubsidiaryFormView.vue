@@ -2,16 +2,32 @@
   <div class="subsidiary-form-layout">
     <DashboardHeader @logout="handleLogout" />
 
-    <!-- Loading Overlay -->
-    <a-spin :spinning="loading" tip="Menyimpan data perusahaan, harap tunggu..." size="large" style="min-height: 400px;">
-      <div class="form-content">
-      <a-card class="form-card">
+    <div class="subsidiary-form-wrapper">
+      <!-- Page Header Section -->
+      <div class="page-header-container">
+        <div class="page-header">
+          <div class="header-left">
+            <h1 class="page-title">{{ isEditMode ? 'Edit Perusahaan' : 'Tambah Perusahaan Baru' }}</h1>
+            <p class="page-description">
+              {{ isEditMode 
+                ? 'Perbarui informasi perusahaan, struktur kepemilikan, bidang usaha, dan data pengurus perusahaan.'
+                : 'Tambah perusahaan baru ke dalam sistem. Lengkapi informasi identitas, struktur kepemilikan, bidang usaha, dan data pengurus.' 
+              }}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading Overlay -->
+      <a-spin :spinning="loading" tip="Menyimpan data perusahaan, harap tunggu..." size="large" style="min-height: 400px;">
+        <div class="form-content">
+        <a-card class="form-card">
         <!-- Progress Steps -->
         <a-steps :current="currentStep" class="form-steps">
-          <a-step title="1 Identitas Perusahaan" />
-          <a-step title="2 Struktur Kepemilikan" />
-          <a-step title="3 Bidang Usaha" />
-          <a-step title="4 Pengurus/Dewan Direksi" />
+          <a-step title="Identitas Perusahaan" />
+          <a-step title="Struktur Kepemilikan" />
+          <a-step title="Bidang Usaha" />
+          <a-step title="Pengurus/Dewan Direksi" />
         </a-steps>
 
         <!-- Step 1: Identitas Perusahaan -->
@@ -427,6 +443,7 @@
       </a-card>
       </div>
     </a-spin>
+    </div>
   </div>
 </template>
 
@@ -461,6 +478,11 @@ const isSuperAdmin = computed(() => {
 // Get user's company ID
 const userCompanyId = computed(() => {
   return authStore.user?.company_id || undefined
+})
+
+// Check if edit mode
+const isEditMode = computed(() => {
+  return !!route.params.id
 })
 
 const formData = ref({
@@ -859,6 +881,44 @@ onMounted(async () => {
   background: #f5f5f5;
 }
 
+.subsidiary-form-wrapper {
+  width: 100%;
+}
+
+/* .page-header-container {
+  background: #fff;
+  border-bottom: 1px solid #e8e8e8;
+  padding: 24px;
+  margin-bottom: 0;
+} */
+
+/* .page-header {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+} */
+
+/* .header-left {
+  flex: 1;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  color: #1a1a1a;
+  line-height: 1.4;
+}
+
+.page-description {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+  line-height: 1.5;
+} */
+
 .form-content {
   max-width: 1200px;
   margin: 0 auto;
@@ -868,7 +928,7 @@ onMounted(async () => {
 .form-card {
   background: white;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  /* box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); */
 }
 
 .form-steps {

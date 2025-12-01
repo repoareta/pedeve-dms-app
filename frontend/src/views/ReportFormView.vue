@@ -105,8 +105,8 @@
                         placeholder="Masukkan revenue"
                         style="width: 100%"
                         :min="0"
-                        :formatter="(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')"
-                        :parser="(value) => value!.replace(/\$\s?|(,*)/g, '')"
+                        :formatter="(value: string | number | undefined) => `${value || ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')"
+                        :parser="(value: string | undefined) => (value || '').replace(/\$\s?|(,*)/g, '')"
                       />
                     </a-form-item>
                   </a-col>
@@ -117,8 +117,8 @@
                         placeholder="Masukkan opex"
                         style="width: 100%"
                         :min="0"
-                        :formatter="(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')"
-                        :parser="(value) => value!.replace(/\$\s?|(,*)/g, '')"
+                        :formatter="(value: string | number | undefined) => `${value || ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')"
+                        :parser="(value: string | undefined) => (value || '').replace(/\$\s?|(,*)/g, '')"
                       />
                     </a-form-item>
                   </a-col>
@@ -128,8 +128,8 @@
                         v-model:value="formData.npat"
                         placeholder="Masukkan NPAT"
                         style="width: 100%"
-                        :formatter="(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')"
-                        :parser="(value) => value!.replace(/\$\s?|(,*)/g, '')"
+                        :formatter="(value: string | number | undefined) => `${value || ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')"
+                        :parser="(value: string | undefined) => (value || '').replace(/\$\s?|(,*)/g, '')"
                       />
                     </a-form-item>
                   </a-col>
@@ -140,8 +140,8 @@
                         placeholder="Masukkan dividend"
                         style="width: 100%"
                         :min="0"
-                        :formatter="(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')"
-                        :parser="(value) => value!.replace(/\$\s?|(,*)/g, '')"
+                        :formatter="(value: string | number | undefined) => `${value || ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')"
+                        :parser="(value: string | undefined) => (value || '').replace(/\$\s?|(,*)/g, '')"
                       />
                     </a-form-item>
                   </a-col>

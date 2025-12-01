@@ -677,6 +677,7 @@ const rkapData = computed(() => {
   let change = 0
   if (currentIndex > 0) {
     const previous = sorted[currentIndex - 1]
+    if (!previous) return { value: revenue, year: year, change: 0 }
     const prevRevenue = previous.revenue || 0
     if (prevRevenue > 0) {
       change = ((revenue - prevRevenue) / prevRevenue) * 100
@@ -718,6 +719,7 @@ const opexData = computed(() => {
   let change = 0
   if (currentIndex > 0) {
     const previous = sorted[currentIndex - 1]
+    if (!previous) return { value: opex, quarter: quarter, change: 0 }
     const prevOpex = previous.opex || 0
     if (prevOpex > 0) {
       change = ((opex - prevOpex) / prevOpex) * 100
@@ -759,6 +761,7 @@ const npatData = computed(() => {
   let change = 0
   if (currentIndex > 0) {
     const previous = sorted[currentIndex - 1]
+    if (!previous) return { value: npat, quarter: quarter, change: 0 }
     const prevNpat = previous.npat || 0
     if (prevNpat > 0) {
       change = ((npat - prevNpat) / prevNpat) * 100
@@ -827,7 +830,9 @@ const rkapChartData = computed(() => {
   })
   const periods = sorted.map(r => {
     if (!r.period) return ''
-    const [, month] = r.period.split('-')
+    const parts = r.period.split('-')
+    const month = parts[1]
+    if (!month) return ''
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
     const monthIndex = parseInt(month, 10) - 1
     return monthIndex >= 0 && monthIndex < monthNames.length ? monthNames[monthIndex] : month
@@ -856,7 +861,9 @@ const opexChartData = computed(() => {
   })
   const periods = sorted.map(r => {
     if (!r.period) return ''
-    const [, month] = r.period.split('-')
+    const parts = r.period.split('-')
+    const month = parts[1]
+    if (!month) return ''
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
     const monthIndex = parseInt(month, 10) - 1
     return monthIndex >= 0 && monthIndex < monthNames.length ? monthNames[monthIndex] : month
@@ -872,7 +879,9 @@ const npatChartData = computed(() => {
   })
   const periods = sorted.map(r => {
     if (!r.period) return ''
-    const [, month] = r.period.split('-')
+    const parts = r.period.split('-')
+    const month = parts[1]
+    if (!month) return ''
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
     const monthIndex = parseInt(month, 10) - 1
     return monthIndex >= 0 && monthIndex < monthNames.length ? monthNames[monthIndex] : month

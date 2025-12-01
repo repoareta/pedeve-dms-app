@@ -212,7 +212,7 @@ import { Icon as IconifyIcon } from '@iconify/vue'
 import { companyApi, userApi, type Company, type User } from '../api/userManagement'
 import apiClient from '../api/client'
 import type { UploadFile } from 'ant-design-vue'
-import reportsApi, { type Report } from '../api/reports'
+import reportsApi from '../api/reports'
 
 dayjs.locale('id')
 
@@ -274,13 +274,17 @@ const loadUsers = async () => {
 }
 
 // Filter options
-const filterCompanyOption = (input: string, option: any) => {
+interface FilterOption {
+  value: string
+}
+
+const filterCompanyOption = (input: string, option: FilterOption) => {
   const company = companies.value.find(c => c.id === option.value)
   if (!company) return false
   return company.name.toLowerCase().includes(input.toLowerCase())
 }
 
-const filterUserOption = (input: string, option: any) => {
+const filterUserOption = (input: string, option: FilterOption) => {
   const user = users.value.find(u => u.id === option.value)
   if (!user) return false
   const searchText = input.toLowerCase()

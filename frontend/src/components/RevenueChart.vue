@@ -86,7 +86,6 @@ const chartInfo = computed(() => {
   }
   
   const latestRevenue = props.chartData.revenueData[props.chartData.revenueData.length - 1] || 0
-  const latestNpat = props.chartData.npatData[props.chartData.npatData.length - 1] || 0
   const prevRevenue = props.chartData.revenueData.length > 1 
     ? (props.chartData.revenueData[props.chartData.revenueData.length - 2] || 0)
     : latestRevenue

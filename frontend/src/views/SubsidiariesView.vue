@@ -387,7 +387,6 @@ import reportsApi, { type Report } from '../api/reports'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
-import dayjs from 'dayjs'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -445,7 +444,8 @@ const companyReportsMap = ref<Record<string, Report[]>>({})
 const reportsLoading = ref(false)
 
 // Format period helper
-const formatPeriod = (period: string | undefined): string => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _formatPeriod = (period: string | undefined): string => {
   if (!period) return 'Unknown'
   const [year, month] = period.split('-')
   if (!year || !month) return period

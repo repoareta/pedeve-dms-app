@@ -71,7 +71,7 @@ const subsidiariesList = computed(() => {
   <a-card class="subsidiaries-card" title="Underperforming Subsidiaries" :bordered="false" :loading="loading">
     <div v-if="subsidiariesList.length > 0" class="subsidiaries-list">
       <div 
-        v-for="(sub, index) in subsidiariesList" 
+        v-for="sub in subsidiariesList" 
         :key="sub.id" 
         class="subsidiary-item"
         @click="handleSubsidiaryClick(sub)"

@@ -79,7 +79,7 @@ const loadReports = async () => {
   loading.value = true
   try {
     // Load current period reports
-    const params: any = {
+    const params: { page: number; page_size: number; period?: string } = {
       page: 1,
       page_size: 9999, // Load all reports
     }
@@ -103,7 +103,7 @@ const loadReports = async () => {
           period: prevPeriod,
         })
         previousPeriodReports.value = prevResponse.data
-      } catch (error) {
+      } catch {
         // Silently fail if previous period doesn't exist
         previousPeriodReports.value = []
       }
@@ -365,7 +365,7 @@ const handleLogout = async () => {
 
 const handleExportPDF = async () => {
   try {
-    const params: any = {}
+    const params: { period?: string } = {}
     if (selectedPeriod.value) {
       params.period = selectedPeriod.value
     }
@@ -395,7 +395,7 @@ const handleExportPDF = async () => {
 
 const handleExportExcel = async () => {
   try {
-    const params: any = {}
+    const params: { period?: string } = {}
     if (selectedPeriod.value) {
       params.period = selectedPeriod.value
     }

@@ -248,15 +248,16 @@ func main() {
 	protected.Delete("/roles/:id", roleManagementHandler.DeleteRole)
 
 	// Route Report Management (dilindungi)
+	// Catatan: Route yang lebih spesifik harus didefinisikan sebelum route dengan parameter
 	reportHandler := http.NewReportHandler(usecase.NewReportUseCase())
 	protected.Post("/reports", reportHandler.CreateReport)
 	protected.Get("/reports", reportHandler.GetAllReports)
+	protected.Get("/reports/export/excel", reportHandler.ExportReportsExcel)
+	protected.Get("/reports/export/pdf", reportHandler.ExportReportsPDF)
 	protected.Get("/reports/company/:company_id", reportHandler.GetReportsByCompany)
 	protected.Get("/reports/:id", reportHandler.GetReport)
 	protected.Put("/reports/:id", reportHandler.UpdateReport)
 	protected.Delete("/reports/:id", reportHandler.DeleteReport)
-	protected.Get("/reports/export/excel", reportHandler.ExportReportsExcel)
-	protected.Get("/reports/export/pdf", reportHandler.ExportReportsPDF)
 	protected.Get("/roles/:id/permissions", roleManagementHandler.GetRolePermissions)
 	protected.Post("/roles/:id/permissions", roleManagementHandler.AssignPermissionToRole)
 	protected.Delete("/roles/:id/permissions", roleManagementHandler.RevokePermissionFromRole)

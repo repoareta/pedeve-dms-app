@@ -827,7 +827,7 @@ const rkapChartData = computed(() => {
   })
   const periods = sorted.map(r => {
     if (!r.period) return ''
-    const [year, month] = r.period.split('-')
+    const [, month] = r.period.split('-')
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
     const monthIndex = parseInt(month, 10) - 1
     return monthIndex >= 0 && monthIndex < monthNames.length ? monthNames[monthIndex] : month
@@ -856,7 +856,7 @@ const opexChartData = computed(() => {
   })
   const periods = sorted.map(r => {
     if (!r.period) return ''
-    const [year, month] = r.period.split('-')
+    const [, month] = r.period.split('-')
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
     const monthIndex = parseInt(month, 10) - 1
     return monthIndex >= 0 && monthIndex < monthNames.length ? monthNames[monthIndex] : month
@@ -872,7 +872,7 @@ const npatChartData = computed(() => {
   })
   const periods = sorted.map(r => {
     if (!r.period) return ''
-    const [year, month] = r.period.split('-')
+    const [, month] = r.period.split('-')
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
     const monthIndex = parseInt(month, 10) - 1
     return monthIndex >= 0 && monthIndex < monthNames.length ? monthNames[monthIndex] : month

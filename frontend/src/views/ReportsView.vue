@@ -258,7 +258,7 @@ const formatPeriod = (period: string | undefined): string => {
 }
 
 // Calculate RKAP percentage (dummy calculation for now)
-const calculateRKAPPercent = (report: Report): number => {
+const calculateRKAPPercent = (_report: Report): number => {
   // Dummy calculation - in real app, this would come from RKAP data
   return Math.floor(Math.random() * 100)
 }
@@ -276,7 +276,7 @@ const calculateFinancialScore = (financialRatio: number): string => {
 const loadReports = async () => {
   loading.value = true
   try {
-    const params: any = {
+    const params: { page: number; page_size: number; company_id?: string; period?: string } = {
       page: currentPage.value,
       page_size: pageSize.value,
     }
@@ -360,7 +360,8 @@ watch([currentPage, pageSize], () => {
 })
 
 // Old dummy data (removed, now using backend data)
-const oldDummyData = [
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _oldDummyData = [
   {
     id: '1',
     name: 'PT Petro Nusantara Laporan Bulan Januari',
@@ -598,7 +599,8 @@ const columns: TableColumnsType = [
 ]
 
 // Visible pages - maksimal 4 halaman sesuai gambar
-const visiblePages = computed(() => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _visiblePages = computed(() => {
   const maxVisible = 4
   const pages: number[] = []
   
@@ -636,7 +638,7 @@ const handleLogout = async () => {
 const handleExportPDF = async () => {
   try {
     exportLoading.value = true
-    const params: any = {}
+    const params: { company_id?: string; period?: string } = {}
     // Export semua data yang sesuai filter (tanpa pagination)
     if (filterCompanyIds.value && filterCompanyIds.value.length > 0) {
       params.company_id = filterCompanyIds.value.join(',')
@@ -677,7 +679,7 @@ const handleExportPDF = async () => {
 const handleExportExcel = async () => {
   try {
     exportLoading.value = true
-    const params: any = {}
+    const params: { company_id?: string; period?: string } = {}
     // Export semua data yang sesuai filter (tanpa pagination)
     if (filterCompanyIds.value && filterCompanyIds.value.length > 0) {
       params.company_id = filterCompanyIds.value.join(',')
@@ -756,15 +758,19 @@ const handleDelete = (record: Report) => {
   })
 }
 
-const goToFirstPage = () => {
+// Navigation functions (kept for potential future use)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _goToFirstPage = () => {
   currentPage.value = 1
 }
 
-const goToLastPage = () => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _goToLastPage = () => {
   currentPage.value = totalPages.value
 }
 
-const goToPage = (page: number) => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _goToPage = (page: number) => {
   currentPage.value = page
 }
 
@@ -805,7 +811,7 @@ const handleSearch = async () => {
   if (searchText.value && searchText.value.trim()) {
     try {
       loading.value = true
-      const params: any = {
+      const params: { page: number; page_size: number; company_id?: string; period?: string } = {
         page: 1,
         page_size: 999999, // Load all data for search
       }

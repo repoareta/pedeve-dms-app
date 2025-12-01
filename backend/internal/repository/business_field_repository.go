@@ -17,10 +17,16 @@ type businessFieldRepository struct {
 	db *gorm.DB
 }
 
-func NewBusinessFieldRepository() BusinessFieldRepository {
+// NewBusinessFieldRepositoryWithDB creates a new business field repository with injected DB (for testing)
+func NewBusinessFieldRepositoryWithDB(db *gorm.DB) BusinessFieldRepository {
 	return &businessFieldRepository{
-		db: database.GetDB(),
+		db: db,
 	}
+}
+
+// NewBusinessFieldRepository creates a new business field repository with default DB (backward compatibility)
+func NewBusinessFieldRepository() BusinessFieldRepository {
+	return NewBusinessFieldRepositoryWithDB(database.GetDB())
 }
 
 func (r *businessFieldRepository) Create(businessField *domain.BusinessFieldModel) error {

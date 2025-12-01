@@ -5,10 +5,12 @@ import (
 	"fmt"
 
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/uuid"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // RoleManagementUseCase interface untuk role management operations
@@ -49,12 +51,17 @@ type permissionManagementUseCase struct {
 	permissionRepo repository.PermissionRepository
 }
 
-// NewRoleManagementUseCase creates a new role management use case
-func NewRoleManagementUseCase() RoleManagementUseCase {
+// NewRoleManagementUseCaseWithDB creates a new role management use case with injected DB (for testing)
+func NewRoleManagementUseCaseWithDB(db *gorm.DB) RoleManagementUseCase {
 	return &roleManagementUseCase{
-		roleRepo:       repository.NewRoleRepository(),
-		permissionRepo: repository.NewPermissionRepository(),
+		roleRepo:       repository.NewRoleRepositoryWithDB(db),
+		permissionRepo: repository.NewPermissionRepositoryWithDB(db),
 	}
+}
+
+// NewRoleManagementUseCase creates a new role management use case with default DB (backward compatibility)
+func NewRoleManagementUseCase() RoleManagementUseCase {
+	return NewRoleManagementUseCaseWithDB(database.GetDB())
 }
 
 // NewPermissionManagementUseCase creates a new permission management use case

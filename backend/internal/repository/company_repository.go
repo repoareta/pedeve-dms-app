@@ -27,11 +27,16 @@ type companyRepository struct {
 	db *gorm.DB
 }
 
-// NewCompanyRepository creates a new company repository
-func NewCompanyRepository() CompanyRepository {
+// NewCompanyRepositoryWithDB creates a new company repository with injected DB (for testing)
+func NewCompanyRepositoryWithDB(db *gorm.DB) CompanyRepository {
 	return &companyRepository{
-		db: database.GetDB(),
+		db: db,
 	}
+}
+
+// NewCompanyRepository creates a new company repository with default DB (backward compatibility)
+func NewCompanyRepository() CompanyRepository {
+	return NewCompanyRepositoryWithDB(database.GetDB())
 }
 
 func (r *companyRepository) Create(company *domain.CompanyModel) error {

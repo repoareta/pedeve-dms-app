@@ -5,11 +5,13 @@ import (
 	"fmt"
 
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	passwordPkg "github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/password"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/uuid"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // UserManagementUseCase interface untuk user management operations
@@ -42,14 +44,19 @@ type userManagementUseCase struct {
 	assignmentRepo        repository.UserCompanyAssignmentRepository
 }
 
-// NewUserManagementUseCase creates a new user management use case
-func NewUserManagementUseCase() UserManagementUseCase {
+// NewUserManagementUseCaseWithDB creates a new user management use case with injected DB (for testing)
+func NewUserManagementUseCaseWithDB(db *gorm.DB) UserManagementUseCase {
 	return &userManagementUseCase{
-		userRepo:       repository.NewUserRepository(),
-		companyRepo:    repository.NewCompanyRepository(),
-		roleRepo:       repository.NewRoleRepository(),
-		assignmentRepo: repository.NewUserCompanyAssignmentRepository(),
+		userRepo:       repository.NewUserRepositoryWithDB(db),
+		companyRepo:    repository.NewCompanyRepositoryWithDB(db),
+		roleRepo:       repository.NewRoleRepositoryWithDB(db),
+		assignmentRepo: repository.NewUserCompanyAssignmentRepositoryWithDB(db),
 	}
+}
+
+// NewUserManagementUseCase creates a new user management use case with default DB (backward compatibility)
+func NewUserManagementUseCase() UserManagementUseCase {
+	return NewUserManagementUseCaseWithDB(database.GetDB())
 }
 
 func (uc *userManagementUseCase) CreateUser(username, email, password string, companyID, roleID *string) (*domain.UserModel, error) {
@@ -209,8 +216,7 @@ func (uc *userManagementUseCase) GetUsersByCompany(companyID string) ([]domain.U
 // This is used for User Management to show only users that the current user has access to
 func (uc *userManagementUseCase) GetUsersByCompanyHierarchy(companyID string) ([]domain.UserModel, error) {
 	// Get company descendants (includes direct children and all nested descendants)
-	companyUseCase := NewCompanyUseCase()
-	descendants, err := companyUseCase.GetCompanyDescendants(companyID)
+	descendants, err := uc.companyRepo.GetDescendants(companyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get company descendants: %w", err)
 	}

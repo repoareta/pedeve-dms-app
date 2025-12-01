@@ -10,6 +10,7 @@ import (
 	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 // DevelopmentUseCase handles development-related operations (seeding, resetting data)
@@ -26,14 +27,19 @@ type developmentUseCase struct {
 	userCompanyAssignmentRepo repository.UserCompanyAssignmentRepository
 }
 
-// NewDevelopmentUseCase creates a new development use case
-func NewDevelopmentUseCase() DevelopmentUseCase {
+// NewDevelopmentUseCaseWithDB creates a new development use case with injected DB (for testing)
+func NewDevelopmentUseCaseWithDB(db *gorm.DB) DevelopmentUseCase {
 	return &developmentUseCase{
-		companyRepo:              repository.NewCompanyRepository(),
-		userRepo:                 repository.NewUserRepository(),
-		roleRepo:                 repository.NewRoleRepository(),
-		userCompanyAssignmentRepo: repository.NewUserCompanyAssignmentRepository(),
+		companyRepo:              repository.NewCompanyRepositoryWithDB(db),
+		userRepo:                 repository.NewUserRepositoryWithDB(db),
+		roleRepo:                 repository.NewRoleRepositoryWithDB(db),
+		userCompanyAssignmentRepo: repository.NewUserCompanyAssignmentRepositoryWithDB(db),
 	}
+}
+
+// NewDevelopmentUseCase creates a new development use case with default DB (backward compatibility)
+func NewDevelopmentUseCase() DevelopmentUseCase {
+	return NewDevelopmentUseCaseWithDB(database.GetDB())
 }
 
 // ResetSubsidiaryData deletes all subsidiary companies and their related users

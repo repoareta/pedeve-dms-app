@@ -27,11 +27,16 @@ type roleRepository struct {
 	db *gorm.DB
 }
 
-// NewRoleRepository creates a new role repository
-func NewRoleRepository() RoleRepository {
+// NewRoleRepositoryWithDB creates a new role repository with injected DB (for testing)
+func NewRoleRepositoryWithDB(db *gorm.DB) RoleRepository {
 	return &roleRepository{
-		db: database.GetDB(),
+		db: db,
 	}
+}
+
+// NewRoleRepository creates a new role repository with default DB (backward compatibility)
+func NewRoleRepository() RoleRepository {
+	return NewRoleRepositoryWithDB(database.GetDB())
 }
 
 func (r *roleRepository) Create(role *domain.RoleModel) error {

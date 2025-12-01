@@ -6,10 +6,12 @@ import (
 	"time"
 
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/uuid"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // CompanyUseCase interface untuk company operations
@@ -36,14 +38,19 @@ type companyUseCase struct {
 	directorRepo       repository.DirectorRepository
 }
 
-// NewCompanyUseCase creates a new company use case
-func NewCompanyUseCase() CompanyUseCase {
+// NewCompanyUseCaseWithDB creates a new company use case with injected DB (for testing)
+func NewCompanyUseCaseWithDB(db *gorm.DB) CompanyUseCase {
 	return &companyUseCase{
-		companyRepo:       repository.NewCompanyRepository(),
-		shareholderRepo:   repository.NewShareholderRepository(),
-		businessFieldRepo: repository.NewBusinessFieldRepository(),
-		directorRepo:      repository.NewDirectorRepository(),
+		companyRepo:       repository.NewCompanyRepositoryWithDB(db),
+		shareholderRepo:   repository.NewShareholderRepositoryWithDB(db),
+		businessFieldRepo: repository.NewBusinessFieldRepositoryWithDB(db),
+		directorRepo:      repository.NewDirectorRepositoryWithDB(db),
 	}
+}
+
+// NewCompanyUseCase creates a new company use case with default DB (backward compatibility)
+func NewCompanyUseCase() CompanyUseCase {
+	return NewCompanyUseCaseWithDB(database.GetDB())
 }
 
 func (uc *companyUseCase) CreateCompany(name, code, description string, parentID *string) (*domain.CompanyModel, error) {

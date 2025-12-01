@@ -270,6 +270,59 @@ func (UserCompanyAssignmentModel) TableName() string {
 	return "user_company_assignments"
 }
 
+// ReportModel merepresentasikan laporan bulanan perusahaan
+type ReportModel struct {
+	ID             string     `gorm:"primaryKey" json:"id"`
+	Period         string     `gorm:"index;not null" json:"period"` // Format: YYYY-MM (e.g., "2025-09")
+	CompanyID      string     `gorm:"index;not null" json:"company_id"`
+	InputterID     *string    `gorm:"index" json:"inputter_id"` // User yang menginput (bisa null)
+	Revenue        int64      `gorm:"not null" json:"revenue"`
+	Opex           int64      `gorm:"not null" json:"opex"`
+	NPAT           int64      `gorm:"not null" json:"npat"` // Net Profit After Tax
+	Dividend       int64      `gorm:"not null" json:"dividend"`
+	FinancialRatio float64    `gorm:"not null" json:"financial_ratio"` // Mandatory
+	Attachment     *string    `gorm:"type:text" json:"attachment"`     // Optional, bisa null
+	Remark         *string    `gorm:"type:text" json:"remark"`         // Optional, bisa null
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+
+	// Relationships
+	Company  *CompanyModel `gorm:"foreignKey:CompanyID" json:"company,omitempty"`
+	Inputter *UserModel    `gorm:"foreignKey:InputterID" json:"inputter,omitempty"`
+}
+
+func (ReportModel) TableName() string {
+	return "reports"
+}
+
+// CreateReportRequest untuk request body create report
+type CreateReportRequest struct {
+	Period         string   `json:"period" validate:"required,regexp=^\\d{4}-\\d{2}$"` // Format: YYYY-MM
+	CompanyID      string   `json:"company_id" validate:"required"`
+	InputterID     *string  `json:"inputter_id"` // Optional
+	Revenue        int64    `json:"revenue" validate:"required"`
+	Opex           int64    `json:"opex" validate:"required"`
+	NPAT           int64    `json:"npat" validate:"required"`
+	Dividend       int64    `json:"dividend" validate:"required"`
+	FinancialRatio float64  `json:"financial_ratio" validate:"required"`
+	Attachment     *string  `json:"attachment"` // Optional
+	Remark         *string  `json:"remark"`     // Optional
+}
+
+// UpdateReportRequest untuk request body update report
+type UpdateReportRequest struct {
+	Period         *string  `json:"period" validate:"omitempty,regexp=^\\d{4}-\\d{2}$"`
+	CompanyID      *string  `json:"company_id"`
+	InputterID     *string  `json:"inputter_id"`
+	Revenue        *int64   `json:"revenue"`
+	Opex           *int64   `json:"opex"`
+	NPAT           *int64   `json:"npat"`
+	Dividend       *int64   `json:"dividend"`
+	FinancialRatio *float64 `json:"financial_ratio"`
+	Attachment     *string  `json:"attachment"`
+	Remark         *string  `json:"remark"`
+}
+
 // UserCompanyResponse untuk response GetMyCompanies (company dengan role info)
 type UserCompanyResponse struct {
 	Company   CompanyModel `json:"company"`

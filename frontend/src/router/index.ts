@@ -76,6 +76,24 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Manajemen Pengguna' },
     },
     {
+      path: '/reports',
+      name: 'reports',
+      component: () => import('../views/ReportsView.vue'),
+      meta: { requiresAuth: true, title: 'Laporan' },
+    },
+    {
+      path: '/reports/new',
+      name: 'report-new',
+      component: () => import('../views/ReportFormView.vue'),
+      meta: { requiresAuth: true, title: 'Tambah Laporan' },
+    },
+    {
+      path: '/reports/:id/edit',
+      name: 'report-edit',
+      component: () => import('../views/ReportFormView.vue'),
+      meta: { requiresAuth: true, title: 'Edit Laporan' },
+    },
+    {
       path: '/about',
       name: 'about',
       component: () => import('../views/AboutView.vue'),

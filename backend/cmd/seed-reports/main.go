@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"time"
 
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
@@ -73,8 +72,8 @@ func main() {
 	// Periods to seed (2025-09, 2025-10, 2025-11, 2025-12)
 	periods := []string{"2025-09", "2025-10", "2025-11", "2025-12"}
 
-	// Initialize random seed
-	rand.Seed(time.Now().UnixNano())
+	// Note: As of Go 1.20, rand.Seed is deprecated and not needed
+	// The global random number generator is automatically seeded
 
 	// Get all users for random assignment
 	allUsers, err := userRepo.GetAll()

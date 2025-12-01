@@ -567,50 +567,119 @@ func (h *ReportHandler) ExportReportsExcel(c *fiber.Ctx) error {
 		})
 	}
 	f.SetActiveSheet(index)
-	f.DeleteSheet("Sheet1")
+	if err := f.DeleteSheet("Sheet1"); err != nil {
+		// Log error but continue (Sheet1 might not exist)
+		fmt.Printf("Warning: Failed to delete Sheet1: %v\n", err)
+	}
 
 	// Set headers
 	headers := []string{"Period", "Company", "Revenue", "Opex", "NPAT", "Dividend", "Financial Ratio (%)", "Inputter", "Remark"}
 	for i, header := range headers {
 		cell := fmt.Sprintf("%c1", 'A'+i)
-		f.SetCellValue(sheetName, cell, header)
-		style, _ := f.NewStyle(&excelize.Style{
+		if err := f.SetCellValue(sheetName, cell, header); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "export_failed",
+				Message: fmt.Sprintf("Failed to set cell value: %v", err),
+			})
+		}
+		style, err := f.NewStyle(&excelize.Style{
 			Font: &excelize.Font{Bold: true},
 			Fill: excelize.Fill{Type: "pattern", Color: []string{"#E0E0E0"}, Pattern: 1},
 		})
-		f.SetCellStyle(sheetName, cell, cell, style)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "export_failed",
+				Message: fmt.Sprintf("Failed to create style: %v", err),
+			})
+		}
+		if err := f.SetCellStyle(sheetName, cell, cell, style); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "export_failed",
+				Message: fmt.Sprintf("Failed to set cell style: %v", err),
+			})
+		}
 	}
 
 	// Add data
 	for i, report := range reports {
 		row := i + 2
-		f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), report.Period)
+		if err := f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), report.Period); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "export_failed",
+				Message: fmt.Sprintf("Failed to set cell value: %v", err),
+			})
+		}
 		companyName := "Unknown"
 		if report.Company != nil {
 			companyName = report.Company.Name
 		}
-		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), companyName)
-		f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), report.Revenue)
-		f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), report.Opex)
-		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), report.NPAT)
-		f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), report.Dividend)
-		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), fmt.Sprintf("%.2f", report.FinancialRatio))
+		if err := f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), companyName); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "export_failed",
+				Message: fmt.Sprintf("Failed to set cell value: %v", err),
+			})
+		}
+		if err := f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), report.Revenue); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "export_failed",
+				Message: fmt.Sprintf("Failed to set cell value: %v", err),
+			})
+		}
+		if err := f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), report.Opex); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "export_failed",
+				Message: fmt.Sprintf("Failed to set cell value: %v", err),
+			})
+		}
+		if err := f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), report.NPAT); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "export_failed",
+				Message: fmt.Sprintf("Failed to set cell value: %v", err),
+			})
+		}
+		if err := f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), report.Dividend); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "export_failed",
+				Message: fmt.Sprintf("Failed to set cell value: %v", err),
+			})
+		}
+		if err := f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), fmt.Sprintf("%.2f", report.FinancialRatio)); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "export_failed",
+				Message: fmt.Sprintf("Failed to set cell value: %v", err),
+			})
+		}
 		inputterName := "N/A"
 		if report.Inputter != nil {
 			inputterName = report.Inputter.Username
 		}
-		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), inputterName)
+		if err := f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), inputterName); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "export_failed",
+				Message: fmt.Sprintf("Failed to set cell value: %v", err),
+			})
+		}
 		remark := "N/A"
 		if report.Remark != nil {
 			remark = *report.Remark
 		}
-		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), remark)
+		if err := f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), remark); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "export_failed",
+				Message: fmt.Sprintf("Failed to set cell value: %v", err),
+			})
+		}
 	}
 
 	// Auto-size columns
 	for i := 0; i < len(headers); i++ {
 		col := string(rune('A' + i))
-		f.SetColWidth(sheetName, col, col, 15)
+		if err := f.SetColWidth(sheetName, col, col, 15); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "export_failed",
+				Message: fmt.Sprintf("Failed to set column width: %v", err),
+			})
+		}
 	}
 
 	// Save to buffer

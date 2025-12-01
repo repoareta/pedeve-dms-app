@@ -233,11 +233,12 @@ body {
   background-size: cover;
   object-fit: cover;
   padding: 90px 24px 10px 24px;
-  min-height: 250px;
+  min-height: 280px;
   // margin-bottom: 100px;
   justify-content: start;
-  align-items: center;
+  align-items: start;
   display: flex;
+  margin-bottom: -120px;
 }
 
 .mainContentPage{
@@ -727,10 +728,13 @@ body {
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   height: 100%;
+  display: flex;
+  flex-direction: column;
 
   :deep(.ant-card-head) {
     border-bottom: 1px solid #f0f0f0;
     padding: 16px 24px;
+    flex-shrink: 0;
 
     .ant-card-head-title {
       font-size: 16px;
@@ -741,6 +745,10 @@ body {
 
   :deep(.ant-card-body) {
     padding: 24px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
   .chart-extra {
@@ -751,9 +759,14 @@ body {
     }
   }
 
-  .chart-container {
-    height: 300px;
+  .chart-revenue-dashboard {
+    height: 450px;
     position: relative;
+    width: 100%;
+    
+    canvas {
+      max-height: 100% !important;
+    }
   }
 }
 
@@ -764,10 +777,13 @@ body {
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   height: 100%;
+  display: flex;
+  flex-direction: column;
 
   :deep(.ant-card-head) {
     border-bottom: 1px solid #f0f0f0;
     padding: 16px 24px;
+    flex-shrink: 0;
 
     .ant-card-head-title {
       font-size: 16px;
@@ -777,10 +793,16 @@ body {
 
   :deep(.ant-card-body) {
     padding: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
   .subsidiaries-list {
     padding: 8px 0;
+    flex: 1;
+    overflow-y: auto;
   }
 
   .subsidiary-item {
@@ -817,6 +839,25 @@ body {
     justify-content: center;
     flex-shrink: 0;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+
+    .company-logo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .icon-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 600;
+      font-size: 14px;
+      text-transform: uppercase;
+    }
   }
 
   .subsidiary-info {
@@ -982,6 +1023,22 @@ body {
 
 .content-row {
   margin-bottom: 24px;
+  
+  // Ensure all columns have equal height
+  :deep(.ant-row) {
+    display: flex;
+    align-items: stretch;
+  }
+  
+  :deep(.ant-col) {
+    display: flex;
+    flex-direction: column;
+    
+    > * {
+      width: 100%;
+      height: 100%;
+    }
+  }
 }
 
 @media (max-width: 768px) {

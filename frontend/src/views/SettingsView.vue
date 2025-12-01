@@ -31,11 +31,11 @@ const secret = ref<string>('')
 const twoFACode = ref('')
 const backupCodes = ref<string[]>([])
 
-// Development features
-const seederStatusLoading = ref(false)
-const seederStatus = ref<{ exists: boolean; message: string } | null>(null)
-const resetLoading = ref(false)
-const runSeederLoading = ref(false)
+// Development features - Combined
+const allSeederStatusLoading = ref(false)
+const allSeederStatus = ref<{ status: Record<string, boolean>; message: string } | null>(null)
+const resetAllLoading = ref(false)
+const runAllSeedersLoading = ref(false)
 
 // Audit logs
 const auditLogs = ref<AuditLog[]>([])
@@ -707,74 +707,80 @@ const sonarqubeColumns: TableColumnsType = [
   },
 ]
 
-// Development functions
-const checkSeederStatus = async () => {
+// Combined Development functions
+const checkAllSeederStatus = async () => {
   try {
-    seederStatusLoading.value = true
-    const status = await developmentApi.checkSeederStatus()
-    seederStatus.value = status
+    allSeederStatusLoading.value = true
+    const status = await developmentApi.checkAllSeederStatus()
+    allSeederStatus.value = status
   } catch (error: unknown) {
-    console.error('Failed to check seeder status:', error)
+    console.error('Failed to check all seeder status:', error)
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal memeriksa status seeder'
     message.error(errorMessage)
   } finally {
-    seederStatusLoading.value = false
+    allSeederStatusLoading.value = false
   }
 }
 
-const handleResetSubsidiaryData = () => {
+const handleResetAllSeededData = () => {
   Modal.confirm({
-    title: 'Reset Data Subsidiary',
-    content: 'Apakah Anda yakin ingin menghapus semua data subsidiary dan user yang terkait? Tindakan ini tidak dapat dibatalkan!',
-    okText: 'Ya, Reset',
-    cancelText: 'Batal',
+    title: 'Reset Semua Data Seeder',
+    content: 'Apakah Anda yakin ingin menghapus semua data yang sudah di-seed (Reports, Companies, Users)? Tindakan ini tidak dapat dibatalkan dan akan menghapus semua relasi data.',
+    okText: 'Ya, Reset Semua',
     okType: 'danger',
+    cancelText: 'Batal',
     onOk: async () => {
       try {
-        resetLoading.value = true
-        await developmentApi.resetSubsidiaryData()
-        message.success('Data subsidiary berhasil di-reset')
-        // Refresh seeder status
-        await checkSeederStatus()
+        resetAllLoading.value = true
+        const result = await developmentApi.resetAllSeededData()
+        message.success(result.message || 'Semua data seeder berhasil di-reset')
+        // Refresh status
+        await checkAllSeederStatus()
       } catch (error: unknown) {
-        console.error('Failed to reset subsidiary data:', error)
+        console.error('Failed to reset all seeded data:', error)
         const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
-        const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal reset data subsidiary'
+        const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal reset semua data seeder'
         message.error(errorMessage)
       } finally {
-        resetLoading.value = false
+        resetAllLoading.value = false
       }
     },
   })
 }
 
-const handleRunSubsidiarySeeder = async () => {
-  try {
-    runSeederLoading.value = true
-    await developmentApi.runSubsidiarySeeder()
-    message.success('Seeder data subsidiary berhasil dijalankan')
-    // Refresh seeder status
-    await checkSeederStatus()
-  } catch (error: unknown) {
-    console.error('Failed to run seeder:', error)
-    const axiosError = error as { response?: { status?: number; data?: { message?: string } }; message?: string }
-    const errorCode = axiosError.response?.status
-    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal menjalankan seeder'
-    
-    if (errorCode === 409) {
-      // Conflict - data already exists
-      Modal.warning({
-        title: 'Data Seeder Sudah Tersedia',
-        content: errorMessage,
-        okText: 'OK',
-      })
-    } else {
-      message.error(errorMessage)
-    }
-  } finally {
-    runSeederLoading.value = false
-  }
+const handleRunAllSeeders = async () => {
+  Modal.confirm({
+    title: 'Jalankan Semua Seeder Data',
+    content: 'Ini akan menjalankan semua seeder secara berurutan: Company → Reports. Memastikan relasi data terjaga dengan benar. Lanjutkan?',
+    okText: 'Ya, Jalankan',
+    cancelText: 'Batal',
+    onOk: async () => {
+      try {
+        runAllSeedersLoading.value = true
+        const result = await developmentApi.runAllSeeders()
+        message.success(result.message || 'Semua seeder berhasil dijalankan')
+        if (result.details) {
+          // Show details if available
+          const detailsText = Object.entries(result.details).map(([key, value]) => `• ${key}: ${value}`).join('\n')
+          Modal.info({
+            title: 'Seeder Details',
+            content: detailsText,
+            okText: 'OK',
+          })
+        }
+        // Refresh status
+        await checkAllSeederStatus()
+      } catch (error: unknown) {
+        console.error('Failed to run all seeders:', error)
+        const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+        const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal menjalankan semua seeder'
+        message.error(errorMessage)
+      } finally {
+        runAllSeedersLoading.value = false
+      }
+    },
+  })
 }
 
 const handleMenuClick = (e: { key: string }) => {
@@ -792,7 +798,7 @@ onMounted(() => {
   if (isSuperadmin.value) {
     fetchAuditLogs()
     fetchAuditStats()
-    checkSeederStatus()
+    checkAllSeederStatus()
     
     // Check SonarQube Monitor status (only for superadmin/admin)
     if (isSuperadmin.value || isAdmin.value) {
@@ -1043,69 +1049,71 @@ onUnmounted(() => {
               </template>
 
               <div class="development-section">
-            <div class="section-header">
-              <div>
-                <h3 class="section-title">Manajemen Data Subsidiary</h3>
-                <p class="section-description">
-                  Reset dan seed data subsidiary untuk kebutuhan development
-                </p>
-              </div>
-            </div>
+                <div class="section-header">
+                  <div>
+                    <h3 class="section-title">Manajemen Data Seeder</h3>
+                    <p class="section-description">
+                      Reset dan seed semua data sample (Company, User, Reports) secara terpusat. Memastikan relasi data terjaga dengan benar.
+                    </p>
+                  </div>
+                </div>
 
-            <!-- Seeder Status -->
-            <div class="seeder-status" style="margin-bottom: 24px;">
-              <a-space size="middle" align="center">
-                <a-spin v-if="seederStatusLoading" size="small" />
-                <a-tag v-else-if="seederStatus?.exists" color="success">
-                  <IconifyIcon icon="mdi:check-circle" width="16" style="margin-right: 4px;" />
-                  Data Seeder Tersedia
-                </a-tag>
-                <a-tag v-else color="default">
-                  <IconifyIcon icon="mdi:alert-circle" width="16" style="margin-right: 4px;" />
-                  Data Seeder Belum Tersedia
-                </a-tag>
-                <a-button size="small" @click="checkSeederStatus" :loading="seederStatusLoading">
-                  <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
-                  Refresh Status
-                </a-button>
-              </a-space>
-            </div>
+                <!-- All Seeder Status -->
+                <div class="seeder-status" style="margin-bottom: 24px;">
+                  <a-space size="middle" align="center" wrap>
+                    <a-spin v-if="allSeederStatusLoading" size="small" />
+                    <template v-else-if="allSeederStatus">
+                      <a-tag :color="allSeederStatus.status.company ? 'success' : 'default'">
+                        <IconifyIcon :icon="allSeederStatus.status.company ? 'mdi:check-circle' : 'mdi:alert-circle'" width="16" style="margin-right: 4px;" />
+                        Company: {{ allSeederStatus.status.company ? 'Tersedia' : 'Belum Tersedia' }}
+                      </a-tag>
+                      <a-tag :color="allSeederStatus.status.report ? 'success' : 'default'">
+                        <IconifyIcon :icon="allSeederStatus.status.report ? 'mdi:check-circle' : 'mdi:alert-circle'" width="16" style="margin-right: 4px;" />
+                        Report: {{ allSeederStatus.status.report ? 'Tersedia' : 'Belum Tersedia' }}
+                      </a-tag>
+                    </template>
+                    <a-button size="small" @click="checkAllSeederStatus" :loading="allSeederStatusLoading">
+                      <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
+                      Refresh Status
+                    </a-button>
+                  </a-space>
+                </div>
 
-            <!-- Action Buttons -->
-            <div class="development-actions">
-              <a-space size="large" direction="vertical" style="width: 100%;">
-                <a-button
-                  type="primary"
-                  danger
-                  size="large"
-                  block
-                  @click="handleResetSubsidiaryData"
-                  :loading="resetLoading"
-                >
-                  <IconifyIcon icon="mdi:delete-sweep" width="18" style="margin-right: 8px;" />
-                  Reset Data Subsidiary
-                </a-button>
-                <a-button
-                  type="primary"
-                  size="large"
-                  block
-                  @click="handleRunSubsidiarySeeder"
-                  :loading="runSeederLoading"
-                >
-                  <IconifyIcon icon="mdi:database-plus" width="18" style="margin-right: 8px;" />
-                  Jalankan Seeder Data Subsidiary
-                </a-button>
-              </a-space>
-            </div>
+                <!-- Action Buttons -->
+                <div class="development-actions">
+                  <a-space size="large" direction="vertical" style="width: 100%;">
+                    <a-button
+                      type="primary"
+                      danger
+                      size="large"
+                      block
+                      @click="handleResetAllSeededData"
+                      :loading="resetAllLoading"
+                    >
+                      <IconifyIcon icon="mdi:delete-sweep" width="18" style="margin-right: 8px;" />
+                      Reset Semua Data Seeder
+                    </a-button>
+                    <a-button
+                      type="primary"
+                      size="large"
+                      block
+                      @click="handleRunAllSeeders"
+                      :loading="runAllSeedersLoading"
+                    >
+                      <IconifyIcon icon="mdi:database-plus" width="18" style="margin-right: 8px;" />
+                      Seeder Data
+                    </a-button>
+                  </a-space>
+                </div>
 
-            <!-- Info Alert -->
-            <a-alert
-              message="Informasi"
-              description="Reset Data Subsidiary akan menghapus semua data subsidiary dan user yang terkait. Jalankan Seeder akan membuat sample data subsidiary. Jika data sudah ada, proses seeder akan dibatalkan untuk mencegah duplikasi."
-              type="info"
-              show-icon
-              style="margin-top: 24px;"
-            />
+                <!-- Info Alert -->
+                <a-alert
+                  message="Informasi"
+                  description="Seeder Data akan menjalankan semua seeder secara berurutan: Company → Reports. Ini memastikan relasi data terjaga dengan benar. Reset Semua Data Seeder akan menghapus semua data yang sudah di-seed (Reports → Companies) untuk memastikan relasi dihapus dengan benar."
+                  type="info"
+                  show-icon
+                  style="margin-top: 24px;"
+                />
               </div>
             </a-card>
           </div>

@@ -6,6 +6,8 @@
 # Run all tests
 test:
 	@echo "🧪 Running all tests..."
+	@echo "📋 Testing all features: Company, User Management, Reports, Roles, Permissions, etc."
+	@echo ""
 	@go test ./... -v 2>&1 | tee /tmp/test-output.txt; \
 	TEST_EXIT=$$?; \
 	echo ""; \
@@ -17,9 +19,21 @@ test:
 	echo "   ✅ Passed: $$PASSED"; \
 	echo "   ❌ Failed: $$FAILED"; \
 	echo "   📦 Total:  $$TOTAL"; \
+	echo ""; \
+	echo "📋 Test Coverage by Feature:"; \
+	COMPANY_REPO=$$(grep "^--- PASS:.*TestCompanyRepository" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
+	COMPANY_UC=$$(grep "^--- PASS:.*TestCompanyUseCase" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
+	USER_REPO=$$(grep "^--- PASS:.*TestUserRepository" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
+	USER_UC=$$(grep "^--- PASS:.*TestUserManagementUseCase" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
+	REPORT_REPO=$$(grep "^--- PASS:.*TestReportRepository" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
+	REPORT_UC=$$(grep "^--- PASS:.*TestReportUseCase" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
+	echo "   🏢 Company:     Repository ($$COMPANY_REPO) + UseCase ($$COMPANY_UC)"; \
+	echo "   👤 User:        Repository ($$USER_REPO) + UseCase ($$USER_UC)"; \
+	echo "   📊 Report:     Repository ($$REPORT_REPO) + UseCase ($$REPORT_UC)"; \
 	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
 	if [ $$TEST_EXIT -eq 0 ]; then \
 		echo "✅ All tests passed!"; \
+		echo "✅ All features tested: Company, User Management, Reports, and their relationships"; \
 	else \
 		echo "❌ Some tests failed!"; \
 	fi; \

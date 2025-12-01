@@ -17,10 +17,16 @@ type shareholderRepository struct {
 	db *gorm.DB
 }
 
-func NewShareholderRepository() ShareholderRepository {
+// NewShareholderRepositoryWithDB creates a new shareholder repository with injected DB (for testing)
+func NewShareholderRepositoryWithDB(db *gorm.DB) ShareholderRepository {
 	return &shareholderRepository{
-		db: database.GetDB(),
+		db: db,
 	}
+}
+
+// NewShareholderRepository creates a new shareholder repository with default DB (backward compatibility)
+func NewShareholderRepository() ShareholderRepository {
+	return NewShareholderRepositoryWithDB(database.GetDB())
 }
 
 func (r *shareholderRepository) Create(shareholder *domain.ShareholderModel) error {

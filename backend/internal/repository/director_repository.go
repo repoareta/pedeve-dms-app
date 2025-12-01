@@ -17,10 +17,16 @@ type directorRepository struct {
 	db *gorm.DB
 }
 
-func NewDirectorRepository() DirectorRepository {
+// NewDirectorRepositoryWithDB creates a new director repository with injected DB (for testing)
+func NewDirectorRepositoryWithDB(db *gorm.DB) DirectorRepository {
 	return &directorRepository{
-		db: database.GetDB(),
+		db: db,
 	}
+}
+
+// NewDirectorRepository creates a new director repository with default DB (backward compatibility)
+func NewDirectorRepository() DirectorRepository {
+	return NewDirectorRepositoryWithDB(database.GetDB())
 }
 
 func (r *directorRepository) Create(director *domain.DirectorModel) error {

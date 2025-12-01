@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
-	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -51,9 +51,29 @@ func SetupTestDBPostgres(t *testing.T) *gorm.DB {
 		t.Skip("TEST_DATABASE_URL not set, skipping PostgreSQL test")
 	}
 
-	db, err := database.InitDatabase(databaseURL)
+	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent), // Silence logs during tests
+	})
 	if err != nil {
 		t.Fatalf("Failed to connect to test PostgreSQL database: %v", err)
+	}
+
+	// Auto migrate all models
+	err = db.AutoMigrate(
+		&domain.CompanyModel{},
+		&domain.UserModel{},
+		&domain.RoleModel{},
+		&domain.PermissionModel{},
+		&domain.RolePermissionModel{},
+		&domain.ShareholderModel{},
+		&domain.BusinessFieldModel{},
+		&domain.DirectorModel{},
+		&domain.UserCompanyAssignmentModel{},
+		&domain.AuditLog{},
+		&domain.UserActivityLog{},
+	)
+	if err != nil {
+		t.Fatalf("Failed to migrate test PostgreSQL database: %v", err)
 	}
 
 	return db

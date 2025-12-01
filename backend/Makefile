@@ -6,13 +6,48 @@
 # Run all tests
 test:
 	@echo "🧪 Running all tests..."
-	go test ./... -v
+	@go test ./... -v 2>&1 | tee /tmp/test-output.txt; \
+	TEST_EXIT=$$?; \
+	echo ""; \
+	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
+	echo "📊 Test Summary:"; \
+	PASSED=$$(grep "^--- PASS:" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
+	FAILED=$$(grep "^--- FAIL:" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
+	TOTAL=$$(grep "^=== RUN" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
+	echo "   ✅ Passed: $$PASSED"; \
+	echo "   ❌ Failed: $$FAILED"; \
+	echo "   📦 Total:  $$TOTAL"; \
+	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
+	if [ $$TEST_EXIT -eq 0 ]; then \
+		echo "✅ All tests passed!"; \
+	else \
+		echo "❌ Some tests failed!"; \
+	fi; \
+	rm -f /tmp/test-output.txt; \
+	exit $$TEST_EXIT
 
 # Run unit tests only (fast)
 test-unit:
 	@echo "⚡ Running unit tests (fast)..."
-	go test ./internal/usecase/... -v
-	go test ./internal/repository/... -v
+	@(go test ./internal/usecase/... -v && go test ./internal/repository/... -v) 2>&1 | tee /tmp/test-output.txt; \
+	TEST_EXIT=$$?; \
+	echo ""; \
+	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
+	echo "📊 Test Summary:"; \
+	PASSED=$$(grep "^--- PASS:" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
+	FAILED=$$(grep "^--- FAIL:" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
+	TOTAL=$$(grep "^=== RUN" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
+	echo "   ✅ Passed: $$PASSED"; \
+	echo "   ❌ Failed: $$FAILED"; \
+	echo "   📦 Total:  $$TOTAL"; \
+	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
+	if [ $$TEST_EXIT -eq 0 ]; then \
+		echo "✅ All tests passed!"; \
+	else \
+		echo "❌ Some tests failed!"; \
+	fi; \
+	rm -f /tmp/test-output.txt; \
+	exit $$TEST_EXIT
 
 # Run integration tests only
 test-integration:

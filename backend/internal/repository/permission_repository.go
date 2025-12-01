@@ -22,11 +22,16 @@ type permissionRepository struct {
 	db *gorm.DB
 }
 
-// NewPermissionRepository creates a new permission repository
-func NewPermissionRepository() PermissionRepository {
+// NewPermissionRepositoryWithDB creates a new permission repository with injected DB (for testing)
+func NewPermissionRepositoryWithDB(db *gorm.DB) PermissionRepository {
 	return &permissionRepository{
-		db: database.GetDB(),
+		db: db,
 	}
+}
+
+// NewPermissionRepository creates a new permission repository with default DB (backward compatibility)
+func NewPermissionRepository() PermissionRepository {
+	return NewPermissionRepositoryWithDB(database.GetDB())
 }
 
 func (r *permissionRepository) Create(permission *domain.PermissionModel) error {

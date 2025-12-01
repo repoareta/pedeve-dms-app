@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -24,51 +24,77 @@ ChartJS.register(
   Filler
 )
 
-const chartData = ref({
-  labels: [
-    'Januari 2025',
-    'Februari 2025',
-    'Maret 2025',
-    'April 2025',
-    'Mei 2025',
-    'Juni 2025',
-    'Juli 2025',
-    'Agustus 2025',
-    'September 2025',
-    'Oktober 2025',
-    'November 2025',
-    'Desember 2025',
-  ],
-  datasets: [
-    {
-      label: 'RKAP',
-      backgroundColor: 'rgba(24, 144, 255, 0.25)',
-      borderColor: '#1890ff',
-      borderWidth: 2,
-      pointRadius: 0,
-      pointHoverRadius: 4,
-      pointBackgroundColor: '#1890ff',
-      pointBorderColor: '#fff',
-      pointBorderWidth: 2,
-      data: [100, 105, 110, 108, 115, 120, 118, 125, 122, 130, 128, 135],
-      fill: '+1',
-      tension: 0.4,
-    },
-    {
-      label: 'NPAT Trends',
-      backgroundColor: 'rgba(82, 196, 26, 0.35)',
-      borderColor: '#52c41a',
-      borderWidth: 2,
-      pointRadius: 0,
-      pointHoverRadius: 4,
-      pointBackgroundColor: '#52c41a',
-      pointBorderColor: '#fff',
-      pointBorderWidth: 2,
-      data: [15, 18, 20, 19, 22, 25, 23, 27, 26, 30, 28, 32],
-      fill: true,
-      tension: 0.4,
-    },
-  ],
+interface ChartDataProps {
+  labels: string[]
+  revenueData: number[]
+  npatData: number[]
+  rkapData: number[]
+}
+
+const props = defineProps<{
+  chartData?: ChartDataProps
+  loading?: boolean
+}>()
+
+const chartDataComputed = computed(() => {
+  if (!props.chartData || props.chartData.labels.length === 0) {
+    return {
+      labels: [],
+      datasets: [],
+    }
+  }
+
+  return {
+    labels: props.chartData.labels,
+    datasets: [
+      {
+        label: 'RKAP',
+        backgroundColor: 'rgba(24, 144, 255, 0.25)',
+        borderColor: '#1890ff',
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointBackgroundColor: '#1890ff',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        data: props.chartData.rkapData,
+        fill: '+1',
+        tension: 0.4,
+      },
+      {
+        label: 'NPAT Trends',
+        backgroundColor: 'rgba(82, 196, 26, 0.35)',
+        borderColor: '#52c41a',
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointBackgroundColor: '#52c41a',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        data: props.chartData.npatData,
+        fill: true,
+        tension: 0.4,
+      },
+    ],
+  }
+})
+
+// Calculate summary info for chart extra
+const chartInfo = computed(() => {
+  if (!props.chartData || props.chartData.revenueData.length === 0) {
+    return 'No data'
+  }
+  
+  const latestRevenue = props.chartData.revenueData[props.chartData.revenueData.length - 1] || 0
+  const latestNpat = props.chartData.npatData[props.chartData.npatData.length - 1] || 0
+  const prevRevenue = props.chartData.revenueData.length > 1 
+    ? (props.chartData.revenueData[props.chartData.revenueData.length - 2] || 0)
+    : latestRevenue
+  
+  const change = prevRevenue > 0 ? ((latestRevenue - prevRevenue) / prevRevenue) * 100 : 0
+  const sign = change >= 0 ? '+' : ''
+  
+  return `Q${Math.ceil((props.chartData.labels.length) / 3)} ${new Date().getFullYear()} ${sign}${change.toFixed(0)}% $${latestRevenue.toFixed(0)}M`
 })
 
 const chartOptions = ref({
@@ -134,14 +160,17 @@ const chartOptions = ref({
 </script>
 
 <template>
-  <a-card class="chart-card" title="Revenue VS NPAT Trends" :bordered="false">
+  <a-card class="chart-card" title="Revenue VS NPAT Trends" :bordered="false" :loading="loading">
     <template #extra>
       <div class="chart-extra">
-        <span class="chart-info">Q1 2024 +10% $120M</span>
+        <span class="chart-info">{{ chartInfo }}</span>
       </div>
     </template>
-    <div class="chart-container">
-      <Line :data="chartData" :options="chartOptions as any" />
+    <div class="chart-revenue-dashboard">
+      <Line v-if="chartDataComputed.labels.length > 0" :data="chartDataComputed" :options="chartOptions as any" />
+      <div v-else class="empty-chart">
+        <p>No data available</p>
+      </div>
     </div>
   </a-card>
 </template>

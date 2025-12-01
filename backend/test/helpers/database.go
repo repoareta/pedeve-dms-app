@@ -35,6 +35,7 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 		&domain.UserCompanyAssignmentModel{},
 		&domain.AuditLog{},
 		&domain.UserActivityLog{},
+		&domain.ReportModel{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate test database: %v", err)
@@ -71,6 +72,7 @@ func SetupTestDBPostgres(t *testing.T) *gorm.DB {
 		&domain.UserCompanyAssignmentModel{},
 		&domain.AuditLog{},
 		&domain.UserActivityLog{},
+		&domain.ReportModel{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate test PostgreSQL database: %v", err)

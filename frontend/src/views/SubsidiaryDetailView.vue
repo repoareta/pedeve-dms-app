@@ -111,12 +111,15 @@
                               <stop offset="100%" style="stop-color:#ff9800;stop-opacity:0.05" />
                             </linearGradient>
                           </defs>
-                          <path :d="rkapChartFillPath" fill="url(#rkapGradient)" class="chart-fill" />
-                          <path :d="rkapChartPath" stroke="#ff9800" stroke-width="2" fill="none" class="chart-line" />
+                          <path v-if="rkapChartFillPath" :d="rkapChartFillPath" fill="url(#rkapGradient)" class="chart-fill" />
+                          <path v-if="rkapTargetChartPath" :d="rkapTargetChartPath" stroke="#1890ff" stroke-width="1.5" stroke-dasharray="4,2" fill="none" class="chart-line" />
+                          <path v-if="rkapChartPath" :d="rkapChartPath" stroke="#ff9800" stroke-width="2" fill="none" class="chart-line" />
                         </svg>
                         <div class="chart-labels">
-                          <span>Jan</span>
-                          <span>Des</span>
+                          <span v-if="rkapChartData.periods.length > 0">{{ rkapChartData.periods[0] }}</span>
+                          <span v-else>Jan</span>
+                          <span v-if="rkapChartData.periods.length > 0">{{ rkapChartData.periods[rkapChartData.periods.length - 1] }}</span>
+                          <span v-else>Des</span>
                         </div>
                       </div>
                     </div>
@@ -143,12 +146,14 @@
                               <stop offset="100%" style="stop-color:#666;stop-opacity:0.05" />
                             </linearGradient>
                           </defs>
-                          <path :d="opexChartFillPath" fill="url(#opexGradient)" class="chart-fill" />
-                          <path :d="opexChartPath" stroke="#666" stroke-width="2" fill="none" class="chart-line" />
+                          <path v-if="opexChartFillPath" :d="opexChartFillPath" fill="url(#opexGradient)" class="chart-fill" />
+                          <path v-if="opexChartPath" :d="opexChartPath" stroke="#666" stroke-width="2" fill="none" class="chart-line" />
                         </svg>
                         <div class="chart-labels">
-                          <span>Jan</span>
-                          <span>Des</span>
+                          <span v-if="opexChartData.periods.length > 0">{{ opexChartData.periods[0] }}</span>
+                          <span v-else>Jan</span>
+                          <span v-if="opexChartData.periods.length > 0">{{ opexChartData.periods[opexChartData.periods.length - 1] }}</span>
+                          <span v-else>Des</span>
                         </div>
                       </div>
                     </div>
@@ -171,16 +176,18 @@
                         <svg width="100%" height="60" viewBox="0 0 200 60" class="mini-chart">
                           <defs>
                             <linearGradient id="npatGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                              <stop offset="0%" style="stop-color:#666;stop-opacity:0.3" />
-                              <stop offset="100%" style="stop-color:#666;stop-opacity:0.05" />
+                              <stop offset="0%" style="stop-color:#52c41a;stop-opacity:0.3" />
+                              <stop offset="100%" style="stop-color:#52c41a;stop-opacity:0.05" />
                             </linearGradient>
                           </defs>
-                          <path :d="npatChartFillPath" fill="url(#npatGradient)" class="chart-fill" />
-                          <path :d="npatChartPath" stroke="#666" stroke-width="2" fill="none" class="chart-line" />
+                          <path v-if="npatChartFillPath" :d="npatChartFillPath" fill="url(#npatGradient)" class="chart-fill" />
+                          <path v-if="npatChartPath" :d="npatChartPath" stroke="#52c41a" stroke-width="2" fill="none" class="chart-line" />
                         </svg>
                         <div class="chart-labels">
-                          <span>Jan</span>
-                          <span>Des</span>
+                          <span v-if="npatChartData.periods.length > 0">{{ npatChartData.periods[0] }}</span>
+                          <span v-else>Jan</span>
+                          <span v-if="npatChartData.periods.length > 0">{{ npatChartData.periods[npatChartData.periods.length - 1] }}</span>
+                          <span v-else>Des</span>
                         </div>
                       </div>
                     </div>
@@ -544,6 +551,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { companyApi, userApi, roleApi, type Company, type BusinessField, type User, type Role } from '../api/userManagement'
+import reportsApi, { type Report } from '../api/reports'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import dayjs from 'dayjs'
@@ -641,39 +649,236 @@ const filteredRoles = computed(() => {
   )
 })
 
-// Dummy data untuk charts
-const rkapData = ref({
-  value: 120000000,
-  year: '2025',
-  change: 15
-})
-
-const opexData = ref({
-  value: 80000000,
-  quarter: 'Q1 2024',
-  change: 5
-})
-
-const npatData = ref({
-  value: 25000000,
-  quarter: 'Q1 2024',
-  change: 15
-})
-
-// Generate chart data
-const generateChartData = (baseValue: number, variance: number = 0.2) => {
-  const points = 12
-  const data: number[] = []
-  for (let i = 0; i < points; i++) {
-    const random = (Math.random() - 0.5) * variance
-    data.push(baseValue * (1 + random))
+// Chart data computed from real reports
+const rkapData = computed(() => {
+  if (companyReports.value.length === 0) {
+    return { value: 0, year: '2025', change: 0 }
   }
-  return data
+  
+  // Get latest report
+  const latest = [...companyReports.value].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return b.period.localeCompare(a.period)
+  })[0]
+  
+  if (!latest) {
+    return { value: 0, year: '2025', change: 0 }
+  }
+  
+  const year = latest.period ? latest.period.split('-')[0] : '2025'
+  const revenue = latest.revenue || 0
+  
+  // Calculate change from previous period
+  const sorted = [...companyReports.value].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return a.period.localeCompare(b.period)
+  })
+  const currentIndex = sorted.findIndex(r => r.id === latest.id)
+  let change = 0
+  if (currentIndex > 0) {
+    const previous = sorted[currentIndex - 1]
+    const prevRevenue = previous.revenue || 0
+    if (prevRevenue > 0) {
+      change = ((revenue - prevRevenue) / prevRevenue) * 100
+    }
+  }
+  
+  return {
+    value: revenue,
+    year: year,
+    change: Math.round(change * 10) / 10
+  }
+})
+
+const opexData = computed(() => {
+  if (companyReports.value.length === 0) {
+    return { value: 0, quarter: 'Q1 2025', change: 0 }
+  }
+  
+  // Get latest report
+  const latest = [...companyReports.value].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return b.period.localeCompare(a.period)
+  })[0]
+  
+  if (!latest) {
+    return { value: 0, quarter: 'Q1 2025', change: 0 }
+  }
+  
+  const period = latest.period || ''
+  const quarter = formatPeriod(period)
+  const opex = latest.opex || 0
+  
+  // Calculate change from previous period
+  const sorted = [...companyReports.value].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return a.period.localeCompare(b.period)
+  })
+  const currentIndex = sorted.findIndex(r => r.id === latest.id)
+  let change = 0
+  if (currentIndex > 0) {
+    const previous = sorted[currentIndex - 1]
+    const prevOpex = previous.opex || 0
+    if (prevOpex > 0) {
+      change = ((opex - prevOpex) / prevOpex) * 100
+    }
+  }
+  
+  return {
+    value: opex,
+    quarter: quarter,
+    change: Math.round(Math.abs(change) * 10) / 10
+  }
+})
+
+const npatData = computed(() => {
+  if (companyReports.value.length === 0) {
+    return { value: 0, quarter: 'Q1 2025', change: 0 }
+  }
+  
+  // Get latest report
+  const latest = [...companyReports.value].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return b.period.localeCompare(a.period)
+  })[0]
+  
+  if (!latest) {
+    return { value: 0, quarter: 'Q1 2025', change: 0 }
+  }
+  
+  const period = latest.period || ''
+  const quarter = formatPeriod(period)
+  const npat = latest.npat || 0
+  
+  // Calculate change from previous period
+  const sorted = [...companyReports.value].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return a.period.localeCompare(b.period)
+  })
+  const currentIndex = sorted.findIndex(r => r.id === latest.id)
+  let change = 0
+  if (currentIndex > 0) {
+    const previous = sorted[currentIndex - 1]
+    const prevNpat = previous.npat || 0
+    if (prevNpat > 0) {
+      change = ((npat - prevNpat) / prevNpat) * 100
+    }
+  }
+  
+  return {
+    value: npat,
+    quarter: quarter,
+    change: Math.round(change * 10) / 10
+  }
+})
+
+// Generate chart data from real reports
+const generateChartDataFromReports = (reports: Report[], field: 'revenue' | 'opex' | 'npat') => {
+  if (reports.length === 0) return []
+  
+  // Sort by period
+  const sorted = [...reports].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return a.period.localeCompare(b.period)
+  })
+  
+  // Extract data for the field
+  return sorted.map(report => {
+    if (field === 'revenue') return report.revenue || 0
+    if (field === 'opex') return report.opex || 0
+    if (field === 'npat') return report.npat || 0
+    return 0
+  })
 }
 
-const rkapChartData = computed(() => generateChartData(100, 0.3))
-const opexChartData = computed(() => generateChartData(80, 0.2))
-const npatChartData = computed(() => generateChartData(25, 0.25))
+// Format period helper
+const formatPeriod = (period: string | undefined): string => {
+  if (!period) return 'Unknown'
+  const [year, month] = period.split('-')
+  if (!year || !month) return period
+  const months = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ]
+  const monthIndex = parseInt(month, 10) - 1
+  if (monthIndex < 0 || monthIndex >= months.length) return period
+  return `${months[monthIndex]} ${year}`
+}
+
+// Calculate RKAP percentage (dummy calculation for now - can be enhanced with actual RKAP data)
+const calculateRKAPPercent = (report: Report): number => {
+  // Dummy calculation - in real app, this would come from RKAP data
+  // For now, calculate as percentage of revenue vs a target
+  const target = report.revenue * 1.1 // Assume target is 110% of revenue
+  if (target === 0) return 0
+  return Math.round((report.revenue / target) * 100)
+}
+
+// RKAP vs Realization chart data
+// For RKAP, we'll use revenue as realization and calculate RKAP as target (110% of average revenue)
+const rkapChartData = computed(() => {
+  const revenueData = generateChartDataFromReports(companyReports.value, 'revenue')
+  if (revenueData.length === 0) return { rkap: [], realization: [], periods: [] }
+  
+  // Get periods for labels
+  const sorted = [...companyReports.value].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return a.period.localeCompare(b.period)
+  })
+  const periods = sorted.map(r => {
+    if (!r.period) return ''
+    const [year, month] = r.period.split('-')
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+    const monthIndex = parseInt(month, 10) - 1
+    return monthIndex >= 0 && monthIndex < monthNames.length ? monthNames[monthIndex] : month
+  })
+  
+  // Calculate average revenue
+  const avgRevenue = revenueData.reduce((sum, val) => sum + val, 0) / revenueData.length
+  // RKAP target is 110% of average
+  const rkapTarget = avgRevenue * 1.1
+  
+  // Generate RKAP line (target line)
+  const rkap = revenueData.map(() => rkapTarget)
+  
+  return {
+    rkap: rkap,
+    realization: revenueData,
+    periods: periods
+  }
+})
+
+const opexChartData = computed(() => {
+  const data = generateChartDataFromReports(companyReports.value, 'opex')
+  const sorted = [...companyReports.value].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return a.period.localeCompare(b.period)
+  })
+  const periods = sorted.map(r => {
+    if (!r.period) return ''
+    const [year, month] = r.period.split('-')
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+    const monthIndex = parseInt(month, 10) - 1
+    return monthIndex >= 0 && monthIndex < monthNames.length ? monthNames[monthIndex] : month
+  })
+  return { data, periods }
+})
+
+const npatChartData = computed(() => {
+  const data = generateChartDataFromReports(companyReports.value, 'npat')
+  const sorted = [...companyReports.value].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return a.period.localeCompare(b.period)
+  })
+  const periods = sorted.map(r => {
+    if (!r.period) return ''
+    const [year, month] = r.period.split('-')
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+    const monthIndex = parseInt(month, 10) - 1
+    return monthIndex >= 0 && monthIndex < monthNames.length ? monthNames[monthIndex] : month
+  })
+  return { data, periods }
+})
 
 // Generate SVG path untuk chart
 const generateChartPath = (data: number[], width: number = 200, height: number = 60) => {
@@ -681,7 +886,7 @@ const generateChartPath = (data: number[], width: number = 200, height: number =
   const max = Math.max(...data)
   const min = Math.min(...data)
   const range = max - min || 1
-  const stepX = width / (data.length - 1)
+  const stepX = data.length > 1 ? width / (data.length - 1) : width
   
   const firstValue = data[0] ?? 0
   let path = `M 0 ${height - ((firstValue - min) / range) * height}`
@@ -699,7 +904,7 @@ const generateChartFillPath = (data: number[], width: number = 200, height: numb
   const max = Math.max(...data)
   const min = Math.min(...data)
   const range = max - min || 1
-  const stepX = width / (data.length - 1)
+  const stepX = data.length > 1 ? width / (data.length - 1) : width
   
   let path = `M 0 ${height}`
   const firstValue = data[0] ?? 0
@@ -714,12 +919,35 @@ const generateChartFillPath = (data: number[], width: number = 200, height: numb
   return path
 }
 
-const rkapChartPath = computed(() => generateChartPath(rkapChartData.value))
-const rkapChartFillPath = computed(() => generateChartFillPath(rkapChartData.value))
-const opexChartPath = computed(() => generateChartPath(opexChartData.value))
-const opexChartFillPath = computed(() => generateChartFillPath(opexChartData.value))
-const npatChartPath = computed(() => generateChartPath(npatChartData.value))
-const npatChartFillPath = computed(() => generateChartFillPath(npatChartData.value))
+// RKAP chart paths - need two lines (RKAP target and Realization)
+const rkapChartPath = computed(() => {
+  const chartData = rkapChartData.value
+  if (chartData.realization.length === 0) return ''
+  // Use realization data for the main line
+  return generateChartPath(chartData.realization)
+})
+
+const rkapChartFillPath = computed(() => {
+  const chartData = rkapChartData.value
+  if (chartData.realization.length === 0) return ''
+  return generateChartFillPath(chartData.realization)
+})
+
+// RKAP target line path
+const rkapTargetChartPath = computed(() => {
+  const chartData = rkapChartData.value
+  if (chartData.rkap.length === 0) return ''
+  return generateChartPath(chartData.rkap)
+})
+
+const opexChartPath = computed(() => generateChartPath(opexChartData.value.data))
+const opexChartFillPath = computed(() => generateChartFillPath(opexChartData.value.data))
+const npatChartPath = computed(() => generateChartPath(npatChartData.value.data))
+const npatChartFillPath = computed(() => generateChartFillPath(npatChartData.value.data))
+
+// Reports data
+const companyReports = ref<Report[]>([])
+const reportsLoading = ref(false)
 
 // Dummy data untuk recent files
 const recentFiles = ref([
@@ -746,33 +974,24 @@ const recentFiles = ref([
   }
 ])
 
-// Dummy data untuk recent reports
-const recentReports = ref([
-  {
-    key: '1',
-    name: 'Laporan September',
-    rkap_percent: 85,
-    revenue: '$120M',
-    npat: '$25M',
-    opex: '$80M'
-  },
-  {
-    key: '2',
-    name: 'Laporan Agustus',
-    rkap_percent: 82,
-    revenue: '$115M',
-    npat: '$23M',
-    opex: '$78M'
-  },
-  {
-    key: '3',
-    name: 'Laporan Juli',
-    rkap_percent: 88,
-    revenue: '$125M',
-    npat: '$27M',
-    opex: '$82M'
-  }
-])
+// Recent reports computed from real data
+const recentReports = computed(() => {
+  // Sort by period descending and take latest 5
+  const sorted = [...companyReports.value].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return b.period.localeCompare(a.period)
+  }).slice(0, 5)
+  
+  return sorted.map((report, index) => ({
+    key: String(index + 1),
+    name: `Laporan ${formatPeriod(report.period)}`,
+    rkap_percent: calculateRKAPPercent(report),
+    revenue: formatCurrency(report.revenue),
+    npat: formatCurrency(report.npat),
+    opex: formatCurrency(report.opex),
+    period: report.period
+  }))
+})
 
 const fileColumns = [
   { title: 'Name', dataIndex: 'name', key: 'name' },
@@ -830,21 +1049,30 @@ const loadCompany = async () => {
   loading.value = true
   try {
     company.value = await companyApi.getById(id)
-    // Generate financial data berdasarkan company ID
+    // Load reports after company is loaded
     if (company.value) {
-      const hash = company.value.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-      rkapData.value.value = (100 + (hash % 100)) * 1000000
-      rkapData.value.change = 10 + (hash % 10)
-      opexData.value.value = (50 + (hash % 50)) * 1000000
-      opexData.value.change = 3 + (hash % 5)
-      npatData.value.value = (20 + (hash % 30)) * 1000000
-      npatData.value.change = 10 + (hash % 10)
+      await loadCompanyReports(id)
     }
   } catch (error: unknown) {
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     message.error('Gagal memuat data perusahaan: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
   } finally {
     loading.value = false
+  }
+}
+
+const loadCompanyReports = async (companyId: string) => {
+  reportsLoading.value = true
+  try {
+    const reports = await reportsApi.getByCompanyId(companyId)
+    companyReports.value = reports
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    console.error('Gagal memuat data reports:', axiosError.response?.data?.message || axiosError.message || 'Unknown error')
+    // Don't show error message to user, just log it
+    companyReports.value = []
+  } finally {
+    reportsLoading.value = false
   }
 }
 

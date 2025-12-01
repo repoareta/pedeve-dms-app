@@ -2,6 +2,8 @@ package usecase
 
 import (
 	"fmt"
+	"math/rand"
+	"time"
 
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
@@ -18,22 +20,33 @@ type DevelopmentUseCase interface {
 	ResetSubsidiaryData() error
 	RunSubsidiarySeeder() (bool, error) // Returns (alreadyExists, error)
 	CheckSeederDataExists() (bool, error)
+	ResetReportData() error
+	RunReportSeeder() error
+	CheckReportDataExists() (bool, error)
+	// Combined operations
+	RunAllSeeders() error // Run all seeders in order: company -> reports
+	ResetAllSeededData() error // Reset all seeded data: reports -> company
+	CheckAllSeederStatus() (map[string]bool, error) // Check status of all seeders
 }
 
 type developmentUseCase struct {
+	db                        *gorm.DB
 	companyRepo              repository.CompanyRepository
 	userRepo                 repository.UserRepository
 	roleRepo                 repository.RoleRepository
 	userCompanyAssignmentRepo repository.UserCompanyAssignmentRepository
+	reportRepo               repository.ReportRepository
 }
 
 // NewDevelopmentUseCaseWithDB creates a new development use case with injected DB (for testing)
 func NewDevelopmentUseCaseWithDB(db *gorm.DB) DevelopmentUseCase {
 	return &developmentUseCase{
+		db:                        db,
 		companyRepo:              repository.NewCompanyRepositoryWithDB(db),
 		userRepo:                 repository.NewUserRepositoryWithDB(db),
 		roleRepo:                 repository.NewRoleRepositoryWithDB(db),
 		userCompanyAssignmentRepo: repository.NewUserCompanyAssignmentRepositoryWithDB(db),
+		reportRepo:               repository.NewReportRepositoryWithDB(db),
 	}
 }
 
@@ -51,7 +64,10 @@ func NewDevelopmentUseCase() DevelopmentUseCase {
 // 5. Delete all companies (soft delete: set is_active = false)
 func (uc *developmentUseCase) ResetSubsidiaryData() error {
 	zapLog := logger.GetLogger()
-	db := database.GetDB()
+	db := uc.db
+	if db == nil {
+		db = database.GetDB()
+	}
 
 	// Start transaction
 	tx := db.Begin()
@@ -708,6 +724,229 @@ func (uc *developmentUseCase) RunSubsidiarySeeder() (bool, error) {
 
 	zapLog.Info("Subsidiary seeder completed successfully")
 	return false, nil
+}
+
+// ResetReportData deletes all reports
+func (uc *developmentUseCase) ResetReportData() error {
+	zapLog := logger.GetLogger()
+
+	count, err := uc.reportRepo.Count()
+	if err != nil {
+		return fmt.Errorf("failed to count reports: %w", err)
+	}
+
+	if count == 0 {
+		zapLog.Info("No reports found to reset")
+		return nil
+	}
+
+	err = uc.reportRepo.DeleteAll()
+	if err != nil {
+		return fmt.Errorf("failed to delete reports: %w", err)
+	}
+
+	zapLog.Info("Successfully reset report data", zap.Int64("reports_deleted", count))
+	return nil
+}
+
+// RunReportSeeder runs the report seeder
+func (uc *developmentUseCase) RunReportSeeder() error {
+	zapLog := logger.GetLogger()
+
+	// Check if reports already exist
+	exists, err := uc.CheckReportDataExists()
+	if err != nil {
+		return fmt.Errorf("failed to check report data: %w", err)
+	}
+
+	if exists {
+		zapLog.Warn("Report data already exists, skipping seeder execution")
+		return fmt.Errorf("report data already exists")
+	}
+
+	// Get all subsidiaries
+	allCompanies, err := uc.companyRepo.GetAll()
+	if err != nil {
+		return fmt.Errorf("failed to get companies: %w", err)
+	}
+
+	var subsidiaries []domain.CompanyModel
+	for _, comp := range allCompanies {
+		if comp.Level > 0 && comp.IsActive {
+			subsidiaries = append(subsidiaries, comp)
+		}
+	}
+
+	if len(subsidiaries) == 0 {
+		return fmt.Errorf("no subsidiaries found. please run seed-companies first")
+	}
+
+	// Get all users for random assignment
+	allUsers, err := uc.userRepo.GetAll()
+	if err != nil {
+		zapLog.Warn("Failed to get users, will use null inputter", zap.Error(err))
+		allUsers = []domain.UserModel{}
+	}
+
+	// Periods to seed
+	periods := []string{"2025-09", "2025-10", "2025-11", "2025-12"}
+
+	// Initialize random seed
+	rand.Seed(time.Now().UnixNano())
+
+	totalCreated := 0
+
+	// Create reports for each subsidiary
+	for _, company := range subsidiaries {
+		for _, period := range periods {
+			// Check if report already exists
+			existing, _ := uc.reportRepo.GetByCompanyIDAndPeriod(company.ID, period)
+			if existing != nil {
+				continue
+			}
+
+			// Generate realistic random data
+			revenue := int64(rand.Intn(450000000) + 50000000)
+			opexPercent := float64(rand.Intn(40)+30) / 100.0
+			opex := int64(float64(revenue) * opexPercent)
+			profit := revenue - opex
+			tax := int64(float64(profit) * 0.25)
+			if profit < 0 {
+				tax = 0
+			}
+			npat := profit - tax
+			dividend := int64(0)
+			if npat > 0 {
+				dividendPercent := float64(rand.Intn(20)+10) / 100.0
+				dividend = int64(float64(npat) * dividendPercent)
+			}
+			financialRatio := float64(revenue) / float64(opex)
+			if financialRatio > 3.0 {
+				financialRatio = 3.0
+			}
+
+			// Randomly assign inputter (or null)
+			var inputterID *string
+			if len(allUsers) > 0 && rand.Float32() > 0.3 {
+				randomUser := allUsers[rand.Intn(len(allUsers))]
+				inputterID = &randomUser.ID
+			}
+
+			// Create report
+			report := &domain.ReportModel{
+				ID:             uuid.GenerateUUID(),
+				Period:         period,
+				CompanyID:      company.ID,
+				InputterID:     inputterID,
+				Revenue:        revenue,
+				Opex:           opex,
+				NPAT:           npat,
+				Dividend:       dividend,
+				FinancialRatio: financialRatio,
+				Attachment:     nil,
+				Remark:         nil,
+			}
+
+			if err := uc.reportRepo.Create(report); err != nil {
+				zapLog.Warn("Failed to create report", zap.String("company", company.ID), zap.String("period", period), zap.Error(err))
+				continue
+			}
+
+			totalCreated++
+		}
+	}
+
+	zapLog.Info("Report seeder completed successfully", zap.Int("reports_created", totalCreated))
+	return nil
+}
+
+// CheckReportDataExists checks if report data already exists
+func (uc *developmentUseCase) CheckReportDataExists() (bool, error) {
+	count, err := uc.reportRepo.Count()
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// RunAllSeeders runs all seeders in the correct order
+// Order: 1. Company seeder, 2. Report seeder
+func (uc *developmentUseCase) RunAllSeeders() error {
+	zapLog := logger.GetLogger()
+
+	// Step 1: Run company seeder first
+	zapLog.Info("Step 1: Running company seeder...")
+	alreadyExists, err := uc.RunSubsidiarySeeder()
+	if err != nil {
+		return fmt.Errorf("failed to run company seeder: %w", err)
+	}
+	if alreadyExists {
+		zapLog.Info("Company seeder data already exists, skipping")
+	} else {
+		zapLog.Info("Company seeder completed successfully")
+	}
+
+	// Step 2: Run report seeder (depends on companies)
+	zapLog.Info("Step 2: Running report seeder...")
+	err = uc.RunReportSeeder()
+	if err != nil {
+		if err.Error() == "report data already exists" {
+			zapLog.Info("Report seeder data already exists, skipping")
+		} else {
+			return fmt.Errorf("failed to run report seeder: %w", err)
+		}
+	} else {
+		zapLog.Info("Report seeder completed successfully")
+	}
+
+	zapLog.Info("All seeders completed successfully")
+	return nil
+}
+
+// ResetAllSeededData resets all seeded data in reverse order
+// Order: 1. Report data, 2. Company data
+func (uc *developmentUseCase) ResetAllSeededData() error {
+	zapLog := logger.GetLogger()
+
+	// Step 1: Reset report data first (depends on companies)
+	zapLog.Info("Step 1: Resetting report data...")
+	err := uc.ResetReportData()
+	if err != nil {
+		return fmt.Errorf("failed to reset report data: %w", err)
+	}
+	zapLog.Info("Report data reset completed")
+
+	// Step 2: Reset company data
+	zapLog.Info("Step 2: Resetting company data...")
+	err = uc.ResetSubsidiaryData()
+	if err != nil {
+		return fmt.Errorf("failed to reset company data: %w", err)
+	}
+	zapLog.Info("Company data reset completed")
+
+	zapLog.Info("All seeded data reset completed successfully")
+	return nil
+}
+
+// CheckAllSeederStatus checks the status of all seeders
+func (uc *developmentUseCase) CheckAllSeederStatus() (map[string]bool, error) {
+	status := make(map[string]bool)
+
+	// Check company seeder status
+	companyExists, err := uc.CheckSeederDataExists()
+	if err != nil {
+		return nil, fmt.Errorf("failed to check company seeder status: %w", err)
+	}
+	status["company"] = companyExists
+
+	// Check report seeder status
+	reportExists, err := uc.CheckReportDataExists()
+	if err != nil {
+		return nil, fmt.Errorf("failed to check report seeder status: %w", err)
+	}
+	status["report"] = reportExists
+
+	return status, nil
 }
 
 

@@ -1,4 +1,4 @@
-.PHONY: dev up down restart logs clean help seed-companies
+.PHONY: dev up down restart logs clean help seed-companies test test-frontend
 
 # Default target
 .DEFAULT_GOAL := help
@@ -66,6 +66,16 @@ seed-companies: ## Seed sample companies and users (10 subsidiaries with 3-layer
 	@echo "🌱 Seeding Companies and Users..."
 	@cd backend && DATABASE_URL="postgres://postgres:dms_password@localhost:5432/db_dms_pedeve?sslmode=disable" go run ./cmd/seed-companies
 
+# Run tests
+test: ## Run backend tests
+	@echo "🧪 Running backend tests..."
+	@cd backend && make test
+
+# Run frontend tests
+test-frontend: ## Run frontend unit tests
+	@echo "🧪 Running frontend tests..."
+	@cd frontend && npm run test:unit
+
 # Help
 help:
 	@echo "DMS App - Development Commands"
@@ -86,6 +96,8 @@ help:
 	@echo "  rebuild       - Rebuild and restart services"
 	@echo "  status        - Show service status"
 	@echo "  seed-companies - Seed sample companies and users (10 subsidiaries)"
+	@echo "  test          - Run backend tests"
+	@echo "  test-frontend - Run frontend unit tests"
 	@echo "  help          - Show this help message"
 	@echo ""
 	@echo "Examples:"

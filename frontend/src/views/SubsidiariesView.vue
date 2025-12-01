@@ -81,7 +81,9 @@
                   <div class="metric-value">{{ formatCurrency(getRKAPData(company.id)) }}</div>
                   <div class="metric-meta">
                     <span class="metric-year">{{ getRKAPYear(company.id) }}</span>
-                    <span class="metric-change positive">+{{ getRKAPChange(company.id) }}%</span>
+                    <span class="metric-change" :class="getRKAPChange(company.id) >= 0 ? 'positive' : 'negative'">
+                      {{ getRKAPChange(company.id) >= 0 ? '+' : '' }}{{ getRKAPChange(company.id) }}%
+                    </span>
                   </div>
                   <div class="metric-label">RKAP vs Realization</div>
                 </div>
@@ -381,9 +383,11 @@ import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { companyApi, userApi, roleApi, type Company, type User, type Role } from '../api/userManagement'
+import reportsApi, { type Report } from '../api/reports'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
+import dayjs from 'dayjs'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -436,11 +440,33 @@ const tablePagination = ref({
   total: 0,
 })
 
-// Sample financial data (RKAP & Opex) - akan diganti dengan data real jika ada
-const financialData = ref<Record<string, {
-  rkap: { value: number; year: string; change: number }
-  opex: { value: number; quarter: string; change: number }
-}>>({})
+// Reports data per company
+const companyReportsMap = ref<Record<string, Report[]>>({})
+const reportsLoading = ref(false)
+
+// Format period helper
+const formatPeriod = (period: string | undefined): string => {
+  if (!period) return 'Unknown'
+  const [year, month] = period.split('-')
+  if (!year || !month) return period
+  const months = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ]
+  const monthIndex = parseInt(month, 10) - 1
+  if (monthIndex < 0 || monthIndex >= months.length) return period
+  return `${months[monthIndex]} ${year}`
+}
+
+// Get quarter from period
+const getQuarterFromPeriod = (period: string | undefined): string => {
+  if (!period) return 'Q1 2025'
+  const [year, month] = period.split('-')
+  if (!year || !month) return 'Q1 2025'
+  const monthNum = parseInt(month, 10)
+  const quarter = Math.floor((monthNum - 1) / 3) + 1
+  return `Q${quarter} ${year}`
+}
 
 // Computed untuk filtered companies berdasarkan search, diurutkan berdasarkan waktu (paling baru di atas)
 const filteredCompanies = computed(() => {
@@ -478,52 +504,105 @@ watch(searchText, () => {
   currentPage.value = 1
 })
 
-// Generate financial data untuk company
-const generateFinancialData = (companyId: string) => {
-  if (!financialData.value[companyId]) {
-    // Generate random but consistent data berdasarkan company ID
-    const hash = companyId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-    const baseValue = 100 + (hash % 100)
-    const baseOpex = 50 + (hash % 50)
-
-    financialData.value[companyId] = {
-      rkap: {
-        value: baseValue * 1000000, // dalam juta
-        year: '2025',
-        change: 10 + (hash % 10)
-      },
-      opex: {
-        value: baseOpex * 1000000,
-        quarter: `Q${1 + (hash % 4)} 2024`,
-        change: 3 + (hash % 5)
-      }
-    }
-  }
-  return financialData.value[companyId]
-}
-
+// Get financial data from real reports
 const getRKAPData = (companyId: string): number => {
-  return generateFinancialData(companyId).rkap.value
+  const reports = companyReportsMap.value[companyId] || []
+  if (reports.length === 0) return 0
+  
+  // Get latest report
+  const latest = [...reports].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return b.period.localeCompare(a.period)
+  })[0]
+  
+  return latest?.revenue || 0
 }
 
 const getRKAPYear = (companyId: string): string => {
-  return generateFinancialData(companyId).rkap.year
+  const reports = companyReportsMap.value[companyId] || []
+  if (reports.length === 0) return '2025'
+  
+  const latest = [...reports].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return b.period.localeCompare(a.period)
+  })[0]
+  
+  if (!latest?.period) return '2025'
+  const year = latest.period.split('-')[0]
+  return year || '2025'
 }
 
 const getRKAPChange = (companyId: string): number => {
-  return generateFinancialData(companyId).rkap.change
+  const reports = companyReportsMap.value[companyId] || []
+  if (reports.length < 2) return 0
+  
+  // Sort by period
+  const sorted = [...reports].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return a.period.localeCompare(b.period)
+  })
+  
+  const latest = sorted[sorted.length - 1]
+  const previous = sorted[sorted.length - 2]
+  
+  if (!latest || !previous) return 0
+  
+  const latestRevenue = latest.revenue || 0
+  const prevRevenue = previous.revenue || 0
+  
+  if (prevRevenue === 0) return 0
+  
+  const change = ((latestRevenue - prevRevenue) / prevRevenue) * 100
+  return Math.round(change * 10) / 10
 }
 
 const getOpexData = (companyId: string): number => {
-  return generateFinancialData(companyId).opex.value
+  const reports = companyReportsMap.value[companyId] || []
+  if (reports.length === 0) return 0
+  
+  // Get latest report
+  const latest = [...reports].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return b.period.localeCompare(a.period)
+  })[0]
+  
+  return latest?.opex || 0
 }
 
 const getOpexQuarter = (companyId: string): string => {
-  return generateFinancialData(companyId).opex.quarter
+  const reports = companyReportsMap.value[companyId] || []
+  if (reports.length === 0) return 'Q1 2025'
+  
+  const latest = [...reports].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return b.period.localeCompare(a.period)
+  })[0]
+  
+  return getQuarterFromPeriod(latest?.period)
 }
 
 const getOpexChange = (companyId: string): number => {
-  return generateFinancialData(companyId).opex.change
+  const reports = companyReportsMap.value[companyId] || []
+  if (reports.length < 2) return 0
+  
+  // Sort by period
+  const sorted = [...reports].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return a.period.localeCompare(b.period)
+  })
+  
+  const latest = sorted[sorted.length - 1]
+  const previous = sorted[sorted.length - 2]
+  
+  if (!latest || !previous) return 0
+  
+  const latestOpex = latest.opex || 0
+  const prevOpex = previous.opex || 0
+  
+  if (prevOpex === 0) return 0
+  
+  const change = ((latestOpex - prevOpex) / prevOpex) * 100
+  return Math.round(Math.abs(change) * 10) / 10
 }
 
 // Format currency
@@ -580,15 +659,39 @@ const loadCompanies = async () => {
   companiesLoading.value = true
   try {
     companies.value = await companyApi.getAll()
-    // Generate financial data untuk semua companies
-    companies.value.forEach(company => {
-      generateFinancialData(company.id)
-    })
+    // Load reports for all companies
+    await loadAllCompanyReports()
   } catch (error: unknown) {
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     message.error('Gagal memuat perusahaan: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
   } finally {
     companiesLoading.value = false
+  }
+}
+
+// Load reports for all companies
+const loadAllCompanyReports = async () => {
+  if (companies.value.length === 0) return
+  
+  reportsLoading.value = true
+  try {
+    // Load reports for all companies in parallel
+    const reportPromises = companies.value.map(async (company) => {
+      try {
+        const reports = await reportsApi.getByCompanyId(company.id)
+        companyReportsMap.value[company.id] = reports
+      } catch (error) {
+        // Silently fail for individual companies - just log it
+        console.warn(`Failed to load reports for company ${company.id}:`, error)
+        companyReportsMap.value[company.id] = []
+      }
+    })
+    
+    await Promise.all(reportPromises)
+  } catch (error) {
+    console.error('Error loading company reports:', error)
+  } finally {
+    reportsLoading.value = false
   }
 }
 

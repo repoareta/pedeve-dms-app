@@ -258,6 +258,7 @@ const formatPeriod = (period: string | undefined): string => {
 }
 
 // Calculate RKAP percentage (dummy calculation for now)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const calculateRKAPPercent = (_report: Report): number => {
   // Dummy calculation - in real app, this would come from RKAP data
   return Math.floor(Math.random() * 100)

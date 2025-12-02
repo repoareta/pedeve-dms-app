@@ -126,6 +126,59 @@ const reportsApi = {
     })
     return response.data
   },
+
+  // Upload reports from Excel file
+  async uploadReports(file: File, onProgress?: (progress: number) => void): Promise<{ success: number; failed: number; errors: Array<{ row: number; message: string }> }> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await apiClient.post('/reports/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          onProgress(progress)
+        } else if (onProgress && progressEvent.loaded) {
+          // Fallback jika total tidak tersedia
+          onProgress(Math.min(99, Math.round(progressEvent.loaded / 1024))) // Estimate based on KB
+        }
+      },
+    })
+    return response.data
+  },
+
+  // Validate Excel file before upload
+  async validateExcelFile(file: File): Promise<{ valid: boolean; errors: Array<{ row: number; column: string; message: string }>; data: any[] }> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await apiClient.post('/reports/validate', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+
+  // Download template Excel
+  async downloadTemplate(): Promise<Blob> {
+    const response = await apiClient.get('/reports/template', {
+      responseType: 'blob',
+      validateStatus: (status) => status < 500, // Don't throw on 4xx
+    })
+    
+    if (response.status === 404) {
+      throw new Error('Template endpoint not found')
+    }
+    
+    if (response.status >= 400) {
+      throw new Error(`Failed to download template: ${response.status}`)
+    }
+    
+    return response.data
+  },
 }
 
 export default reportsApi

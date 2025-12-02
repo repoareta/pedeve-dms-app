@@ -246,6 +246,13 @@ body {
   padding: 24px;
 }
 
+// .navtopMenuItem{
+//   background: orange;
+//   display: flex !important;
+//   justify-content: center !important;
+//   align-items: center !important;
+// }
+
 .page-header{
   .page-title{
     font-size: 25px !important;
@@ -440,6 +447,7 @@ body {
       padding: 0 12px;
 
       .desktop-menu {
+        
         :deep(.ant-menu-item) {
           padding: 0 12px;
           font-size: 14px;
@@ -770,6 +778,22 @@ body {
   }
 }
 
+.btn-icon-label{
+  color: #333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  height: 33px;
+  border-radius: 8px;
+  border: 1px solid #d9d9d9;
+  transition: all 0.3s;
+  &:hover {
+    background: #f5f5f5;
+    border-color: var(--primary-color);
+  }
+}
+
 // ==========================================
 // Subsidiaries List Styles
 // ==========================================
@@ -1063,5 +1087,380 @@ body {
   .dashboard-actions {
     width: 100%;
     justify-content: flex-end;
+  }
+}
+
+/* Global Striped Table Styles - Fallback for non-scoped components */
+.striped-table .ant-table-tbody > tr:nth-child(even) > td {
+  background-color: #fafafa !important;
+}
+
+.striped-table .ant-table-tbody > tr:nth-child(odd) > td {
+  background-color: #ffffff !important;
+}
+
+.striped-table .ant-table-tbody > tr:hover > td {
+  background-color: #e6f7ff !important;
+}
+
+// ==========================================
+// Global Ant Design Input Customization
+// ==========================================
+// Custom styles untuk semua input components Ant Design agar seragam
+// Style ini akan diterapkan secara default ke semua input di aplikasi
+
+// Custom Variables untuk Input
+:root {
+  --input-bg-color: #ffffff;
+  --input-border-color: #b7b7c7;
+  --input-border-color-hover: #40a9ff;
+  --input-border-color-focus: #035cab;
+  --input-border-radius: 8px;
+  --input-height-default: 40px;
+  --input-height-large: 48px;
+  --input-height-small: 32px;
+  --input-text-color: #333333;
+  --input-placeholder-color: #bfbfbf;
+  --input-disabled-bg: #f5f5f5;
+  --input-disabled-color: rgba(0, 0, 0, 0.25);
+}
+
+// ==========================================
+// Text Input (a-input)
+// ==========================================
+
+.ant-input-affix-wrapper {
+  background-color: var(--input-bg-color) !important;
+  border-color: var(--input-border-color) !important;
+  border-radius: var(--input-border-radius) !important;
+  height: var(--input-height-default) !important;
+  color: var(--input-text-color) !important;
+  font-size: 14px !important;
+  padding: 4px 11px !important;
+  transition: all 0.3s ease !important;
+
+ 
+  &:hover {
+    border-color: var(--input-border-color-hover) !important;
+  }
+
+  &:focus,
+  &.ant-input-focused,
+  &.ant-input-affix-wrapper-focused {
+    border-color: var(--input-border-color-focus) !important;
+    box-shadow: 0 0 0 2px rgba(3, 92, 171, 0.1) !important;
+  }
+
+  &::placeholder {
+    color: var(--input-placeholder-color) !important;
+  }
+
+  &:disabled,
+  &[disabled] {
+    background-color: var(--input-disabled-bg) !important;
+    color: var(--input-disabled-color) !important;
+    cursor: not-allowed !important;
+  }
+}
+
+// Styling untuk prefix dan suffix icon
+.ant-input-affix-wrapper {
+  .ant-input-prefix,
+  .ant-input-suffix {
+    color: rgba(0, 0, 0, 0.25) !important;
+    display: flex !important;
+    align-items: center !important;
+    flex-shrink: 0 !important;
+  }
+
+  .ant-input-suffix {
+    color: rgba(0, 0, 0, 0.45) !important;
+  }
+}
+
+// Input sizes
+.ant-input-lg,
+.ant-input-affix-wrapper-lg {
+  height: var(--input-height-large) !important;
+  font-size: 16px !important;
+  padding: 4px 15px !important;
+}
+
+.ant-input-sm,
+.ant-input-affix-wrapper-sm {
+  height: var(--input-height-small) !important;
+  font-size: 12px !important;
+  padding: 2px 7px !important;
+}
+
+// ==========================================
+// Password Input (a-input-password)
+// ==========================================
+.ant-input-password {
+  background-color: var(--input-bg-color) !important;
+  border-color: var(--input-border-color) !important;
+  border-radius: var(--input-border-radius) !important;
+  height: var(--input-height-default) !important;
+
+  &:hover {
+    border-color: var(--input-border-color-hover) !important;
+  }
+
+  &:focus,
+  &.ant-input-password-focused {
+    border-color: var(--input-border-color-focus) !important;
+    box-shadow: 0 0 0 2px rgba(3, 92, 171, 0.1) !important;
+  }
+
+  .ant-input {
+    background-color: transparent !important;
+    border: none !important;
+    height: 100% !important;
+  }
+}
+
+.ant-input-password-lg {
+  height: var(--input-height-large) !important;
+}
+
+.ant-input-password-sm {
+  height: var(--input-height-small) !important;
+}
+
+// ==========================================
+// Number Input (a-input-number)
+// ==========================================
+.ant-input-number {
+  background-color: var(--input-bg-color) !important;
+  border-color: var(--input-border-color) !important;
+  border-radius: var(--input-border-radius) !important;
+  height: var(--input-height-default) !important;
+  width: 100% !important;
+
+  &:hover {
+    border-color: var(--input-border-color-hover) !important;
+  }
+
+  &:focus,
+  &.ant-input-number-focused {
+    border-color: var(--input-border-color-focus) !important;
+    box-shadow: 0 0 0 2px rgba(3, 92, 171, 0.1) !important;
+  }
+
+  .ant-input-number-input {
+    height: 100% !important;
+    background-color: transparent !important;
+    border: none !important;
+  }
+
+  &:disabled,
+  &[disabled] {
+    background-color: var(--input-disabled-bg) !important;
+    cursor: not-allowed !important;
+  }
+}
+
+.ant-input-number-lg {
+  height: var(--input-height-large) !important;
+}
+
+.ant-input-number-sm {
+  height: var(--input-height-small) !important;
+}
+
+// ==========================================
+// Textarea (a-textarea)
+// ==========================================
+.ant-input,
+textarea.ant-input {
+  min-height: auto !important;
+}
+
+.ant-input {
+  &[type="textarea"] {
+    min-height: 80px !important;
+    padding: 4px 11px !important;
+    resize: vertical !important;
+  }
+}
+
+// ==========================================
+// Select Dropdown (a-select)
+// ==========================================
+.ant-select {
+  .ant-select-selector {
+    background-color: var(--input-bg-color) !important;
+    border-color: var(--input-border-color) !important;
+    border-radius: var(--input-border-radius) !important;
+    height: var(--input-height-default) !important;
+    min-height: var(--input-height-default) !important;
+    transition: all 0.3s ease !important;
+
+    .ant-select-selection-item {
+      line-height: calc(var(--input-height-default) - 2px) !important;
+      color: var(--input-text-color) !important;
+    }
+
+    .ant-select-selection-placeholder {
+      line-height: calc(var(--input-height-default) - 2px) !important;
+      color: var(--input-placeholder-color) !important;
+    }
+  }
+
+  &:hover .ant-select-selector {
+    border-color: var(--input-border-color-hover) !important;
+  }
+
+  &.ant-select-focused .ant-select-selector,
+  &.ant-select-open .ant-select-selector {
+    border-color: var(--input-border-color-focus) !important;
+    box-shadow: 0 0 0 2px rgba(3, 92, 171, 0.1) !important;
+  }
+
+  &.ant-select-disabled {
+    .ant-select-selector {
+      background-color: var(--input-disabled-bg) !important;
+      color: var(--input-disabled-color) !important;
+      cursor: not-allowed !important;
+    }
+  }
+}
+
+.ant-select-lg {
+  .ant-select-selector {
+    height: var(--input-height-large) !important;
+    min-height: var(--input-height-large) !important;
+
+    .ant-select-selection-item,
+    .ant-select-selection-placeholder {
+      line-height: calc(var(--input-height-large) - 2px) !important;
+    }
+  }
+}
+
+.ant-select-sm {
+  .ant-select-selector {
+    height: var(--input-height-small) !important;
+    min-height: var(--input-height-small) !important;
+
+    .ant-select-selection-item,
+    .ant-select-selection-placeholder {
+      line-height: calc(var(--input-height-small) - 2px) !important;
+    }
+  }
+}
+
+// ==========================================
+// Date Picker (a-date-picker)
+// ==========================================
+.ant-picker {
+  background-color: var(--input-bg-color) !important;
+  border-color: var(--input-border-color) !important;
+  border-radius: var(--input-border-radius) !important;
+  height: var(--input-height-default) !important;
+  width: 100% !important;
+  transition: all 0.3s ease !important;
+
+  .ant-picker-input {
+    > input {
+      color: var(--input-text-color) !important;
+      font-size: 14px !important;
+
+      &::placeholder {
+        color: var(--input-placeholder-color) !important;
+      }
+    }
+  }
+
+  &:hover {
+    border-color: var(--input-border-color-hover) !important;
+  }
+
+  &.ant-picker-focused {
+    border-color: var(--input-border-color-focus) !important;
+    box-shadow: 0 0 0 2px rgba(3, 92, 171, 0.1) !important;
+  }
+
+  &.ant-picker-disabled {
+    background-color: var(--input-disabled-bg) !important;
+    cursor: not-allowed !important;
+  }
+}
+
+.ant-picker-lg {
+  height: var(--input-height-large) !important;
+  font-size: 16px !important;
+}
+
+.ant-picker-sm {
+  height: var(--input-height-small) !important;
+  font-size: 12px !important;
+}
+
+// ==========================================
+// Range Picker (a-range-picker)
+// ==========================================
+.ant-picker-range {
+  background-color: var(--input-bg-color) !important;
+  border-color: var(--input-border-color) !important;
+  border-radius: var(--input-border-radius) !important;
+  height: var(--input-height-default) !important;
+
+  &:hover {
+    border-color: var(--input-border-color-hover) !important;
+  }
+
+  &.ant-picker-focused {
+    border-color: var(--input-border-color-focus) !important;
+    box-shadow: 0 0 0 2px rgba(3, 92, 171, 0.1) !important;
+  }
+}
+
+// ==========================================
+// Time Picker (a-time-picker)
+// ==========================================
+.ant-picker-time-panel-column {
+  > li.ant-picker-time-panel-cell-selected {
+    background-color: rgba(3, 92, 171, 0.1) !important;
+  }
+}
+
+// ==========================================
+// Input Group (a-input-group)
+// ==========================================
+.ant-input-group {
+  .ant-input-group-addon {
+    background-color: #fafafa !important;
+    border-color: var(--input-border-color) !important;
+    border-radius: var(--input-border-radius) !important;
+    color: var(--input-text-color) !important;
+  }
+}
+
+// ==========================================
+// Form Item (a-form-item) - untuk spacing yang konsisten
+// ==========================================
+.ant-form-item {
+  margin-bottom: 24px !important;
+
+  .ant-form-item-label {
+    > label {
+      color: var(--text-color) !important;
+      font-weight: 500 !important;
+    }
+  }
+}
+
+// ==========================================
+// Override untuk komponen yang menggunakan input internal
+// ==========================================
+.ant-cascader-picker,
+.ant-mentions,
+.ant-auto-complete {
+  .ant-input,
+  .ant-select-selector {
+    background-color: var(--input-bg-color) !important;
+    border-color: var(--input-border-color) !important;
+    border-radius: var(--input-border-radius) !important;
   }
 }

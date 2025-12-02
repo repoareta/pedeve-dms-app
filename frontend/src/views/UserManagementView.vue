@@ -5,6 +5,7 @@ import { message, Modal } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { companyApi, userApi, roleApi, permissionApi, type Company, type User, type Role, type Permission } from '../api/userManagement'
 import { useAuthStore } from '../stores/auth'
+import { Icon as IconifyIcon } from '@iconify/vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -36,6 +37,7 @@ const resetPasswordForm = ref<{ user_id: string; username: string; new_password:
 // Search states
 const companySearchText = ref('')
 const userSearchText = ref('')
+const permissionSearchText = ref('')
 
 // Pagination
 const companyPagination = ref({
@@ -77,6 +79,24 @@ const filteredUsers = computed(() => {
       u.username.toLowerCase().includes(search) ||
       u.email.toLowerCase().includes(search) ||
       u.role.toLowerCase().includes(search)
+    )
+  }
+  
+  return filtered
+})
+
+const filteredPermissions = computed(() => {
+  let filtered = [...permissions.value]
+  
+  // Search filter
+  if (permissionSearchText.value) {
+    const search = permissionSearchText.value.toLowerCase()
+    filtered = filtered.filter(p => 
+      p.name.toLowerCase().includes(search) ||
+      (p.description && p.description.toLowerCase().includes(search)) ||
+      p.resource.toLowerCase().includes(search) ||
+      p.action.toLowerCase().includes(search) ||
+      p.scope.toLowerCase().includes(search)
     )
   }
   
@@ -195,6 +215,49 @@ const userColumns = computed(() => [
     onFilter: (value: boolean, record: User) => record.is_active === value 
   },
   { title: 'Aksi', key: 'actions', width: 150 },
+])
+
+const permissionColumns = computed(() => [
+  { 
+    title: 'Nama Izin', 
+    dataIndex: 'name', 
+    key: 'name',
+    sorter: (a: Permission, b: Permission) => a.name.localeCompare(b.name),
+  },
+  { 
+    title: 'Deskripsi', 
+    dataIndex: 'description', 
+    key: 'description',
+    sorter: (a: Permission, b: Permission) => (a.description || '').localeCompare(b.description || ''),
+  },
+  { 
+    title: 'Resource', 
+    dataIndex: 'resource', 
+    key: 'resource',
+    sorter: (a: Permission, b: Permission) => a.resource.localeCompare(b.resource),
+    filters: Array.from(new Set(permissions.value.map(p => p.resource))).map(r => ({ text: r, value: r })),
+    onFilter: (value: string | number | boolean, record: Permission) => record.resource === value,
+  },
+  { 
+    title: 'Aksi', 
+    dataIndex: 'action', 
+    key: 'action',
+    sorter: (a: Permission, b: Permission) => a.action.localeCompare(b.action),
+    filters: Array.from(new Set(permissions.value.map(p => p.action))).map(a => ({ text: a, value: a })),
+    onFilter: (value: string | number | boolean, record: Permission) => record.action === value,
+  },
+  { 
+    title: 'Cakupan', 
+    dataIndex: 'scope', 
+    key: 'scope',
+    sorter: (a: Permission, b: Permission) => a.scope.localeCompare(b.scope),
+    filters: [
+      { text: 'Global', value: 'global' },
+      { text: 'Company', value: 'company' },
+      { text: 'Sub Company', value: 'sub_company' },
+    ],
+    onFilter: (value: string | number | boolean, record: Permission) => record.scope === value,
+  },
 ])
 
 // Roles
@@ -562,25 +625,20 @@ const getScopeColor = (scope: string): string => {
         <!-- Users Tab -->
         <a-tab-pane key="users" tab="Pengguna">
           <div class="table-header">
-            <a-button v-if="canCreateUser" type="primary" @click="handleCreateUser">
-              <template #icon>
-                <span>+</span>
-              </template>
-              Tambah Pengguna
-            </a-button>
-          </div>
-
-          <div style="margin-bottom: 16px;">
             <a-input
               v-model:value="userSearchText"
-              placeholder="Cari pengguna (username, email, role)..."
+              placeholder="Search"
+              class="search-input"
               allow-clear
-              style="width: 300px;"
             >
               <template #prefix>
-                <span>🔍</span>
+                <IconifyIcon icon="mdi:magnify" width="16" />
               </template>
             </a-input>
+            <a-button v-if="canCreateUser" type="primary" @click="handleCreateUser">
+              <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
+              Tambah Pengguna
+            </a-button>
           </div>
 
           <a-table
@@ -600,6 +658,7 @@ const getScopeColor = (scope: string): string => {
               userPagination.pageSize = pagination.pageSize || 10
             }"
             row-key="id"
+            class="striped-table"
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'company_id'">
@@ -703,6 +762,7 @@ const getScopeColor = (scope: string): string => {
             :data-source="roles"
             :loading="rolesLoading"
             :scroll="{ x: 'max-content' }"
+            class="striped-table"
             :pagination="{
               pageSize: 10,
               showSizeChanger: true,
@@ -751,16 +811,24 @@ const getScopeColor = (scope: string): string => {
 
         <!-- Permissions Tab -->
         <a-tab-pane key="permissions" tab="Izin">
+          <div class="table-header">
+            <a-input
+              v-model:value="permissionSearchText"
+              placeholder="Search"
+              class="search-input"
+              allow-clear
+            >
+              <template #prefix>
+                <IconifyIcon icon="mdi:magnify" width="16" />
+              </template>
+            </a-input>
+          </div>
+
           <a-table
-            :columns="[
-              { title: 'Nama Izin', dataIndex: 'name', key: 'name' },
-              { title: 'Deskripsi', dataIndex: 'description', key: 'description' },
-              { title: 'Resource', dataIndex: 'resource', key: 'resource' },
-              { title: 'Aksi', dataIndex: 'action', key: 'action' },
-              { title: 'Cakupan', dataIndex: 'scope', key: 'scope' },
-            ]"
-            :data-source="permissions"
+            :columns="permissionColumns"
+            :data-source="filteredPermissions"
             :loading="permissionsLoading"
+            class="striped-table"
             :scroll="{ x: 'max-content' }"
             :pagination="{
               pageSize: 10,
@@ -971,7 +1039,9 @@ const getScopeColor = (scope: string): string => {
 .table-header {
   margin-bottom: 16px;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .search-container {
@@ -979,7 +1049,7 @@ const getScopeColor = (scope: string): string => {
 }
 
 .search-input {
-  width: 100%;
+  flex: 1;
   max-width: 300px;
 }
 
@@ -1096,6 +1166,22 @@ const getScopeColor = (scope: string): string => {
   .search-input {
     max-width: 100%;
   }
+}
+
+/* Striped table styles */
+.striped-table :deep(.ant-table-tbody > tr:nth-child(even) > td),
+.striped-table :deep(.ant-table-tbody tr:nth-child(even) td) {
+  background-color: #fafafa !important;
+}
+
+.striped-table :deep(.ant-table-tbody > tr:nth-child(odd) > td),
+.striped-table :deep(.ant-table-tbody tr:nth-child(odd) td) {
+  background-color: #ffffff !important;
+}
+
+.striped-table :deep(.ant-table-tbody > tr:hover > td),
+.striped-table :deep(.ant-table-tbody tr:hover td) {
+  background-color: #e6f7ff !important;
 }
 </style>
 

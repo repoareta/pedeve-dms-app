@@ -1047,18 +1047,8 @@ const getIconColor = (name: string): string => {
 }
 
 const getLevelLabel = (level: number): string => {
-  switch (level) {
-    case 0:
-      return 'Holding (Induk)'
-    case 1:
-      return 'Anak Perusahaan'
-    case 2:
-      return 'Cucu Perusahaan'
-    case 3:
-      return 'Cicit Perusahaan'
-    default:
-      return `Level ${level}`
-  }
+  if (level === 0) return 'Holding'
+  return `Level ${level}`
 }
 
 const getLevelColor = (level: number): string => {

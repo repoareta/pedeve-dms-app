@@ -266,12 +266,13 @@ onUnmounted(() => {
           <a-menu 
           mode="horizontal" 
           :selected-keys="[route.name as string]"
-          class="nav-menu desktop-menu"
-        >
+          class="nav-menu desktop-menu">
           <a-menu-item 
             v-for="item in menuItems" 
             :key="item.key"
             @click="handleMenuItemClick(item.path)"
+
+            class="navtopMenuItem"
           >
             <IconifyIcon :icon="item.icon" width="18" style="margin-right: 8px;" />
             {{ item.label }}

@@ -2132,7 +2132,7 @@ background: white;
     }
 
     :deep(.ant-btn) {
-      height: 44px;
+      height: 40px;
       font-size: 15px;
       border-radius: 8px;
     }

@@ -14,30 +14,23 @@
             </p>
           </div>
           <div class="header-right">
-            <a-input v-model:value="searchText" placeholder="Search" allow-clear class="search-input" size="large">
+            <a-input v-if="viewMode === 'grid'" v-model:value="searchText" placeholder="Search" class="search-input"
+              allow-clear>
               <template #prefix>
-                <IconifyIcon icon="mdi:magnify" width="20" />
+                <IconifyIcon icon="mdi:account" width="16" />
               </template>
             </a-input>
             <div class="view-mode-buttons">
-              <a-button 
-                :type="viewMode === 'grid' ? 'primary' : 'default'"
-                size="large"
-                @click="handleViewModeChange('grid')"
-                class="view-mode-btn"
-              >
+              <a-button :type="viewMode === 'grid' ? 'primary' : 'default'" @click="handleViewModeChange('grid')"
+                class="view-mode-btn">
                 <IconifyIcon icon="mdi:view-grid" width="20" />
               </a-button>
-              <a-button 
-                :type="viewMode === 'list' ? 'primary' : 'default'"
-                size="large"
-                @click="handleViewModeChange('list')"
-                class="view-mode-btn"
-              >
+              <a-button :type="viewMode === 'list' ? 'primary' : 'default'" @click="handleViewModeChange('list')"
+                class="view-mode-btn">
                 <IconifyIcon icon="mdi:view-list" width="20" />
               </a-button>
             </div>
-            <a-button type="primary" size="large" @click="handleCreateCompany" class="add-button">
+            <a-button type="primary" @click="handleCreateCompany" style="display: flex; align-items: center;">
               <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
               Add new Subsidiary
             </a-button>
@@ -47,7 +40,8 @@
 
       <div class="mainContentPage">
         <!-- Subsidiary Cards Grid -->
-        <div class="subsidiary-cards-grid" v-if="viewMode === 'grid' && !companiesLoading && filteredCompanies.length > 0">
+        <div class="subsidiary-cards-grid"
+          v-if="viewMode === 'grid' && !companiesLoading && filteredCompanies.length > 0">
           <div v-for="company in paginatedCompanies" :key="company.id" class="subsidiary-card"
             @click="handleViewDetail(company.id)">
             <!-- Card Header -->
@@ -112,72 +106,77 @@
 
         <!-- Subsidiary Table View -->
         <div v-if="viewMode === 'list'">
-          <a-table
-            :columns="tableColumns"
-            :data-source="tableData"
-            :loading="companiesLoading || tableDataLoading"
-            :pagination="{
-              current: tablePagination.current,
-              pageSize: tablePagination.pageSize,
-              total: tablePagination.total,
-              showSizeChanger: true,
-              showTotal: (total: number) => `Total ${total} subsidiaries`,
-              pageSizeOptions: ['10', '20', '50', '100'],
-            }"
-            @change="handleTableChange"
-            row-key="id"
-            :scroll="{ x: 'max-content' }"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'logo'">
-                <div class="table-logo-cell">
-                  <img v-if="getCompanyLogo(record)" :src="getCompanyLogo(record)" :alt="record.name" class="table-logo" />
-                  <div v-else class="table-logo-placeholder" :style="{ backgroundColor: getIconColor(record.name) }">
-                    {{ getCompanyInitial(record.name) }}
+          <a-card class="subsidiaries-table-card" :bordered="false">
+            <!-- Table Filters and Actions -->
+            <div class="table-filters-container">
+              <a-input v-model:value="searchText" placeholder="Search" class="search-input" allow-clear>
+                <template #prefix>
+                  <IconifyIcon icon="mdi:magnify" width="16" />
+                </template>
+              </a-input>
+            </div>
+
+            <a-table :columns="tableColumns" :data-source="tableData" :loading="companiesLoading || tableDataLoading"
+              :pagination="{
+                current: tablePagination.current,
+                pageSize: tablePagination.pageSize,
+                total: tablePagination.total,
+                showSizeChanger: true,
+                showTotal: (total: number) => `Total ${total} subsidiaries`,
+                pageSizeOptions: ['10', '20', '50', '100'],
+              }" @change="handleTableChange" row-key="id" :scroll="{ x: 'max-content' }" class="striped-table">
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'logo'">
+                  <div class="table-logo-cell">
+                    <img v-if="getCompanyLogo(record)" :src="getCompanyLogo(record)" :alt="record.name"
+                      class="table-logo" />
+                    <div v-else class="table-logo-placeholder" :style="{ backgroundColor: getIconColor(record.name) }">
+                      {{ getCompanyInitial(record.name) }}
+                    </div>
                   </div>
-                </div>
+                </template>
+                <template v-if="column.key === 'level'">
+                  <a-tag :color="getLevelColor(record.level)">
+                    {{ getLevelLabel(record.level) }}
+                  </a-tag>
+                </template>
+                <template v-if="column.key === 'status'">
+                  <a-tag :color="record.is_active ? 'green' : 'red'">
+                    {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
+                  </a-tag>
+                </template>
+                <template v-if="column.key === 'actions'">
+                  <a-dropdown>
+                    <a-button type="link" size="small">
+                      Aksi
+                      <IconifyIcon icon="mdi:chevron-down" width="16" style="margin-left: 4px;" />
+                    </a-button>
+                    <template #overlay>
+                      <a-menu>
+                        <a-menu-item key="view" @click="handleViewDetail(record.id)">
+                          <IconifyIcon icon="mdi:eye" width="16" style="margin-right: 8px;" />
+                          Lihat Detail
+                        </a-menu-item>
+                        <a-menu-item v-if="canEdit" key="edit" @click="handleEditCompany(record.id)">
+                          <IconifyIcon icon="mdi:pencil" width="16" style="margin-right: 8px;" />
+                          Edit
+                        </a-menu-item>
+                        <a-menu-item v-if="canAssignRole" key="assign-role" @click="handleAssignRole(record.id)">
+                          <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
+                          Assign Role
+                        </a-menu-item>
+                        <a-menu-divider v-if="canDelete && (canEdit || canAssignRole)" />
+                        <a-menu-item v-if="canDelete" key="delete" danger @click="handleDeleteCompany(record.id)">
+                          <IconifyIcon icon="mdi:delete" width="16" style="margin-right: 8px;" />
+                          Hapus
+                        </a-menu-item>
+                      </a-menu>
+                    </template>
+                  </a-dropdown>
+                </template>
               </template>
-              <template v-if="column.key === 'level'">
-                <a-tag :color="getLevelColor(record.level)">
-                  {{ getLevelLabel(record.level) }}
-                </a-tag>
-              </template>
-              <template v-if="column.key === 'status'">
-                <a-tag :color="record.is_active ? 'green' : 'red'">
-                  {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
-                </a-tag>
-              </template>
-              <template v-if="column.key === 'actions'">
-                <a-dropdown>
-                  <a-button type="link" size="small">
-                    Aksi
-                    <IconifyIcon icon="mdi:chevron-down" width="16" style="margin-left: 4px;" />
-                  </a-button>
-                  <template #overlay>
-                    <a-menu>
-                      <a-menu-item key="view" @click="handleViewDetail(record.id)">
-                        <IconifyIcon icon="mdi:eye" width="16" style="margin-right: 8px;" />
-                        Lihat Detail
-                      </a-menu-item>
-                      <a-menu-item v-if="canEdit" key="edit" @click="handleEditCompany(record.id)">
-                        <IconifyIcon icon="mdi:pencil" width="16" style="margin-right: 8px;" />
-                        Edit
-                      </a-menu-item>
-                      <a-menu-item v-if="canAssignRole" key="assign-role" @click="handleAssignRole(record.id)">
-                        <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
-                        Assign Role
-                      </a-menu-item>
-                      <a-menu-divider v-if="canDelete && (canEdit || canAssignRole)" />
-                      <a-menu-item v-if="canDelete" key="delete" danger @click="handleDeleteCompany(record.id)">
-                        <IconifyIcon icon="mdi:delete" width="16" style="margin-right: 8px;" />
-                        Hapus
-                      </a-menu-item>
-                    </a-menu>
-                  </template>
-                </a-dropdown>
-              </template>
-            </template>
-          </a-table>
+            </a-table>
+          </a-card>
         </div>
 
         <!-- Loading State -->
@@ -196,7 +195,8 @@
         </div>
 
         <!-- No Search Results -->
-        <div v-if="viewMode === 'grid' && !companiesLoading && companies.length > 0 && filteredCompanies.length === 0" class="empty-state">
+        <div v-if="viewMode === 'grid' && !companiesLoading && companies.length > 0 && filteredCompanies.length === 0"
+          class="empty-state">
           <IconifyIcon icon="mdi:magnify" width="64" style="color: #ccc; margin-bottom: 16px;" />
           <p>Tidak ada hasil untuk "{{ searchText }}"</p>
           <a-button type="default" @click="searchText = ''">Hapus Filter</a-button>
@@ -211,13 +211,8 @@
       </div>
 
       <!-- Assign Role Modal -->
-      <a-modal
-        v-model:open="assignRoleModalVisible"
-        title="Assign Role - Kelola Pengurus"
-        :confirm-loading="assignRoleLoading"
-        width="900px"
-        :footer="null"
-      >
+      <a-modal v-model:open="assignRoleModalVisible" title="Assign Role - Kelola Pengurus"
+        :confirm-loading="assignRoleLoading" width="900px" :footer="null">
         <div class="assign-role-container">
           <!-- Form Assign Role Baru -->
           <div class="assign-new-section">
@@ -229,24 +224,14 @@
               <a-row :gutter="16">
                 <a-col :span="12">
                   <a-form-item label="Cari User" required>
-                    <a-select
-                      v-model:value="assignRoleForm.userId"
-                      show-search
-                      placeholder="Cari user berdasarkan nama atau email"
-                      :filter-option="filterUserOption"
-                      :loading="usersLoading"
-                      @search="handleUserSearch"
-                      allow-clear
-                      :disabled="usersLoading"
-                    >
-                      <a-select-option
-                        v-for="user in filteredUsers"
-                        :key="user.id"
-                        :value="user.id"
-                        :disabled="companyUsers.some(u => u.id === user.id)"
-                      >
+                    <a-select v-model:value="assignRoleForm.userId" show-search
+                      placeholder="Cari user berdasarkan nama atau email" :filter-option="filterUserOption"
+                      :loading="usersLoading" @search="handleUserSearch" allow-clear :disabled="usersLoading">
+                      <a-select-option v-for="user in filteredUsers" :key="user.id" :value="user.id"
+                        :disabled="companyUsers.some(u => u.id === user.id)">
                         {{ user.username }} ({{ user.email }})
-                        <span v-if="companyUsers.some(u => u.id === user.id)" class="text-muted"> - Sudah menjadi pengurus</span>
+                        <span v-if="companyUsers.some(u => u.id === user.id)" class="text-muted"> - Sudah menjadi
+                          pengurus</span>
                       </a-select-option>
                     </a-select>
                     <small v-if="usersLoading" class="text-muted">Memuat daftar user...</small>
@@ -257,21 +242,10 @@
                 </a-col>
                 <a-col :span="12">
                   <a-form-item label="Pilih Role" required>
-                    <a-select
-                      v-model:value="assignRoleForm.roleId"
-                      show-search
-                      placeholder="Cari role"
-                      :filter-option="filterRoleOption"
-                      :loading="rolesLoading"
-                      @search="handleRoleSearch"
-                      allow-clear
-                      :disabled="rolesLoading"
-                    >
-                      <a-select-option
-                        v-for="role in filteredRoles"
-                        :key="role.id"
-                        :value="role.id"
-                      >
+                    <a-select v-model:value="assignRoleForm.roleId" show-search placeholder="Cari role"
+                      :filter-option="filterRoleOption" :loading="rolesLoading" @search="handleRoleSearch" allow-clear
+                      :disabled="rolesLoading">
+                      <a-select-option v-for="role in filteredRoles" :key="role.id" :value="role.id">
                         {{ role.name }}
                       </a-select-option>
                     </a-select>
@@ -279,14 +253,10 @@
                   </a-form-item>
                 </a-col>
               </a-row>
-              
+
               <a-form-item>
-                <a-button 
-                  type="primary" 
-                  :loading="assignRoleLoading" 
-                  @click="handleAssignRoleSubmit" 
-                  :disabled="!assignRoleForm.userId || !assignRoleForm.roleId"
-                >
+                <a-button type="primary" :loading="assignRoleLoading" @click="handleAssignRoleSubmit"
+                  :disabled="!assignRoleForm.userId || !assignRoleForm.roleId">
                   <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
                   Assign Role
                 </a-button>
@@ -302,14 +272,8 @@
               <IconifyIcon icon="mdi:account-group" width="20" style="margin-right: 8px;" />
               Pengurus Saat Ini
             </h3>
-            <a-table
-              :columns="userColumns"
-              :data-source="companyUsers"
-              :loading="usersLoading"
-              :pagination="{ pageSize: 10 }"
-              row-key="id"
-              size="middle"
-            >
+            <a-table :columns="userColumns" :data-source="companyUsers" :loading="usersLoading"
+              :pagination="{ pageSize: 10 }" row-key="id" size="middle" class="striped-table">
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'role'">
                   <a-tag v-if="record.role" :color="getRoleColor(record.role)">
@@ -341,32 +305,16 @@
       </a-modal>
 
       <!-- Edit User Role Modal -->
-      <a-modal
-        v-model:open="editingUserRoleModalVisible"
-        title="Ubah Role Pengurus"
-        :confirm-loading="editingRoleLoading"
-        @ok="handleSaveUserRole"
-        @cancel="handleCancelEditUserRole"
-        width="500px"
-      >
+      <a-modal v-model:open="editingUserRoleModalVisible" title="Ubah Role Pengurus"
+        :confirm-loading="editingRoleLoading" @ok="handleSaveUserRole" @cancel="handleCancelEditUserRole" width="500px">
         <a-form layout="vertical" v-if="editingUserRole">
           <a-form-item label="User">
             <a-input :value="getUserById(editingUserRole.userId)?.username" disabled />
           </a-form-item>
           <a-form-item label="Pilih Role Baru" required>
-            <a-select
-              v-model:value="editingUserRole.roleId"
-              show-search
-              placeholder="Cari role"
-              :filter-option="filterRoleOption"
-              :loading="rolesLoading"
-              @search="handleRoleSearch"
-            >
-              <a-select-option
-                v-for="role in filteredRoles"
-                :key="role.id"
-                :value="role.id"
-              >
+            <a-select v-model:value="editingUserRole.roleId" show-search placeholder="Cari role"
+              :filter-option="filterRoleOption" :loading="rolesLoading" @search="handleRoleSearch">
+              <a-select-option v-for="role in filteredRoles" :key="role.id" :value="role.id">
                 {{ role.name }}
               </a-select-option>
             </a-select>
@@ -474,14 +422,14 @@ const filteredCompanies = computed(() => {
 
   // Apply search filter
   if (searchText.value.trim()) {
-  const search = searchText.value.toLowerCase().trim()
+    const search = searchText.value.toLowerCase().trim()
     filtered = companies.value.filter(company =>
-    company.name.toLowerCase().includes(search) ||
-    company.code.toLowerCase().includes(search) ||
-    (company.short_name && company.short_name.toLowerCase().includes(search)) ||
-    (company.nib && company.nib.toLowerCase().includes(search)) ||
-    (company.description && company.description.toLowerCase().includes(search))
-  )
+      company.name.toLowerCase().includes(search) ||
+      company.code.toLowerCase().includes(search) ||
+      (company.short_name && company.short_name.toLowerCase().includes(search)) ||
+      (company.nib && company.nib.toLowerCase().includes(search)) ||
+      (company.description && company.description.toLowerCase().includes(search))
+    )
   }
 
   // Sort by updated_at (most recent first), fallback to created_at
@@ -508,25 +456,25 @@ watch(searchText, () => {
 const getRKAPData = (companyId: string): number => {
   const reports = companyReportsMap.value[companyId] || []
   if (reports.length === 0) return 0
-  
+
   // Get latest report
   const latest = [...reports].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return b.period.localeCompare(a.period)
   })[0]
-  
+
   return latest?.revenue || 0
 }
 
 const getRKAPYear = (companyId: string): string => {
   const reports = companyReportsMap.value[companyId] || []
   if (reports.length === 0) return '2025'
-  
+
   const latest = [...reports].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return b.period.localeCompare(a.period)
   })[0]
-  
+
   if (!latest?.period) return '2025'
   const year = latest.period.split('-')[0]
   return year || '2025'
@@ -535,23 +483,23 @@ const getRKAPYear = (companyId: string): string => {
 const getRKAPChange = (companyId: string): number => {
   const reports = companyReportsMap.value[companyId] || []
   if (reports.length < 2) return 0
-  
+
   // Sort by period
   const sorted = [...reports].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return a.period.localeCompare(b.period)
   })
-  
+
   const latest = sorted[sorted.length - 1]
   const previous = sorted[sorted.length - 2]
-  
+
   if (!latest || !previous) return 0
-  
+
   const latestRevenue = latest.revenue || 0
   const prevRevenue = previous.revenue || 0
-  
+
   if (prevRevenue === 0) return 0
-  
+
   const change = ((latestRevenue - prevRevenue) / prevRevenue) * 100
   return Math.round(change * 10) / 10
 }
@@ -559,48 +507,48 @@ const getRKAPChange = (companyId: string): number => {
 const getOpexData = (companyId: string): number => {
   const reports = companyReportsMap.value[companyId] || []
   if (reports.length === 0) return 0
-  
+
   // Get latest report
   const latest = [...reports].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return b.period.localeCompare(a.period)
   })[0]
-  
+
   return latest?.opex || 0
 }
 
 const getOpexQuarter = (companyId: string): string => {
   const reports = companyReportsMap.value[companyId] || []
   if (reports.length === 0) return 'Q1 2025'
-  
+
   const latest = [...reports].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return b.period.localeCompare(a.period)
   })[0]
-  
+
   return getQuarterFromPeriod(latest?.period)
 }
 
 const getOpexChange = (companyId: string): number => {
   const reports = companyReportsMap.value[companyId] || []
   if (reports.length < 2) return 0
-  
+
   // Sort by period
   const sorted = [...reports].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return a.period.localeCompare(b.period)
   })
-  
+
   const latest = sorted[sorted.length - 1]
   const previous = sorted[sorted.length - 2]
-  
+
   if (!latest || !previous) return 0
-  
+
   const latestOpex = latest.opex || 0
   const prevOpex = previous.opex || 0
-  
+
   if (prevOpex === 0) return 0
-  
+
   const change = ((latestOpex - prevOpex) / prevOpex) * 100
   return Math.round(Math.abs(change) * 10) / 10
 }
@@ -672,7 +620,7 @@ const loadCompanies = async () => {
 // Load reports for all companies
 const loadAllCompanyReports = async () => {
   if (companies.value.length === 0) return
-  
+
   reportsLoading.value = true
   try {
     // Load reports for all companies in parallel
@@ -686,7 +634,7 @@ const loadAllCompanyReports = async () => {
         companyReportsMap.value[company.id] = []
       }
     })
-    
+
     await Promise.all(reportPromises)
   } catch (error) {
     console.error('Error loading company reports:', error)
@@ -718,7 +666,7 @@ const handleViewModeChange = async (mode: 'grid' | 'list') => {
   viewMode.value = mode
   // Save to localStorage
   localStorage.setItem('subsidiaries-view-mode', mode)
-  
+
   // Lazy load table data only when switching to list view
   // Check if companies are already loaded, if not load them
   if (mode === 'list' && companies.value.length === 0) {
@@ -742,7 +690,7 @@ const loadTableData = async () => {
   if (companies.value.length === 0) {
     await loadCompanies()
   }
-  
+
   tableDataLoading.value = true
   try {
     // Update pagination total
@@ -804,10 +752,10 @@ const tableColumns: TableColumnsType = [
     sorter: (a: Company, b: Company) => a.level - b.level,
     width: 150,
     filters: [
-      { text: 'Holding (Induk)', value: 0 },
-      { text: 'Anak Perusahaan', value: 1 },
-      { text: 'Cucu Perusahaan', value: 2 },
-      { text: 'Cicit Perusahaan', value: 3 },
+      { text: 'Holding', value: 0 },
+      { text: 'Level 1', value: 1 },
+      { text: 'Level 2', value: 2 },
+      { text: 'Level 3', value: 3 },
     ],
     onFilter: (value: string | number | boolean, record: Company) => {
       if (typeof value === 'number') {
@@ -870,18 +818,8 @@ const handleTableChange: TableProps['onChange'] = (pagination) => {
 
 // Get Level Label
 const getLevelLabel = (level: number): string => {
-  switch (level) {
-    case 0:
-      return 'Holding (Induk)'
-    case 1:
-      return 'Anak Perusahaan'
-    case 2:
-      return 'Cucu Perusahaan'
-    case 3:
-      return 'Cicit Perusahaan'
-    default:
-      return `Level ${level}`
-  }
+  if (level === 0) return 'Holding'
+  return `Level ${level}`
 }
 
 // Get Level Color
@@ -943,13 +881,13 @@ const filteredUsers = computed(() => {
   const availableUsers = allUsers.value.filter(
     user => !companyUsers.value.some(cu => cu.id === user.id)
   )
-  
+
   if (!userSearchText.value) {
     return availableUsers.slice(0, 20) // Limit to 20 for performance
   }
   const search = userSearchText.value.toLowerCase()
   return availableUsers.filter(
-    user => 
+    user =>
       user.username.toLowerCase().includes(search) ||
       user.email.toLowerCase().includes(search)
   ).slice(0, 20)
@@ -958,7 +896,7 @@ const filteredUsers = computed(() => {
 const filteredRoles = computed(() => {
   // Filter out superadmin role - hanya untuk developer, bukan untuk user pengguna
   const nonSuperadminRoles = allRoles.value.filter(role => role.name.toLowerCase() !== 'superadmin')
-  
+
   if (!roleSearchText.value) {
     return nonSuperadminRoles
   }
@@ -1002,14 +940,14 @@ const openAssignRoleModal = async (companyId: string) => {
     message.error('Company ID tidak ditemukan')
     return
   }
-  
+
   selectedCompanyId.value = companyId
   assignRoleModalVisible.value = true
   assignRoleForm.value = {
     userId: undefined,
     roleId: undefined,
   }
-  
+
   // Load users and roles
   await Promise.all([
     loadUsers(companyId),
@@ -1019,13 +957,13 @@ const openAssignRoleModal = async (companyId: string) => {
 
 const loadUsers = async (companyId: string) => {
   if (!companyId) return
-  
+
   usersLoading.value = true
   try {
     // Load all users (backend will filter based on access) - for dropdown selection
     const allUsersData = await userApi.getAll()
     allUsers.value = allUsersData
-    
+
     // Load company users from junction table (supports multiple company assignments)
     try {
       const companyUsersData = await companyApi.getUsers(companyId)
@@ -1036,10 +974,10 @@ const loadUsers = async (companyId: string) => {
       companyUsers.value = allUsersData.filter(user => user.company_id === companyId)
     }
   } catch (error: unknown) {
-    const axiosError = error as { 
-      response?: { 
+    const axiosError = error as {
+      response?: {
         status?: number
-        data?: { 
+        data?: {
           message?: string
           error?: string
         }
@@ -1047,13 +985,13 @@ const loadUsers = async (companyId: string) => {
       message?: string
       code?: string
     }
-    
+
     const statusCode = axiosError.response?.status
-    const errorMessage = axiosError.response?.data?.message || 
-                        axiosError.response?.data?.error || 
-                        axiosError.message || 
-                        'Unknown error'
-    
+    const errorMessage = axiosError.response?.data?.message ||
+      axiosError.response?.data?.error ||
+      axiosError.message ||
+      'Unknown error'
+
     // Handle different error scenarios
     if (statusCode === 403 || statusCode === 401) {
       console.warn('Access denied to users endpoint (status:', statusCode, '):', errorMessage)
@@ -1110,8 +1048,8 @@ const filterUserOption = (input: string, option: unknown) => {
   const user = allUsers.value.find(u => u.id === opt.value)
   if (!user) return false
   const search = input.toLowerCase()
-  return user.username.toLowerCase().includes(search) || 
-         user.email.toLowerCase().includes(search)
+  return user.username.toLowerCase().includes(search) ||
+    user.email.toLowerCase().includes(search)
 }
 
 const filterRoleOption = (input: string, option: unknown) => {
@@ -1126,7 +1064,7 @@ const handleAssignRoleSubmit = async () => {
     message.error('Harap pilih user dan role')
     return
   }
-  
+
   assignRoleLoading.value = true
   try {
     await userApi.assignToCompany(
@@ -1169,7 +1107,7 @@ const handleSaveUserRole = async () => {
     message.error('Harap pilih role')
     return
   }
-  
+
   editingRoleLoading.value = true
   try {
     await userApi.assignToCompany(
@@ -1193,7 +1131,7 @@ const handleSaveUserRole = async () => {
 // Remove User
 const handleRemoveUser = async (user: User) => {
   if (!selectedCompanyId.value) return
-  
+
   // Show confirmation
   Modal.confirm({
     title: 'Hapus Pengurus',
@@ -1230,7 +1168,7 @@ const getRoleColor = (role: string): string => {
 
 onMounted(async () => {
   await loadCompanies()
-  
+
   // If view mode is 'list', load table data
   if (viewMode.value === 'list') {
     await loadTableData()
@@ -1294,32 +1232,55 @@ onMounted(async () => {
   width: 300px;
 }
 
-.search-input :deep(.ant-input) {
-  border-radius: 8px;
-}
-
 .view-mode-buttons {
   display: flex;
   gap: 8px;
-  border: 1px solid #d9d9d9;
+  /* border: 1px solid #d9d9d9; */
   border-radius: 8px;
   padding: 4px;
-  background: #fafafa;
+  /* background: #fafafa; */
+  height: 40px;
+  align-items: center;
 }
 
 .view-mode-btn {
-  height: 36px;
+  height: 32px;
   padding: 0 12px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.add-button {
-  height: 44px;
-  padding: 0 24px;
-  font-weight: 500;
-  box-shadow: 0 2px 8px rgba(3, 92, 171, 0.2);
+/* Semua button di header-right harus sama tinggi (40px default) */
+.header-right :deep(.ant-btn) {
+  height: 40px !important;
+  min-height: 40px !important;
+}
+
+/* Subsidiaries Table Card */
+.subsidiaries-table-card {
+  border-radius: 12px;
+  overflow: hidden;
+  background: white;
+}
+
+.subsidiaries-table-card :deep(.ant-card-body) {
+  padding: 24px;
+}
+
+/* Table Filters Container */
+.table-filters-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.table-filters-container .search-input {
+  flex: 1;
+  min-width: 200px;
+  max-width: 300px;
 }
 
 /* Cards Grid */
@@ -1613,5 +1574,21 @@ onMounted(async () => {
 .text-muted {
   color: #999;
   font-size: 12px;
+}
+
+/* Striped table styles */
+.striped-table :deep(.ant-table-tbody > tr:nth-child(even) > td),
+.striped-table :deep(.ant-table-tbody tr:nth-child(even) td) {
+  background-color: #fafafa !important;
+}
+
+.striped-table :deep(.ant-table-tbody > tr:nth-child(odd) > td),
+.striped-table :deep(.ant-table-tbody tr:nth-child(odd) td) {
+  background-color: #ffffff !important;
+}
+
+.striped-table :deep(.ant-table-tbody > tr:hover > td),
+.striped-table :deep(.ant-table-tbody tr:hover td) {
+  background-color: #e6f7ff !important;
 }
 </style>

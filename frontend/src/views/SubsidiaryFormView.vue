@@ -19,7 +19,7 @@
       </div>
 
       <!-- Loading Overlay -->
-      <a-spin :spinning="loading" tip="Menyimpan data perusahaan, harap tunggu..." size="large" style="min-height: 400px;">
+      <a-spin :spinning="loading" tip="Menyimpan data perusahaan, harap tunggu..." style="min-height: 400px;">
         <div class="form-content">
         <a-card class="form-card">
         <!-- Progress Steps -->
@@ -43,7 +43,7 @@
               <IconifyIcon icon="mdi:information" width="20" style="margin-right: 8px;" />
               Informasi Dasar
             </h3>
-            <a-row :gutter="[12, 1]">
+            <a-row :gutter="[12, 0]">
 
               <a-col :xs="24" :md="6">
                 <a-form-item label="Nama Lengkap" required>
@@ -108,7 +108,7 @@
               <IconifyIcon icon="mdi:phone" width="20" style="margin-right: 8px;" />
               Informasi Kontak
             </h3>
-            <a-row :gutter="[12, 1]">
+            <a-row :gutter="[12, 0]">
               <a-col :xs="24" :md="6">
                 <a-form-item label="Telp">
                   <a-input v-model:value="formData.phone" placeholder="Nomor telepon" />
@@ -138,7 +138,7 @@
               <IconifyIcon icon="mdi:map-marker" width="20" style="margin-right: 8px;" />
               Alamat Perusahaan
             </h3>
-            <a-row :gutter="[12, 1]">
+            <a-row :gutter="[12, 0]">
               <a-col :xs="12">
                 <a-form-item label="Alamat Perusahaan">
                   <a-textarea v-model:value="formData.address" :rows="3" placeholder="Alamat perusahaan" />
@@ -170,7 +170,7 @@
                 <IconifyIcon icon="mdi:information" width="20" style="margin-right: 8px;" />
                 Informasi Dasar
               </h3>
-              <a-row :gutter="[12, 1]">
+              <a-row :gutter="[12, 0]">
                 <a-col v-if="!route.params.id" :xs="24" :md="12">
                   <a-form-item label="Kode Perusahaan" required>
                     <a-input v-model:value="formData.code" placeholder="Kode perusahaan (unik)" />
@@ -297,7 +297,7 @@
           <!-- Utama -->
           <div class="form-section">
             <h3 class="section-title">Utama</h3>
-            <a-row :gutter="[12, 1]">
+            <a-row :gutter="[12, 0]">
               <a-col :xs="24" :md="12">
                 <a-form-item label="Sektor Industri">
                   <a-input v-model:value="formData.main_business.industry_sector" placeholder="Sektor industri" />
@@ -319,7 +319,7 @@
           <!-- Lain-lain -->
           <div class="form-section">
             <h3 class="section-title">Lain-lain</h3>
-            <a-row :gutter="[12, 1]">
+            <a-row :gutter="[12, 0]">
               <a-col :xs="24">
                 <a-form-item label="Kegiatan Usaha Tambahan">
                   <a-textarea v-model:value="formData.main_business.additional_activities" :rows="3" placeholder="Kegiatan usaha tambahan" />
@@ -948,7 +948,7 @@ onMounted(async () => {
 }
 
 .form-section {
-  margin-bottom: 32px;
+  margin-bottom: 16px;
 }
 
 .section-title {
@@ -972,7 +972,7 @@ onMounted(async () => {
 .form-card :deep(.ant-form-item-label) {
   display: block;
   text-align: left;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   padding: 0;
 }
 
@@ -989,6 +989,64 @@ onMounted(async () => {
 
 .form-card :deep(.ant-form-item-control) {
   flex: 1;
+}
+
+/* Ensure all inputs, selects, date pickers, and buttons have consistent height (40px) */
+/* Text input dan input dengan affix wrapper */
+.form-card :deep(input.ant-input:not([type="textarea"])),
+.form-card :deep(.ant-input-affix-wrapper) {
+  height: 40px !important;
+}
+
+.form-card :deep(.ant-input-affix-wrapper .ant-input) {
+  height: 100% !important;
+}
+
+/* Select */
+.form-card :deep(.ant-select-selector) {
+  height: 40px !important;
+}
+
+.form-card :deep(.ant-select-selection-item),
+.form-card :deep(.ant-select-selection-placeholder) {
+  line-height: 38px !important;
+}
+
+/* Date Picker */
+.form-card :deep(.ant-picker),
+.form-card :deep(.ant-picker-input) {
+  height: 40px !important;
+}
+
+.form-card :deep(.ant-picker-input > input) {
+  height: 38px !important;
+  line-height: 38px !important;
+}
+
+/* Textarea tetap fleksibel, tidak perlu height 40px */
+.form-card :deep(textarea.ant-input) {
+  height: auto !important;
+  min-height: auto !important;
+}
+
+/* Buttons height */
+.form-card :deep(.ant-btn) {
+  height: 40px !important;
+  min-height: 40px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Small buttons tetap kecil */
+.form-card :deep(.ant-btn-sm) {
+  height: 24px !important;
+  min-height: 24px !important;
+}
+
+/* Form item margin bottom untuk merapatkan */
+.form-card :deep(.ant-form-item) {
+  margin-bottom: 8px !important;
 }
 
 @media (max-width: 768px) {

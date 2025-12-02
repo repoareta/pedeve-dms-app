@@ -9,7 +9,7 @@
           <div class="header-left">
             <h1 class="page-title">Reports</h1>
             <p class="page-description">
-              Subtitle here
+              Manage all reports and financial data.
             </p>
           </div>
           <div class="header-right">
@@ -17,7 +17,7 @@
               <IconifyIcon icon="mdi:file-excel" width="16" style="margin-right: 8px;" />
               Upload Report
             </a-button>
-            <a-button type="primary" size="large" class="add-report-btn" @click="handleAddReport">
+            <a-button type="primary" class="add-report-btn" @click="handleAddReport">
               <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
               Add report
             </a-button>
@@ -30,42 +30,28 @@
         <a-card class="reports-table-card" :bordered="false">
           <!-- Table Filters and Actions -->
           <div class="table-filters-container">
-            <a-input
-              v-model:value="searchText"
-              placeholder="Search reports..."
-              class="search-input"
-              allow-clear
-              @input="handleSearch"
-            >
+            <a-input v-model:value="searchText" placeholder="Search report" class="search-input"
+              allow-clear>
               <template #prefix>
-                <IconifyIcon icon="mdi:magnify" width="18" />
+                <IconifyIcon icon="mdi:magnify" width="16" />
               </template>
             </a-input>
-            <a-select
-              v-model:value="filterCompanyIds"
-              placeholder="Filter Subsidiary"
-              allow-clear
-              mode="multiple"
-              :max-tag-count="1"
-              class="filter-select"
-              @change="handleCompanyFilterChange"
-            >
+            <a-select v-model:value="filterCompanyIds" placeholder="Filter Subsidiary" allow-clear mode="multiple"
+              :max-tag-count="1" class="filter-select" @change="handleCompanyFilterChange">
               <a-select-option v-for="company in companies" :key="company.id" :value="company.id">
                 {{ company.name }}
               </a-select-option>
             </a-select>
-            <a-select
-              v-model:value="filterPeriod"
-              placeholder="Filter Periode"
-              allow-clear
-              class="filter-select"
-              @change="handlePeriodFilterChange"
-            >
+            <a-select v-model:value="filterPeriod" placeholder="Filter Periode" allow-clear class="filter-select"
+              @change="handlePeriodFilterChange">
               <a-select-option v-for="period in availablePeriods" :key="period" :value="period">
                 {{ formatPeriod(period) }}
               </a-select-option>
             </a-select>
             <div class="export-buttons">
+              <a-button type="text" class="export-btn" @click="handleDownloadTemplate" :loading="templateLoading">
+                <IconifyIcon icon="mdi:file-download" width="20" />
+              </a-button>
               <a-button type="text" class="export-btn" @click="handleExportPDF" :loading="exportLoading">
                 <IconifyIcon icon="mdi:file-pdf-box" width="20" />
               </a-button>
@@ -74,34 +60,29 @@
               </a-button>
             </div>
           </div>
-          
-          <a-table
-            :columns="columns"
-            :data-source="paginatedReports"
-            :pagination="{
-              current: currentPage,
-              pageSize: pageSize,
-              total: filteredReportsTotal,
-              showSizeChanger: true,
-              showTotal: (total: number) => `Total ${total} reports`,
-              pageSizeOptions: ['10', '20', '50', '100'],
-            }"
-            :loading="loading"
-            row-key="id"
-            :scroll="{ x: 'max-content' }"
-            @change="handleTableChange"
-          >
+
+          <a-table :columns="columns" :data-source="paginatedReports" :pagination="{
+            current: currentPage,
+            pageSize: pageSize,
+            total: filteredReportsTotal,
+            showSizeChanger: true,
+            showTotal: (total: number) => `Total ${total} reports`,
+            pageSizeOptions: ['10', '20', '50', '100'],
+          }" :loading="loading" row-key="id" :scroll="{ x: 'max-content' }" class="striped-table"
+            @change="handleTableChange">
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'name'">
                 <div class="name-cell">
                   <div class="table-logo-cell">
-                    <img v-if="getCompanyLogo(record.company)" :src="getCompanyLogo(record.company)" :alt="record.company?.name || ''" class="table-logo" />
-                    <div v-else class="table-logo-placeholder" :style="{ backgroundColor: getIconColor(record.company?.name || '') }">
+                    <img v-if="getCompanyLogo(record.company)" :src="getCompanyLogo(record.company)"
+                      :alt="record.company?.name || ''" class="table-logo" />
+                    <div v-else class="table-logo-placeholder"
+                      :style="{ backgroundColor: getIconColor(record.company?.name || '') }">
                       {{ getCompanyInitial(record.company?.name || '') }}
                     </div>
                   </div>
                   <div class="company-name-wrapper">
-                    <span class="company-name">{{ record.company?.name || 'Unknown Company' }}</span>
+                    <span class="company-name">{{ record.company?.name || 'Unknown Company' }}</span> <br>
                     <span class="report-period">Laporan Bulan {{ formatPeriod(record.period) }}</span>
                   </div>
                 </div>
@@ -122,7 +103,8 @@
                 <span>{{ formatNumber(record.dividend) }}</span>
               </template>
               <template v-if="column.key === 'financial_score'">
-                <div class="financial-score-badge" :class="getScoreClass(calculateFinancialScore(record.financial_ratio))">
+                <div class="financial-score-badge"
+                  :class="getScoreClass(calculateFinancialScore(record.financial_ratio))">
                   {{ calculateFinancialScore(record.financial_ratio) }}
                 </div>
               </template>
@@ -155,10 +137,136 @@
               </template>
             </template>
           </a-table>
-          
+
         </a-card>
       </div>
     </div>
+
+    <!-- Upload Report Modal -->
+    <a-modal
+      v-model:open="uploadModalVisible"
+      title="Upload Report"
+      :width="900"
+      :mask-closable="false"
+    >
+      <div class="upload-modal-content">
+        <!-- File Input (Hidden) -->
+        <input
+          ref="fileInputRef"
+          type="file"
+          accept=".xlsx,.xls"
+          style="display: none"
+          @change="handleFileSelect"
+        />
+
+        <!-- File Selection -->
+        <div v-if="!selectedFile && !uploading" class="file-selection">
+          <a-button type="primary" @click="triggerFileSelect" :loading="validating">
+            <IconifyIcon icon="mdi:file-upload" width="16" style="margin-right: 8px;" />
+            Pilih File Excel
+          </a-button>
+          <p class="file-hint">Format: .xlsx atau .xls</p>
+        </div>
+
+        <!-- Preview and Validation -->
+        <div v-if="selectedFile && !uploading && validationResult" class="preview-section">
+          <div class="file-info">
+            <IconifyIcon icon="mdi:file-excel" width="24" style="color: #52c41a; margin-right: 8px;" />
+            <span class="file-name">{{ selectedFile.name }}</span>
+            <a-button type="link" size="small" @click="clearFile">
+              <IconifyIcon icon="mdi:close" width="16" />
+            </a-button>
+          </div>
+
+          <!-- Validation Summary -->
+          <div class="validation-summary" v-if="validationResult">
+            <a-alert
+              v-if="validationResult.errors && validationResult.errors.length === 0"
+              type="success"
+              message="Semua data valid. Siap untuk diupload."
+              show-icon
+              style="margin-bottom: 16px;"
+            />
+            <a-alert
+              v-else-if="validationResult.errors && validationResult.errors.length > 0"
+              type="error"
+              :message="`Ditemukan ${validationResult.errors.length} error. Harap perbaiki sebelum upload.`"
+              show-icon
+              style="margin-bottom: 16px;"
+            />
+          </div>
+
+          <!-- Data Preview Table -->
+          <div class="data-preview" v-if="validationResult && validationResult.data">
+            <h4>Preview Data ({{ validationResult.data.length }} baris)</h4>
+            <a-table
+              :columns="previewColumns"
+              :data-source="validationResult.data"
+              :pagination="{ pageSize: 10 }"
+              :scroll="{ x: 'max-content', y: 300 }"
+              size="small"
+              class="preview-table"
+            >
+              <template #bodyCell="{ column, record, index }">
+                <template v-if="column.key === 'row_number'">
+                  {{ index + 1 }}
+                </template>
+                <template v-if="column.key === 'status'">
+                  <a-tag v-if="getRowErrors(index + 1).length === 0" color="success">Valid</a-tag>
+                  <a-tag v-else color="error">Error</a-tag>
+                </template>
+              </template>
+            </a-table>
+          </div>
+
+          <!-- Error Details -->
+          <div v-if="validationResult && validationResult.errors && validationResult.errors.length > 0" class="error-details">
+            <h4>Detail Error:</h4>
+            <a-list :data-source="validationResult.errors" size="small">
+              <template #renderItem="{ item }">
+                <a-list-item>
+                  <a-list-item-meta>
+                    <template #title>
+                      Baris {{ item.row }} - {{ item.column }}
+                    </template>
+                    <template #description>
+                      {{ item.message }}
+                    </template>
+                  </a-list-item-meta>
+                </a-list-item>
+              </template>
+            </a-list>
+          </div>
+        </div>
+
+        <!-- Upload Progress -->
+        <div v-if="uploading" class="upload-progress">
+          <a-spin size="large" />
+          <div class="progress-info">
+            <p>Mengupload data...</p>
+            <a-progress :percent="uploadProgress" :status="uploadProgress === 100 ? 'success' : 'active'" />
+            <p class="progress-text">{{ uploadProgress }}%</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <template #footer>
+        <div class="modal-footer">
+          <a-button @click="closeUploadModal">Batal</a-button>
+          <a-button
+            v-if="selectedFile && !uploading && !validating && validationResult"
+            type="primary"
+            :disabled="!validationResult.valid || (validationResult.errors && validationResult.errors.length > 0)"
+            @click="handleUpload"
+            :loading="uploading"
+          >
+            <IconifyIcon icon="mdi:upload" width="16" style="margin-right: 8px;" />
+            Upload
+          </a-button>
+        </div>
+      </template>
+    </a-modal>
   </div>
 </template>
 
@@ -293,7 +401,7 @@ const loadReports = async () => {
     reportsData.value = response.data
     totalReports.value = response.total
     totalPages.value = response.total_pages
-    
+
     // Check if no data found and show appropriate message
     if (response.data.length === 0 && (filterPeriod.value || (filterCompanyIds.value && filterCompanyIds.value.length > 0))) {
       let filterMessage = ''
@@ -311,9 +419,14 @@ const loadReports = async () => {
   } catch (error: unknown) {
     const axiosError = error as { response?: { status?: number; data?: { message?: string } }; message?: string }
     const status = axiosError.response?.status
-    
+
     // Check if it's a network error or 404/empty result
     if (status === 404 || (axiosError.message && axiosError.message.includes('Network Error'))) {
+      // Clear table data so previous results are not shown when nothing matches filters
+      reportsData.value = []
+      totalReports.value = 0
+      totalPages.value = 0
+
       // Check if we have filters applied
       if (filterPeriod.value || (filterCompanyIds.value && filterCompanyIds.value.length > 0)) {
         let filterMessage = ''
@@ -351,14 +464,13 @@ watch([filterCompanyIds, filterPeriod], () => {
   loadReports()
 })
 
-// Watch for pagination changes (only reload if search is not active)
-watch([currentPage, pageSize], () => {
-  // Only reload from backend if search is not active
-  // If search is active, pagination is handled client-side
-  if (!searchText.value || !searchText.value.trim()) {
-    loadReports()
-  }
+// Watch searchText untuk trigger handleSearch
+watch(searchText, () => {
+  handleSearch()
 })
+
+// Note: Pagination changes are handled by handleTableChange
+// Watch is removed to prevent double loading
 
 // Old dummy data (removed, now using backend data)
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -477,7 +589,7 @@ const filteredReports = computed(() => {
   // If search is active, use allReportsForSearch, otherwise use current page data
   const sourceData = (searchText.value && searchText.value.trim()) ? allReportsForSearch.value : reportsData.value
   let filtered = sourceData
-  
+
   // Apply search filter
   if (searchText.value && searchText.value.trim()) {
     const search = searchText.value.toLowerCase().trim()
@@ -487,21 +599,21 @@ const filteredReports = computed(() => {
       return companyName.toLowerCase().includes(search) || period.includes(search)
     })
   }
-  
+
   return filtered
 })
 
 // Computed for paginated reports
 const paginatedReports = computed(() => {
   const filtered = filteredReports.value
-  
+
   // If search is active, apply client-side pagination
   if (searchText.value && searchText.value.trim()) {
     const start = (currentPage.value - 1) * pageSize.value
     const end = start + pageSize.value
     return filtered.slice(start, end)
   }
-  
+
   // Otherwise, return backend paginated data
   return reportsData.value
 })
@@ -604,7 +716,7 @@ const columns: TableColumnsType = [
 const _visiblePages = computed(() => {
   const maxVisible = 4
   const pages: number[] = []
-  
+
   if (totalPages.value <= maxVisible) {
     // Jika total halaman <= 4, tampilkan semua
     for (let i = 1; i <= totalPages.value; i++) {
@@ -616,7 +728,7 @@ const _visiblePages = computed(() => {
       pages.push(i)
     }
   }
-  
+
   return pages
 })
 
@@ -651,7 +763,7 @@ const handleExportPDF = async () => {
     const blob = await reportsApi.exportPDF(params)
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
-    
+
     // Generate filename dengan filter info
     let filename = 'reports'
     if (filterPeriod.value) {
@@ -661,7 +773,7 @@ const handleExportPDF = async () => {
       filename += `_${filterCompanyIds.value.length}companies`
     }
     filename += `_${new Date().toISOString().split('T')[0]}.pdf`
-    
+
     link.href = url
     link.download = filename
     document.body.appendChild(link)
@@ -692,7 +804,7 @@ const handleExportExcel = async () => {
     const blob = await reportsApi.exportExcel(params)
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
-    
+
     // Generate filename dengan filter info
     let filename = 'reports'
     if (filterPeriod.value) {
@@ -702,7 +814,7 @@ const handleExportExcel = async () => {
       filename += `_${filterCompanyIds.value.length}companies`
     }
     filename += `_${new Date().toISOString().split('T')[0]}.xlsx`
-    
+
     link.href = url
     link.download = filename
     document.body.appendChild(link)
@@ -718,8 +830,185 @@ const handleExportExcel = async () => {
   }
 }
 
+// Upload states
+const uploadModalVisible = ref(false)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const selectedFile = ref<File | null>(null)
+const validating = ref(false)
+const uploading = ref(false)
+const uploadProgress = ref(0)
+const templateLoading = ref(false)
+const validationResult = ref<{
+  valid: boolean
+  errors: Array<{ row: number; column: string; message: string }>
+  data: any[]
+} | null>(null)
+
+// Preview columns for upload modal
+const previewColumns = [
+  { title: 'No', key: 'row_number', width: 60 },
+  { title: 'Periode', dataIndex: 'period', key: 'period' },
+  { title: 'Company Code', dataIndex: 'company_code', key: 'company_code' },
+  { title: 'Revenue', dataIndex: 'revenue', key: 'revenue' },
+  { title: 'OPEX', dataIndex: 'opex', key: 'opex' },
+  { title: 'NPAT', dataIndex: 'npat', key: 'npat' },
+  { title: 'Dividend', dataIndex: 'dividend', key: 'dividend' },
+  { title: 'Financial Ratio', dataIndex: 'financial_ratio', key: 'financial_ratio' },
+  { title: 'Status', key: 'status', width: 80 },
+]
+
 const handleUploadReport = () => {
-  message.info('Upload Report functionality coming soon')
+  uploadModalVisible.value = true
+  clearFile()
+}
+
+const triggerFileSelect = () => {
+  fileInputRef.value?.click()
+}
+
+const handleFileSelect = async (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  // Validate file extension
+  const validExtensions = ['.xlsx', '.xls']
+  const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
+  if (!validExtensions.includes(fileExtension)) {
+    message.error('Format file tidak valid. Hanya file Excel (.xlsx, .xls) yang diperbolehkan.')
+    return
+  }
+
+  selectedFile.value = file
+  validating.value = true
+  uploadProgress.value = 0
+
+  try {
+    // Validate file
+    const result = await reportsApi.validateExcelFile(file)
+    
+    // Ensure result has required structure
+    if (!result.errors) {
+      result.errors = []
+    }
+    if (!result.data) {
+      result.data = []
+    }
+    
+    validationResult.value = result
+
+    if (result.valid) {
+      message.success('File valid. Siap untuk diupload.')
+    } else {
+      message.warning(`Ditemukan ${result.errors.length} error. Harap perbaiki sebelum upload.`)
+    }
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal memvalidasi file: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
+    clearFile()
+  } finally {
+    validating.value = false
+  }
+}
+
+const getRowErrors = (rowNumber: number): Array<{ row: number; column: string; message: string }> => {
+  if (!validationResult.value) return []
+  return validationResult.value.errors.filter(e => e.row === rowNumber)
+}
+
+const handleUpload = async () => {
+  if (!selectedFile.value || !validationResult.value || validationResult.value.errors.length > 0) {
+    message.error('Tidak dapat upload. Harap perbaiki semua error terlebih dahulu.')
+    return
+  }
+
+  uploading.value = true
+  uploadProgress.value = 0
+
+  try {
+    const result = await reportsApi.uploadReports(selectedFile.value, (progress) => {
+      uploadProgress.value = progress
+    })
+
+    if (result.errors.length > 0) {
+      message.warning(`Upload selesai dengan ${result.failed} error. ${result.success} data berhasil diupload.`)
+    } else {
+      message.success('Upload selesai.')
+    }
+
+    // Reload reports
+    await loadReports()
+    
+    // Close modal after delay
+    setTimeout(() => {
+      closeUploadModal()
+    }, 1500)
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal upload: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
+  } finally {
+    uploading.value = false
+    uploadProgress.value = 0
+  }
+}
+
+const handleDownloadTemplate = async () => {
+  templateLoading.value = true
+  try {
+    const blob = await reportsApi.downloadTemplate()
+    
+    // Check if response is actually a blob
+    if (!(blob instanceof Blob)) {
+      throw new Error('Response is not a valid file')
+    }
+    
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'report_template.xlsx'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    message.success('Template berhasil didownload')
+  } catch (error: unknown) {
+    const axiosError = error as { 
+      response?: { 
+        status?: number
+        data?: { message?: string; error?: string } 
+      }
+      message?: string 
+      code?: string
+    }
+    
+    // Handle 404 or endpoint not found
+    if (axiosError.response?.status === 404 || axiosError.code === 'ERR_BAD_REQUEST') {
+      message.warning('Endpoint template belum tersedia. Silakan hubungi administrator.')
+    } else {
+      const errorMessage = axiosError.response?.data?.message || 
+                          axiosError.response?.data?.error || 
+                          axiosError.message || 
+                          'Unknown error'
+      message.error('Gagal download template: ' + errorMessage)
+    }
+  } finally {
+    templateLoading.value = false
+  }
+}
+
+const clearFile = () => {
+  selectedFile.value = null
+  validationResult.value = null
+  uploadProgress.value = 0
+  if (fileInputRef.value) {
+    fileInputRef.value.value = ''
+  }
+}
+
+const closeUploadModal = () => {
+  uploadModalVisible.value = false
+  clearFile()
+  uploading.value = false
 }
 
 const handleAddReport = () => {
@@ -777,17 +1066,22 @@ const _goToPage = (page: number) => {
 
 // Handle table change (pagination, sorting, filtering)
 const handleTableChange = (pag: { current?: number; pageSize?: number }) => {
-  if (pag.current) {
+  let shouldReload = false
+
+  if (pag.current !== undefined && pag.current !== currentPage.value) {
     currentPage.value = pag.current
+    shouldReload = true
   }
-  if (pag.pageSize) {
+
+  if (pag.pageSize !== undefined && pag.pageSize !== pageSize.value) {
     pageSize.value = pag.pageSize
     currentPage.value = 1 // Reset to first page when page size changes
+    shouldReload = true
   }
-  
-  // Always reload from backend when pagination changes (unless search is active)
-  // If search is active, pagination is client-side only
-  if (!searchText.value || !searchText.value.trim()) {
+
+  // Only reload from backend if pagination changed and search is not active
+  // If search is active, pagination is handled client-side only (no reload needed)
+  if (shouldReload && (!searchText.value || !searchText.value.trim())) {
     loadReports()
   }
 }
@@ -807,7 +1101,7 @@ const handleCompanyFilterChange = () => {
 // Handle search input
 const handleSearch = async () => {
   currentPage.value = 1
-  
+
   // If search is active, load all reports (without pagination) for client-side search
   if (searchText.value && searchText.value.trim()) {
     try {
@@ -853,6 +1147,10 @@ onMounted(async () => {
 .reports-layout {
   min-height: 100vh;
   background: #f5f5f5;
+}
+
+.search-input {
+  width: 300px;
 }
 
 .reports-content {
@@ -906,15 +1204,24 @@ onMounted(async () => {
 }
 
 /* Ensure all filter elements have same height */
-.table-filters-container :deep(.ant-input),
+/* .table-filters-container :deep(.ant-input),
 .table-filters-container :deep(.ant-select-selector) {
   height: 40px !important;
-}
+} */
 
-.table-filters-container :deep(.ant-select-selection-item),
+/* .table-filters-container :deep(.ant-select-selection-item),
 .table-filters-container :deep(.ant-select-selection-placeholder) {
   line-height: 38px !important;
-}
+} */
+
+/* Styling untuk selection overflow item - perlu :deep() karena scoped */
+/* .table-filters-container :deep(.ant-select-selection-overflow-item){
+  background: red !important;
+  line-height: 0 !important;
+  padding: 0 !important;
+  height: 20px;
+  margin: 0 !important;
+} */
 
 .action-btn {
   width: 40px;
@@ -940,11 +1247,14 @@ onMounted(async () => {
 }
 
 .add-report-btn {
-  height: 44px;
-  padding: 0 24px;
+  height: 40px;
+  padding: 0 15px;
   font-weight: 500;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(3, 92, 171, 0.2);
+  /* box-shadow: 0 2px 8px rgba(3, 92, 171, 0.2); */
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 /* Main Content */
@@ -955,7 +1265,7 @@ onMounted(async () => {
 
 .reports-table-card {
   border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  /* box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08); */
   overflow: hidden;
   background: white;
 }
@@ -981,13 +1291,46 @@ onMounted(async () => {
 }
 
 .filter-select {
-  height: 40px;
   min-width: 180px;
 }
 
 .filter-select:first-of-type {
   min-width: 200px;
 }
+
+/* Ensure filter select has consistent height */
+.table-filters-container :deep(.filter-select .ant-select-selector) {
+  height: 40px !important;
+}
+
+.table-filters-container :deep(.filter-select .ant-select-selection-item),
+.table-filters-container :deep(.filter-select .ant-select-selection-placeholder) {
+  line-height: 38px !important;
+}
+
+/* Styling untuk selection item di select multiple - perlu :deep() karena scoped */
+/* .filter-select :deep(.ant-select-selection-overflow-item) {
+  background: red !important;
+} */
+
+.filter-select :deep(.ant-select-selection-overflow-item .ant-select-selection-item) {
+  position: relative;
+  display: flex;
+  flex: none;
+  justify-content: center;
+  align-items: center;
+  border-radius: 5px;
+
+}
+
+/* Atau dengan selector yang lebih spesifik */
+/* .table-filters-container :deep(.ant-select-selection-overflow-item) {
+  background: red !important;
+}
+
+.table-filters-container :deep(.ant-select-selection-overflow-item .ant-select-selection-item) {
+  background: red !important;
+} */
 
 .export-buttons {
   display: flex;
@@ -997,15 +1340,15 @@ onMounted(async () => {
 }
 
 /* Ensure all filter elements have same height */
-.table-filters-container :deep(.ant-input),
+/* .table-filters-container :deep(.ant-input),
 .table-filters-container :deep(.ant-select-selector) {
   height: 40px !important;
-}
+} */
 
-.table-filters-container :deep(.ant-select-selection-item),
+/* .table-filters-container :deep(.ant-select-selection-item),
 .table-filters-container :deep(.ant-select-selection-placeholder) {
   line-height: 38px !important;
-}
+} */
 
 /* Table Styles */
 .name-cell {
@@ -1112,8 +1455,17 @@ onMounted(async () => {
   padding: 16px;
 }
 
-:deep(.ant-table-tbody > tr:hover > td) {
-  background: #fafafa;
+/* Striped table styles */
+.reports-table-card .striped-table :deep(.ant-table-tbody > tr:nth-child(even) > td) {
+  background-color: #fafafa !important;
+}
+
+.reports-table-card .striped-table :deep(.ant-table-tbody > tr:nth-child(odd) > td) {
+  background-color: #ffffff !important;
+}
+
+.reports-table-card .striped-table :deep(.ant-table-tbody > tr:hover > td) {
+  background-color: #e6f7ff !important;
 }
 
 :deep(.ant-table-thead > tr > th) {
@@ -1210,12 +1562,18 @@ onMounted(async () => {
   }
 
   /* Mobile: same height for all filter elements */
-  .table-filters-container :deep(.ant-input),
+  /* .table-filters-container :deep(.ant-input),
   .table-filters-container :deep(.ant-select-selector) {
     height: 40px !important;
+  } */
+
+
+
+  .export-btn {
+    height: 40px;
+    padding: 0 12px;
   }
 
-  .export-btn,
   .action-btn {
     width: 36px;
     height: 36px;
@@ -1281,5 +1639,110 @@ onMounted(async () => {
     width: 100%;
   }
 }
-</style>
 
+/* Upload Modal Styles */
+.upload-modal-content {
+  min-height: 400px;
+}
+
+.file-selection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.file-hint {
+  margin-top: 16px;
+  color: #999;
+  font-size: 14px;
+}
+
+.preview-section {
+  margin-top: 16px;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.file-name {
+  flex: 1;
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+.validation-summary {
+  margin-bottom: 16px;
+}
+
+.data-preview {
+  margin-bottom: 24px;
+}
+
+.data-preview h4 {
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.preview-table {
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+}
+
+.error-details {
+  margin-top: 24px;
+  padding: 16px;
+  background: #fff1f0;
+  border: 1px solid #ffccc7;
+  border-radius: 8px;
+}
+
+.error-details h4 {
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #cf1322;
+}
+
+.upload-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.progress-info {
+  margin-top: 24px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.progress-info p {
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.progress-text {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #666;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+</style>

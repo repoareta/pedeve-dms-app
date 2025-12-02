@@ -3,27 +3,30 @@ package http
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
+	"github.com/jung-kurt/gofpdf"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/audit"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
-	"github.com/gofiber/fiber/v2"
-	"github.com/jung-kurt/gofpdf"
 	"github.com/xuri/excelize/v2"
 )
 
 // ReportHandler handles report-related HTTP requests
 type ReportHandler struct {
-	reportUseCase usecase.ReportUseCase
+	reportUseCase  usecase.ReportUseCase
+	companyUseCase usecase.CompanyUseCase
 }
 
 // NewReportHandler creates a new report handler
 func NewReportHandler(reportUseCase usecase.ReportUseCase) *ReportHandler {
 	return &ReportHandler{
-		reportUseCase: reportUseCase,
+		reportUseCase:  reportUseCase,
+		companyUseCase: usecase.NewCompanyUseCase(),
 	}
 }
 
@@ -209,7 +212,7 @@ func (h *ReportHandler) GetAllReports(c *fiber.Ctx) error {
 				companyIDMap[id] = true
 			}
 		}
-		
+
 		for _, r := range filteredReports {
 			if companyIDMap[r.CompanyID] {
 				filtered = append(filtered, r)
@@ -266,18 +269,18 @@ func (h *ReportHandler) GetAllReports(c *fiber.Ctx) error {
 	userID := c.Locals("userID").(string)
 	username := c.Locals("username").(string)
 	audit.LogAction(userID, username, "list_reports", audit.ResourceReport, "", getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
-		"total":        total,
-		"page":         page,
-		"page_size":    pageSize,
+		"total":          total,
+		"page":           page,
+		"page_size":      pageSize,
 		"company_filter": companyIDFilter,
-		"period_filter": periodFilter,
+		"period_filter":  periodFilter,
 	})
 
 	return c.JSON(map[string]interface{}{
-		"data":       paginatedReports,
-		"total":      total,
-		"page":       page,
-		"page_size":  pageSize,
+		"data":        paginatedReports,
+		"total":       total,
+		"page":        page,
+		"page_size":   pageSize,
 		"total_pages": (total + pageSize - 1) / pageSize,
 	})
 }
@@ -531,7 +534,7 @@ func (h *ReportHandler) ExportReportsExcel(c *fiber.Ctx) error {
 				companyIDMap[id] = true
 			}
 		}
-		
+
 		for _, r := range reports {
 			if companyIDMap[r.CompanyID] {
 				filtered = append(filtered, r)
@@ -693,9 +696,9 @@ func (h *ReportHandler) ExportReportsExcel(c *fiber.Ctx) error {
 
 	// Audit log
 	audit.LogAction(userID, username, "export_reports_excel", audit.ResourceReport, "", getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
-		"count":         len(reports),
+		"count":          len(reports),
 		"company_filter": companyIDFilter,
-		"period_filter": periodFilter,
+		"period_filter":  periodFilter,
 	})
 
 	// Set headers and send file
@@ -758,7 +761,7 @@ func (h *ReportHandler) ExportReportsPDF(c *fiber.Ctx) error {
 				companyIDMap[id] = true
 			}
 		}
-		
+
 		for _, r := range reports {
 			if companyIDMap[r.CompanyID] {
 				filtered = append(filtered, r)
@@ -827,9 +830,9 @@ func (h *ReportHandler) ExportReportsPDF(c *fiber.Ctx) error {
 
 	// Audit log
 	audit.LogAction(userID, username, "export_reports_pdf", audit.ResourceReport, "", getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
-		"count":         len(reports),
+		"count":          len(reports),
 		"company_filter": companyIDFilter,
-		"period_filter": periodFilter,
+		"period_filter":  periodFilter,
 	})
 
 	// Set headers and send file
@@ -856,3 +859,977 @@ func formatNumber(num int64) string {
 	return result
 }
 
+// DownloadTemplate handles downloading Excel template for report upload
+// @Summary      Download Report Template
+// @Description  Download template Excel file untuk upload reports. Template berisi kolom-kolom yang diperlukan dengan contoh data.
+// @Tags         Reports
+// @Accept       json
+// @Produce      application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+// @Security     BearerAuth
+// @Success      200  {file}  application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+// @Failure      500  {object}  domain.ErrorResponse
+// @Router       /api/v1/reports/template [get]
+func (h *ReportHandler) DownloadTemplate(c *fiber.Ctx) error {
+	// Get user info to determine accessible companies
+	companyID := c.Locals("companyID")
+	roleName := c.Locals("roleName").(string)
+
+	var accessibleCompanies []domain.CompanyModel
+	var err error
+
+	// Get accessible companies based on user role
+	if roleName == "superadmin" {
+		// Superadmin can access all companies
+		accessibleCompanies, err = h.companyUseCase.GetAllCompanies()
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "template_failed",
+				Message: "Failed to get companies",
+			})
+		}
+	} else {
+		// Non-superadmin: get their company and all descendants
+		if companyID == nil {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "User company not found",
+			})
+		}
+
+		var userCompanyID string
+		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
+			userCompanyID = *companyIDPtr
+		} else if companyIDStr, ok := companyID.(string); ok {
+			userCompanyID = companyIDStr
+		} else {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Invalid company ID format",
+			})
+		}
+
+		// Get user's company
+		userCompany, err := h.companyUseCase.GetCompanyByID(userCompanyID)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "template_failed",
+				Message: "Failed to get user company",
+			})
+		}
+
+		// Get all descendants (including user's company)
+		descendants, err := h.companyUseCase.GetCompanyDescendants(userCompanyID)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "template_failed",
+				Message: "Failed to get company descendants",
+			})
+		}
+
+		// Include user's company itself
+		accessibleCompanies = append([]domain.CompanyModel{*userCompany}, descendants...)
+	}
+
+	// Filter only active companies
+	var activeCompanies []domain.CompanyModel
+	for _, company := range accessibleCompanies {
+		if company.IsActive {
+			activeCompanies = append(activeCompanies, company)
+		}
+	}
+
+	if len(activeCompanies) == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
+			Error:   "template_failed",
+			Message: "No accessible companies found",
+		})
+	}
+
+	// Create Excel file
+	f := excelize.NewFile()
+	defer func() {
+		if err := f.Close(); err != nil {
+			fmt.Printf("Error closing Excel file: %v\n", err)
+		}
+	}()
+
+	sheetName := "Template"
+	index, err := f.NewSheet(sheetName)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "template_failed",
+			Message: "Failed to create Excel sheet",
+		})
+	}
+	f.SetActiveSheet(index)
+	if err := f.DeleteSheet("Sheet1"); err != nil {
+		// Log error but continue (Sheet1 might not exist)
+		fmt.Printf("Warning: Failed to delete Sheet1: %v\n", err)
+	}
+
+	// Set headers
+	headers := []string{"Period (YYYY-MM)", "Company Code", "Revenue", "OPEX", "NPAT", "Dividend", "Financial Ratio (%)", "Remark"}
+	for i, header := range headers {
+		cell := fmt.Sprintf("%c1", 'A'+i)
+		if err := f.SetCellValue(sheetName, cell, header); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "template_failed",
+				Message: fmt.Sprintf("Failed to set cell value: %v", err),
+			})
+		}
+		style, err := f.NewStyle(&excelize.Style{
+			Font: &excelize.Font{Bold: true},
+			Fill: excelize.Fill{Type: "pattern", Color: []string{"#E0E0E0"}, Pattern: 1},
+		})
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "template_failed",
+				Message: fmt.Sprintf("Failed to create style: %v", err),
+			})
+		}
+		if err := f.SetCellStyle(sheetName, cell, cell, style); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "template_failed",
+				Message: fmt.Sprintf("Failed to set cell style: %v", err),
+			})
+		}
+	}
+
+	// Add data rows with company codes pre-filled
+	// Each company gets one row with example data
+	currentMonth := time.Now().Format("2006-01")
+	for i, company := range activeCompanies {
+		row := i + 2
+		// Period (current month as example)
+		if err := f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), currentMonth); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "template_failed",
+				Message: fmt.Sprintf("Failed to set cell value: %v", err),
+			})
+		}
+		// Company Code (pre-filled from database)
+		if err := f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), company.Code); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "template_failed",
+				Message: fmt.Sprintf("Failed to set cell value: %v", err),
+			})
+		}
+		// Example values for other columns (user can modify)
+		exampleValues := []interface{}{1000000, 500000, 300000, 100000, 30.5, "Example remark"}
+		columns := []string{"C", "D", "E", "F", "G", "H"}
+		for j, value := range exampleValues {
+			cell := fmt.Sprintf("%s%d", columns[j], row)
+			if err := f.SetCellValue(sheetName, cell, value); err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+					Error:   "template_failed",
+					Message: fmt.Sprintf("Failed to set cell value: %v", err),
+				})
+			}
+		}
+	}
+
+	// Set column widths
+	columnWidths := map[string]float64{
+		"A": 15, // Period
+		"B": 15, // Company Code
+		"C": 15, // Revenue
+		"D": 15, // OPEX
+		"E": 15, // NPAT
+		"F": 15, // Dividend
+		"G": 20, // Financial Ratio
+		"H": 30, // Remark
+	}
+	for col, width := range columnWidths {
+		if err := f.SetColWidth(sheetName, col, col, width); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "template_failed",
+				Message: fmt.Sprintf("Failed to set column width: %v", err),
+			})
+		}
+	}
+
+	// Write to buffer
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "template_failed",
+			Message: "Failed to write Excel file",
+		})
+	}
+
+	// Set response headers
+	c.Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Set("Content-Disposition", "attachment; filename=report_template.xlsx")
+
+	return c.Send(buf.Bytes())
+}
+
+// ValidateExcelFile validates an Excel file before upload
+// @Summary      Validate Excel File
+// @Description  Validates Excel file format and data before upload. Returns validation errors and parsed data.
+// @Tags         Reports
+// @Accept       multipart/form-data
+// @Produce      json
+// @Security     BearerAuth
+// @Param        file  formData  file  true  "Excel file (.xlsx, .xls)"
+// @Success      200   {object}  map[string]interface{}  "Response dengan valid, errors, dan data"
+// @Failure      400   {object}  domain.ErrorResponse
+// @Failure      500   {object}  domain.ErrorResponse
+// @Router       /api/v1/reports/validate [post]
+func (h *ReportHandler) ValidateExcelFile(c *fiber.Ctx) error {
+	// Get file from form
+	file, err := c.FormFile("file")
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_request",
+			Message: "File tidak ditemukan dalam request",
+		})
+	}
+
+	// Validate file extension
+	filename := file.Filename
+	if !strings.HasSuffix(strings.ToLower(filename), ".xlsx") && !strings.HasSuffix(strings.ToLower(filename), ".xls") {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_file_format",
+			Message: "Format file tidak valid. Hanya file Excel (.xlsx, .xls) yang diperbolehkan",
+		})
+	}
+
+	// Open file
+	src, err := file.Open()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "file_read_error",
+			Message: "Gagal membaca file",
+		})
+	}
+	defer src.Close()
+
+	// Read file into buffer
+	fileData := make([]byte, file.Size)
+	if _, err := src.Read(fileData); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "file_read_error",
+			Message: "Gagal membaca file",
+		})
+	}
+
+	// Open Excel file
+	f, err := excelize.OpenReader(bytes.NewReader(fileData))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_excel_file",
+			Message: "File Excel tidak valid atau corrupt",
+		})
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			fmt.Printf("Error closing Excel file: %v\n", err)
+		}
+	}()
+
+	// Get user info for company access validation
+	companyID := c.Locals("companyID")
+	roleName := c.Locals("roleName").(string)
+
+	// Get accessible companies
+	var accessibleCompanyCodes map[string]bool
+	if roleName == "superadmin" {
+		companies, err := h.companyUseCase.GetAllCompanies()
+		if err == nil {
+			accessibleCompanyCodes = make(map[string]bool)
+			for _, company := range companies {
+				if company.IsActive {
+					accessibleCompanyCodes[company.Code] = true
+				}
+			}
+		}
+	} else if companyID != nil {
+		var userCompanyID string
+		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
+			userCompanyID = *companyIDPtr
+		} else if companyIDStr, ok := companyID.(string); ok {
+			userCompanyID = companyIDStr
+		}
+
+		if userCompanyID != "" {
+			userCompany, err := h.companyUseCase.GetCompanyByID(userCompanyID)
+			if err == nil {
+				descendants, err := h.companyUseCase.GetCompanyDescendants(userCompanyID)
+				if err == nil {
+					accessibleCompanyCodes = make(map[string]bool)
+					accessibleCompanyCodes[userCompany.Code] = true
+					for _, company := range descendants {
+						if company.IsActive {
+							accessibleCompanyCodes[company.Code] = true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Get first sheet name
+	sheetName := f.GetSheetName(0)
+	if sheetName == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_excel_file",
+			Message: "File Excel tidak memiliki sheet",
+		})
+	}
+
+	// Get all rows
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_excel_file",
+			Message: "Gagal membaca data dari Excel",
+		})
+	}
+
+	if len(rows) < 2 {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_excel_file",
+			Message: "File Excel harus memiliki minimal header dan 1 baris data",
+		})
+	}
+
+	// Validate headers (row 0, index 0)
+	headers := rows[0]
+	expectedHeaders := []string{"Period (YYYY-MM)", "Company Code", "Revenue", "OPEX", "NPAT", "Dividend", "Financial Ratio (%)", "Remark"}
+	if len(headers) < len(expectedHeaders) {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_excel_file",
+			Message: "Header tidak lengkap. Pastikan semua kolom ada",
+		})
+	}
+
+	// Parse and validate data rows
+	var errors []map[string]interface{}
+	var data []map[string]interface{}
+
+	for rowIndex := 1; rowIndex < len(rows); rowIndex++ {
+		row := rows[rowIndex]
+		rowNum := rowIndex + 1 // Excel row number (1-based)
+
+		// Skip empty rows
+		if len(row) == 0 || (len(row) == 1 && strings.TrimSpace(row[0]) == "") {
+			continue
+		}
+
+		rowData := make(map[string]interface{})
+		rowErrors := []map[string]interface{}{}
+
+		// Period (YYYY-MM)
+		if len(row) > 0 {
+			period := strings.TrimSpace(row[0])
+			rowData["period"] = period
+			if period == "" {
+				rowErrors = append(rowErrors, map[string]interface{}{
+					"row":     rowNum,
+					"column":  "Period (YYYY-MM)",
+					"message": "Period wajib diisi",
+				})
+			} else {
+				// Validate format YYYY-MM
+				if _, err := time.Parse("2006-01", period); err != nil {
+					rowErrors = append(rowErrors, map[string]interface{}{
+						"row":     rowNum,
+						"column":  "Period (YYYY-MM)",
+						"message": "Format period harus YYYY-MM (contoh: 2024-01)",
+					})
+				}
+			}
+		} else {
+			rowErrors = append(rowErrors, map[string]interface{}{
+				"row":     rowNum,
+				"column":  "Period (YYYY-MM)",
+				"message": "Period wajib diisi",
+			})
+		}
+
+		// Company Code
+		if len(row) > 1 {
+			companyCode := strings.TrimSpace(row[1])
+			rowData["company_code"] = companyCode
+			if companyCode == "" {
+				rowErrors = append(rowErrors, map[string]interface{}{
+					"row":     rowNum,
+					"column":  "Company Code",
+					"message": "Company Code wajib diisi",
+				})
+			} else {
+				// Validate company code exists and is accessible
+				if accessibleCompanyCodes != nil && !accessibleCompanyCodes[companyCode] {
+					rowErrors = append(rowErrors, map[string]interface{}{
+						"row":     rowNum,
+						"column":  "Company Code",
+						"message": fmt.Sprintf("Company Code '%s' tidak ditemukan atau tidak dapat diakses", companyCode),
+					})
+				} else {
+					// Check if company exists in database
+					company, err := h.companyUseCase.GetCompanyByCode(companyCode)
+					if err != nil || company == nil || !company.IsActive {
+						rowErrors = append(rowErrors, map[string]interface{}{
+							"row":     rowNum,
+							"column":  "Company Code",
+							"message": fmt.Sprintf("Company Code '%s' tidak ditemukan", companyCode),
+						})
+					}
+				}
+			}
+		} else {
+			rowErrors = append(rowErrors, map[string]interface{}{
+				"row":     rowNum,
+				"column":  "Company Code",
+				"message": "Company Code wajib diisi",
+			})
+		}
+
+		// Revenue
+		if len(row) > 2 {
+			revenueStr := strings.TrimSpace(row[2])
+			rowData["revenue"] = revenueStr
+			if revenueStr == "" {
+				rowErrors = append(rowErrors, map[string]interface{}{
+					"row":     rowNum,
+					"column":  "Revenue",
+					"message": "Revenue wajib diisi",
+				})
+			} else {
+				if revenue, err := strconv.ParseFloat(revenueStr, 64); err != nil || revenue < 0 {
+					rowErrors = append(rowErrors, map[string]interface{}{
+						"row":     rowNum,
+						"column":  "Revenue",
+						"message": "Revenue harus berupa angka positif atau nol",
+					})
+				}
+			}
+		} else {
+			rowErrors = append(rowErrors, map[string]interface{}{
+				"row":     rowNum,
+				"column":  "Revenue",
+				"message": "Revenue wajib diisi",
+			})
+		}
+
+		// OPEX
+		if len(row) > 3 {
+			opexStr := strings.TrimSpace(row[3])
+			rowData["opex"] = opexStr
+			if opexStr == "" {
+				rowErrors = append(rowErrors, map[string]interface{}{
+					"row":     rowNum,
+					"column":  "OPEX",
+					"message": "OPEX wajib diisi",
+				})
+			} else {
+				if opex, err := strconv.ParseFloat(opexStr, 64); err != nil || opex < 0 {
+					rowErrors = append(rowErrors, map[string]interface{}{
+						"row":     rowNum,
+						"column":  "OPEX",
+						"message": "OPEX harus berupa angka positif atau nol",
+					})
+				}
+			}
+		} else {
+			rowErrors = append(rowErrors, map[string]interface{}{
+				"row":     rowNum,
+				"column":  "OPEX",
+				"message": "OPEX wajib diisi",
+			})
+		}
+
+		// NPAT
+		if len(row) > 4 {
+			npatStr := strings.TrimSpace(row[4])
+			rowData["npat"] = npatStr
+			if npatStr == "" {
+				rowErrors = append(rowErrors, map[string]interface{}{
+					"row":     rowNum,
+					"column":  "NPAT",
+					"message": "NPAT wajib diisi",
+				})
+			} else {
+				if _, err := strconv.ParseFloat(npatStr, 64); err != nil {
+					rowErrors = append(rowErrors, map[string]interface{}{
+						"row":     rowNum,
+						"column":  "NPAT",
+						"message": "NPAT harus berupa angka",
+					})
+				}
+			}
+		} else {
+			rowErrors = append(rowErrors, map[string]interface{}{
+				"row":     rowNum,
+				"column":  "NPAT",
+				"message": "NPAT wajib diisi",
+			})
+		}
+
+		// Dividend
+		if len(row) > 5 {
+			dividendStr := strings.TrimSpace(row[5])
+			rowData["dividend"] = dividendStr
+			if dividendStr == "" {
+				rowErrors = append(rowErrors, map[string]interface{}{
+					"row":     rowNum,
+					"column":  "Dividend",
+					"message": "Dividend wajib diisi",
+				})
+			} else {
+				if dividend, err := strconv.ParseFloat(dividendStr, 64); err != nil || dividend < 0 {
+					rowErrors = append(rowErrors, map[string]interface{}{
+						"row":     rowNum,
+						"column":  "Dividend",
+						"message": "Dividend harus berupa angka positif atau nol",
+					})
+				}
+			}
+		} else {
+			rowErrors = append(rowErrors, map[string]interface{}{
+				"row":     rowNum,
+				"column":  "Dividend",
+				"message": "Dividend wajib diisi",
+			})
+		}
+
+		// Financial Ratio (optional)
+		if len(row) > 6 {
+			financialRatioStr := strings.TrimSpace(row[6])
+			rowData["financial_ratio"] = financialRatioStr
+			if financialRatioStr != "" {
+				if _, err := strconv.ParseFloat(financialRatioStr, 64); err != nil {
+					rowErrors = append(rowErrors, map[string]interface{}{
+						"row":     rowNum,
+						"column":  "Financial Ratio (%)",
+						"message": "Financial Ratio harus berupa angka",
+					})
+				}
+			}
+		}
+
+		// Remark (optional)
+		if len(row) > 7 {
+			rowData["remark"] = strings.TrimSpace(row[7])
+		}
+
+		// Add row errors to errors list
+		errors = append(errors, rowErrors...)
+
+		// Add row data
+		data = append(data, rowData)
+	}
+
+	// Return validation result
+	return c.Status(fiber.StatusOK).JSON(map[string]interface{}{
+		"valid":  len(errors) == 0,
+		"errors": errors,
+		"data":   data,
+	})
+}
+
+// UploadReports handles uploading Excel file and creating reports in bulk
+// @Summary      Upload Reports from Excel
+// @Description  Upload Excel file, validate rows, and create reports in database.
+// @Tags         Reports
+// @Accept       multipart/form-data
+// @Produce      json
+// @Security     BearerAuth
+// @Param        file  formData  file  true  "Excel file (.xlsx, .xls)"
+// @Success      200   {object}  map[string]interface{}  "Response dengan success, failed, dan errors"
+// @Failure      400   {object}  domain.ErrorResponse
+// @Failure      500   {object}  domain.ErrorResponse
+// @Router       /api/v1/reports/upload [post]
+func (h *ReportHandler) UploadReports(c *fiber.Ctx) error {
+	// Get file from form
+	file, err := c.FormFile("file")
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_request",
+			Message: "File tidak ditemukan dalam request",
+		})
+	}
+
+	filename := strings.ToLower(file.Filename)
+	if !strings.HasSuffix(filename, ".xlsx") && !strings.HasSuffix(filename, ".xls") {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_file_format",
+			Message: "Format file tidak valid. Hanya file Excel (.xlsx, .xls) yang diperbolehkan",
+		})
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "file_read_error",
+			Message: "Gagal membaca file",
+		})
+	}
+	defer src.Close()
+
+	fileData, err := io.ReadAll(src)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "file_read_error",
+			Message: "Gagal membaca file",
+		})
+	}
+
+	f, err := excelize.OpenReader(bytes.NewReader(fileData))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_excel_file",
+			Message: "File Excel tidak valid atau corrupt",
+		})
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			fmt.Printf("Error closing Excel file: %v\n", err)
+		}
+	}()
+
+	// Get user info
+	userID := c.Locals("userID").(string)
+	username := c.Locals("username").(string)
+	roleName := c.Locals("roleName").(string)
+	companyID := c.Locals("companyID")
+
+	// Determine accessible company codes (same logic as validation)
+	var accessibleCompanyCodes map[string]bool
+	if roleName == "superadmin" {
+		companies, err := h.companyUseCase.GetAllCompanies()
+		if err == nil {
+			accessibleCompanyCodes = make(map[string]bool)
+			for _, company := range companies {
+				if company.IsActive {
+					accessibleCompanyCodes[company.Code] = true
+				}
+			}
+		}
+	} else if companyID != nil {
+		var userCompanyID string
+		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
+			userCompanyID = *companyIDPtr
+		} else if companyIDStr, ok := companyID.(string); ok {
+			userCompanyID = companyIDStr
+		}
+
+		if userCompanyID != "" {
+			userCompany, err := h.companyUseCase.GetCompanyByID(userCompanyID)
+			if err == nil {
+				descendants, err := h.companyUseCase.GetCompanyDescendants(userCompanyID)
+				if err == nil {
+					accessibleCompanyCodes = make(map[string]bool)
+					accessibleCompanyCodes[userCompany.Code] = true
+					for _, company := range descendants {
+						if company.IsActive {
+							accessibleCompanyCodes[company.Code] = true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	sheetName := f.GetSheetName(0)
+	if sheetName == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_excel_file",
+			Message: "File Excel tidak memiliki sheet",
+		})
+	}
+
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_excel_file",
+			Message: "Gagal membaca data dari Excel",
+		})
+	}
+
+	if len(rows) < 2 {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_excel_file",
+			Message: "File Excel harus memiliki minimal header dan 1 baris data",
+		})
+	}
+
+	headers := rows[0]
+	expectedHeaders := []string{"Period (YYYY-MM)", "Company Code", "Revenue", "OPEX", "NPAT", "Dividend", "Financial Ratio (%)", "Remark"}
+	if len(headers) < len(expectedHeaders) {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_excel_file",
+			Message: "Header tidak lengkap. Pastikan semua kolom ada",
+		})
+	}
+
+	// Process rows
+	errorsList := []map[string]interface{}{}
+	successCount := 0
+	failedCount := 0
+
+	for rowIndex := 1; rowIndex < len(rows); rowIndex++ {
+		row := rows[rowIndex]
+		rowNum := rowIndex + 1
+
+		if len(row) == 0 || (len(row) == 1 && strings.TrimSpace(row[0]) == "") {
+			continue
+		}
+
+		rowErrors := []map[string]interface{}{}
+
+		// Period (YYYY-MM)
+		var period string
+		if len(row) > 0 {
+			period = strings.TrimSpace(row[0])
+			if period == "" {
+				rowErrors = append(rowErrors, map[string]interface{}{
+					"row":     rowNum,
+					"column":  "Period (YYYY-MM)",
+					"message": "Period wajib diisi",
+				})
+			} else if _, err := time.Parse("2006-01", period); err != nil {
+				rowErrors = append(rowErrors, map[string]interface{}{
+					"row":     rowNum,
+					"column":  "Period (YYYY-MM)",
+					"message": "Format period harus YYYY-MM (contoh: 2024-01)",
+				})
+			}
+		} else {
+			rowErrors = append(rowErrors, map[string]interface{}{
+				"row":     rowNum,
+				"column":  "Period (YYYY-MM)",
+				"message": "Period wajib diisi",
+			})
+		}
+
+		// Company Code
+		var companyCode string
+		var companyIDValue string
+		if len(row) > 1 {
+			companyCode = strings.TrimSpace(row[1])
+			if companyCode == "" {
+				rowErrors = append(rowErrors, map[string]interface{}{
+					"row":     rowNum,
+					"column":  "Company Code",
+					"message": "Company Code wajib diisi",
+				})
+			} else {
+				if accessibleCompanyCodes != nil && !accessibleCompanyCodes[companyCode] {
+					rowErrors = append(rowErrors, map[string]interface{}{
+						"row":     rowNum,
+						"column":  "Company Code",
+						"message": fmt.Sprintf("Company Code '%s' tidak ditemukan atau tidak dapat diakses", companyCode),
+					})
+				} else {
+					company, err := h.companyUseCase.GetCompanyByCode(companyCode)
+					if err != nil || company == nil || !company.IsActive {
+						rowErrors = append(rowErrors, map[string]interface{}{
+							"row":     rowNum,
+							"column":  "Company Code",
+							"message": fmt.Sprintf("Company Code '%s' tidak ditemukan", companyCode),
+						})
+					} else {
+						companyIDValue = company.ID
+					}
+				}
+			}
+		} else {
+			rowErrors = append(rowErrors, map[string]interface{}{
+				"row":     rowNum,
+				"column":  "Company Code",
+				"message": "Company Code wajib diisi",
+			})
+		}
+
+		// Revenue
+		var revenueValue float64
+		if len(row) > 2 {
+			revenueStr := strings.TrimSpace(row[2])
+			if revenueStr == "" {
+				rowErrors = append(rowErrors, map[string]interface{}{
+					"row":     rowNum,
+					"column":  "Revenue",
+					"message": "Revenue wajib diisi",
+				})
+			} else {
+				var err error
+				revenueValue, err = strconv.ParseFloat(revenueStr, 64)
+				if err != nil || revenueValue < 0 {
+					rowErrors = append(rowErrors, map[string]interface{}{
+						"row":     rowNum,
+						"column":  "Revenue",
+						"message": "Revenue harus berupa angka positif atau nol",
+					})
+				}
+			}
+		} else {
+			rowErrors = append(rowErrors, map[string]interface{}{
+				"row":     rowNum,
+				"column":  "Revenue",
+				"message": "Revenue wajib diisi",
+			})
+		}
+
+		// OPEX
+		var opexValue float64
+		if len(row) > 3 {
+			opexStr := strings.TrimSpace(row[3])
+			if opexStr == "" {
+				rowErrors = append(rowErrors, map[string]interface{}{
+					"row":     rowNum,
+					"column":  "OPEX",
+					"message": "OPEX wajib diisi",
+				})
+			} else {
+				var err error
+				opexValue, err = strconv.ParseFloat(opexStr, 64)
+				if err != nil || opexValue < 0 {
+					rowErrors = append(rowErrors, map[string]interface{}{
+						"row":     rowNum,
+						"column":  "OPEX",
+						"message": "OPEX harus berupa angka positif atau nol",
+					})
+				}
+			}
+		} else {
+			rowErrors = append(rowErrors, map[string]interface{}{
+				"row":     rowNum,
+				"column":  "OPEX",
+				"message": "OPEX wajib diisi",
+			})
+		}
+
+		// NPAT
+		var npatValue float64
+		if len(row) > 4 {
+			npatStr := strings.TrimSpace(row[4])
+			if npatStr == "" {
+				rowErrors = append(rowErrors, map[string]interface{}{
+					"row":     rowNum,
+					"column":  "NPAT",
+					"message": "NPAT wajib diisi",
+				})
+			} else {
+				var err error
+				npatValue, err = strconv.ParseFloat(npatStr, 64)
+				if err != nil {
+					rowErrors = append(rowErrors, map[string]interface{}{
+						"row":     rowNum,
+						"column":  "NPAT",
+						"message": "NPAT harus berupa angka",
+					})
+				}
+			}
+		} else {
+			rowErrors = append(rowErrors, map[string]interface{}{
+				"row":     rowNum,
+				"column":  "NPAT",
+				"message": "NPAT wajib diisi",
+			})
+		}
+
+		// Dividend
+		var dividendValue float64
+		if len(row) > 5 {
+			dividendStr := strings.TrimSpace(row[5])
+			if dividendStr == "" {
+				rowErrors = append(rowErrors, map[string]interface{}{
+					"row":     rowNum,
+					"column":  "Dividend",
+					"message": "Dividend wajib diisi",
+				})
+			} else {
+				var err error
+				dividendValue, err = strconv.ParseFloat(dividendStr, 64)
+				if err != nil || dividendValue < 0 {
+					rowErrors = append(rowErrors, map[string]interface{}{
+						"row":     rowNum,
+						"column":  "Dividend",
+						"message": "Dividend harus berupa angka positif atau nol",
+					})
+				}
+			}
+		} else {
+			rowErrors = append(rowErrors, map[string]interface{}{
+				"row":     rowNum,
+				"column":  "Dividend",
+				"message": "Dividend wajib diisi",
+			})
+		}
+
+		// Financial Ratio (optional, default 0)
+		var financialRatioValue float64
+		if len(row) > 6 {
+			financialRatioStr := strings.TrimSpace(row[6])
+			if financialRatioStr != "" {
+				var err error
+				financialRatioValue, err = strconv.ParseFloat(financialRatioStr, 64)
+				if err != nil {
+					rowErrors = append(rowErrors, map[string]interface{}{
+						"row":     rowNum,
+						"column":  "Financial Ratio (%)",
+						"message": "Financial Ratio harus berupa angka",
+					})
+				}
+			}
+		}
+
+		// Remark (optional)
+		var remarkValue *string
+		if len(row) > 7 {
+			remark := strings.TrimSpace(row[7])
+			if remark != "" {
+				remarkValue = &remark
+			}
+		}
+
+		// Collect errors and continue
+		if len(rowErrors) > 0 {
+			errorsList = append(errorsList, rowErrors...)
+			failedCount++
+			continue
+		}
+
+		// Prepare request
+		inputterID := userID
+		createReq := domain.CreateReportRequest{
+			Period:         period,
+			CompanyID:      companyIDValue,
+			InputterID:     &inputterID,
+			Revenue:        int64(revenueValue),
+			Opex:           int64(opexValue),
+			NPAT:           int64(npatValue),
+			Dividend:       int64(dividendValue),
+			FinancialRatio: financialRatioValue,
+			Remark:         remarkValue,
+		}
+
+		report, err := h.reportUseCase.CreateReport(&createReq)
+		if err != nil {
+			errorsList = append(errorsList, map[string]interface{}{
+				"row":     rowNum,
+				"column":  "general",
+				"message": err.Error(),
+			})
+			failedCount++
+			continue
+		}
+
+		// Audit log per success
+		audit.LogAction(userID, username, "upload_report", audit.ResourceReport, report.ID, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
+			"company_id": companyIDValue,
+			"period":     period,
+			"source":     "excel_upload",
+		})
+
+		successCount++
+	}
+
+	return c.Status(fiber.StatusOK).JSON(map[string]interface{}{
+		"success": successCount,
+		"failed":  failedCount,
+		"errors":  errorsList,
+	})
+}

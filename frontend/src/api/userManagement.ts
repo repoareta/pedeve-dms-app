@@ -160,6 +160,11 @@ export const companyApi = {
     return response.data
   },
 
+  getAncestors: async (id: string): Promise<Company[]> => {
+    const response = await apiClient.get<Company[]>(`/companies/${id}/ancestors`)
+    return response.data
+  },
+
   create: async (data: CompanyCreateRequest): Promise<Company> => {
     const response = await apiClient.post<Company>('/companies', data)
     return response.data

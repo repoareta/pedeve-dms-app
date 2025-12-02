@@ -10,18 +10,17 @@
 
       <!-- Company Detail -->
       <div v-else-if="company" class="detail-card">
-        <div class="page-header-container container"
-          style="display:flex; flex-direction: column; flex-wrap: wrap;justify-content: center; align-items: start;">
-          <div>
-            <!-- Back Button -->
-            <a-button type="text" @click="handleBack" class="back-button">
-              <IconifyIcon icon="mdi:arrow-left" width="20" style="margin-right: 8px;" />
-              Kembali ke Daftar Subsidiary
-            </a-button>
-          </div>
+        <div class="back-button-container">
+          <a-button type="text" @click="handleBack" class="back-button">
+            <IconifyIcon icon="mdi:arrow-left" width="20" style="margin-right: 8px;" />
+            Kembali ke Daftar Subsidiary
+          </a-button>
+        </div>
 
+        <div class="page-header-container" style="min-height: 350px; width: 100%;">
           <!-- Header Section -->
           <div class="detail-header">
+
             <div class="company-icon-large">
               <img v-if="getCompanyLogo(company)" :src="getCompanyLogo(company)" :alt="company.name"
                 class="logo-image-large" />
@@ -41,19 +40,32 @@
                 </a-tag>
                 <span v-if="company.code" class="meta-item">Kode: {{ company.code }}</span>
                 <span v-if="company.nib" class="meta-item">No Reg {{ company.nib }}</span>
+
+                <!-- Company Hierarchy -->
+                <div v-if="companyHierarchy.length > 1" class="company-hierarchy">
+                  <span class="hierarchy-label">Hirarki:</span>
+                  <span class="hierarchy-path">
+                    <template v-for="(hierarchyCompany, index) in companyHierarchy" :key="hierarchyCompany.id">
+                      <span class="hierarchy-item">{{ hierarchyCompany.name }}</span>
+                      <span v-if="index < companyHierarchy.length - 1" class="hierarchy-separator">/</span>
+                    </template>
+                  </span>
+                </div>
+                
               </div>
             </div>
             <div class="header-actions">
               <a-space>
-                <a-button>
+                <a-button @click="handleExportPDF" :loading="exportLoading"  class="btn-icon-label">
                   <IconifyIcon icon="mdi:file-pdf-box" width="16" style="margin-right: 8px;" />
                   PDF
                 </a-button>
-                <a-button>
-                  <IconifyIcon icon="mdi:chart-box" width="16" style="margin-right: 8px;" />
+                <a-button @click="handleExportExcel" :loading="exportLoading"  class="btn-icon-label">
+                  <IconifyIcon icon="mdi:file-excel-box" width="16" style="margin-right: 8px;" />
+                  Excel
                 </a-button>
                 <a-date-picker v-model:value="selectedPeriod" picker="month" placeholder="Select Periode"
-                  style="width: 150px;" />
+                  format="YYYY-MM" style="width: 150px;" @change="handlePeriodChange" />
                 <a-dropdown v-if="hasAnyMenuOption">
                   <template #overlay>
                     <a-menu @click="handleMenuClick">
@@ -72,7 +84,7 @@
                       </a-menu-item>
                     </a-menu>
                   </template>
-                  <a-button>
+                  <a-button  style="display: flex; align-items: center;" class="btn-icon-label">
                     <IconifyIcon icon="mdi:dots-vertical" width="16" style="margin-right: 8px;" />
                     Options
                   </a-button>
@@ -104,21 +116,27 @@
                         </div>
                       </div>
                       <div class="mini-chart-container">
-                        <svg width="100%" height="60" viewBox="0 0 200 60" class="mini-chart">
+                        <svg width="100%" height="60" viewBox="0 0 200 60" class="mini-chart"
+                          preserveAspectRatio="none">
                           <defs>
                             <linearGradient id="rkapGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                               <stop offset="0%" style="stop-color:#ff9800;stop-opacity:0.3" />
                               <stop offset="100%" style="stop-color:#ff9800;stop-opacity:0.05" />
                             </linearGradient>
                           </defs>
-                          <path v-if="rkapChartFillPath" :d="rkapChartFillPath" fill="url(#rkapGradient)" class="chart-fill" />
-                          <path v-if="rkapTargetChartPath" :d="rkapTargetChartPath" stroke="#1890ff" stroke-width="1.5" stroke-dasharray="4,2" fill="none" class="chart-line" />
-                          <path v-if="rkapChartPath" :d="rkapChartPath" stroke="#ff9800" stroke-width="2" fill="none" class="chart-line" />
+                          <path v-if="rkapChartFillPath" :d="rkapChartFillPath" fill="url(#rkapGradient)"
+                            class="chart-fill" />
+                          <path v-if="rkapTargetChartPath" :d="rkapTargetChartPath" stroke="#1890ff" stroke-width="1.5"
+                            stroke-dasharray="4,2" fill="none" class="chart-line" />
+                          <path v-if="rkapChartPath" :d="rkapChartPath" stroke="#ff9800" stroke-width="2" fill="none"
+                            class="chart-line" />
                         </svg>
                         <div class="chart-labels">
                           <span v-if="rkapChartData.periods.length > 0">{{ rkapChartData.periods[0] }}</span>
                           <span v-else>Jan</span>
-                          <span v-if="rkapChartData.periods.length > 0">{{ rkapChartData.periods[rkapChartData.periods.length - 1] }}</span>
+                          <span v-if="rkapChartData.periods.length > 0">{{
+                            rkapChartData.periods[rkapChartData.periods.length -
+                            1] }}</span>
                           <span v-else>Des</span>
                         </div>
                       </div>
@@ -139,20 +157,25 @@
                         </div>
                       </div>
                       <div class="mini-chart-container">
-                        <svg width="100%" height="60" viewBox="0 0 200 60" class="mini-chart">
+                        <svg width="100%" height="60" viewBox="0 0 200 60" class="mini-chart"
+                          preserveAspectRatio="none">
                           <defs>
                             <linearGradient id="opexGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                               <stop offset="0%" style="stop-color:#666;stop-opacity:0.3" />
                               <stop offset="100%" style="stop-color:#666;stop-opacity:0.05" />
                             </linearGradient>
                           </defs>
-                          <path v-if="opexChartFillPath" :d="opexChartFillPath" fill="url(#opexGradient)" class="chart-fill" />
-                          <path v-if="opexChartPath" :d="opexChartPath" stroke="#666" stroke-width="2" fill="none" class="chart-line" />
+                          <path v-if="opexChartFillPath" :d="opexChartFillPath" fill="url(#opexGradient)"
+                            class="chart-fill" />
+                          <path v-if="opexChartPath" :d="opexChartPath" stroke="#666" stroke-width="2" fill="none"
+                            class="chart-line" />
                         </svg>
                         <div class="chart-labels">
                           <span v-if="opexChartData.periods.length > 0">{{ opexChartData.periods[0] }}</span>
                           <span v-else>Jan</span>
-                          <span v-if="opexChartData.periods.length > 0">{{ opexChartData.periods[opexChartData.periods.length - 1] }}</span>
+                          <span v-if="opexChartData.periods.length > 0">{{
+                            opexChartData.periods[opexChartData.periods.length -
+                            1] }}</span>
                           <span v-else>Des</span>
                         </div>
                       </div>
@@ -173,20 +196,25 @@
                         </div>
                       </div>
                       <div class="mini-chart-container">
-                        <svg width="100%" height="60" viewBox="0 0 200 60" class="mini-chart">
+                        <svg width="100%" height="60" viewBox="0 0 200 60" class="mini-chart"
+                          preserveAspectRatio="none">
                           <defs>
                             <linearGradient id="npatGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                               <stop offset="0%" style="stop-color:#52c41a;stop-opacity:0.3" />
                               <stop offset="100%" style="stop-color:#52c41a;stop-opacity:0.05" />
                             </linearGradient>
                           </defs>
-                          <path v-if="npatChartFillPath" :d="npatChartFillPath" fill="url(#npatGradient)" class="chart-fill" />
-                          <path v-if="npatChartPath" :d="npatChartPath" stroke="#52c41a" stroke-width="2" fill="none" class="chart-line" />
+                          <path v-if="npatChartFillPath" :d="npatChartFillPath" fill="url(#npatGradient)"
+                            class="chart-fill" />
+                          <path v-if="npatChartPath" :d="npatChartPath" stroke="#52c41a" stroke-width="2" fill="none"
+                            class="chart-line" />
                         </svg>
                         <div class="chart-labels">
                           <span v-if="npatChartData.periods.length > 0">{{ npatChartData.periods[0] }}</span>
                           <span v-else>Jan</span>
-                          <span v-if="npatChartData.periods.length > 0">{{ npatChartData.periods[npatChartData.periods.length - 1] }}</span>
+                          <span v-if="npatChartData.periods.length > 0">{{
+                            npatChartData.periods[npatChartData.periods.length -
+                            1] }}</span>
                           <span v-else>Des</span>
                         </div>
                       </div>
@@ -244,8 +272,8 @@
                         <IconifyIcon icon="mdi:arrow-right" width="16" style="margin-left: 4px;" />
                       </a-button>
                     </template>
-                    <a-table :columns="reportColumns" :data-source="recentReports" :pagination="false" :show-header="true"
-                      size="small">
+                    <a-table :columns="reportColumns" :data-source="recentReports" :pagination="false"
+                      :show-header="true" size="small">
                       <template #bodyCell="{ column, record }">
                         <template v-if="column.key === 'rkap_percent'">
                           {{ record.rkap_percent }}%
@@ -369,6 +397,8 @@
             </a-tab-pane>
           </a-tabs>
         </div>
+
+
       </div>
 
       <!-- Not Found -->
@@ -379,13 +409,8 @@
       </div>
 
       <!-- Assign Role Modal -->
-      <a-modal
-        v-model:open="assignRoleModalVisible"
-        title="Assign Role - Kelola Pengurus"
-        :confirm-loading="assignRoleLoading"
-        width="900px"
-        :footer="null"
-      >
+      <a-modal v-model:open="assignRoleModalVisible" title="Assign Role - Kelola Pengurus"
+        :confirm-loading="assignRoleLoading" width="900px" :footer="null">
         <div class="assign-role-container">
           <!-- Form Assign Role Baru -->
           <div class="assign-new-section">
@@ -397,24 +422,14 @@
               <a-row :gutter="16">
                 <a-col :span="12">
                   <a-form-item label="Cari User" required>
-                    <a-select
-                      v-model:value="assignRoleForm.userId"
-                      show-search
-                      placeholder="Cari user berdasarkan nama atau email"
-                      :filter-option="filterUserOption"
-                      :loading="usersLoading"
-                      @search="handleUserSearch"
-                      allow-clear
-                      :disabled="usersLoading"
-                    >
-                      <a-select-option
-                        v-for="user in filteredUsers"
-                        :key="user.id"
-                        :value="user.id"
-                        :disabled="companyUsers.some(u => u.id === user.id)"
-                      >
+                    <a-select v-model:value="assignRoleForm.userId" show-search
+                      placeholder="Cari user berdasarkan nama atau email" :filter-option="filterUserOption"
+                      :loading="usersLoading" @search="handleUserSearch" allow-clear :disabled="usersLoading">
+                      <a-select-option v-for="user in filteredUsers" :key="user.id" :value="user.id"
+                        :disabled="companyUsers.some(u => u.id === user.id)">
                         {{ user.username }} ({{ user.email }})
-                        <span v-if="companyUsers.some(u => u.id === user.id)" class="text-muted"> - Sudah menjadi pengurus</span>
+                        <span v-if="companyUsers.some(u => u.id === user.id)" class="text-muted"> - Sudah menjadi
+                          pengurus</span>
                       </a-select-option>
                     </a-select>
                     <small v-if="usersLoading" class="text-muted">Memuat daftar user...</small>
@@ -425,21 +440,10 @@
                 </a-col>
                 <a-col :span="12">
                   <a-form-item label="Pilih Role" required>
-                    <a-select
-                      v-model:value="assignRoleForm.roleId"
-                      show-search
-                      placeholder="Cari role"
-                      :filter-option="filterRoleOption"
-                      :loading="rolesLoading"
-                      @search="handleRoleSearch"
-                      allow-clear
-                      :disabled="rolesLoading"
-                    >
-                      <a-select-option
-                        v-for="role in filteredRoles"
-                        :key="role.id"
-                        :value="role.id"
-                      >
+                    <a-select v-model:value="assignRoleForm.roleId" show-search placeholder="Cari role"
+                      :filter-option="filterRoleOption" :loading="rolesLoading" @search="handleRoleSearch" allow-clear
+                      :disabled="rolesLoading">
+                      <a-select-option v-for="role in filteredRoles" :key="role.id" :value="role.id">
                         {{ role.name }}
                       </a-select-option>
                     </a-select>
@@ -447,14 +451,10 @@
                   </a-form-item>
                 </a-col>
               </a-row>
-              
+
               <a-form-item>
-                <a-button 
-                  type="primary" 
-                  :loading="assignRoleLoading" 
-                  @click="handleAssignRole" 
-                  :disabled="!assignRoleForm.userId || !assignRoleForm.roleId"
-                >
+                <a-button type="primary" :loading="assignRoleLoading" @click="handleAssignRole"
+                  :disabled="!assignRoleForm.userId || !assignRoleForm.roleId">
                   <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
                   Assign Role
                 </a-button>
@@ -470,14 +470,8 @@
               <IconifyIcon icon="mdi:account-group" width="20" style="margin-right: 8px;" />
               Pengurus Saat Ini
             </h3>
-            <a-table
-              :columns="userColumns"
-              :data-source="companyUsers"
-              :loading="usersLoading"
-              :pagination="{ pageSize: 10 }"
-              row-key="id"
-              size="middle"
-            >
+            <a-table :columns="userColumns" :data-source="companyUsers" :loading="usersLoading"
+              :pagination="{ pageSize: 10 }" row-key="id" size="middle">
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'role'">
                   <a-tag v-if="record.role" :color="getRoleColor(record.role)">
@@ -509,32 +503,16 @@
       </a-modal>
 
       <!-- Edit User Role Modal -->
-      <a-modal
-        v-model:open="editingUserRoleModalVisible"
-        title="Ubah Role Pengurus"
-        :confirm-loading="editingRoleLoading"
-        @ok="handleSaveUserRole"
-        @cancel="handleCancelEditUserRole"
-        width="500px"
-      >
+      <a-modal v-model:open="editingUserRoleModalVisible" title="Ubah Role Pengurus"
+        :confirm-loading="editingRoleLoading" @ok="handleSaveUserRole" @cancel="handleCancelEditUserRole" width="500px">
         <a-form layout="vertical" v-if="editingUserRole">
           <a-form-item label="User">
             <a-input :value="getUserById(editingUserRole.userId)?.username" disabled />
           </a-form-item>
           <a-form-item label="Pilih Role Baru" required>
-            <a-select
-              v-model:value="editingUserRole.roleId"
-              show-search
-              placeholder="Cari role"
-              :filter-option="filterRoleOption"
-              :loading="rolesLoading"
-              @search="handleRoleSearch"
-            >
-              <a-select-option
-                v-for="role in filteredRoles"
-                :key="role.id"
-                :value="role.id"
-              >
+            <a-select v-model:value="editingUserRole.roleId" show-search placeholder="Cari role"
+              :filter-option="filterRoleOption" :loading="rolesLoading" @search="handleRoleSearch">
+              <a-select-option v-for="role in filteredRoles" :key="role.id" :value="role.id">
                 {{ role.name }}
               </a-select-option>
             </a-select>
@@ -546,7 +524,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
@@ -554,7 +532,7 @@ import { companyApi, userApi, roleApi, type Company, type BusinessField, type Us
 import reportsApi, { type Report } from '../api/reports'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
-import dayjs from 'dayjs'
+import dayjs, { type Dayjs } from 'dayjs'
 
 const router = useRouter()
 const route = useRoute()
@@ -563,7 +541,10 @@ const authStore = useAuthStore()
 const company = ref<Company | null>(null)
 const loading = ref(false)
 const activeTab = ref('performance')
-const selectedPeriod = ref<string | null>(null)
+const selectedPeriod = ref<Dayjs | null>(null)
+const exportLoading = ref(false)
+const companyHierarchy = ref<Company[]>([])
+const allCompanies = ref<Company[]>([])
 
 // Assign Role Modal
 const assignRoleModalVisible = ref(false)
@@ -624,13 +605,13 @@ const filteredUsers = computed(() => {
   const availableUsers = allUsers.value.filter(
     user => !companyUsers.value.some(cu => cu.id === user.id)
   )
-  
+
   if (!userSearchText.value) {
     return availableUsers.slice(0, 20) // Limit to 20 for performance
   }
   const search = userSearchText.value.toLowerCase()
   return availableUsers.filter(
-    user => 
+    user =>
       user.username.toLowerCase().includes(search) ||
       user.email.toLowerCase().includes(search)
   ).slice(0, 20)
@@ -639,7 +620,7 @@ const filteredUsers = computed(() => {
 const filteredRoles = computed(() => {
   // Filter out superadmin role - hanya untuk developer, bukan untuk user pengguna
   const nonSuperadminRoles = allRoles.value.filter(role => role.name.toLowerCase() !== 'superadmin')
-  
+
   if (!roleSearchText.value) {
     return nonSuperadminRoles
   }
@@ -649,27 +630,27 @@ const filteredRoles = computed(() => {
   )
 })
 
-// Chart data computed from real reports
+// Chart data computed from filtered reports
 const rkapData = computed(() => {
-  if (companyReports.value.length === 0) {
+  if (filteredReports.value.length === 0) {
     return { value: 0, year: '2025', change: 0 }
   }
-  
+
   // Get latest report
-  const latest = [...companyReports.value].sort((a, b) => {
+  const latest = [...filteredReports.value].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return b.period.localeCompare(a.period)
   })[0]
-  
+
   if (!latest) {
     return { value: 0, year: '2025', change: 0 }
   }
-  
+
   const year = latest.period ? latest.period.split('-')[0] : '2025'
   const revenue = latest.revenue || 0
-  
+
   // Calculate change from previous period
-  const sorted = [...companyReports.value].sort((a, b) => {
+  const sorted = [...filteredReports.value].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return a.period.localeCompare(b.period)
   })
@@ -683,7 +664,7 @@ const rkapData = computed(() => {
       change = ((revenue - prevRevenue) / prevRevenue) * 100
     }
   }
-  
+
   return {
     value: revenue,
     year: year,
@@ -692,26 +673,26 @@ const rkapData = computed(() => {
 })
 
 const opexData = computed(() => {
-  if (companyReports.value.length === 0) {
+  if (filteredReports.value.length === 0) {
     return { value: 0, quarter: 'Q1 2025', change: 0 }
   }
-  
+
   // Get latest report
-  const latest = [...companyReports.value].sort((a, b) => {
+  const latest = [...filteredReports.value].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return b.period.localeCompare(a.period)
   })[0]
-  
+
   if (!latest) {
     return { value: 0, quarter: 'Q1 2025', change: 0 }
   }
-  
+
   const period = latest.period || ''
   const quarter = formatPeriod(period)
   const opex = latest.opex || 0
-  
+
   // Calculate change from previous period
-  const sorted = [...companyReports.value].sort((a, b) => {
+  const sorted = [...filteredReports.value].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return a.period.localeCompare(b.period)
   })
@@ -725,7 +706,7 @@ const opexData = computed(() => {
       change = ((opex - prevOpex) / prevOpex) * 100
     }
   }
-  
+
   return {
     value: opex,
     quarter: quarter,
@@ -734,26 +715,26 @@ const opexData = computed(() => {
 })
 
 const npatData = computed(() => {
-  if (companyReports.value.length === 0) {
+  if (filteredReports.value.length === 0) {
     return { value: 0, quarter: 'Q1 2025', change: 0 }
   }
-  
+
   // Get latest report
-  const latest = [...companyReports.value].sort((a, b) => {
+  const latest = [...filteredReports.value].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return b.period.localeCompare(a.period)
   })[0]
-  
+
   if (!latest) {
     return { value: 0, quarter: 'Q1 2025', change: 0 }
   }
-  
+
   const period = latest.period || ''
   const quarter = formatPeriod(period)
   const npat = latest.npat || 0
-  
+
   // Calculate change from previous period
-  const sorted = [...companyReports.value].sort((a, b) => {
+  const sorted = [...filteredReports.value].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return a.period.localeCompare(b.period)
   })
@@ -767,7 +748,7 @@ const npatData = computed(() => {
       change = ((npat - prevNpat) / prevNpat) * 100
     }
   }
-  
+
   return {
     value: npat,
     quarter: quarter,
@@ -778,13 +759,13 @@ const npatData = computed(() => {
 // Generate chart data from real reports
 const generateChartDataFromReports = (reports: Report[], field: 'revenue' | 'opex' | 'npat') => {
   if (reports.length === 0) return []
-  
+
   // Sort by period
   const sorted = [...reports].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return a.period.localeCompare(b.period)
   })
-  
+
   // Extract data for the field
   return sorted.map(report => {
     if (field === 'revenue') return report.revenue || 0
@@ -820,11 +801,11 @@ const calculateRKAPPercent = (report: Report): number => {
 // RKAP vs Realization chart data
 // For RKAP, we'll use revenue as realization and calculate RKAP as target (110% of average revenue)
 const rkapChartData = computed(() => {
-  const revenueData = generateChartDataFromReports(companyReports.value, 'revenue')
+  const revenueData = generateChartDataFromReports(filteredReports.value, 'revenue')
   if (revenueData.length === 0) return { rkap: [], realization: [], periods: [] }
-  
+
   // Get periods for labels
-  const sorted = [...companyReports.value].sort((a, b) => {
+  const sorted = [...filteredReports.value].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return a.period.localeCompare(b.period)
   })
@@ -837,15 +818,15 @@ const rkapChartData = computed(() => {
     const monthIndex = parseInt(month, 10) - 1
     return monthIndex >= 0 && monthIndex < monthNames.length ? monthNames[monthIndex] : month
   })
-  
+
   // Calculate average revenue
   const avgRevenue = revenueData.reduce((sum, val) => sum + val, 0) / revenueData.length
   // RKAP target is 110% of average
   const rkapTarget = avgRevenue * 1.1
-  
+
   // Generate RKAP line (target line)
   const rkap = revenueData.map(() => rkapTarget)
-  
+
   return {
     rkap: rkap,
     realization: revenueData,
@@ -854,8 +835,8 @@ const rkapChartData = computed(() => {
 })
 
 const opexChartData = computed(() => {
-  const data = generateChartDataFromReports(companyReports.value, 'opex')
-  const sorted = [...companyReports.value].sort((a, b) => {
+  const data = generateChartDataFromReports(filteredReports.value, 'opex')
+  const sorted = [...filteredReports.value].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return a.period.localeCompare(b.period)
   })
@@ -872,8 +853,8 @@ const opexChartData = computed(() => {
 })
 
 const npatChartData = computed(() => {
-  const data = generateChartDataFromReports(companyReports.value, 'npat')
-  const sorted = [...companyReports.value].sort((a, b) => {
+  const data = generateChartDataFromReports(filteredReports.value, 'npat')
+  const sorted = [...filteredReports.value].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return a.period.localeCompare(b.period)
   })
@@ -889,41 +870,112 @@ const npatChartData = computed(() => {
   return { data, periods }
 })
 
-// Generate SVG path untuk chart
+// Generate smooth SVG path untuk chart menggunakan cubic bezier (smooth seperti gelombang radio)
 const generateChartPath = (data: number[], width: number = 200, height: number = 60) => {
   if (!data || data.length === 0) return ''
+  if (data.length === 1) {
+    const value = data[0] ?? 0
+    const max = Math.max(...data)
+    const min = Math.min(...data)
+    const range = max - min || 1
+    const y = height - ((value - min) / range) * height
+    return `M 0 ${y} L ${width} ${y}`
+  }
+
   const max = Math.max(...data)
   const min = Math.min(...data)
   const range = max - min || 1
-  const stepX = data.length > 1 ? width / (data.length - 1) : width
-  
-  const firstValue = data[0] ?? 0
-  let path = `M 0 ${height - ((firstValue - min) / range) * height}`
-  for (let i = 1; i < data.length; i++) {
-    const value = data[i] ?? 0
-    const x = i * stepX
-    const y = height - ((value - min) / range) * height
-    path += ` L ${x} ${y}`
+  const stepX = width / (data.length - 1)
+
+  // Convert data points to coordinates
+  const points: Array<{ x: number; y: number }> = data.map((value, i) => ({
+    x: i * stepX,
+    y: height - ((value - min) / range) * height
+  }))
+
+  // Generate smooth curve using cubic bezier with better control points
+  let path = `M ${points[0]!.x} ${points[0]!.y}`
+
+  // Use smooth bezier curves - calculate control points based on tangent direction
+  for (let i = 0; i < points.length - 1; i++) {
+    const current = points[i]!
+    const next = points[i + 1]!
+
+    // Get previous and next points for tangent calculation
+    const prev = i > 0 ? points[i - 1]! : current
+    const after = i < points.length - 2 ? points[i + 2]! : next
+
+    // Calculate tangent direction (slope)
+    const dx1 = (next.x - prev.x) / 2
+    const dy1 = (next.y - prev.y) / 2
+    const dx2 = (after.x - current.x) / 2
+    const dy2 = (after.y - current.y) / 2
+
+    // Control points for smooth curve (using 1/3 of distance for smoothness)
+    const cp1x = current.x + dx1 / 3
+    const cp1y = current.y + dy1 / 3
+    const cp2x = next.x - dx2 / 3
+    const cp2y = next.y - dy2 / 3
+
+    path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${next.x} ${next.y}`
   }
+
   return path
 }
 
 const generateChartFillPath = (data: number[], width: number = 200, height: number = 60) => {
   if (!data || data.length === 0) return ''
+  if (data.length === 1) {
+    const value = data[0] ?? 0
+    const max = Math.max(...data)
+    const min = Math.min(...data)
+    const range = max - min || 1
+    const y = height - ((value - min) / range) * height
+    return `M 0 ${height} L 0 ${y} L ${width} ${y} L ${width} ${height} Z`
+  }
+
   const max = Math.max(...data)
   const min = Math.min(...data)
   const range = max - min || 1
-  const stepX = data.length > 1 ? width / (data.length - 1) : width
-  
+  const stepX = width / (data.length - 1)
+
+  // Convert data points to coordinates
+  const points: Array<{ x: number; y: number }> = data.map((value, i) => ({
+    x: i * stepX,
+    y: height - ((value - min) / range) * height
+  }))
+
+  // Start from bottom left
   let path = `M 0 ${height}`
-  const firstValue = data[0] ?? 0
-  path += ` L 0 ${height - ((firstValue - min) / range) * height}`
-  for (let i = 1; i < data.length; i++) {
-    const value = data[i] ?? 0
-    const x = i * stepX
-    const y = height - ((value - min) / range) * height
-    path += ` L ${x} ${y}`
+
+  // Line to first point
+  path += ` L ${points[0]!.x} ${points[0]!.y}`
+
+  // Generate smooth curve using cubic bezier (same algorithm as line path)
+  for (let i = 0; i < points.length - 1; i++) {
+    const current = points[i]!
+    const next = points[i + 1]!
+
+    // Get previous and next points for tangent calculation
+    const prev = i > 0 ? points[i - 1]! : current
+    const after = i < points.length - 2 ? points[i + 2]! : next
+
+    // Calculate tangent direction (slope)
+    const dx1 = (next.x - prev.x) / 2
+    const dy1 = (next.y - prev.y) / 2
+    const dx2 = (after.x - current.x) / 2
+    const dy2 = (after.y - current.y) / 2
+
+    // Control points for smooth curve (using 1/3 of distance for smoothness)
+    const cp1x = current.x + dx1 / 3
+    const cp1y = current.y + dy1 / 3
+    const cp2x = next.x - dx2 / 3
+    const cp2y = next.y - dy2 / 3
+
+    path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${next.x} ${next.y}`
   }
+
+  // Close path to bottom right and back to start
   path += ` L ${width} ${height} Z`
   return path
 }
@@ -958,6 +1010,15 @@ const npatChartFillPath = computed(() => generateChartFillPath(npatChartData.val
 const companyReports = ref<Report[]>([])
 const reportsLoading = ref(false)
 
+// Filtered reports based on selected period
+const filteredReports = computed(() => {
+  if (!selectedPeriod.value) {
+    return companyReports.value
+  }
+  const periodStr = selectedPeriod.value.format('YYYY-MM')
+  return companyReports.value.filter(report => report.period === periodStr)
+})
+
 // Dummy data untuk recent files
 const recentFiles = ref([
   {
@@ -983,14 +1044,14 @@ const recentFiles = ref([
   }
 ])
 
-// Recent reports computed from real data
+// Recent reports computed from filtered data
 const recentReports = computed(() => {
   // Sort by period descending and take latest 5
-  const sorted = [...companyReports.value].sort((a, b) => {
+  const sorted = [...filteredReports.value].sort((a, b) => {
     if (!a.period || !b.period) return 0
     return b.period.localeCompare(a.period)
   }).slice(0, 5)
-  
+
   return sorted.map((report, index) => ({
     key: String(index + 1),
     name: `Laporan ${formatPeriod(report.period)}`,
@@ -1061,12 +1122,75 @@ const loadCompany = async () => {
     // Load reports after company is loaded
     if (company.value) {
       await loadCompanyReports(id)
+      await loadCompanyHierarchy(id)
     }
   } catch (error: unknown) {
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     message.error('Gagal memuat data perusahaan: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
   } finally {
     loading.value = false
+  }
+}
+
+const loadCompanyHierarchy = async (companyId: string) => {
+  try {
+    // Try to get ancestors from API first
+    try {
+      const ancestors = await companyApi.getAncestors(companyId)
+      // Ancestors API returns from parent to root (excluding current company)
+      // We need to reverse to get from root to parent, then add current company
+      companyHierarchy.value = [...ancestors].reverse()
+      // Add current company at the end
+      if (company.value) {
+        companyHierarchy.value.push(company.value)
+      }
+      return
+    } catch (apiError) {
+      // If API endpoint doesn't exist (404 or other error), build hierarchy manually
+      // Don't log as error if it's just 404 (endpoint not implemented yet)
+      if ((apiError as { response?: { status?: number } })?.response?.status !== 404) {
+        console.warn('Ancestors API error, building hierarchy manually:', apiError)
+      }
+    }
+
+    // Fallback: Build hierarchy manually by loading all companies
+    if (allCompanies.value.length === 0) {
+      allCompanies.value = await companyApi.getAll()
+    }
+
+    // Build hierarchy from current company to root
+    const hierarchy: Company[] = []
+    let currentCompany: Company | undefined = company.value || undefined
+
+    // If company not found in allCompanies, try to find it
+    if (!currentCompany) {
+      currentCompany = allCompanies.value.find(c => c.id === companyId)
+    }
+
+    if (!currentCompany) {
+      companyHierarchy.value = []
+      return
+    }
+
+    // Build hierarchy by traversing parent_id
+    const companyMap = new Map<string, Company>()
+    allCompanies.value.forEach(c => companyMap.set(c.id, c))
+
+    let current: Company | undefined = currentCompany
+    while (current) {
+      hierarchy.unshift(current) // Add to beginning to get root -> current order
+      
+      if (current.parent_id) {
+        current = companyMap.get(current.parent_id)
+      } else {
+        break
+      }
+    }
+
+    companyHierarchy.value = hierarchy
+  } catch (error) {
+    console.error('Error loading company hierarchy:', error)
+    companyHierarchy.value = []
   }
 }
 
@@ -1139,18 +1263,8 @@ const getIconColor = (name: string): string => {
 }
 
 const getLevelLabel = (level: number): string => {
-  switch (level) {
-    case 0:
-      return 'Holding (Induk)'
-    case 1:
-      return 'Anak Perusahaan'
-    case 2:
-      return 'Cucu Perusahaan'
-    case 3:
-      return 'Cicit Perusahaan'
-    default:
-      return `Level ${String(level)}`
-  }
+  if (level === 0) return 'Holding'
+  return `Level ${String(level)}`
 }
 
 const getLevelColor = (level: number): string => {
@@ -1180,7 +1294,7 @@ const handleEdit = () => {
 
 const handleDelete = async () => {
   if (!company.value) return
-  
+
   try {
     await companyApi.delete(company.value.id)
     message.success('Subsidiary berhasil dihapus')
@@ -1209,13 +1323,13 @@ const openAssignRoleModal = async () => {
     message.error('Company tidak ditemukan')
     return
   }
-  
+
   assignRoleModalVisible.value = true
   assignRoleForm.value = {
     userId: undefined,
     roleId: undefined,
   }
-  
+
   // Load users and roles
   // Note: For non-superadmin, users endpoint might return limited results
   // but we still try to load - error will be handled gracefully
@@ -1227,13 +1341,13 @@ const openAssignRoleModal = async () => {
 
 const loadUsers = async () => {
   if (!company.value) return
-  
+
   usersLoading.value = true
   try {
     // Load all users (backend will filter based on access) - for dropdown selection
     const allUsersData = await userApi.getAll()
     allUsers.value = allUsersData
-    
+
     // Load company users from junction table (supports multiple company assignments)
     try {
       const companyUsersData = await companyApi.getUsers(company.value.id)
@@ -1245,10 +1359,10 @@ const loadUsers = async () => {
     }
   } catch (error: unknown) {
     // Better error handling - check for axios error structure
-    const axiosError = error as { 
-      response?: { 
+    const axiosError = error as {
+      response?: {
         status?: number
-        data?: { 
+        data?: {
           message?: string
           error?: string
         }
@@ -1256,13 +1370,13 @@ const loadUsers = async () => {
       message?: string
       code?: string
     }
-    
+
     const statusCode = axiosError.response?.status
-    const errorMessage = axiosError.response?.data?.message || 
-                        axiosError.response?.data?.error || 
-                        axiosError.message || 
-                        'Unknown error'
-    
+    const errorMessage = axiosError.response?.data?.message ||
+      axiosError.response?.data?.error ||
+      axiosError.message ||
+      'Unknown error'
+
     // Handle different error scenarios
     if (statusCode === 403 || statusCode === 401) {
       // Permission denied - silently handle, don't show error to user
@@ -1309,7 +1423,7 @@ const loadRoles = async () => {
   rolesLoading.value = true
   try {
     allRoles.value = await roleApi.getAll()
-    } catch {
+  } catch {
     message.error('Gagal memuat daftar role')
   } finally {
     rolesLoading.value = false
@@ -1329,8 +1443,8 @@ const filterUserOption = (input: string, option: unknown) => {
   const user = allUsers.value.find(u => u.id === opt.value)
   if (!user) return false
   const search = input.toLowerCase()
-  return user.username.toLowerCase().includes(search) || 
-         user.email.toLowerCase().includes(search)
+  return user.username.toLowerCase().includes(search) ||
+    user.email.toLowerCase().includes(search)
 }
 
 const filterRoleOption = (input: string, option: unknown) => {
@@ -1345,7 +1459,7 @@ const handleAssignRole = async () => {
     message.error('Harap pilih user dan role')
     return
   }
-  
+
   assignRoleLoading.value = true
   try {
     await userApi.assignToCompany(
@@ -1390,7 +1504,7 @@ const handleSaveUserRole = async () => {
     message.error('Harap pilih role')
     return
   }
-  
+
   editingRoleLoading.value = true
   try {
     await userApi.update(editingUserRole.value.userId, {
@@ -1414,11 +1528,11 @@ const handleSaveUserRole = async () => {
 // Remove User
 const handleRemoveUser = async (user: User) => {
   if (!company.value) return
-  
+
   // Show confirmation
   const confirmed = confirm(`Apakah Anda yakin ingin menghapus ${user.username} dari pengurus?`)
   if (!confirmed) return
-  
+
   try {
     // Remove user from company using unassign endpoint (supports multiple company assignments)
     await userApi.unassignFromCompany(user.id, company.value.id)
@@ -1453,6 +1567,100 @@ const handleManageReports = () => {
   message.info('Manage reports feature coming soon')
 }
 
+// Handle period change
+const handlePeriodChange = () => {
+  // Filter is automatically applied via computed property
+  // No need to reload data, just let computed properties react
+}
+
+// Export PDF
+const handleExportPDF = async () => {
+  if (!company.value) {
+    message.error('Company tidak ditemukan')
+    return
+  }
+
+  try {
+    exportLoading.value = true
+    const params: { company_id?: string; period?: string } = {
+      company_id: company.value.id,
+    }
+
+    if (selectedPeriod.value) {
+      params.period = selectedPeriod.value.format('YYYY-MM')
+    }
+
+    const blob = await reportsApi.exportPDF(params)
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    // Generate filename dengan filter info
+    let filename = `subsidiary_${company.value.name.replace(/\s+/g, '_')}`
+    if (selectedPeriod.value) {
+      filename += `_${selectedPeriod.value.format('YYYY-MM')}`
+    }
+    filename += '.pdf'
+
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
+    message.success('Export PDF berhasil')
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal export PDF: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
+  } finally {
+    exportLoading.value = false
+  }
+}
+
+// Export Excel
+const handleExportExcel = async () => {
+  if (!company.value) {
+    message.error('Company tidak ditemukan')
+    return
+  }
+
+  try {
+    exportLoading.value = true
+    const params: { company_id?: string; period?: string } = {
+      company_id: company.value.id,
+    }
+
+    if (selectedPeriod.value) {
+      params.period = selectedPeriod.value.format('YYYY-MM')
+    }
+
+    const blob = await reportsApi.exportExcel(params)
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    // Generate filename dengan filter info
+    let filename = `subsidiary_${company.value.name.replace(/\s+/g, '_')}`
+    if (selectedPeriod.value) {
+      filename += `_${selectedPeriod.value.format('YYYY-MM')}`
+    }
+    filename += '.xlsx'
+
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
+    message.success('Export Excel berhasil')
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal export Excel: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
+  } finally {
+    exportLoading.value = false
+  }
+}
+
 const handleLogout = async () => {
   await authStore.logout()
   router.push('/login')
@@ -1466,6 +1674,21 @@ onMounted(() => {
 <style scoped>
 .subsidiary-detail-layout {
   min-height: 100vh;
+}
+
+.back-button-container {
+  margin-top: 100px;
+  margin-bottom: -100px;
+}
+
+.back-button-container .back-button {
+  margin-bottom: 24px;
+  padding: 0;
+  height: auto;
+  display: flex;
+  align-items: center;
+  padding: 5px 8px;
+  margin: 24px;
 }
 
 .detail-content {
@@ -1545,9 +1768,9 @@ onMounted(() => {
 }
 
 .company-subtitle {
-  font-size: 18px;
+  font-size: 16px;
   color: #666;
-  margin: 0 0 16px 0;
+  margin: -14px 0 16px 0;
 }
 
 .company-meta {
@@ -1555,6 +1778,8 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  /* background: orange; */
+  margin-top: -15px;
 }
 
 .meta-item {
@@ -1562,17 +1787,82 @@ onMounted(() => {
   color: #666;
 }
 
+.company-hierarchy {
+  /* background: red; */
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: -10px;
+  padding-top: 0px;
+  /* border-top: 1px solid #f0f0f0; */
+}
+
+.hierarchy-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+}
+
+.hierarchy-path {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.hierarchy-item {
+  font-size: 12px;
+  color: #333;
+}
+
+.hierarchy-separator {
+  font-size: 14px;
+  color: #999;
+  margin: 0 2px;
+}
+
 .header-actions {
   flex-shrink: 0;
 }
 
+/* Ensure all buttons and date picker in header-actions have consistent height */
+.header-actions :deep(.ant-btn) {
+  height: 40px !important;
+  min-height: 40px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.header-actions :deep(.ant-picker) {
+  height: 40px !important;
+}
+
+.header-actions :deep(.ant-picker-input) {
+  height: 40px !important;
+}
+
+.header-actions :deep(.ant-picker-input > input) {
+  height: 38px !important;
+  line-height: 38px !important;
+}
+
 /* Tabs Container */
 .tabs-container {
-  margin-top: 24px;
+  margin-top: 50px;
+  padding: 24px;
+  /* background: red; */
 }
 
 .tabs-container :deep(.ant-tabs-card) {
   background: transparent;
+  background: white;
+  margin-top: -50px;
+  padding: 24px;
+  border-radius: 
+  15px;
 }
 
 .tabs-container :deep(.ant-tabs-tab) {
@@ -1585,8 +1875,8 @@ onMounted(() => {
 
 /* Performance Content */
 .performance-content {
-  padding: 24px;
-  background: white;
+  padding: 0px 0 24px 0;
+  /* background: orange; */
   border-radius: 0 8px 8px 8px;
 }
 
@@ -1606,6 +1896,11 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 100%;
+}
+
+.trend-card-content :deep(.ant-card-body) {
+  padding: 24px;
 }
 
 .trend-metric {
@@ -1652,11 +1947,19 @@ onMounted(() => {
 .mini-chart-container {
   position: relative;
   width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  display: block;
 }
 
 .mini-chart {
-  width: 100%;
+  width: 100% !important;
   height: 60px;
+  display: block;
+  margin: 0;
+  padding: 0;
+  max-width: 100%;
 }
 
 .chart-fill {

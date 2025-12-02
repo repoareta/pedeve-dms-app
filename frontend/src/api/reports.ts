@@ -61,6 +61,18 @@ export interface ReportsResponse {
   total_pages: number
 }
 
+export type ValidationRow = {
+  period?: string
+  company_code?: string
+  revenue?: number | string
+  opex?: number | string
+  npat?: number | string
+  dividend?: number | string
+  financial_ratio?: number | string
+  remark?: string
+  [key: string]: unknown
+}
+
 const reportsApi = {
   // Get all reports with pagination and filters
   // company_id can be a single ID or comma-separated string for multiple IDs
@@ -150,7 +162,7 @@ const reportsApi = {
   },
 
   // Validate Excel file before upload
-  async validateExcelFile(file: File): Promise<{ valid: boolean; errors: Array<{ row: number; column: string; message: string }>; data: any[] }> {
+  async validateExcelFile(file: File): Promise<{ valid: boolean; errors: Array<{ row: number; column: string; message: string }>; data: ValidationRow[] }> {
     const formData = new FormData()
     formData.append('file', file)
 
@@ -182,4 +194,3 @@ const reportsApi = {
 }
 
 export default reportsApi
-

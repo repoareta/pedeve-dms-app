@@ -207,7 +207,7 @@
               size="small"
               class="preview-table"
             >
-              <template #bodyCell="{ column, record, index }">
+              <template #bodyCell="{ column, index }">
                 <template v-if="column.key === 'row_number'">
                   {{ index + 1 }}
                 </template>
@@ -278,7 +278,7 @@ import { message, Modal } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import type { TableColumnsType } from 'ant-design-vue'
-import reportsApi, { type Report } from '../api/reports'
+import reportsApi, { type Report, type ValidationRow } from '../api/reports'
 import { companyApi, type Company } from '../api/userManagement'
 
 const router = useRouter()
@@ -841,7 +841,7 @@ const templateLoading = ref(false)
 const validationResult = ref<{
   valid: boolean
   errors: Array<{ row: number; column: string; message: string }>
-  data: any[]
+  data: ValidationRow[]
 } | null>(null)
 
 // Preview columns for upload modal

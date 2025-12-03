@@ -94,6 +94,36 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Edit Laporan' },
     },
     {
+      path: '/documents',
+      name: 'documents',
+      component: () => import('../views/DocumentManagementView.vue'),
+      meta: { requiresAuth: true, title: 'Documents' },
+    },
+    {
+      path: '/documents/folders/:id',
+      name: 'document-folder-detail',
+      component: () => import('../views/DocumentFolderDetailView.vue'),
+      meta: { requiresAuth: true, title: 'Folder Detail' },
+    },
+    {
+      path: '/documents/upload',
+      name: 'documents-upload',
+      component: () => import('../views/DocumentUploadView.vue'),
+      meta: { requiresAuth: true, title: 'Upload Document' },
+    },
+    {
+      path: '/documents/:id/edit',
+      name: 'document-edit',
+      component: () => import('../views/DocumentUploadView.vue'),
+      meta: { requiresAuth: true, title: 'Edit Document Metadata' },
+    },
+    {
+      path: '/documents/:id',
+      name: 'document-detail',
+      component: () => import('../views/DocumentDetailView.vue'),
+      meta: { requiresAuth: true, title: 'Document Detail' },
+    },
+    {
       path: '/about',
       name: 'about',
       component: () => import('../views/AboutView.vue'),

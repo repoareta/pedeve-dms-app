@@ -277,6 +277,43 @@ const chartData = computed(() => {
   }
 })
 
+// Sparkline data untuk KPI cards (per period, diurutkan)
+const kpiSparkData = computed(() => {
+  const seriesMap = new Map<string, { revenue: number; opex: number; npat: number; dividend: number; frSum: number; count: number }>()
+
+  const addReport = (report: Report) => {
+    const key = report.period
+    if (!key) return
+    if (!seriesMap.has(key)) {
+      seriesMap.set(key, { revenue: 0, opex: 0, npat: 0, dividend: 0, frSum: 0, count: 0 })
+    }
+    const entry = seriesMap.get(key)!
+    entry.revenue += report.revenue || 0
+    entry.opex += report.opex || 0
+    entry.npat += report.npat || 0
+    entry.dividend += report.dividend || 0
+    entry.frSum += report.financial_ratio || 0
+    entry.count += 1
+  }
+
+  ;[...allReports.value, ...previousPeriodReports.value].forEach(addReport)
+
+  const periods = Array.from(seriesMap.keys()).sort()
+  const toSeries = (selector: (entry: NonNullable<ReturnType<typeof seriesMap.get>>) => number) =>
+    periods.map(p => {
+      const entry = seriesMap.get(p)
+      return entry ? selector(entry) : 0
+    })
+
+  return {
+    revenue: toSeries(e => e.revenue),
+    opex: toSeries(e => e.opex),
+    npat: toSeries(e => e.npat),
+    dividend: toSeries(e => e.dividend),
+    financialRatio: toSeries(e => (e.count > 0 ? e.frSum / e.count : 0)),
+  }
+})
+
 // Underperforming subsidiaries - Show top 5 worst performers based on financial ratio
 const underperformingSubsidiaries = computed(() => {
   // Calculate performance metrics for each company
@@ -458,7 +495,6 @@ onMounted(async () => {
                 v-model:value="selectedPeriod" 
                 placeholder="Select Periode" 
                 class="period-selector"
-                size="large"
                 :loading="loading"
               >
                 <a-select-option 
@@ -496,6 +532,7 @@ onMounted(async () => {
               :change="formatChange(kpiMetrics.revenue.change)" 
               :change-type="kpiMetrics.revenue.change >= 0 ? 'increase' : 'decrease'" 
               icon="mdi:currency-usd" 
+              :chart-data="kpiSparkData.revenue"
             />
             <KPICard 
               title="Opex" 
@@ -503,6 +540,7 @@ onMounted(async () => {
               :change="formatChange(kpiMetrics.opex.change)" 
               :change-type="kpiMetrics.opex.change >= 0 ? 'decrease' : 'increase'" 
               icon="mdi:chart-line" 
+              :chart-data="kpiSparkData.opex"
             />
             <KPICard 
               title="NPAT" 
@@ -510,6 +548,7 @@ onMounted(async () => {
               :change="formatChange(kpiMetrics.npat.change)" 
               :change-type="kpiMetrics.npat.change >= 0 ? 'increase' : 'decrease'" 
               icon="mdi:chart-bar" 
+              :chart-data="kpiSparkData.npat"
             />
             <KPICard 
               title="Financial Ratios" 
@@ -517,6 +556,7 @@ onMounted(async () => {
               :change="formatChange(kpiMetrics.financialRatio.change)" 
               :change-type="kpiMetrics.financialRatio.change >= 0 ? 'increase' : 'decrease'" 
               icon="mdi:chart-pie" 
+              :chart-data="kpiSparkData.financialRatio"
             />
             <KPICard 
               title="Dividend" 
@@ -524,6 +564,7 @@ onMounted(async () => {
               :change="formatChange(kpiMetrics.dividend.change)" 
               :change-type="kpiMetrics.dividend.change >= 0 ? 'increase' : 'decrease'" 
               icon="mdi:cash-multiple" 
+              :chart-data="kpiSparkData.dividend"
             />
           </div>
         </div>
@@ -536,7 +577,7 @@ onMounted(async () => {
 
 
       <!-- Charts and Lists Row -->
-      <div class="mainContent">
+      <div class="mainContent" style="margin-top: -30px;">
         <a-row :gutter="[16, 16]" class="content-row">
           <a-col :xs="24" :lg="16" :xl="16">
             <RevenueChart 

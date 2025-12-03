@@ -27,13 +27,16 @@ test:
 	USER_UC=$$(grep "^--- PASS:.*TestUserManagementUseCase" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
 	REPORT_REPO=$$(grep "^--- PASS:.*TestReportRepository" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
 	REPORT_UC=$$(grep "^--- PASS:.*TestReportUseCase" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
+	DOC_REPO=$$(grep "^--- PASS:.*TestDocumentRepository" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
+	DOC_HANDLER=$$(grep "^--- PASS:.*TestDocumentHandler" /tmp/test-output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0"); \
 	echo "   🏢 Company:     Repository ($$COMPANY_REPO) + UseCase ($$COMPANY_UC)"; \
 	echo "   👤 User:        Repository ($$USER_REPO) + UseCase ($$USER_UC)"; \
 	echo "   📊 Report:     Repository ($$REPORT_REPO) + UseCase ($$REPORT_UC)"; \
+	echo "   📂 Document:   Repository ($$DOC_REPO) + Handler ($$DOC_HANDLER)"; \
 	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
 	if [ $$TEST_EXIT -eq 0 ]; then \
 		echo "✅ All tests passed!"; \
-		echo "✅ All features tested: Company, User Management, Reports, and their relationships"; \
+		echo "✅ All features tested: Company, User Management, Reports, Documents, and their relationships"; \
 	else \
 		echo "❌ Some tests failed!"; \
 	fi; \
@@ -115,4 +118,3 @@ help:
 	@echo "  make test-package PKG=./path - Run tests for specific package"
 	@echo "  make clean             - Clean test artifacts"
 	@echo "  make help              - Show this help message"
-

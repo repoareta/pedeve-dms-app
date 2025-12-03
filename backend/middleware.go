@@ -57,14 +57,22 @@ func SecurityHeadersMiddleware(c *fiber.Ctx) error {
 	c.Set("X-XSS-Protection", "1; mode=block")
 	c.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 
+	// Get both Path() and OriginalURL() for better matching
+	path := c.Path()
+	originalURL := c.OriginalURL()
+
 	// Cek apakah ini route Swagger
-	if strings.HasPrefix(c.Path(), "/swagger") {
+	if strings.HasPrefix(path, "/swagger") || strings.Contains(originalURL, "/swagger") {
 		// Header yang lebih permisif untuk Swagger UI
 		c.Set("X-Frame-Options", "SAMEORIGIN")
 		// Izinkan inline scripts dan styles untuk Swagger UI
 		c.Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;")
+	} else if strings.HasPrefix(path, "/api/v1/files") || strings.Contains(originalURL, "/api/v1/files") {
+		// Header permisif untuk file routes (untuk menampilkan PDF/image dalam iframe)
+		c.Set("X-Frame-Options", "SAMEORIGIN")
+		c.Set("Content-Security-Policy", "default-src 'self'")
 	} else {
-		// Header ketat untuk route API
+		// Header ketat untuk route API lainnya
 		c.Set("X-Frame-Options", "DENY")
 		c.Set("Content-Security-Policy", "default-src 'self'")
 	}

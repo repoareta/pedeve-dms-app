@@ -36,6 +36,8 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 		&domain.AuditLog{},
 		&domain.UserActivityLog{},
 		&domain.ReportModel{},
+		&domain.DocumentFolderModel{},
+		&domain.DocumentModel{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate test database: %v", err)
@@ -90,4 +92,3 @@ func CleanupTestDB(t *testing.T, db *gorm.DB) {
 		}
 	}
 }
-

@@ -8,7 +8,50 @@
   --text-color: #333333;
   --text-color-secondary: #666666;
   --text-color-disabled: #999999;
+  --placeholder-color: #666666;
 }
+
+// Placeholder warna hijau (override default Ant Design)
+input::placeholder,
+textarea::placeholder,
+.ant-input::placeholder,
+.ant-input-affix-wrapper input::placeholder {
+  color: var(--placeholder-color) !important;
+  opacity: 1;
+}
+
+input{
+  height: var(--input-height-default);
+  border-color: var(--input-border-color) !important;
+  &::placeholder{
+    color: var(--placeholder-color) !important;
+  }
+}
+
+
+.ant-input-number-input-wrap{
+  // background: red !important;
+  height: var(--input-height-default) !important;
+  input{
+    // background: red !important;
+  }
+}
+
+
+// Prefix untuk dukungan browser lama (Firefox, Safari lawas)
+input::-moz-placeholder,
+textarea::-moz-placeholder,
+.ant-input::-moz-placeholder {
+  color: var(--placeholder-color) !important;
+  opacity: 1;
+}
+
+input:-ms-input-placeholder,
+textarea:-ms-input-placeholder,
+.ant-input:-ms-input-placeholder {
+  color: var(--placeholder-color) !important;
+}
+
 
 // Reset dan base styles
 * {
@@ -31,6 +74,15 @@ body {
   margin: 0;
   padding: 0;
   color: var(--text-color);
+}
+
+// Global placeholder color
+input::placeholder,
+textarea::placeholder,
+.ant-input::placeholder,
+.ant-input-affix-wrapper input::placeholder {
+  color: var(--placeholder-color);
+  opacity: 1;
 }
 
 // Custom utilities
@@ -200,6 +252,10 @@ body {
   }
 }
 
+button{
+  display: grid;
+}
+
 // ==========================================
 // Dashboard Header Styles
 // ==========================================
@@ -268,31 +324,27 @@ body {
   left: 0;
   right: 0;
   width: 100%;
-  //   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   z-index: 1000;
   transition: all 0.3s ease;
-  background: transparent;
 
   .header-container {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 12px 24px;
-    backdrop-filter: blur(50px) !important;
-    -webkit-backdrop-filter: blur(50px) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
     transition: all 0.3s ease;
     margin: 0;
-    background: transparent;
+    // background: rgba(255, 255, 255, 0.95);
+    // box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    // border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 
     &.onscrollnav {
-      //   background: var(--primary-color) !important;
-      background: rgb(255, 255, 255);
-      // border-radius: 50px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-      // box-shadow: 0 4px 12px rgba(3, 92, 171, 0.2);
+      background: rgba(255, 255, 255, 0.98);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.08);
       transition: all 0.3s ease;
-      // margin: 15px 24px 24px 24px;
     }
   }
 
@@ -313,8 +365,60 @@ body {
     flex: 1;
     display: flex;
     justify-content: center;
+    align-items: center;
     padding: 0 24px;
+    min-width: 0; // Allow flex shrinking
 
+    .custom-nav-menu {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      flex-wrap: nowrap;
+      overflow: visible;
+
+      .nav-item {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 14px;
+        height: 40px;
+        line-height: 40px;
+        border: none;
+        background: transparent;
+        color: #333333;
+        font-size: 14px;
+        font-weight: 400;
+        cursor: pointer;
+        border-radius: 50px;
+        transition: all 0.3s ease;
+        white-space: nowrap;
+        flex-shrink: 0;
+        text-decoration: none;
+        outline: none;
+
+        &:hover {
+          color: var(--primary-color);
+          background: rgba(128, 128, 128, 0.05);
+        }
+
+        &.nav-item-active {
+          color: var(--primary-color);
+          background: rgba(128, 128, 128, 0.072);
+        }
+
+        // Ensure icon and text are aligned
+        :deep(svg) {
+          flex-shrink: 0;
+        }
+      }
+    }
+
+    // Legacy Ant Design menu styles (if still used elsewhere)
     .ant-menu-light {
       background: transparent;
       border-bottom: 0;
@@ -339,26 +443,6 @@ body {
         }
       }
     }
-
-    :deep(.ant-menu) {
-      border-bottom: none;
-      background: transparent;
-      display: flex;
-      justify-content: center;
-    }
-
-    :deep(.ant-menu-item) {
-      padding: 0 20px;
-      height: 48px;
-      line-height: 48px;
-      display: flex;
-      align-items: center;
-    }
-
-    :deep(.ant-menu-item-selected) {
-      color: var(--primary-color);
-      border-bottom-color: var(--primary-color);
-    }
   }
 
   .header-right {
@@ -366,6 +450,8 @@ body {
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
+    position: relative;
+    z-index: 1001;
   }
 
   .icon-btn {
@@ -390,10 +476,17 @@ body {
     border-radius: 8px;
     cursor: pointer;
     transition: background 0.3s;
+    position: relative;
+    z-index: 1001;
 
     &:hover {
       background: #f5f5f5;
     }
+  }
+
+  // Ensure dropdown menu is above everything
+  :deep(.ant-dropdown) {
+    z-index: 1002 !important;
   }
 
   .user-avatar {
@@ -1120,10 +1213,12 @@ body {
   --input-height-large: 48px;
   --input-height-small: 32px;
   --input-text-color: #333333;
-  --input-placeholder-color: #bfbfbf;
+  --input-placeholder-color: #666666 !important;
   --input-disabled-bg: #f5f5f5;
   --input-disabled-color: rgba(0, 0, 0, 0.25);
 }
+
+
 
 // ==========================================
 // Text Input (a-input)

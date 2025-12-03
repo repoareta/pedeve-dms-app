@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+
+	"gorm.io/datatypes"
 )
 
 // User merepresentasikan user dalam sistem (domain model)
@@ -140,6 +142,50 @@ type Document struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+// DocumentFolderModel merepresentasikan folder penyimpanan dokumen
+type DocumentFolderModel struct {
+	ID        string                `gorm:"primaryKey" json:"id"`
+	Name      string                `gorm:"uniqueIndex;not null" json:"name"`
+	ParentID  *string               `gorm:"index" json:"parent_id"`
+	CreatedBy string                `gorm:"index;not null;default:''" json:"created_by"`
+	CreatedAt time.Time             `json:"created_at"`
+	UpdatedAt time.Time             `json:"updated_at"`
+	Children  []DocumentFolderModel `gorm:"foreignKey:ParentID" json:"children,omitempty"`
+}
+
+func (DocumentFolderModel) TableName() string {
+	return "document_folders"
+}
+
+// DocumentModel merepresentasikan file dokumen yang diupload
+type DocumentModel struct {
+	ID         string         `gorm:"primaryKey" json:"id"`
+	FolderID   *string        `gorm:"index" json:"folder_id"`
+	Name       string         `gorm:"not null" json:"name"`      // Judul dokumen
+	FileName   string         `gorm:"not null" json:"file_name"` // Nama file asli
+	FilePath   string         `gorm:"not null" json:"file_path"` // URL/path hasil upload
+	MimeType   string         `gorm:"not null" json:"mime_type"`
+	Size       int64          `gorm:"not null" json:"size"` // Size in bytes
+	Status     string         `gorm:"default:'active'" json:"status"`
+	Metadata   datatypes.JSON `json:"metadata"` // Metadata tambahan (opsional)
+	UploaderID string         `gorm:"index" json:"uploader_id"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
+
+	Folder *DocumentFolderModel `gorm:"foreignKey:FolderID" json:"folder,omitempty"`
+}
+
+func (DocumentModel) TableName() string {
+	return "documents"
+}
+
+// DocumentFolderStat menyimpan agregasi dokumen per folder
+type DocumentFolderStat struct {
+	FolderID  *string `json:"folder_id"`
+	FileCount int64   `json:"file_count"`
+	TotalSize int64   `json:"total_size"`
+}
+
 // ============================================================================
 // COMPANY HIERARCHY MODELS
 // ============================================================================
@@ -272,19 +318,19 @@ func (UserCompanyAssignmentModel) TableName() string {
 
 // ReportModel merepresentasikan laporan bulanan perusahaan
 type ReportModel struct {
-	ID             string     `gorm:"primaryKey" json:"id"`
-	Period         string     `gorm:"index;not null" json:"period"` // Format: YYYY-MM (e.g., "2025-09")
-	CompanyID      string     `gorm:"index;not null" json:"company_id"`
-	InputterID     *string    `gorm:"index" json:"inputter_id"` // User yang menginput (bisa null)
-	Revenue        int64      `gorm:"not null" json:"revenue"`
-	Opex           int64      `gorm:"not null" json:"opex"`
-	NPAT           int64      `gorm:"not null" json:"npat"` // Net Profit After Tax
-	Dividend       int64      `gorm:"not null" json:"dividend"`
-	FinancialRatio float64    `gorm:"not null" json:"financial_ratio"` // Mandatory
-	Attachment     *string    `gorm:"type:text" json:"attachment"`     // Optional, bisa null
-	Remark         *string    `gorm:"type:text" json:"remark"`         // Optional, bisa null
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID             string    `gorm:"primaryKey" json:"id"`
+	Period         string    `gorm:"index;not null" json:"period"` // Format: YYYY-MM (e.g., "2025-09")
+	CompanyID      string    `gorm:"index;not null" json:"company_id"`
+	InputterID     *string   `gorm:"index" json:"inputter_id"` // User yang menginput (bisa null)
+	Revenue        int64     `gorm:"not null" json:"revenue"`
+	Opex           int64     `gorm:"not null" json:"opex"`
+	NPAT           int64     `gorm:"not null" json:"npat"` // Net Profit After Tax
+	Dividend       int64     `gorm:"not null" json:"dividend"`
+	FinancialRatio float64   `gorm:"not null" json:"financial_ratio"` // Mandatory
+	Attachment     *string   `gorm:"type:text" json:"attachment"`     // Optional, bisa null
+	Remark         *string   `gorm:"type:text" json:"remark"`         // Optional, bisa null
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 
 	// Relationships
 	Company  *CompanyModel `gorm:"foreignKey:CompanyID" json:"company,omitempty"`
@@ -297,16 +343,16 @@ func (ReportModel) TableName() string {
 
 // CreateReportRequest untuk request body create report
 type CreateReportRequest struct {
-	Period         string   `json:"period" validate:"required,regexp=^\\d{4}-\\d{2}$"` // Format: YYYY-MM
-	CompanyID      string   `json:"company_id" validate:"required"`
-	InputterID     *string  `json:"inputter_id"` // Optional
-	Revenue        int64    `json:"revenue" validate:"required"`
-	Opex           int64    `json:"opex" validate:"required"`
-	NPAT           int64    `json:"npat" validate:"required"`
-	Dividend       int64    `json:"dividend" validate:"required"`
-	FinancialRatio float64  `json:"financial_ratio" validate:"required"`
-	Attachment     *string  `json:"attachment"` // Optional
-	Remark         *string  `json:"remark"`     // Optional
+	Period         string  `json:"period" validate:"required,regexp=^\\d{4}-\\d{2}$"` // Format: YYYY-MM
+	CompanyID      string  `json:"company_id" validate:"required"`
+	InputterID     *string `json:"inputter_id"` // Optional
+	Revenue        int64   `json:"revenue" validate:"required"`
+	Opex           int64   `json:"opex" validate:"required"`
+	NPAT           int64   `json:"npat" validate:"required"`
+	Dividend       int64   `json:"dividend" validate:"required"`
+	FinancialRatio float64 `json:"financial_ratio" validate:"required"`
+	Attachment     *string `json:"attachment"` // Optional
+	Remark         *string `json:"remark"`     // Optional
 }
 
 // UpdateReportRequest untuk request body update report

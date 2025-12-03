@@ -915,6 +915,7 @@ const getScopeColor = (scope: string): string => {
       <a-modal
         v-model:open="userModalVisible"
         :title="editingUser ? 'Edit Pengguna' : 'Tambah Pengguna'"
+        :centered="true"
         @ok="handleSaveUser"
       >
         <a-form :model="userForm" layout="vertical">
@@ -1005,6 +1006,7 @@ const getScopeColor = (scope: string): string => {
 <style scoped>
 .user-management-layout {
   min-height: 100vh;
+  
 }
 
 .user-management-wrapper {
@@ -1184,4 +1186,3 @@ const getScopeColor = (scope: string): string => {
   background-color: #e6f7ff !important;
 }
 </style>
-

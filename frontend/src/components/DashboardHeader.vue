@@ -38,7 +38,7 @@ const menuItems = computed(() => {
   return [
     { label: 'Dashboard', key: 'dashboard', path: '/dashboard', icon: 'mdi:view-dashboard' },
     { label: 'Anak Perusahaan', key: 'subsidiaries', path: '/subsidiaries', icon: 'mdi:office-building' },
-    { label: 'Dokumen', key: 'documents', path: '/documents', icon: 'mdi:file-document' },
+    { label: 'Documents', key: 'documents', path: '/documents', icon: 'mdi:file-document' },
     { label: 'Laporan', key: 'reports', path: '/reports', icon: 'mdi:chart-box' },
     { label: 'Manajemen Pengguna', key: 'users', path: '/users', icon: 'mdi:account-group' },
   ]
@@ -263,22 +263,17 @@ onUnmounted(() => {
       </div>
 
       <div class="header-center">
-          <a-menu 
-          mode="horizontal" 
-          :selected-keys="[route.name as string]"
-          class="nav-menu desktop-menu">
-          <a-menu-item 
+        <nav class="custom-nav-menu">
+          <button
             v-for="item in menuItems" 
             :key="item.key"
             @click="handleMenuItemClick(item.path)"
-            class="navtopMenuItem"
+            :class="['nav-item', { 'nav-item-active': route.name === item.key }]"
           >
-            <span class="nav-item-content">
-              <IconifyIcon :icon="item.icon" width="18" height="18" />
-              <span class="nav-item-label">{{ item.label }}</span>
-            </span>
-          </a-menu-item>
-        </a-menu>
+            <IconifyIcon :icon="item.icon" width="18" style="margin-right: 8px;" />
+            {{ item.label }}
+          </button>
+        </nav>
         <!-- Show message if role is not recognized -->
         <div v-if="!isRoleValid" class="role-warning-message">
           <IconifyIcon icon="mdi:alert" width="18" style="margin-right: 8px; color: #faad14;" />
@@ -304,7 +299,11 @@ onUnmounted(() => {
           <IconifyIcon icon="mdi:bell-outline" width="20" height="20" />
         </a-button>
 
-        <a-dropdown v-model:open="showUserMenu" placement="bottomRight">
+        <a-dropdown 
+          v-model:open="showUserMenu" 
+          placement="bottomRight"
+          :z-index="1002"
+        >
           <div class="user-profile">
             <div class="user-avatar">
               {{ user?.username?.charAt(0).toUpperCase() || 'U' }}
@@ -313,22 +312,22 @@ onUnmounted(() => {
             <IconifyIcon icon="mdi:chevron-down" width="16" class="desktop-icon" />
           </div>
           <template #overlay>
-            <a-menu>
-              <a-menu-item key="profile" @click="handleMenuItemClick('/profile')">
+            <a-menu style="z-index: 1002;" @click="(e: Event) => e.stopPropagation()">
+              <a-menu-item key="profile" @click="() => { handleMenuItemClick('/profile'); showUserMenu = false; }">
                 <IconifyIcon icon="mdi:account" width="16" style="margin-right: 8px;" />
                 Profil
               </a-menu-item>
-              <a-menu-item key="my-company" @click="handleMenuItemClick('/my-company')">
+              <a-menu-item key="my-company" @click="() => { handleMenuItemClick('/my-company'); showUserMenu = false; }">
                 <IconifyIcon icon="mdi:office-building" width="16" style="margin-right: 8px;" />
                 My Company
                 <a-badge v-if="userCompaniesCount > 1" :count="userCompaniesCount" :number-style="{ backgroundColor: '#52c41a' }" style="margin-left: 8px;" />
               </a-menu-item>
-              <a-menu-item key="settings" @click="handleMenuItemClick('/settings')">
+              <a-menu-item key="settings" @click="() => { handleMenuItemClick('/settings'); showUserMenu = false; }">
                 <IconifyIcon icon="mdi:cog" width="16" style="margin-right: 8px;" />
                 Pengaturan
               </a-menu-item>
               <a-menu-divider />
-              <a-menu-item key="logout" @click="handleLogout">
+              <a-menu-item key="logout" @click="() => { handleLogout(); showUserMenu = false; }">
                 <IconifyIcon icon="mdi:logout" width="16" style="margin-right: 8px;" />
                 Keluar
               </a-menu-item>

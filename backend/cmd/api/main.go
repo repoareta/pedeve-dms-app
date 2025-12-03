@@ -91,6 +91,7 @@ func main() {
 
 	// Setup Fiber app
 	app := fiber.New(fiber.Config{
+		BodyLimit: 10 * 1024 * 1024, // 10MB untuk upload dokumen
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			// Custom error handler untuk logging error ke audit log
 			code := fiber.StatusInternalServerError
@@ -200,18 +201,27 @@ func main() {
 	protected.Get("/user-activity-logs", http.GetUserActivityLogsHandler) // Permanent logs untuk data penting
 
 	// Route documents (dilindungi)
-	protected.Get("/documents", http.GetDocumentsHandler)
-	protected.Get("/documents/:id", http.GetDocumentHandler)
-	protected.Post("/documents", http.CreateDocumentHandler)
-	protected.Put("/documents/:id", http.UpdateDocumentHandler)
-	protected.Delete("/documents/:id", http.DeleteDocumentHandler)
+	// Catatan: Route yang lebih spesifik harus didefinisikan sebelum route dengan parameter
+	documentHandler := http.NewDocumentHandler(usecase.NewDocumentUseCase())
+	protected.Get("/documents/folders", documentHandler.ListFolders)
+	protected.Post("/documents/folders", documentHandler.CreateFolder)
+	protected.Put("/documents/folders/:id", documentHandler.UpdateFolder)
+	protected.Delete("/documents/folders/:id", documentHandler.DeleteFolder)
+	protected.Post("/documents/upload", documentHandler.UploadDocument)
+	protected.Get("/documents", documentHandler.ListDocuments)
+	protected.Get("/documents/summary", documentHandler.DocumentSummary) // ringkasan storage, pastikan sebelum :id
+	protected.Get("/documents/:id", documentHandler.GetDocument)
+	protected.Put("/documents/:id", documentHandler.UpdateDocument)
+	protected.Delete("/documents/:id", documentHandler.DeleteDocument)
 
 	// Route Upload (dilindungi)
 	protected.Post("/upload/logo", http.UploadLogo)
 
-	// Route File Serving (public, untuk serve file dari storage)
-	// Format: /api/v1/files/logos/filename.png
-	api.Get("/files/*", http.ServeFile)
+	// Route File Serving (DILINDUNGI - memerlukan authentication)
+	// Format: /api/v1/files/logos/filename.png atau /api/v1/files/documents/filename.pdf
+	// Catatan: File documents bersifat rahasia, harus dilindungi dengan authentication
+	// Frontend harus mengirim cookie (credentials) untuk mengakses file
+	protected.Get("/files/*", http.ServeFile)
 
 	// Route Company Management (dilindungi)
 	companyHandler := http.NewCompanyHandler(usecase.NewCompanyUseCase())

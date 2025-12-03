@@ -222,44 +222,10 @@
                   </a-card>
                 </div>
 
-                <!-- Recent Files and Reports -->
+                <!-- Recent Reports (Recent Files disembunyikan) -->
                 <div class="recent-section">
-                  <!-- Recent Files -->
-                  <a-card class="recent-card" :bordered="false">
-                    <template #title>
-                      <div class="card-header-title">
-                        <IconifyIcon icon="mdi:clock-outline" width="20" style="margin-right: 8px;" />
-                        <span>Recently Files</span>
-                      </div>
-                    </template>
-                    <template #extra>
-                      <a-button type="link" @click="handleManageFiles">
-                        Manage file upload
-                        <IconifyIcon icon="mdi:arrow-right" width="16" style="margin-left: 4px;" />
-                      </a-button>
-                    </template>
-                    <a-table :columns="fileColumns" :data-source="recentFiles" :pagination="false" :show-header="true"
-                      size="small">
-                      <template #bodyCell="{ column, record }">
-                        <template v-if="column.key === 'type'">
-                          <a-tag :color="record.type === 'Pdf' ? 'red' : 'green'">{{ record.type }}</a-tag>
-                        </template>
-                        <template v-if="column.key === 'status'">
-                          <a-tag v-if="record.status === 'complete'" color="green">Meta Data ✓</a-tag>
-                          <a-button v-else type="link" size="small">
-                            Lengkapi Meta Data
-                            <IconifyIcon icon="mdi:arrow-right" width="14" style="margin-left: 4px;" />
-                          </a-button>
-                        </template>
-                        <template v-if="column.key === 'action'">
-                          <IconifyIcon icon="mdi:chevron-right" width="20" style="color: #999; cursor: pointer;" />
-                        </template>
-                      </template>
-                    </a-table>
-                  </a-card>
-
                   <!-- Recent Reports -->
-                  <a-card class="recent-card" :bordered="false">
+                  <a-card class="recent-card full-width" :bordered="false">
                     <template #title>
                       <div class="card-header-title">
                         <IconifyIcon icon="mdi:clock-outline" width="20" style="margin-right: 8px;" />
@@ -1019,31 +985,6 @@ const filteredReports = computed(() => {
   return companyReports.value.filter(report => report.period === periodStr)
 })
 
-// Dummy data untuk recent files
-const recentFiles = ref([
-  {
-    key: '1',
-    name: 'RUPS_Tahunan_2025',
-    type: 'Pdf',
-    lastModified: '2 hours ago',
-    status: 'complete'
-  },
-  {
-    key: '2',
-    name: 'Laporan_Keuangan_Q1_2024',
-    type: 'Excel',
-    lastModified: '1 day ago',
-    status: 'incomplete'
-  },
-  {
-    key: '3',
-    name: 'Dokumen_Legal_2024',
-    type: 'Pdf',
-    lastModified: '3 days ago',
-    status: 'complete'
-  }
-])
-
 // Recent reports computed from filtered data
 const recentReports = computed(() => {
   // Sort by period descending and take latest 5
@@ -1062,14 +1003,6 @@ const recentReports = computed(() => {
     period: report.period
   }))
 })
-
-const fileColumns = [
-  { title: 'Name', dataIndex: 'name', key: 'name' },
-  { title: 'Type', key: 'type' },
-  { title: 'Last modified', dataIndex: 'lastModified', key: 'lastModified' },
-  { title: '', key: 'status' },
-  { title: '', key: 'action', width: 30 }
-]
 
 const reportColumns = [
   { title: 'Name', dataIndex: 'name', key: 'name' },
@@ -1559,12 +1492,8 @@ const getRoleColor = (role: string): string => {
   return 'default'
 }
 
-const handleManageFiles = () => {
-  message.info('Manage files feature coming soon')
-}
-
 const handleManageReports = () => {
-  message.info('Manage reports feature coming soon')
+  router.push('/reports')
 }
 
 // Handle period change
@@ -1981,14 +1910,18 @@ onMounted(() => {
 
 /* Recent Section */
 .recent-section {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 24px;
 }
 
 .recent-card {
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.full-width {
+  width: 100%;
 }
 
 .card-header-title {
@@ -2028,7 +1961,7 @@ onMounted(() => {
   }
 
   .recent-section {
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 }
 

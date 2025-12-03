@@ -3,6 +3,10 @@
     <DashboardHeader @logout="handleLogout" />
 
     <div class="detail-content">
+     
+
+      
+
       <!-- Loading State -->
       <div v-if="loading || loadingCompanies" class="loading-container">
         <a-spin size="large" />
@@ -977,10 +981,9 @@ const loadCompanyDetail = async (companyId: string) => {
   }
 }
 
-// Select company from selector
+// Select company from selector -> redirect to subsidiary detail
 const selectCompany = async (companyId: string) => {
-  await loadCompanyDetail(companyId)
-  showCompanySelector.value = false
+  router.push(`/subsidiaries/${companyId}`)
 }
 
 // Show selector again
@@ -1462,14 +1465,38 @@ onMounted(() => {
   margin-bottom: 16px;
 }
 
+.page-header-container{
+  margin-bottom: 0 !important;
+}
+
 /* Page Header Container */
-.page-header-container {
+/* .page-header-container {
   padding: 24px;
   background: white;
   border-radius: 8px;
   margin-bottom: 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.page-title {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f1f1f;
+}
+
+.page-description {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+} */
 
 /* Detail Header */
 .detail-header {
@@ -1812,6 +1839,7 @@ onMounted(() => {
 .selector-header {
   text-align: center;
   margin-bottom: 32px;
+  margin-top: 50px;
 }
 
 .selector-title {

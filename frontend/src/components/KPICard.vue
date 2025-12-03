@@ -8,10 +8,14 @@ const props = defineProps<{
   change: string
   changeType: 'increase' | 'decrease'
   icon?: string
+  chartData?: number[]
 }>()
 
-// Generate random mini chart data for demonstration
-const chartData = computed(() => {
+// Use provided chart data; fallback to small random series if missing
+const effectiveChartData = computed(() => {
+  if (props.chartData && props.chartData.length > 0) {
+    return props.chartData
+  }
   const points = 10
   const data: number[] = []
   for (let i = 0; i < points; i++) {
@@ -21,7 +25,7 @@ const chartData = computed(() => {
 })
 
 const chartPath = computed(() => {
-  const data = chartData.value
+  const data = effectiveChartData.value
   if (!data || data.length === 0) return ''
   
   const width = 60
@@ -44,7 +48,7 @@ const chartPath = computed(() => {
 })
 
 const chartFillPath = computed(() => {
-  const data = chartData.value
+  const data = effectiveChartData.value
   if (!data || data.length === 0) return ''
   
   const width = 60
@@ -116,4 +120,3 @@ const chartColor = computed(() => {
     </div>
   </a-card>
 </template>
-

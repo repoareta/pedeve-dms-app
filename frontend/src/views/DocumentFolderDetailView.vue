@@ -11,7 +11,7 @@ import dayjs from 'dayjs'
 
 const route = useRoute()
 const router = useRouter()
-const folderId = computed(() => route.params.id as string)
+const folderId = computed(() => (route.params.id as string) || '')
 
 const folders = ref<DocumentFolder[]>([])
 const files = ref<DocumentItem[]>([])
@@ -199,8 +199,9 @@ const formatTime = (timestamp: string): string => {
 
 const getUserAvatarColor = (username: string): string => {
   const colors = ['#52c41a', '#1890ff', '#faad14', '#f5222d', '#722ed1', '#eb2f96']
-  if (!username) return colors[0]
-  return colors[username.charCodeAt(0) % colors.length]
+  const safeName = username || ''
+  if (!safeName) return '#52c41a'
+  return (colors[safeName.charCodeAt(0) % colors.length] ?? '#52c41a') as string
 }
 
 const handleRefresh = async () => {
@@ -321,7 +322,7 @@ onMounted(async () => {
             row-key="id"
             size="small"
             @change="handleTableChange"
-            :custom-row="(record) => ({
+            :custom-row="(record: DocumentItem) => ({
               onClick: () => router.push(`/documents/${record.id}`),
               style: { cursor: 'pointer' }
             })"
@@ -329,7 +330,7 @@ onMounted(async () => {
               <a-table-column
                 title="Name"
                 key="name"
-                :sorter="(a, b) => (a.name || a.file_name || '').localeCompare(b.name || b.file_name || '')"
+                :sorter="(a: DocumentItem, b: DocumentItem) => (a.name || a.file_name || '').localeCompare(b.name || b.file_name || '')"
               >
                 <template #default="{ record }">
                   <div class="file-name-cell">
@@ -341,7 +342,7 @@ onMounted(async () => {
               <a-table-column
                 title="Type"
                 key="type"
-                :sorter="(a, b) => simplifyMime(a.mime_type).localeCompare(simplifyMime(b.mime_type))"
+                :sorter="(a: DocumentItem, b: DocumentItem) => simplifyMime(a.mime_type).localeCompare(simplifyMime(b.mime_type))"
               >
                 <template #default="{ record }">
                   <a-tag>{{ simplifyMime(record.mime_type) }}</a-tag>
@@ -350,7 +351,7 @@ onMounted(async () => {
               <a-table-column
                 title="Uploaded by"
                 key="uploader"
-                :sorter="(a, b) => (a.uploader_id || '').localeCompare(b.uploader_id || '')"
+                :sorter="(a: DocumentItem, b: DocumentItem) => (a.uploader_id || '').localeCompare(b.uploader_id || '')"
               >
                 <template #default="{ record }">
                   {{ record.uploader_id || '-' }}
@@ -359,7 +360,7 @@ onMounted(async () => {
               <a-table-column
                 title="Last modified"
                 key="last"
-                :sorter="(a, b) => (dayjs(a.updated_at || 0).valueOf() - dayjs(b.updated_at || 0).valueOf())"
+                :sorter="(a: DocumentItem, b: DocumentItem) => (dayjs(a.updated_at || a.created_at || 0).valueOf() - dayjs(b.updated_at || b.created_at || 0).valueOf())"
               >
                 <template #default="{ record }">
                   {{ record.updated_at ? dayjs(record.updated_at).format('YYYY-MM-DD HH:mm') : '-' }}

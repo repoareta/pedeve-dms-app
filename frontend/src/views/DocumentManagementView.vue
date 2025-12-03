@@ -469,7 +469,7 @@ const storageUsage = computed(() => {
 })
 
 const storageBreakdown = computed(() => {
-  const counts: Record<string, { count: number; size: number }> = {
+  const counts: Record<'pdf' | 'doc' | 'png' | 'ppt', { count: number; size: number }> = {
     pdf: { count: 0, size: 0 },
     doc: { count: 0, size: 0 },
     png: { count: 0, size: 0 },
@@ -790,7 +790,7 @@ onMounted(async () => {
                   :pagination="false"
                   size="small"
                   row-key="id"
-                  :custom-row="(record) => ({
+                  :custom-row="(record: DocumentFolder) => ({
                     onClick: () => selectFolder(record.id),
                     onDblclick: () => handleOpenFolder(record.id),
                     style: { cursor: 'pointer' }
@@ -856,7 +856,7 @@ onMounted(async () => {
               }"
               :columns="tableColumns"
               row-key="id"
-              :custom-row="(record) => ({
+              :custom-row="(record: DocumentItem) => ({
                 onClick: () => handleRowClick(record),
                 style: { cursor: 'pointer' }
               })"

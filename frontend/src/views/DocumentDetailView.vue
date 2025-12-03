@@ -126,15 +126,15 @@ const formatTime = (timestamp: string): string => {
 }
 
 // Get user avatar/initial
-const getDisplayName = (username: string): string => {
+const getDisplayName = (username?: string): string => {
   if (!username) return ''
   // Ambil kata pertama jika ada spasi, jika tidak gunakan username apa adanya
   const parts = username.trim().split(/\s+/)
-  return parts.length > 0 ? parts[0] : username
+  return parts.length > 0 ? (parts[0] || '') : username
 }
 
 // Get user avatar color
-const getUserAvatarColor = (username: string): string => {
+const getUserAvatarColor = (username?: string): string => {
   const colors: string[] = ['#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#eb2f96']
   if (!username || username.length === 0) return colors[0] || '#1890ff'
   const firstChar = username.charAt(0)
@@ -155,7 +155,7 @@ const handleDownload = async () => {
     message.error('File tidak tersedia untuk diunduh')
     return
   }
-  const link = window.document.createElement('a')
+  const link = (globalThis as typeof window).document.createElement('a')
   link.href = documentBlobUrl.value
   link.download = document.value.file_name || document.value.name || 'document'
   link.click()
@@ -297,8 +297,18 @@ const convertOfficeToHtml = async (blob: Blob) => {
       const workbook = XLSX.read(arrayBuffer, { type: 'array' })
       
       // Convert first sheet to HTML table
-      const firstSheetName = workbook.SheetNames[0]
-      const worksheet = workbook.Sheets[firstSheetName]
+      const firstSheetName: string = workbook.SheetNames[0] || ''
+      if (!firstSheetName) {
+        officeHtmlContent.value = null
+        message.info('Sheet kosong, tidak ada data untuk ditampilkan.')
+        return
+      }
+      const worksheet = workbook.Sheets[firstSheetName as string] as XLSX.WorkSheet | undefined
+      if (!worksheet) {
+        officeHtmlContent.value = null
+        message.info('Sheet tidak ditemukan.')
+        return
+      }
       const html = XLSX.utils.sheet_to_html(worksheet)
       officeHtmlContent.value = html
     }
@@ -363,7 +373,7 @@ const isOfficeDoc = computed(() => {
 // Get file type icon
 const getFileTypeIcon = computed(() => {
   if (!document.value) return 'mdi:file-document-outline'
-  const mimeType = document.value.mime_type.toLowerCase()
+  const mimeType = document.value.mime_type?.toLowerCase() || ''
   if (mimeType.includes('pdf')) return 'mdi:file-pdf-box'
   if (mimeType.includes('word') || mimeType.includes('doc')) return 'mdi:file-word-box'
   if (mimeType.includes('excel') || mimeType.includes('spreadsheet') || mimeType.includes('xls')) return 'mdi:file-excel-box'
@@ -415,6 +425,18 @@ const handleLogout = async () => {
 const formatDate = (dateString?: string): string => {
   if (!dateString) return '-'
   return dayjs(dateString).format('YYYY-MM-DD')
+}
+
+const openInNewTab = () => {
+  if (getDocumentUrl.value) {
+    if (typeof window !== 'undefined') {
+      window.open(getDocumentUrl.value, '_blank')
+    } else {
+      message.info('Lingkungan tidak mendukung membuka tab baru')
+    }
+  } else {
+    message.info('File belum tersedia untuk diunduh')
+  }
 }
 
 onMounted(async () => {
@@ -564,7 +586,7 @@ onBeforeUnmount(() => {
                 <div class="unsupported-message">
                   <IconifyIcon :icon="getFileTypeIcon" width="64" style="color: #999; margin-bottom: 16px;" />
                   <p>Preview tidak tersedia untuk tipe file ini</p>
-                  <a-button type="primary" @click="window.open(getDocumentUrl, '_blank')">
+                  <a-button type="primary" @click="openInNewTab">
                     <IconifyIcon icon="mdi:download" width="16" style="margin-right: 8px;" />
                     Download untuk melihat
                   </a-button>

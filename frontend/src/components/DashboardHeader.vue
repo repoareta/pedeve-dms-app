@@ -271,11 +271,12 @@ onUnmounted(() => {
             v-for="item in menuItems" 
             :key="item.key"
             @click="handleMenuItemClick(item.path)"
-
             class="navtopMenuItem"
           >
-            <IconifyIcon :icon="item.icon" width="18" style="margin-right: 8px;" />
-            {{ item.label }}
+            <span class="nav-item-content">
+              <IconifyIcon :icon="item.icon" width="18" height="18" />
+              <span class="nav-item-label">{{ item.label }}</span>
+            </span>
           </a-menu-item>
         </a-menu>
         <!-- Show message if role is not recognized -->
@@ -378,4 +379,3 @@ onUnmounted(() => {
     </transition>
   </div>
 </template>
-

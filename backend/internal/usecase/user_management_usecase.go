@@ -38,10 +38,10 @@ type UserManagementUseCase interface {
 }
 
 type userManagementUseCase struct {
-	userRepo              repository.UserRepository
-	companyRepo           repository.CompanyRepository
-	roleRepo              repository.RoleRepository
-	assignmentRepo        repository.UserCompanyAssignmentRepository
+	userRepo       repository.UserRepository
+	companyRepo    repository.CompanyRepository
+	roleRepo       repository.RoleRepository
+	assignmentRepo repository.UserCompanyAssignmentRepository
 }
 
 // NewUserManagementUseCaseWithDB creates a new user management use case with injected DB (for testing)
@@ -102,6 +102,12 @@ func (uc *userManagementUseCase) CreateUser(username, email, password string, co
 	if roleID != nil {
 		role, err := uc.roleRepo.GetByID(*roleID)
 		if err == nil {
+			// Enforce uniqueness untuk role administrator
+			if strings.ToLower(role.Name) == "administrator" {
+				if err := uc.ensureUniqueAdministrator("", *roleID); err != nil {
+					return nil, err
+				}
+			}
 			roleName = role.Name
 		} else {
 			// If role ID provided but not found, use empty string (standby)
@@ -141,7 +147,7 @@ func (uc *userManagementUseCase) CreateUser(username, email, password string, co
 		if err := uc.assignmentRepo.Create(assignment); err != nil {
 			// Log error but don't fail - user is already created
 			// Junction table entry can be created later via "Assign Role"
-			zapLog.Warn("Failed to create junction table entry for new user", 
+			zapLog.Warn("Failed to create junction table entry for new user",
 				zap.String("user_id", user.ID),
 				zap.String("company_id", *companyID),
 				zap.Error(err))
@@ -156,7 +162,7 @@ func (uc *userManagementUseCase) CreateUser(username, email, password string, co
 			IsActive:  true,
 		}
 		if err := uc.assignmentRepo.Create(assignment); err != nil {
-			zapLog.Warn("Failed to create junction table entry for new user (standby)", 
+			zapLog.Warn("Failed to create junction table entry for new user (standby)",
 				zap.String("user_id", user.ID),
 				zap.String("company_id", *companyID),
 				zap.Error(err))
@@ -192,7 +198,7 @@ func (uc *userManagementUseCase) GetUsersByCompany(companyID string) ([]domain.U
 		if err != nil {
 			continue // Skip if user not found
 		}
-		
+
 		// Get role from assignment for this company
 		for _, assignment := range assignments {
 			if assignment.UserID == userID && assignment.CompanyID == companyID && assignment.RoleID != nil {
@@ -205,7 +211,7 @@ func (uc *userManagementUseCase) GetUsersByCompany(companyID string) ([]domain.U
 				break
 			}
 		}
-		
+
 		users = append(users, *user)
 	}
 
@@ -220,23 +226,23 @@ func (uc *userManagementUseCase) GetUsersByCompanyHierarchy(companyID string) ([
 	if err != nil {
 		return nil, fmt.Errorf("failed to get company descendants: %w", err)
 	}
-	
+
 	// Include the company itself
 	allCompanyIDs := []string{companyID}
 	for _, desc := range descendants {
 		allCompanyIDs = append(allCompanyIDs, desc.ID)
 	}
-	
+
 	// Get all users from junction table for these companies
 	allUserIDs := make(map[string]bool)
 	userRoleMap := make(map[string]map[string]*string) // userID -> companyID -> roleID
-	
+
 	for _, compID := range allCompanyIDs {
 		assignments, err := uc.assignmentRepo.GetByCompanyID(compID)
 		if err != nil {
 			continue // Skip if error getting assignments
 		}
-		
+
 		for _, assignment := range assignments {
 			// Include both active and inactive assignments
 			// This ensures users who were unassigned still appear in the list
@@ -250,7 +256,7 @@ func (uc *userManagementUseCase) GetUsersByCompanyHierarchy(companyID string) ([
 			}
 		}
 	}
-	
+
 	// Also get users from UserModel.CompanyID as fallback (backward compatibility)
 	// This ensures users created before junction table implementation are still visible
 	for _, compID := range allCompanyIDs {
@@ -271,7 +277,7 @@ func (uc *userManagementUseCase) GetUsersByCompanyHierarchy(companyID string) ([
 			}
 		}
 	}
-	
+
 	// Get users by IDs
 	users := []domain.UserModel{}
 	for userID := range allUserIDs {
@@ -279,12 +285,12 @@ func (uc *userManagementUseCase) GetUsersByCompanyHierarchy(companyID string) ([
 		if err != nil {
 			continue // Skip if user not found
 		}
-		
+
 		// Skip superadmin users for security
 		if user.Role == "superadmin" {
 			continue
 		}
-		
+
 		// Get role from assignment for the primary company (user's company)
 		// If user is assigned to multiple companies, use the role from the primary company
 		if roleMap, ok := userRoleMap[userID]; ok {
@@ -322,10 +328,10 @@ func (uc *userManagementUseCase) GetUsersByCompanyHierarchy(companyID string) ([
 			// No role found anywhere - user is in standby/unassigned state
 			user.Role = ""
 		}
-		
+
 		users = append(users, *user)
 	}
-	
+
 	return users, nil
 }
 
@@ -404,7 +410,7 @@ func (uc *userManagementUseCase) UpdateUser(id, username, email string, companyI
 				existingAssignment.RoleID = roleID
 				existingAssignment.IsActive = true
 				if err := uc.assignmentRepo.Update(existingAssignment); err != nil {
-					zapLog.Warn("Failed to update junction table assignment", 
+					zapLog.Warn("Failed to update junction table assignment",
 						zap.String("user_id", id),
 						zap.String("company_id", *companyID),
 						zap.Error(err))
@@ -413,7 +419,7 @@ func (uc *userManagementUseCase) UpdateUser(id, username, email string, companyI
 				// No role provided - just activate assignment
 				existingAssignment.IsActive = true
 				if err := uc.assignmentRepo.Update(existingAssignment); err != nil {
-					zapLog.Warn("Failed to activate junction table assignment", 
+					zapLog.Warn("Failed to activate junction table assignment",
 						zap.String("user_id", id),
 						zap.String("company_id", *companyID),
 						zap.Error(err))
@@ -429,7 +435,7 @@ func (uc *userManagementUseCase) UpdateUser(id, username, email string, companyI
 				IsActive:  true,
 			}
 			if err := uc.assignmentRepo.Create(assignment); err != nil {
-				zapLog.Warn("Failed to create junction table assignment", 
+				zapLog.Warn("Failed to create junction table assignment",
 					zap.String("user_id", id),
 					zap.String("company_id", *companyID),
 					zap.Error(err))
@@ -443,7 +449,7 @@ func (uc *userManagementUseCase) UpdateUser(id, username, email string, companyI
 				if assignments[i].IsActive {
 					assignments[i].IsActive = false
 					if err := uc.assignmentRepo.Update(&assignments[i]); err != nil {
-						zapLog.Warn("Failed to deactivate assignment", 
+						zapLog.Warn("Failed to deactivate assignment",
 							zap.String("user_id", id),
 							zap.String("assignment_id", assignments[i].ID),
 							zap.Error(err))
@@ -460,7 +466,7 @@ func (uc *userManagementUseCase) UpdateUser(id, username, email string, companyI
 				existingAssignment.RoleID = roleID
 				existingAssignment.IsActive = true
 				if err := uc.assignmentRepo.Update(existingAssignment); err != nil {
-					zapLog.Warn("Failed to update junction table assignment role", 
+					zapLog.Warn("Failed to update junction table assignment role",
 						zap.String("user_id", id),
 						zap.String("company_id", *user.CompanyID),
 						zap.Error(err))
@@ -542,6 +548,13 @@ func (uc *userManagementUseCase) AssignUserToRole(userID, roleID string) error {
 		return fmt.Errorf("role not found: %w", err)
 	}
 
+	// Jika role adalah administrator, pastikan tidak ada user lain yang sudah memakai role tersebut
+	if strings.ToLower(role.Name) == "administrator" {
+		if err := uc.ensureUniqueAdministrator(userID, roleID); err != nil {
+			return err
+		}
+	}
+
 	user.RoleID = &roleID
 	user.Role = role.Name // Update legacy field
 	return uc.userRepo.Update(user)
@@ -563,15 +576,16 @@ func (uc *userManagementUseCase) AssignUserToRoleInCompany(userID, companyID, ro
 	}
 
 	// Validate role exists
-	_, err = uc.roleRepo.GetByID(roleID)
+	role, err := uc.roleRepo.GetByID(roleID)
 	if err != nil {
 		return fmt.Errorf("role not found: %w", err)
 	}
 
-	// Get role name for legacy field sync
-	role, err := uc.roleRepo.GetByID(roleID)
-	if err != nil {
-		return fmt.Errorf("role not found: %w", err)
+	// Jika role adalah administrator, pastikan unik (hanya satu user)
+	if strings.ToLower(role.Name) == "administrator" {
+		if err := uc.ensureUniqueAdministrator(userID, roleID); err != nil {
+			return err
+		}
 	}
 
 	// Get or create assignment
@@ -611,6 +625,30 @@ func (uc *userManagementUseCase) AssignUserToRoleInCompany(userID, companyID, ro
 		zapLog.Warn("Failed to sync role to users table", zap.Error(err))
 	}
 
+	return nil
+}
+
+// ensureUniqueAdministrator memastikan hanya ada satu user dengan role administrator.
+// Jika currentUserID kosong (""), berarti proses create user baru.
+func (uc *userManagementUseCase) ensureUniqueAdministrator(currentUserID, roleID string) error {
+	role, err := uc.roleRepo.GetByID(roleID)
+	if err != nil {
+		return fmt.Errorf("role not found: %w", err)
+	}
+	if strings.ToLower(role.Name) != "administrator" {
+		return nil
+	}
+
+	existingAdmins, err := uc.userRepo.GetByRoleID(roleID)
+	if err != nil {
+		return fmt.Errorf("failed to check existing administrator: %w", err)
+	}
+
+	for _, u := range existingAdmins {
+		if u.ID != currentUserID {
+			return errors.New("hanya diperbolehkan satu user dengan role administrator")
+		}
+	}
 	return nil
 }
 
@@ -655,26 +693,26 @@ func (uc *userManagementUseCase) GetUserCompanies(userID string) ([]domain.UserC
 	}
 
 	zapLog := logger.GetLogger()
-	
+
 	// Get companies from assignments with role info
 	companies := make([]domain.UserCompanyResponse, 0, len(assignments))
 	for _, assignment := range assignments {
 		if !assignment.IsActive {
 			continue // Skip inactive assignments
 		}
-		
+
 		company, err := uc.companyRepo.GetByID(assignment.CompanyID)
 		if err != nil {
 			// Log but continue - assignment might reference deleted company
 			zapLog.Warn("Company not found for assignment", zap.String("company_id", assignment.CompanyID), zap.Error(err))
 			continue
 		}
-		
+
 		// Get role info
 		var roleID *string
 		roleName := ""
 		roleLevel := 999 // Default high level
-		
+
 		if assignment.RoleID != nil {
 			roleID = assignment.RoleID
 			role, err := uc.roleRepo.GetByID(*assignment.RoleID)
@@ -685,12 +723,12 @@ func (uc *userManagementUseCase) GetUserCompanies(userID string) ([]domain.UserC
 				zapLog.Warn("Role not found for assignment", zap.String("role_id", *assignment.RoleID), zap.Error(err))
 			}
 		}
-		
+
 		companies = append(companies, domain.UserCompanyResponse{
-			Company:    *company,
-			RoleID:     roleID,
-			Role:       roleName,
-			RoleLevel:  roleLevel,
+			Company:   *company,
+			RoleID:    roleID,
+			Role:      roleName,
+			RoleLevel: roleLevel,
 		})
 	}
 
@@ -724,21 +762,21 @@ func (uc *userManagementUseCase) ToggleUserStatus(id string) (*domain.UserModel,
 
 func (uc *userManagementUseCase) DeleteUser(id string) error {
 	zapLog := logger.GetLogger()
-	
+
 	// First, delete all user-company assignments from junction table
 	// This prevents foreign key constraint violation
 	if err := uc.assignmentRepo.DeleteByUserID(id); err != nil {
-		zapLog.Warn("Failed to delete user company assignments", 
+		zapLog.Warn("Failed to delete user company assignments",
 			zap.String("user_id", id),
 			zap.Error(err))
 		// Continue even if assignment deletion fails - user might not have any assignments
 	}
-	
+
 	// Then delete the user
 	if err := uc.userRepo.Delete(id); err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -795,4 +833,3 @@ func (uc *userManagementUseCase) ResetUserPassword(userID, newPassword string) e
 	zapLog.Info("User password reset successfully", zap.String("user_id", userID), zap.String("username", user.Username))
 	return nil
 }
-

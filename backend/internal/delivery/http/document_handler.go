@@ -10,6 +10,7 @@ import (
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/audit"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/utils"
 )
 
 type DocumentHandler struct {
@@ -34,7 +35,7 @@ func (h *DocumentHandler) ListFolders(c *fiber.Ctx) error {
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
 
 	var ownerFilter *string
-	if roleName != "superadmin" {
+	if !utils.IsSuperAdminLike(roleName) {
 		ownerFilter = &userIDStr
 	}
 
@@ -192,7 +193,7 @@ func (h *DocumentHandler) ListDocuments(c *fiber.Ctx) error {
 	}
 
 	// Jika filter folder diberikan, pastikan kepemilikan folder untuk non-superadmin
-	if folderPtr != nil && roleName != "superadmin" {
+	if folderPtr != nil && !utils.IsSuperAdminLike(roleName) {
 		folder, err := h.docUseCase.GetFolderByID(folderID)
 		if err != nil {
 			return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
@@ -273,8 +274,8 @@ func (h *DocumentHandler) ListDocuments(c *fiber.Ctx) error {
 		})
 	}
 
-	// RBAC: non-superadmin hanya melihat dokumen milik sendiri
-	if roleName != "superadmin" {
+	// RBAC: non-superadmin/administrator hanya melihat dokumen milik sendiri
+	if !utils.IsSuperAdminLike(roleName) {
 		filtered := make([]domain.DocumentModel, 0, len(docs))
 		for _, d := range docs {
 			if d.UploaderID == userIDStr {
@@ -343,7 +344,7 @@ func (h *DocumentHandler) GetDocument(c *fiber.Ctx) error {
 		})
 	}
 
-	if roleName != "superadmin" && doc.UploaderID != userIDStr {
+	if !utils.IsSuperAdminLike(roleName) && doc.UploaderID != userIDStr {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
 			Message: "Anda tidak memiliki akses ke dokumen ini",
@@ -400,7 +401,7 @@ func (h *DocumentHandler) UploadDocument(c *fiber.Ctx) error {
 	// Jika folder ditentukan, pastikan kepemilikan folder untuk non-superadmin
 	roleVal := c.Locals("roleName")
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
-	if folderPtr != nil && roleName != "superadmin" {
+	if folderPtr != nil && !utils.IsSuperAdminLike(roleName) {
 		folder, err := h.docUseCase.GetFolderByID(*folderPtr)
 		if err != nil {
 			return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
@@ -479,7 +480,7 @@ func (h *DocumentHandler) UpdateDocument(c *fiber.Ctx) error {
 			Message: "Document tidak ditemukan",
 		})
 	}
-	if roleName != "superadmin" && existingDoc.UploaderID != userIDStr {
+	if !utils.IsSuperAdminLike(roleName) && existingDoc.UploaderID != userIDStr {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
 			Message: "Anda tidak memiliki akses mengubah dokumen ini",
@@ -525,7 +526,7 @@ func (h *DocumentHandler) UpdateDocument(c *fiber.Ctx) error {
 		if v := c.FormValue("folder_id"); v != "" {
 			folderPtr = &v
 		}
-		if folderPtr != nil && roleName != "superadmin" {
+			if folderPtr != nil && !utils.IsSuperAdminLike(roleName) {
 			folder, err := h.docUseCase.GetFolderByID(*folderPtr)
 			if err != nil {
 				return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
@@ -595,7 +596,7 @@ func (h *DocumentHandler) UpdateDocument(c *fiber.Ctx) error {
 		})
 	}
 
-	if payload.FolderID != nil && roleName != "superadmin" {
+	if payload.FolderID != nil && !utils.IsSuperAdminLike(roleName) {
 		folder, err := h.docUseCase.GetFolderByID(*payload.FolderID)
 		if err != nil {
 			return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
@@ -658,7 +659,7 @@ func (h *DocumentHandler) DeleteDocument(c *fiber.Ctx) error {
 			Message: "Document tidak ditemukan",
 		})
 	}
-	if roleName != "superadmin" && existingDoc.UploaderID != userIDStr {
+	if !utils.IsSuperAdminLike(roleName) && existingDoc.UploaderID != userIDStr {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
 			Message: "Anda tidak memiliki akses menghapus dokumen ini",

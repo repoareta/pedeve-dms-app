@@ -12,14 +12,14 @@ import (
 // Role yang dikembalikan adalah role TERTINGGI dari semua assignments (untuk dashboard)
 func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []string, error) {
 	zapLog := logger.GetLogger()
-	
+
 	// Get user with relationships
 	userRepo := repository.NewUserRepository()
 	user, role, company, err := userRepo.GetUserWithRoleAndCompany(userID)
 	if err != nil {
 		return nil, "", nil, 0, "", nil, err
 	}
-	
+
 	// Get all assignments untuk user ini (dari junction table)
 	assignmentRepo := repository.NewUserCompanyAssignmentRepository()
 	assignments, err := assignmentRepo.GetByUserID(userID)
@@ -28,18 +28,18 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 		roleRepo := repository.NewRoleRepository()
 		var highestRole *domain.RoleModel
 		highestLevel := 999 // Start dengan level tinggi, semakin kecil semakin tinggi role
-		
+
 		for _, assignment := range assignments {
 			if !assignment.IsActive || assignment.RoleID == nil {
 				continue
 			}
-			
+
 			// Get role detail
 			roleDetail, err := roleRepo.GetByID(*assignment.RoleID)
 			if err != nil {
 				continue
 			}
-			
+
 			// Role level: 0=superadmin, 1=admin, 2=manager, 3=staff
 			// Semakin kecil level, semakin tinggi role
 			if roleDetail.Level < highestLevel {
@@ -47,17 +47,17 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 				highestRole = roleDetail
 			}
 		}
-		
+
 		// Jika ditemukan role dari assignments, gunakan yang tertinggi
 		if highestRole != nil {
 			roleID := &highestRole.ID
 			roleName := highestRole.Name
-			
+
 			// Get company dari assignment dengan role tertinggi (atau primary company)
 			var companyID *string
 			var companyLevel int
 			hierarchyScope := "global"
-			
+
 			// Cari company dari assignment dengan role tertinggi
 			for _, assignment := range assignments {
 				if assignment.IsActive && assignment.RoleID != nil {
@@ -80,7 +80,7 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 					}
 				}
 			}
-			
+
 			// Fallback ke company dari UserModel jika tidak ada dari assignment
 			if companyID == nil && user.CompanyID != nil {
 				companyID = user.CompanyID
@@ -95,7 +95,7 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 					}
 				}
 			}
-			
+
 			// Get permissions from role
 			permissions := []string{}
 			if roleID != nil {
@@ -108,11 +108,11 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 					zapLog.Warn("Failed to get permissions for role", zap.String("role_id", *roleID), zap.Error(err))
 				}
 			}
-			
+
 			// Add default permissions based on role name (backward compatibility)
 			if len(permissions) == 0 {
 				switch roleName {
-				case "superadmin":
+				case "superadmin", "administrator":
 					permissions = []string{"*"}
 				case "admin":
 					permissions = []string{"view_dashboard", "manage_users", "manage_documents", "view_reports"}
@@ -122,11 +122,11 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 					permissions = []string{"view_dashboard", "view_documents"}
 				}
 			}
-			
+
 			return roleID, roleName, companyID, companyLevel, hierarchyScope, permissions, nil
 		}
 	}
-	
+
 	// Fallback: gunakan role dari UserModel (backward compatibility)
 	var roleID *string
 	roleName := "user" // Default role name
@@ -137,16 +137,16 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 		// Fallback ke legacy role field
 		roleName = user.Role
 	}
-	
+
 	// Determine company info
 	var companyID *string
 	companyLevel := 0
 	hierarchyScope := "global"
-	
+
 	if company != nil {
 		companyID = &company.ID
 		companyLevel = company.Level
-		
+
 		// Determine hierarchy scope based on company level
 		if companyLevel == 0 {
 			hierarchyScope = "global" // Root/Superadmin
@@ -159,7 +159,7 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 		// Superadmin (no company)
 		hierarchyScope = "global"
 	}
-	
+
 	// Get permissions from role
 	permissions := []string{}
 	if roleID != nil {
@@ -173,11 +173,11 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 			zapLog.Warn("Failed to get permissions for role", zap.String("role_id", *roleID), zap.Error(err))
 		}
 	}
-	
+
 	// Add default permissions based on role name (backward compatibility)
 	if len(permissions) == 0 {
 		switch roleName {
-		case "superadmin":
+		case "superadmin", "administrator":
 			permissions = []string{"*"} // All permissions
 		case "admin":
 			permissions = []string{"view_dashboard", "manage_users", "manage_documents", "view_reports"}
@@ -187,7 +187,6 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 			permissions = []string{"view_dashboard", "view_documents"}
 		}
 	}
-	
+
 	return roleID, roleName, companyID, companyLevel, hierarchyScope, permissions, nil
 }
-

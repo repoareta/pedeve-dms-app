@@ -320,7 +320,7 @@ const iconColors = [
 // Get company logo atau generate icon
 const getCompanyLogo = (company: Company | undefined): string | undefined => {
   if (company?.logo) {
-    const apiURL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+    const apiURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-pedeve-dev.aretaamany.com')
     const baseURL = apiURL.replace(/\/api\/v1$/, '')
     return company.logo.startsWith('http') ? company.logo : `${baseURL}${company.logo}`
   }

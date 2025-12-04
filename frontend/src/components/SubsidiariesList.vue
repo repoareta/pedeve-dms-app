@@ -29,7 +29,7 @@ const router = useRouter()
 // Get company logo URL
 const getCompanyLogo = (company?: Company): string | undefined => {
   if (!company?.logo) return undefined
-  const apiURL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+const apiURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-pedeve-dev.aretaamany.com')
   const baseURL = apiURL.replace(/\/api\/v1$/, '')
   return company.logo.startsWith('http') ? company.logo : `${baseURL}${company.logo}`
 }
@@ -115,4 +115,3 @@ const subsidiariesList = computed(() => {
     </div>
   </a-card>
 </template>
-

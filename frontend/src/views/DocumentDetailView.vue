@@ -223,7 +223,7 @@ const loadDocumentFile = async () => {
 
   try {
     // Construct file URL
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+    const baseUrl = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-pedeve-dev.aretaamany.com')).replace(/\/$/, '')
     let filePath = document.value.file_path.trim()
     
     // If file_path already starts with /api/v1/files/, use it directly
@@ -521,7 +521,7 @@ onBeforeUnmount(() => {
 
             <!-- Document Content -->
             <div class="document-content" :style="{ zoom: `${zoomLevel}%` }">
-              <div v-if="isPDF && getDocumentUrl && getDocumentUrl !== 'http://localhost:8080/' && getDocumentUrl !== 'http://localhost:8080'" class="pdf-viewer">
+              <div v-if="isPDF && getDocumentUrl" class="pdf-viewer">
                 <iframe
                   :src="getDocumentUrl"
                   class="pdf-iframe"
@@ -533,7 +533,7 @@ onBeforeUnmount(() => {
               <div v-else-if="isPDF" class="unsupported-viewer">
                 <div class="unsupported-message">
                   <IconifyIcon icon="mdi:alert-circle" width="64" style="color: #ff4d4f; margin-bottom: 16px;" />
-                  <p v-if="!getDocumentUrl || getDocumentUrl === 'http://localhost:8080/' || getDocumentUrl === 'http://localhost:8080'">File path tidak ditemukan atau URL tidak valid</p>
+                  <p v-if="!getDocumentUrl">File path tidak ditemukan atau URL tidak valid</p>
                   <p v-else>Preview tidak tersedia</p>
                   <p style="font-size: 12px; color: #999; margin-top: 8px;">File path: {{ document?.file_path || 'N/A' }}</p>
                   <p style="font-size: 12px; color: #999;">Constructed URL: {{ getDocumentUrl || 'N/A' }}</p>

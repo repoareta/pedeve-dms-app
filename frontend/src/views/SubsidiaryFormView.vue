@@ -611,7 +611,7 @@ const handleLogoUpload = async (file: File): Promise<boolean> => {
       logoUrl = response.url
     } else {
       // Relative URL dari local storage, tambahkan baseURL
-      const apiURL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+      const apiURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-pedeve-dev.aretaamany.com')
       const baseURL = apiURL.replace(/\/api\/v1$/, '') // Hapus /api/v1 jika ada
       logoUrl = `${baseURL}${response.url}`
     }
@@ -806,7 +806,7 @@ const loadCompanyData = async () => {
           logoUrl = company.logo
         } else {
           // Get base URL tanpa /api/v1 untuk static files
-          const apiURL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+          const apiURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-pedeve-dev.aretaamany.com')
           const baseURL = apiURL.replace(/\/api\/v1$/, '') // Hapus /api/v1 jika ada
           logoUrl = `${baseURL}${company.logo}`
         }
@@ -1063,4 +1063,3 @@ onMounted(async () => {
   }
 }
 </style>
-

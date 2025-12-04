@@ -215,6 +215,8 @@ server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
     server_name api-pedeve-dev.aretaamany.com;
+    # Allow uploads up to 10MB (matching Fiber BodyLimit)
+    client_max_body_size 10m;
 
     ssl_certificate /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/privkey.pem;
@@ -265,6 +267,9 @@ server {
     listen 80;
     listen [::]:80;
     server_name api-pedeve-dev.aretaamany.com;
+
+    # Allow uploads up to 10MB (matching Fiber BodyLimit)
+    client_max_body_size 10m;
 
     # Logging
     access_log /var/log/nginx/backend-api-access.log;
@@ -385,4 +390,3 @@ echo ""
 echo "🧪 Test commands:"
 echo "   curl http://api-pedeve-dev.aretaamany.com/health"
 echo "   curl http://api-pedeve-dev.aretaamany.com/api/v1/csrf-token"
-

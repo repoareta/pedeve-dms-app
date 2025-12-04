@@ -3,14 +3,11 @@ import { useAuthStore } from '../stores/auth'
 
 // Pastikan baseURL selalu diakhiri dengan /api/v1
 const getBaseURL = () => {
-  const envURL = import.meta.env.VITE_API_URL
-  if (envURL) {
-    // Hapus trailing slash jika ada
-    const cleanURL = envURL.replace(/\/$/, '')
-    // Pastikan /api/v1 ditambahkan
-    return cleanURL.endsWith('/api/v1') ? cleanURL : `${cleanURL}/api/v1`
-  }
-  return 'http://localhost:8080/api/v1'
+  const envURL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL
+  const fallbackHost = import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-pedeve-dev.aretaamany.com'
+
+  const base = (envURL || fallbackHost).replace(/\/$/, '')
+  return base.endsWith('/api/v1') ? base : `${base}/api/v1`
 }
 
 const API_BASE_URL = getBaseURL()

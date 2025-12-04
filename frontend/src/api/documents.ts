@@ -20,6 +20,7 @@ export interface DocumentItem {
   status: string
   metadata?: Record<string, unknown>
   uploader_id?: string
+  uploader_name?: string
   created_at?: string
   updated_at?: string
 }

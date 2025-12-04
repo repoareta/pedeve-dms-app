@@ -59,9 +59,9 @@ const emit = defineEmits([
               {{ getDisplayName(activity.username).charAt(0).toUpperCase() }}
             </div>
             <div class="activity-content">
-              <div class="activity-user">{{ getDisplayName(activity.username) }}</div>
-              <div class="activity-description">{{ getActivityDescription(activity) }}</div>
               <div class="activity-time">{{ formatTime(activity.created_at) }}</div>
+              <div class="activity-description"><strong>{{ getDisplayName(activity.username) }}</strong> {{ getActivityDescription(activity) }}</div>
+              
             </div>
             <div v-if="index < activities.length - 1" class="activity-line"></div>
           </div>
@@ -78,16 +78,11 @@ const emit = defineEmits([
 </template>
 
 <style scoped>
-.sidebar-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
+
 
 .activity-card {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  /* background: orange !important; */
+  
 }
 
 .activity-header {
@@ -95,11 +90,12 @@ const emit = defineEmits([
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
+  margin-bottom: -10px;
+  
 }
 
 .activity-title {
-  margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -108,7 +104,7 @@ const emit = defineEmits([
 }
 
 .activity-list {
-  padding: 8px 0;
+  padding: 3px 0;
 }
 
 .activity-timeline {
@@ -117,20 +113,22 @@ const emit = defineEmits([
 
 .activity-item {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   position: relative;
-  padding: 12px 0;
+  padding: 10px 0;
 }
 
 .activity-avatar {
-  width: 36px;
-  height: 36px;
+  width: 25px;
+  height: 25px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
   font-weight: 600;
+  font-size: 12px;
+  margin:0 0 0 5px;
 }
 
 .activity-content {
@@ -139,15 +137,17 @@ const emit = defineEmits([
 
 .activity-user {
   font-weight: 600;
+  font-size: 12px;
   text-transform: lowercase;
 }
 
 .activity-description {
   color: #555;
+  font-size: 12px;
 }
 
 .activity-time {
-  color: #999;
+  color: #555555;
   font-size: 12px;
 }
 

@@ -20,19 +20,21 @@ textarea::placeholder,
   opacity: 1;
 }
 
-input{
+input {
   height: var(--input-height-default);
   border-color: var(--input-border-color) !important;
-  &::placeholder{
+
+  &::placeholder {
     color: var(--placeholder-color) !important;
   }
 }
 
 
-.ant-input-number-input-wrap{
+.ant-input-number-input-wrap {
   // background: red !important;
   height: var(--input-height-default) !important;
-  input{
+
+  input {
     // background: red !important;
   }
 }
@@ -243,8 +245,10 @@ textarea::placeholder,
 }
 
 .subsidiary-form-layout {
+
   // background: red !important;
   .form-content {
+
     // background: orange;
     .form-card {
       // background: blue;
@@ -252,7 +256,7 @@ textarea::placeholder,
   }
 }
 
-button{
+button {
   display: grid;
 }
 
@@ -279,12 +283,13 @@ button{
   padding: 90px 24px 10px 24px;
   margin-top: -70px;
   margin-bottom: 100px;
+
   .kpi-row {
     margin-bottom: -80px;
   }
 }
 
-.page-header-container{
+.page-header-container {
   background: #e7e7e7 url("@/assets/images/bgHeader.png") no-repeat center center;
   background-size: cover;
   object-fit: cover;
@@ -297,7 +302,7 @@ button{
   margin-bottom: -120px;
 }
 
-.mainContentPage{
+.mainContentPage {
   width: 100%;
   padding: 24px;
 }
@@ -309,13 +314,12 @@ button{
 //   align-items: center !important;
 // }
 
-.page-header{
-  .page-title{
+.page-header {
+  .page-title {
     font-size: 25px !important;
   }
-  .page-description{
 
-  }
+  .page-description {}
 }
 
 .dashboard-header {
@@ -427,6 +431,7 @@ button{
         background: rgba(128, 128, 128, 0.072);
         border-radius: 50px;
         border-color: transparent;
+
         &::after {
           border-bottom: 0;
           border-bottom-color: red;
@@ -437,6 +442,7 @@ button{
         &:hover {
           color: var(--primary-color);
         }
+
         &::after {
           border-bottom: 0;
           border-bottom-color: red;
@@ -535,12 +541,13 @@ button{
 
   // Responsive Design
   @media (max-width: 992px) {
+
     // Tablet
     .header-center {
       padding: 0 12px;
 
       .desktop-menu {
-        
+
         :deep(.ant-menu-item) {
           padding: 0 12px;
           font-size: 14px;
@@ -556,6 +563,7 @@ button{
   }
 
   @media (max-width: 768px) {
+
     // Mobile
     .header-container {
       padding: 10px 16px;
@@ -864,14 +872,14 @@ button{
     height: 450px;
     position: relative;
     width: 100%;
-    
+
     canvas {
       max-height: 100% !important;
     }
   }
 }
 
-.btn-icon-label{
+.btn-icon-label {
   color: #333;
   display: flex;
   align-items: center;
@@ -881,6 +889,7 @@ button{
   border-radius: 8px;
   border: 1px solid #d9d9d9;
   transition: all 0.3s;
+
   &:hover {
     background: #f5f5f5;
     border-color: var(--primary-color);
@@ -1024,6 +1033,7 @@ button{
   // padding: 24px;
   max-width: 1920px;
   margin: 0 auto;
+
   .mainContent {
     padding: 24px;
   }
@@ -1138,20 +1148,61 @@ button{
   }
 }
 
+// .ant-input-search {
+//   .ant-input-wrapper {
+//     position: relative;
+
+//     .ant-input-affix-wrapper {
+//       position: relative;
+//       // background: blue !important;
+//       border-top-right-radius: 0 !important;
+//       border-bottom-right-radius: 0 !important;
+//     }
+
+//     .ant-input-group-addon {
+//       background: transparent !important;
+//       border-top-left-radius: 0 !important;
+//       border-bottom-left-radius: 0 !important;
+
+//       button {
+//         // border: none !important;
+//         background: transparent !important;
+//         box-shadow: none !important;
+//         height: 32px;
+//         width: 32px;
+//       }
+//     }
+//   }
+// }
+
+
+
+.sidebar-stack{
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: white;
+  border-radius: 12px;
+  .ant-card{
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+}
+
 .content-row {
   margin-bottom: 24px;
-  
+
   // Ensure all columns have equal height
   :deep(.ant-row) {
     display: flex;
     align-items: stretch;
   }
-  
+
   :deep(.ant-col) {
     display: flex;
     flex-direction: column;
-    
-    > * {
+
+    >* {
       width: 100%;
       height: 100%;
     }
@@ -1184,15 +1235,15 @@ button{
 }
 
 /* Global Striped Table Styles - Fallback for non-scoped components */
-.striped-table .ant-table-tbody > tr:nth-child(even) > td {
+.striped-table .ant-table-tbody>tr:nth-child(even)>td {
   background-color: #fafafa !important;
 }
 
-.striped-table .ant-table-tbody > tr:nth-child(odd) > td {
+.striped-table .ant-table-tbody>tr:nth-child(odd)>td {
   background-color: #ffffff !important;
 }
 
-.striped-table .ant-table-tbody > tr:hover > td {
+.striped-table .ant-table-tbody>tr:hover>td {
   background-color: #e6f7ff !important;
 }
 
@@ -1234,7 +1285,7 @@ button{
   padding: 4px 11px !important;
   transition: all 0.3s ease !important;
 
- 
+
   &:hover {
     border-color: var(--input-border-color-hover) !important;
   }
@@ -1260,6 +1311,7 @@ button{
 
 // Styling untuk prefix dan suffix icon
 .ant-input-affix-wrapper {
+
   .ant-input-prefix,
   .ant-input-suffix {
     color: rgba(0, 0, 0, 0.25) !important;
@@ -1313,6 +1365,16 @@ button{
     height: 100% !important;
   }
 }
+
+:where(.css-dev-only-do-not-override-1fflfus).ant-input-affix-wrapper>input.ant-input {
+  padding: 0;
+  font-size: inherit;
+  border: none;
+  border-radius: 0;
+  outline: none;
+  height: auto !important;
+}
+
 
 .ant-input-password-lg {
   height: var(--input-height-large) !important;
@@ -1457,7 +1519,7 @@ textarea.ant-input {
   transition: all 0.3s ease !important;
 
   .ant-picker-input {
-    > input {
+    >input {
       color: var(--input-text-color) !important;
       font-size: 14px !important;
 
@@ -1515,7 +1577,7 @@ textarea.ant-input {
 // Time Picker (a-time-picker)
 // ==========================================
 .ant-picker-time-panel-column {
-  > li.ant-picker-time-panel-cell-selected {
+  >li.ant-picker-time-panel-cell-selected {
     background-color: rgba(3, 92, 171, 0.1) !important;
   }
 }
@@ -1539,7 +1601,7 @@ textarea.ant-input {
   margin-bottom: 24px !important;
 
   .ant-form-item-label {
-    > label {
+    >label {
       color: var(--text-color) !important;
       font-weight: 500 !important;
     }
@@ -1552,6 +1614,7 @@ textarea.ant-input {
 .ant-cascader-picker,
 .ant-mentions,
 .ant-auto-complete {
+
   .ant-input,
   .ant-select-selector {
     background-color: var(--input-bg-color) !important;

@@ -248,10 +248,12 @@ func GetUserActivityLogsHandler(c *fiber.Ctx) error {
 		})
 	}
 
-	// User reguler hanya bisa lihat logs mereka sendiri
+	// User reguler hanya bisa lihat logs mereka sendiri.
+	// Admin/superadmin/administrator bisa lihat semua logs, namun administrator tidak boleh melihat log milik superadmin.
 	filterUserID := currentUserID
-	if currentUser.Role == "admin" || currentUser.Role == "superadmin" {
-		// Admin bisa lihat semua logs
+	isAdminLike := currentUser.Role == "admin" || currentUser.Role == "superadmin" || currentUser.Role == "administrator"
+	isAdministrator := currentUser.Role == "administrator"
+	if isAdminLike {
 		filterUserID = ""
 	}
 
@@ -267,6 +269,20 @@ func GetUserActivityLogsHandler(c *fiber.Ctx) error {
 		})
 	}
 
+	// Administrator: sembunyikan log milik superadmin
+	if isAdministrator {
+		filtered := make([]domain.UserActivityLog, 0, len(logs))
+		for _, l := range logs {
+			if l.Username != "" && l.Username != "superadmin" {
+				filtered = append(filtered, l)
+			}
+		}
+		logs = filtered
+		if total > int64(len(filtered)) {
+			total = int64(len(filtered))
+		}
+	}
+
 	// Kembalikan response
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"data":       logs,
@@ -276,4 +292,3 @@ func GetUserActivityLogsHandler(c *fiber.Ctx) error {
 		"totalPages": (total + int64(pageSize) - 1) / int64(pageSize),
 	})
 }
-

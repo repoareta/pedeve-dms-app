@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, h } from 'vue'
+import { ref, onMounted, onUnmounted, computed, h, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { message, Modal } from 'ant-design-vue'
@@ -15,6 +15,9 @@ const authStore = useAuthStore()
 
 // Check if user is superadmin
 const isSuperadmin = computed(() => authStore.user?.role?.toLowerCase() === 'superadmin')
+
+// Role administrator
+const isAdministrator = computed(() => authStore.user?.role?.toLowerCase() === 'administrator')
 
 // Superadmin-like: superadmin atau administrator (akses penuh, kecuali fitur development tetap superadmin-only)
 const isSuperadminLike = computed(() => ['superadmin', 'administrator'].includes(authStore.user?.role?.toLowerCase() || ''))
@@ -72,8 +75,8 @@ const userActivityFilters = ref({
 const selectedUserActivityLog = ref<UserActivityLog | null>(null)
 const userActivityDetailModalVisible = ref(false)
 
-// Tab state untuk audit logs
-const auditLogActiveTab = ref<string>('audit') // 'audit' atau 'user-activity'
+// Tab state untuk audit logs (administrator langsung ke User Activity)
+const auditLogActiveTab = ref<string>(isSuperadmin.value ? 'audit' : 'user-activity') // 'audit' atau 'user-activity'
 
 // SonarQube state
 const sonarqubeEnabled = ref(false) // Track if feature is enabled
@@ -482,11 +485,23 @@ const fetchUserActivityLogs = async (page: number = 1, pageSize: number = 10) =>
     }
     
     const response = await auditApi.getUserActivityLogs(params)
-    userActivityLogs.value = response.data
+    let rows = response.data
+
+    // Administrator melihat semua log kecuali yang berasal dari superadmin
+    if (isAdministrator.value) {
+      rows = rows.filter((item) => item.username?.toLowerCase() !== 'superadmin')
+    }
+
+    userActivityLogs.value = rows
+    const removed = response.data.length - rows.length
+    const adjustedTotal = isAdministrator.value
+      ? Math.max(response.total - removed, rows.length)
+      : response.total
+
     userActivityPagination.value = {
       current: response.page,
       pageSize: response.pageSize,
-      total: response.total,
+      total: adjustedTotal,
     }
   } catch (error: unknown) {
     console.error('Failed to fetch user activity logs:', error)
@@ -791,27 +806,40 @@ const handleOpenChange = (keys: string[]) => {
   openKeys.value = keys
 }
 
+// Sinkronkan data sesuai tab yang dipilih
+watch(
+  () => auditLogActiveTab.value,
+  (tab) => {
+    if (tab === 'audit' && isSuperadmin.value) {
+      fetchAuditLogs()
+    }
+    if (tab === 'user-activity' && isSuperadminLike.value) {
+      fetchUserActivityLogs(userActivityPagination.value.current, userActivityPagination.value.pageSize)
+    }
+  },
+  { immediate: false },
+)
+
 onMounted(() => {
   check2FAStatus()
-  // Fetch audit logs/stats untuk superadmin-like (superadmin & administrator)
-  if (isSuperadminLike.value) {
+  // Fetch audit/user activity sesuai role
+  if (isSuperadmin.value) {
     fetchAuditLogs()
     fetchAuditStats()
-    // Fitur development: cek status seeder hanya untuk superadmin
-    if (isSuperadmin.value) {
-      checkAllSeederStatus()
-    }
-    
-    // Check SonarQube Monitor status (superadmin/administrator/admin)
-    if (isSuperadminLike.value || isAdmin.value) {
-      checkSonarQubeStatus()
-    }
-    
-    // Auto-refresh stats cards saja setiap 30 detik (hanya untuk audit stats, bukan seluruh halaman)
-    // Interval akan dihentikan otomatis saat user keluar dari halaman (onUnmounted)
+    fetchUserActivityLogs(userActivityPagination.value.current, userActivityPagination.value.pageSize)
+    checkAllSeederStatus()
+    // Refresh stats cards setiap 30 detik (hanya untuk superadmin)
     auditStatsInterval = window.setInterval(() => {
       fetchAuditStats()
-    }, 30000) // 30 detik - hanya refresh stats cards
+    }, 30000)
+  } else if (isSuperadminLike.value) {
+    // Administrator: hanya user activity
+    fetchUserActivityLogs(userActivityPagination.value.current, userActivityPagination.value.pageSize)
+  }
+
+  // Check SonarQube Monitor status (superadmin/administrator/admin)
+  if (isSuperadminLike.value || isAdmin.value) {
+    checkSonarQubeStatus()
   }
 })
 
@@ -1132,7 +1160,7 @@ onUnmounted(() => {
 
               <!-- Tabs untuk Audit Logs dan User Activity -->
               <a-tabs v-model:activeKey="auditLogActiveTab" class="audit-tabs">
-                <a-tab-pane key="audit" tab="Audit Logs">
+                <a-tab-pane v-if="isSuperadmin" key="audit" tab="Audit Logs">
                   <div class="audit-logs-section">
                 <!-- Fixed Header Section -->
                 <div class="section-header-fixed">

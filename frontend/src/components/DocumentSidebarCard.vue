@@ -54,24 +54,24 @@ const props = defineProps<{
         <IconifyIcon icon="mdi:view-dashboard-outline" width="16" style="margin-right: 8px;" />
         Dashboard
       </a-button>
-      <a-button type="text" block class="nav-link" @click="emit('nav-recent')">
+      <!-- <a-button type="text" block class="nav-link" @click="emit('nav-recent')">
         <IconifyIcon icon="mdi:clock-outline" width="16" style="margin-right: 8px;" />
         Recent
       </a-button>
       <a-button type="text" block class="nav-link" @click="emit('nav-trash')">
         <IconifyIcon icon="mdi:trash-can-outline" width="16" style="margin-right: 8px;" />
         Trash
-      </a-button>
+      </a-button> -->
     </div>
   </a-card>
 </template>
 
 <style scoped>
 .search-card {
-  background: #fff;
+  /* background: #fff;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  padding: 12px;
+  /* box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); */
+  /* padding: 12px;  */
 }
 
 .search-header {
@@ -106,11 +106,14 @@ const props = defineProps<{
 
 .new-folder-btn {
   width: 100%;
-  height: 40px;
+  height: 35px;
   margin-bottom: 16px;
-  background: #db241b;
-  border-color: #db241b;
+  /* background: #db241b;
+  border-color: #db241b; */
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .new-folder-btn:hover {

@@ -7,6 +7,7 @@ import { Icon as IconifyIcon } from '@iconify/vue'
 import DocumentSidebarActivityCard from '../components/DocumentSidebarActivityCard.vue'
 import documentsApi, { type DocumentFolder, type DocumentItem, type DocumentFolderStat } from '../api/documents'
 import { auditApi, type UserActivityLog } from '../api/audit'
+import { userApi, type User } from '../api/userManagement'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 
@@ -19,6 +20,7 @@ const pagedFiles = ref<DocumentItem[]>([])
 const totalDocuments = ref(0)
 
 const recentSearch = ref('')
+const folderSearch = ref('')
 const selectedFolderId = ref<string | undefined>(undefined)
 const addFolderModalVisible = ref(false)
 const newFolderName = ref('')
@@ -39,6 +41,7 @@ const currentTypeFilter = ref<string>('')
 const folderStatsMap = ref<Record<string, { count: number; size: number }>>({})
 const totalStorageSize = ref(0)
 const storageBreakdownSource = ref<DocumentItem[]>([])
+const userMap = ref<Record<string, string>>({})
 
 // Activity feed
 const activities = ref<UserActivityLog[]>([])
@@ -65,6 +68,20 @@ const loadFolders = async () => {
     message.error(err.message || 'Gagal memuat folder')
   } finally {
     loading.value = false
+  }
+}
+
+const loadUsers = async () => {
+  try {
+    const users: User[] = await userApi.getAll()
+    const map: Record<string, string> = {}
+    users.forEach((u) => {
+      map[u.id] = u.username || u.email || u.id
+    })
+    userMap.value = map
+  } catch (error) {
+    console.warn('Gagal memuat data pengguna untuk uploader name:', error)
+    userMap.value = {}
   }
 }
 
@@ -500,20 +517,27 @@ const storageBreakdown = computed(() => {
   return entries.length ? entries : Object.entries(counts) // jika kosong, tampilkan nol semua
 })
 
-// Folder list filtering by time
-const filteredFoldersByTime = computed(() => {
+// Folder list filtering by time + search
+const filteredFolders = computed(() => {
+  const keyword = folderSearch.value.trim().toLowerCase()
   const now = dayjs()
   return folders.value.filter(folder => {
+    const matchSearch =
+      !keyword ||
+      folder.name?.toLowerCase().includes(keyword) ||
+      folder.id?.toLowerCase().includes(keyword)
+
     const created = folder.created_at ? dayjs(folder.created_at) : null
-    if (!created) return true
-    if (timeFilter.value === 'all') return true
-    if (timeFilter.value === 'last-month') {
-      return created.isAfter(now.subtract(1, 'month'))
+    let matchTime = true
+    if (created) {
+      if (timeFilter.value === 'last-month') {
+        matchTime = created.isAfter(now.subtract(1, 'month'))
+      } else if (timeFilter.value === 'last-week') {
+        matchTime = created.isAfter(now.subtract(1, 'week'))
+      }
     }
-    if (timeFilter.value === 'last-week') {
-      return created.isAfter(now.subtract(1, 'week'))
-    }
-    return true
+
+    return matchSearch && matchTime
   }).sort((a, b) => {
     const tA = a.created_at ? dayjs(a.created_at).valueOf() : 0
     const tB = b.created_at ? dayjs(b.created_at).valueOf() : 0
@@ -540,8 +564,12 @@ const getFileTypeColor = (mimeType: string | undefined): string => {
 }
 
 const getUploaderName = (uploaderId: string | undefined): string => {
-  // Dummy - should fetch from user API
-  return uploaderId || 'Unknown'
+  if (!uploaderId) return 'Unknown'
+  const fromMap = userMap.value[uploaderId]
+  if (fromMap) return fromMap
+  const match = pagedFiles.value.find((f) => f.uploader_id === uploaderId)
+  const metaName = (match?.metadata as Record<string, unknown> | undefined)?.['uploaded_by'] as string | undefined
+  return match?.uploader_name || metaName || uploaderId
 }
 
 const formatDateTime = (dateString: string | undefined): string => {
@@ -592,20 +620,15 @@ const tableColumns = [
     sorter: (a: DocumentItem, b: DocumentItem) => (a.uploader_id || '').localeCompare(b.uploader_id || ''),
   },
   {
-    title: 'Last modified',
-    dataIndex: 'created_at',
-    key: 'created_at',
-    width: 180,
+    title: 'Meta Data status',
+    dataIndex: 'updated_at',
+    key: 'metadata_status',
+    width: 220,
     sorter: (a: DocumentItem, b: DocumentItem) => {
-      const tA = a.created_at ? dayjs(a.created_at).valueOf() : 0
-      const tB = b.created_at ? dayjs(b.created_at).valueOf() : 0
+      const tA = a.updated_at ? dayjs(a.updated_at).valueOf() : a.created_at ? dayjs(a.created_at).valueOf() : 0
+      const tB = b.updated_at ? dayjs(b.updated_at).valueOf() : b.created_at ? dayjs(b.created_at).valueOf() : 0
       return tA - tB
     },
-  },
-  {
-    title: 'Meta Data status',
-    key: 'metadata_status',
-    width: 180,
   },
 ]
 
@@ -620,8 +643,8 @@ const handleTableChange = (
   // Sorting
   const sortField = sorter?.field || sorter?.columnKey || 'created_at'
   const sortOrder = sorter?.order === 'ascend' ? 'asc' : sorter?.order === 'descend' ? 'desc' : currentSortDir.value
-  const allowedSort = ['name', 'mime_type', 'uploader_id', 'created_at', 'size']
-  currentSortBy.value = allowedSort.includes(String(sortField)) ? String(sortField) : 'created_at'
+  const allowedSort = ['name', 'mime_type', 'uploader_id', 'updated_at', 'size']
+  currentSortBy.value = allowedSort.includes(String(sortField)) ? String(sortField) : 'updated_at'
   currentSortDir.value = sortOrder
 
   // Type filter
@@ -661,7 +684,8 @@ onMounted(async () => {
       loadFolders(),
       loadDocuments({ page: 1 }),
       loadDocumentSummary(),
-      loadActivities()
+      loadActivities(),
+      loadUsers(),
     ])
   } finally {
     pageLoading.value = false
@@ -701,7 +725,7 @@ onMounted(async () => {
       </div> -->
 
       <a-row :gutter="[16, 16]" style="margin-top: 70px;">
-        <a-col :xs="24" :lg="6" :xl="6" class="left-column">
+        <a-col :xs="24" :lg="5" :xl="5" class="left-column1">
           <DocumentSidebarActivityCard
             :activities="activities"
             :activity-loading="activityLoading"
@@ -722,11 +746,23 @@ onMounted(async () => {
           />
         </a-col>
 
-        <a-col :xs="24" :lg="12" :xl="12" class="center-column">
-          <a-card class="folders-card" :bordered="false">
+        <a-col :xs="24" :lg="15" :xl="15" class="center-column1">
+          <a-card class="folders-card all-folders" :bordered="false">
             <div class="folders-header">
               <div class="title">Folders</div>
               <div class="folders-actions">
+                <a-input
+                  v-model:value="folderSearch"
+                  placeholder="Search"
+                  allow-clear
+                  class="search-input"
+                  size="small"
+                  style="width: 150px; margin-right: 8px;"
+                >
+                  <template #prefix>
+                    <IconifyIcon icon="mdi:magnify" width="16" />
+                  </template>
+                </a-input>
                 <a-select v-model:value="viewMode" style="width: 120px; margin-right: 8px;" size="small">
                   <a-select-option value="grid">View</a-select-option>
                   <a-select-option value="list">List</a-select-option>
@@ -748,45 +784,57 @@ onMounted(async () => {
               </div>
             </div>
             <transition name="fade">
-              <div v-if="viewMode === 'grid'" class="folders-row">
-                <div class="folder-card add-folder-card" @click="handleAddFolderClick">
-                  <div class="folder-icon-large">
-                    <IconifyIcon icon="mdi:plus" width="48" />
-                  </div>
-                  <div class="folder-name">Add new folder</div>
-                </div>
-                <div
-                  v-for="folder in filteredFoldersByTime"
-                  :key="folder.id"
-                  class="folder-card"
-                  :class="{ active: folder.id === selectedFolderId }"
-                  @click="selectFolder(folder.id)"
-                  @dblclick.stop="handleOpenFolder(folder.id)"
-                >
-                  <div class="folder-card-header">
-                    <div class="folder-icon">
-                      <IconifyIcon icon="mdi:folder" width="32" />
+              <div v-if="viewMode === 'grid'" class="folders-row1">
+                <a-row :gutter="[14, 14]">
+                  <a-col :xs="24" :sm="12" :md="12" :lg="8" :xl="6">
+                    <div class="folder-card add-folder-card" @click="handleAddFolderClick">
+                      <div class="folder-icon-large">
+                        <IconifyIcon icon="mdi:plus" width="35" />
+                      </div>
+                      <div class="folder-name">Add new folder</div>
                     </div>
-                    <a-dropdown :trigger="['click']">
-                      <IconifyIcon icon="mdi:dots-vertical" width="20" class="folder-menu-icon" @click.stop />
-                      <template #overlay>
-                        <a-menu>
-                          <a-menu-item key="rename" @click="openRenameModal(folder)">Rename</a-menu-item>
-                          <a-menu-item key="delete" @click="handleDeleteFolder(folder)">Delete</a-menu-item>
-                        </a-menu>
-                      </template>
-                    </a-dropdown>
-                  </div>
-                  <div class="folder-name">{{ folder.name }}</div>
-                  <div class="folder-meta">
-                    <span>{{ getFolderFileCount(folder.id) }} Files</span>
-                    <span>{{ getFolderSize(folder.id) }}</span>
-                  </div>
-                </div>
+                  </a-col>
+                  <a-col
+                    v-for="folder in filteredFolders"
+                    :key="folder.id"
+                    :xs="24"
+                    :sm="12"
+                    :md="12"
+                    :lg="8"
+                    :xl="6"
+                  >
+                    <div
+                      class="folder-card"
+                      :class="{ active: folder.id === selectedFolderId }"
+                      @click="selectFolder(folder.id)"
+                      @dblclick.stop="handleOpenFolder(folder.id)"
+                    >
+                      <div class="folder-card-header">
+                        <div class="folder-icon">
+                          <IconifyIcon icon="mdi:folder" width="50" color="#E7EAE9" />
+                        </div>
+                        <a-dropdown :trigger="['click']">
+                          <IconifyIcon icon="mdi:dots-vertical" width="20" class="folder-menu-icon" @click.stop />
+                          <template #overlay>
+                            <a-menu>
+                              <a-menu-item key="rename" @click="openRenameModal(folder)">Rename</a-menu-item>
+                              <a-menu-item key="delete" @click="handleDeleteFolder(folder)">Delete</a-menu-item>
+                            </a-menu>
+                          </template>
+                        </a-dropdown>
+                      </div>
+                      <div class="folder-name">{{ folder.name }}</div>
+                      <div class="folder-meta">
+                        <span>{{ getFolderFileCount(folder.id) }} Files</span>
+                        <span>{{ getFolderSize(folder.id) }}</span>
+                      </div>
+                    </div>
+                  </a-col>
+                </a-row>
               </div>
               <div v-else class="folders-list">
                 <a-table
-                  :data-source="filteredFoldersByTime"
+                  :data-source="filteredFolders"
                   :pagination="false"
                   size="small"
                   row-key="id"
@@ -878,38 +926,42 @@ onMounted(async () => {
                 <template v-else-if="column.key === 'uploader_id'">
                   {{ getUploaderName(record.uploader_id) }}
                 </template>
-                <template v-else-if="column.key === 'created_at'">
-                  {{ formatDateTime(record.created_at) }}
-                </template>
                 <template v-else-if="column.key === 'metadata_status'">
-                  <a-button
-                    v-if="hasCompleteMetadata(record)"
-                    type="default"
-                    size="small"
-                    style="background: #f5f5f5; border-color: #d9d9d9;"
-                    @click.stop="handleRowClick(record)"
-                  >
-                    Meta Data ✓
-                  </a-button>
-                  <a-button
-                    v-else
-                    type="primary"
-                    size="small"
-                    style="background: #52c41a; border-color: #52c41a;"
-                    @click.stop="handleRowClick(record)"
-                  >
-                    Lengkapi Meta Data →
-                  </a-button>
+                  <div class="metadata-status-cell">
+                    <div class="meta-action">
+                      <a-button
+                        v-if="hasCompleteMetadata(record)"
+                        type="default"
+                        size="small"
+                        style="background: #f5f5f5; border-color: #d9d9d9;"
+                        @click.stop="handleRowClick(record)"
+                      >
+                        Meta Data ✓
+                      </a-button>
+                      <a-button
+                        v-else
+                        type="primary"
+                        size="small"
+                        style="background: #52c41a; border-color: #52c41a;"
+                        @click.stop="handleRowClick(record)"
+                      >
+                        Lengkapi Meta Data →
+                      </a-button>
+                    </div>
+                    <div class="meta-date">
+                      <IconifyIcon icon="lets-icons:time" width="14"/>: {{ formatDateTime(record.updated_at || record.created_at) }}
+                    </div>
+                  </div>
                 </template>
               </template>
             </a-table>
           </a-card>
         </a-col>
 
-        <a-col :xs="24" :lg="6" :xl="6" class="right-column">
+        <a-col :xs="24" :lg="4" :xl="4" class="right-column1">
           <a-card class="detail-card" :bordered="false" v-if="selectedFolder">
             <div class="detail-icon">
-              <IconifyIcon icon="mdi:folder" width="64" style="color: #035cab;" />
+              <IconifyIcon icon="mdi:folder" width="100" style="color: #E7EAE9;" />
             </div>
             <div class="detail-title">Details</div>
             <div class="detail-row">
@@ -923,10 +975,6 @@ onMounted(async () => {
             <div class="detail-row">
               <span>Size</span>
               <strong>{{ getSelectedFolderSize() }}</strong>
-            </div>
-            <div class="detail-row">
-              <span>Location</span>
-              <strong>-</strong>
             </div>
             <div class="detail-row">
               <span>Last Edited</span>
@@ -1054,7 +1102,7 @@ onMounted(async () => {
 }
 
 .documents-content {
-  max-width: 1400px;
+  max-width: 100%;
   margin: 0 auto;
   padding: 16px 24px 40px;
 }
@@ -1085,10 +1133,10 @@ onMounted(async () => {
 }
 
 .search-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  // background: #fff;
+  // border-radius: 12px;
+  // padding: 16px;
+  // box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
 .search-header {
@@ -1161,8 +1209,26 @@ onMounted(async () => {
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
+.all-folders{
+  // background-color: orange;
+  max-height: 425px;
+  overflow: auto;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 .activity-card {
   background: #fff;
+}
+
+.meta-date{
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+  justify-content: start;
+  color: #777;
 }
 
 .activity-header {
@@ -1287,8 +1353,8 @@ onMounted(async () => {
 
 .folders-row-skeleton {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
   margin-top: 16px;
 }
 
@@ -1499,7 +1565,7 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 140px;
+  min-height: 124px;
 }
 
 .folder-card.add-folder-card:hover {
@@ -1522,7 +1588,7 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 12px;
+  margin-bottom: 0px;
 }
 
 .folder-icon {
@@ -1547,10 +1613,11 @@ onMounted(async () => {
 }
 
 .folder-name {
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: 500;
+  line-height: 19px;
+  font-size: 13px;
   color: #333;
-  margin-bottom: 8px;
+  // margin-bottom: 8px;
   word-break: break-word;
 }
 
@@ -1604,26 +1671,26 @@ onMounted(async () => {
 }
 
 .detail-card {
-  margin-bottom: 16px;
+  // margin-bottom: 16px;
 }
 
 .detail-icon {
   text-align: center;
-  margin-bottom: 16px;
+  // margin-bottom: 16px;
 }
 
 .detail-title {
   font-weight: 700;
-  font-size: 16px;
-  margin-bottom: 16px;
+  font-size: 14px;
+  margin-bottom: 6px;
   color: #333;
 }
 
 .detail-row {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
+  display: block;
+  // justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
   border-bottom: 1px solid #f0f0f0;
 }
 
@@ -1635,12 +1702,13 @@ onMounted(async () => {
 
 .detail-row span {
   color: #666;
-  font-size: 14px;
+  font-size: 12px;
+  display: block;
 }
 
 .detail-row strong {
   color: #333;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -1737,4 +1805,6 @@ onMounted(async () => {
 .dot.red { background: #ff4d4f; }
 .dot.blue { background: #1890ff; }
 .dot.orange { background: #faad14; }
+
+
 </style>

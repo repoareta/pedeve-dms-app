@@ -5,6 +5,7 @@ import { message, Modal } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import documentsApi, { type DocumentItem } from '../api/documents'
+import { userApi, type User } from '../api/userManagement'
 import { auditApi, type UserActivityLog } from '../api/audit'
 import DocumentSidebarActivityCard from '../components/DocumentSidebarActivityCard.vue'
 import dayjs from 'dayjs'
@@ -21,6 +22,7 @@ const documentId = computed(() => route.params.id as string)
 const document = ref<DocumentItem | null>(null)
 const loading = ref(true)
 const pageLoading = ref(true)
+const userMap = ref<Record<string, string>>({})
 
 // Activity feed
 const activities = ref<UserActivityLog[]>([])
@@ -222,20 +224,45 @@ const loadDocumentFile = async () => {
   }
 
   try {
-    // Construct file URL
-    const baseUrl = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-pedeve-dev.aretaamany.com')).replace(/\/$/, '')
-    let filePath = document.value.file_path.trim()
-    
-    // If file_path already starts with /api/v1/files/, use it directly
-    if (!filePath.startsWith('/api/v1/files/')) {
-      // Legacy support: convert to /api/v1/files/documents/...
-      if (filePath.startsWith('/')) {
-        filePath = filePath.substring(1)
-      }
-      filePath = `/api/v1/files/${filePath}`
+    // Construct file URL with robust handling to avoid double /api/v1
+    const rawBase =
+      import.meta.env.VITE_API_BASE_URL ||
+      import.meta.env.VITE_API_URL ||
+      (import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-pedeve-dev.aretaamany.com')
+
+    let baseOrigin = rawBase
+    let basePath = ''
+    try {
+      const u = new URL(rawBase)
+      baseOrigin = u.origin
+      basePath = u.pathname.replace(/\/$/, '') // e.g. /api/v1 or ''
+    } catch (e) {
+      console.warn('Invalid VITE_API_BASE_URL, using raw value:', rawBase, e)
     }
-    
-    const fileUrl = `${baseUrl}${filePath}`
+
+    let filePath = document.value.file_path.trim()
+
+    // If already absolute URL (e.g., GCS signed URL), use as is
+    let fileUrl: string
+    if (/^https?:\/\//i.test(filePath)) {
+      fileUrl = filePath
+    } else {
+      if (!filePath.startsWith('/')) {
+        filePath = `/${filePath}`
+      }
+      // Normalize to /api/v1/files/... without duplicating /api/v1
+      if (!filePath.startsWith('/api/v1')) {
+        filePath = `/api/v1/files${filePath}`
+      }
+      // If basePath already includes /api/v1, avoid double prefix
+      if (basePath && filePath.startsWith(basePath)) {
+        // keep as is
+      } else if (basePath) {
+        filePath = `${basePath}${filePath}`
+      }
+      fileUrl = `${baseOrigin}${filePath}`
+    }
+
     console.log('Downloading file with authentication:', fileUrl)
     
     // Download file with authentication (cookies will be sent automatically)
@@ -427,6 +454,65 @@ const formatDate = (dateString?: string): string => {
   return dayjs(dateString).format('YYYY-MM-DD')
 }
 
+const loadUsers = async () => {
+  try {
+    const users: User[] = await userApi.getAll()
+    const map: Record<string, string> = {}
+    users.forEach((u) => {
+      map[u.id] = u.username || u.email || u.id
+    })
+    userMap.value = map
+  } catch (error) {
+    console.warn('Gagal memuat data pengguna untuk uploader name:', error)
+  }
+}
+
+// Helper pembacaan metadata dengan fallback
+const getMetaValue = (keys: (string | undefined)[], fallback?: string): string => {
+  for (const k of keys) {
+    if (!k) continue
+    const val = metadata.value[k] as string | undefined
+    if (val && String(val).trim() !== '') return String(val)
+  }
+  if (fallback) return fallback
+  return '-'
+}
+
+const getDocType = () =>
+  getMetaValue(['document_type', 'doc_type'])
+
+const getReference = () =>
+  getMetaValue(['document_number', 'reference', 'document_reference', 'number'])
+
+const getUnit = () =>
+  getMetaValue(['unit', 'division'])
+
+const getUploadedBy = () =>
+  getMetaValue(
+    ['uploaded_by', 'pic', 'uploader_name'],
+    (document.value as { uploader_name?: string } | null)?.uploader_name ||
+      (document.value?.uploader_id ? userMap.value[document.value.uploader_id] : undefined) ||
+      '-',
+  )
+
+const getDocStatus = () => {
+  const statusVal = getMetaValue(['status'])
+  if (statusVal && statusVal !== '-') return statusVal
+  const isActiveVal = metadata.value.is_active
+  if (typeof isActiveVal === 'string') return isActiveVal
+  if (typeof isActiveVal === 'boolean') return isActiveVal ? 'Aktif' : 'Tidak Aktif'
+  return document.value?.status || '-'
+}
+
+const getIssuedDate = () =>
+  getMetaValue(['document_date', 'published_date', 'issued_date'])
+
+const getEffectiveDate = () =>
+  getMetaValue(['effective_date'])
+
+const getExpiredDate = () =>
+  getMetaValue(['expired_date'])
+
 const openInNewTab = () => {
   if (getDocumentUrl.value) {
     if (typeof window !== 'undefined') {
@@ -443,6 +529,7 @@ onMounted(async () => {
   pageLoading.value = true
   try {
     await Promise.all([
+      loadUsers(),
       loadDocument(),
       loadActivities()
     ])
@@ -466,7 +553,7 @@ onBeforeUnmount(() => {
     <div class="document-detail-content">
       <a-row :gutter="[20, 20]">
         <!-- Left Sidebar -->
-        <a-col :xs="24" :lg="6" :xl="6" class="left-column">
+        <a-col :xs="24" :lg="5" :xl="5" class="left-column1">
           <DocumentSidebarActivityCard
             :activities="activities"
             :activity-loading="activityLoading"
@@ -488,7 +575,7 @@ onBeforeUnmount(() => {
         </a-col>
 
         <!-- Main Content - Document Viewer -->
-        <a-col :xs="24" :lg="12" :xl="12" class="center-column">
+        <a-col :xs="24" :lg="15" :xl="15" class="center-column1">
           <a-card class="document-viewer-card" :bordered="false" v-if="!loading && document">
             <!-- Document Header -->
             <div class="document-header">
@@ -602,61 +689,61 @@ onBeforeUnmount(() => {
         </a-col>
 
         <!-- Right Sidebar - Metadata Panel -->
-        <a-col :xs="24" :lg="6" :xl="6" class="right-column">
+        <a-col :xs="24" :lg="4" :xl="4" class="right-column1">
           <a-card class="metadata-card" :bordered="false" v-if="!loading && document">
             <div class="metadata-header">
               <h3 class="metadata-title">Meta Data</h3>
             </div>
             <div class="metadata-content">
-              <div class="metadata-field">
+              <!-- <div class="metadata-field">
                 <label>Judul Dokumen</label>
                 <div class="metadata-value">{{ metadata.document_title || document.name || '-' }}</div>
-              </div>
+              </div> -->
               <div class="metadata-field">
                 <label>Document ID</label>
                 <div class="metadata-value">{{ metadata.document_id || document.id || '-' }}</div>
               </div>
               <div class="metadata-field">
                 <label>Jenis Dokumen</label>
-                <div class="metadata-value">{{ metadata.document_type || '-' }}</div>
+                <div class="metadata-value">{{ getDocType() }}</div>
               </div>
               <div class="metadata-field">
                 <label>Nomor Dokumen / Referensi</label>
-                <div class="metadata-value">{{ metadata.document_number || '-' }}</div>
+                <div class="metadata-value">{{ getReference() }}</div>
               </div>
               <div class="metadata-field">
                 <label>Unit / Divisi</label>
-                <div class="metadata-value">{{ metadata.unit || metadata.division || '-' }}</div>
+                <div class="metadata-value">{{ getUnit() }}</div>
               </div>
               <div class="metadata-field">
                 <label>Uploaded By / PIC</label>
-                <div class="metadata-value">{{ metadata.uploaded_by || metadata.pic || '-' }}</div>
+                <div class="metadata-value">{{ getUploadedBy() }}</div>
               </div>
               <div class="metadata-field">
                 <label>Status Dokumen</label>
                 <div class="metadata-value">
-                  <a-tag :color="metadata.status === 'Disetujui' || metadata.status === 'Approved' ? 'success' : 'default'">
-                    {{ metadata.status || '-' }}
+                  <a-tag :color="getDocStatus() === 'Disetujui' || getDocStatus() === 'Approved' || getDocStatus() === 'Aktif' ? 'success' : 'default'">
+                    {{ getDocStatus() }}
                   </a-tag>
                 </div>
               </div>
               <div class="metadata-field">
                 <label>Tanggal Dokumen (Diterbitkan)</label>
-                <div class="metadata-value">{{ formatDate(metadata.document_date as string) || formatDate(metadata.published_date as string) || '-' }}</div>
+                <div class="metadata-value">{{ formatDate(getIssuedDate()) }}</div>
               </div>
               <div class="metadata-field">
                 <label>Tanggal Berlaku</label>
-                <div class="metadata-value">{{ formatDate(metadata.effective_date as string) || '-' }}</div>
+                <div class="metadata-value">{{ formatDate(getEffectiveDate()) }}</div>
               </div>
               <div class="metadata-field">
                 <label>Tanggal Berakhir</label>
-                <div class="metadata-value">{{ formatDate(metadata.expired_date as string) || '-' }}</div>
+                <div class="metadata-value">{{ formatDate(getExpiredDate()) }}</div>
               </div>
               <div class="metadata-field">
                 <label>Is Active</label>
                 <div class="metadata-value">
-                  <a-tag :color="metadata.is_active ? 'success' : 'default'">
-                    {{ metadata.is_active ? 'Aktif' : 'Tidak Aktif' }}
+                  <a-tag :color="(metadata.is_active as boolean) || (metadata.is_active as string) === 'Aktif' ? 'success' : 'default'">
+                    {{ (metadata.is_active as string) === 'Aktif' || (metadata.is_active as boolean) ? 'Aktif' : 'Tidak Aktif' }}
                   </a-tag>
                 </div>
               </div>
@@ -705,9 +792,9 @@ onBeforeUnmount(() => {
 }
 
 .document-detail-content {
-  padding: 24px;
-  max-width: 1440px;
+  max-width: 100%;
   margin: 0 auto;
+  padding: 16px 24px 40px;
 }
 
 // Left Sidebar (same as DocumentManagementView)
@@ -718,9 +805,9 @@ onBeforeUnmount(() => {
 }
 
 .search-card {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  // background: #fff;
+  // border-radius: 12px;
+  // box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
 .search-header {
@@ -1109,7 +1196,7 @@ onBeforeUnmount(() => {
 }
 
 .metadata-title {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   margin: 0;
   color: #333;

@@ -391,6 +391,7 @@ const userRole = computed(() => {
 })
 
 const isSuperadmin = computed(() => userRole.value === 'superadmin')
+const isAdministrator = computed(() => userRole.value === 'administrator')
 const isAdmin = computed(() => userRole.value === 'admin')
 const isManager = computed(() => userRole.value === 'manager')
 const isStaff = computed(() => userRole.value === 'staff')
@@ -479,8 +480,8 @@ onMounted(async () => {
   <div class="dashboard-layout">
     <DashboardHeader @logout="handleLogout" />
 
-    <!-- Superadmin Dashboard (Holding Company) -->
-    <div v-if="isSuperadmin" class="dashboard-content">
+    <!-- Superadmin / Administrator Dashboard (Holding Company) -->
+    <div v-if="isSuperadmin || isAdministrator" class="dashboard-content">
 
       <div class="bg-header-general">
 

@@ -20,7 +20,7 @@ const isScrolled = ref(false)
 const isMaximized = ref(false)
 
 // Valid roles that can access the application
-const validRoles = ['superadmin', 'admin', 'manager', 'staff']
+const validRoles = ['superadmin', 'administrator', 'admin', 'manager', 'staff']
 
 // Check if user role is valid
 const isRoleValid = computed(() => {

@@ -3,6 +3,7 @@ package usecase
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
@@ -458,18 +459,19 @@ func (uc *userManagementUseCase) UpdateUser(id, username, email string, companyI
 			}
 		}
 	} else if roleID != nil {
-		// Only roleID changed, but no companyID - update all active assignments for this user
-		// This is a bit unusual, but we'll update the primary company assignment if exists
-		if user.CompanyID != nil {
-			existingAssignment, err := uc.assignmentRepo.GetByUserAndCompany(id, *user.CompanyID)
-			if err == nil && existingAssignment != nil {
-				existingAssignment.RoleID = roleID
-				existingAssignment.IsActive = true
-				if err := uc.assignmentRepo.Update(existingAssignment); err != nil {
-					zapLog.Warn("Failed to update junction table assignment role",
-						zap.String("user_id", id),
-						zap.String("company_id", *user.CompanyID),
-						zap.Error(err))
+		// Only roleID changed, tetapi companyID tidak diberikan.
+		// Perbarui semua assignment aktif agar role baru konsisten untuk pengambilan role tertinggi.
+		assignments, err := uc.assignmentRepo.GetByUserID(id)
+		if err == nil {
+			for i := range assignments {
+				if assignments[i].IsActive {
+					assignments[i].RoleID = roleID
+					if err := uc.assignmentRepo.Update(&assignments[i]); err != nil {
+						zapLog.Warn("Failed to update junction table assignment role",
+							zap.String("user_id", id),
+							zap.String("company_id", assignments[i].CompanyID),
+							zap.Error(err))
+					}
 				}
 			}
 		}

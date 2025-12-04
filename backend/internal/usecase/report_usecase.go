@@ -8,6 +8,7 @@ import (
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/uuid"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/utils"
 	"gorm.io/gorm"
 )
 
@@ -98,7 +99,7 @@ func (uc *reportUseCase) GetReportByID(id string) (*domain.ReportModel, error) {
 
 func (uc *reportUseCase) GetAllReports(userRole string, userCompanyID *string) ([]domain.ReportModel, error) {
 	// Superadmin can see all reports
-	if userRole == "superadmin" {
+	if utils.IsSuperAdminLike(userRole) {
 		return uc.reportRepo.GetAll()
 	}
 
@@ -235,7 +236,7 @@ func (uc *reportUseCase) DeleteReport(id string) error {
 // - User is regular user and companyID is their company
 func (uc *reportUseCase) ValidateReportAccess(userRole string, userCompanyID *string, reportCompanyID string) (bool, error) {
 	// Superadmin can access all
-	if userRole == "superadmin" {
+	if utils.IsSuperAdminLike(userRole) {
 		return true, nil
 	}
 
@@ -261,4 +262,3 @@ func (uc *reportUseCase) ValidateReportAccess(userRole string, userCompanyID *st
 	// Regular users can only access their own company's reports
 	return false, nil
 }
-

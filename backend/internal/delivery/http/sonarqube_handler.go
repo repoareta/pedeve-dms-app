@@ -9,6 +9,7 @@ import (
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/sonarqube"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/utils"
 	"go.uber.org/zap"
 )
 
@@ -56,15 +57,15 @@ func (h *SonarQubeHandler) GetIssues(c *fiber.Ctx) error {
 		})
 	}
 
-	// Only superadmin and admin can access
-	if roleName != "superadmin" && roleName != "admin" {
+	// Only superadmin/administrator and admin can access
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" {
 		h.logger.Warn("Unauthorized access attempt to SonarCloud issues",
 			zap.String("role", roleName),
 			zap.String("path", c.Path()),
 		)
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
-			Message: "Only superadmin and admin can access SonarCloud issues",
+			Message: "Only superadmin/administrator and admin can access SonarCloud issues",
 		})
 	}
 
@@ -177,15 +178,15 @@ func (h *SonarQubeHandler) ExportIssues(c *fiber.Ctx) error {
 		})
 	}
 
-	// Only superadmin and admin can access
-	if roleName != "superadmin" && roleName != "admin" {
+	// Only superadmin/administrator and admin can access
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" {
 		h.logger.Warn("Unauthorized access attempt to export SonarCloud issues",
 			zap.String("role", roleName),
 			zap.String("path", c.Path()),
 		)
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
-			Message: "Only superadmin and admin can export SonarCloud issues",
+			Message: "Only superadmin/administrator and admin can export SonarCloud issues",
 		})
 	}
 
@@ -279,15 +280,15 @@ func (h *SonarQubeHandler) GetSoftwareQualityMetrics(c *fiber.Ctx) error {
 		})
 	}
 
-	// Only superadmin and admin can access
-	if roleName != "superadmin" && roleName != "admin" {
+	// Only superadmin/administrator and admin can access
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" {
 		h.logger.Warn("Unauthorized access attempt to SonarQube metrics",
 			zap.String("role", roleName),
 			zap.String("path", c.Path()),
 		)
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
-			Message: "Only superadmin and admin can access SonarQube metrics",
+			Message: "Only superadmin/administrator and admin can access SonarQube metrics",
 		})
 	}
 

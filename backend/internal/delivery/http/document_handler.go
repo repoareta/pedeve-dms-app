@@ -46,10 +46,12 @@ func (h *DocumentHandler) ListFolders(c *fiber.Ctx) error {
 			Message: err.Error(),
 		})
 	}
-	username, _ := c.Locals("username").(string)
-	audit.LogAction(userIDStr, username, audit.ActionViewDoc, audit.ResourceDocument, "", getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
-		"operation": "list_folders",
-	})
+	if audit.ShouldLogView() {
+		username, _ := c.Locals("username").(string)
+		audit.LogAction(userIDStr, username, audit.ActionViewDoc, audit.ResourceDocument, "", getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
+			"operation": "list_folders",
+		})
+	}
 	return c.JSON(folders)
 }
 
@@ -219,7 +221,7 @@ func (h *DocumentHandler) ListDocuments(c *fiber.Ctx) error {
 	usePaginated := page > 0 || pageSize > 0 || search != "" || sortBy != "" || sortDir != "" || typeFilter != ""
 
 	ownerFilter := (*string)(nil)
-	if roleName != "superadmin" {
+	if !utils.IsSuperAdminLike(roleName) {
 		ownerFilter = &userIDStr
 	}
 
@@ -251,13 +253,15 @@ func (h *DocumentHandler) ListDocuments(c *fiber.Ctx) error {
 			})
 		}
 
-		username, _ := c.Locals("username").(string)
-		audit.LogAction(userIDStr, username, audit.ActionViewDoc, audit.ResourceDocument, "", getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
-			"operation": "list_documents_paginated",
-			"folder_id": folderID,
-			"page":      page,
-			"page_size": pageSize,
-		})
+		if audit.ShouldLogView() {
+			username, _ := c.Locals("username").(string)
+			audit.LogAction(userIDStr, username, audit.ActionViewDoc, audit.ResourceDocument, "", getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
+				"operation": "list_documents_paginated",
+				"folder_id": folderID,
+				"page":      page,
+				"page_size": pageSize,
+			})
+		}
 		return c.JSON(fiber.Map{
 			"data":      docs,
 			"total":     total,
@@ -285,11 +289,13 @@ func (h *DocumentHandler) ListDocuments(c *fiber.Ctx) error {
 		docs = filtered
 	}
 
-	username, _ := c.Locals("username").(string)
-	audit.LogAction(userIDStr, username, audit.ActionViewDoc, audit.ResourceDocument, "", getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
-		"operation": "list_documents",
-		"folder_id": folderID,
-	})
+	if audit.ShouldLogView() {
+		username, _ := c.Locals("username").(string)
+		audit.LogAction(userIDStr, username, audit.ActionViewDoc, audit.ResourceDocument, "", getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
+			"operation": "list_documents",
+			"folder_id": folderID,
+		})
+	}
 	return c.JSON(docs)
 }
 
@@ -351,8 +357,10 @@ func (h *DocumentHandler) GetDocument(c *fiber.Ctx) error {
 		})
 	}
 
-	username, _ := c.Locals("username").(string)
-	audit.LogAction(userIDStr, username, audit.ActionViewDoc, audit.ResourceDocument, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+	if audit.ShouldLogView() {
+		username, _ := c.Locals("username").(string)
+		audit.LogAction(userIDStr, username, audit.ActionViewDoc, audit.ResourceDocument, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+	}
 	return c.JSON(doc)
 }
 
@@ -526,7 +534,7 @@ func (h *DocumentHandler) UpdateDocument(c *fiber.Ctx) error {
 		if v := c.FormValue("folder_id"); v != "" {
 			folderPtr = &v
 		}
-			if folderPtr != nil && !utils.IsSuperAdminLike(roleName) {
+		if folderPtr != nil && !utils.IsSuperAdminLike(roleName) {
 			folder, err := h.docUseCase.GetFolderByID(*folderPtr)
 			if err != nil {
 				return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{

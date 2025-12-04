@@ -454,7 +454,7 @@ const getSelectedFolderLastEdited = (): string => {
 }
 
 // Storage summary
-const STORAGE_CAPACITY_BYTES = 15 * 1024 * 1024 * 1024 // 15 GB default
+const STORAGE_CAPACITY_BYTES = 5 * 1024 * 1024 * 1024 // 5 GB default
 const storageUsage = computed(() => {
   const used = totalStorageSize.value
   const capacity = STORAGE_CAPACITY_BYTES
@@ -960,7 +960,7 @@ onMounted(async () => {
                   <a-progress
                     type="circle"
                     :percent="storageUsage.percent"
-                    :width="140"
+                    :width="200"
                     stroke-color="#ff4d4f"
                     :format="() => ''"
                   />
@@ -1485,6 +1485,10 @@ onMounted(async () => {
   transition: all 0.2s ease;
   background: #fff;
   position: relative;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
 .folder-card.add-folder-card {

@@ -634,9 +634,9 @@ func (h *UserManagementHandler) AssignUserToCompany(c *fiber.Ctx) error {
 		})
 	}
 
-	// Superadmin can assign to any company
+	// Superadmin/administrator can assign to any company
 	// Admin can only assign to their own company
-	if roleName != "superadmin" {
+	if !utils.IsSuperAdminLike(roleName) {
 		// Check if user has company
 		if companyID == nil {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
@@ -762,9 +762,9 @@ func (h *UserManagementHandler) UnassignUserFromCompany(c *fiber.Ctx) error {
 		})
 	}
 
-	// Superadmin can unassign from any company
+	// Superadmin/administrator can unassign from any company
 	// Admin can only unassign from their own company
-	if roleName != "superadmin" {
+	if !utils.IsSuperAdminLike(roleName) {
 		// Check if user has company
 		if companyID == nil {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{

@@ -58,25 +58,28 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 			var companyLevel int
 			hierarchyScope := "global"
 
-			// Cari company dari assignment dengan role tertinggi
+			// Cari company dari assignment dengan role tertinggi.
+			// Untuk role global (superadmin/administrator), prioritaskan holding (level 0) jika ada.
 			for _, assignment := range assignments {
 				if assignment.IsActive && assignment.RoleID != nil {
 					roleDetail, err := roleRepo.GetByID(*assignment.RoleID)
 					if err == nil && roleDetail.Level == highestLevel {
-						companyID = &assignment.CompanyID
-						// Get company level
+						// Ambil data company
 						companyRepo := repository.NewCompanyRepository()
 						if comp, err := companyRepo.GetByID(assignment.CompanyID); err == nil {
-							companyLevel = comp.Level
-							if companyLevel == 0 {
-								hierarchyScope = "global"
-							} else if companyLevel == 1 {
-								hierarchyScope = "company"
-							} else {
-								hierarchyScope = "sub_company"
+							// Jika belum ada company terpilih, atau kita menemukan holding (level 0), set.
+							if companyID == nil || comp.Level == 0 {
+								companyID = &assignment.CompanyID
+								companyLevel = comp.Level
+								if companyLevel == 0 {
+									hierarchyScope = "global"
+								} else if companyLevel == 1 {
+									hierarchyScope = "company"
+								} else {
+									hierarchyScope = "sub_company"
+								}
 							}
 						}
-						break
 					}
 				}
 			}

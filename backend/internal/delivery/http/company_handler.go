@@ -3,11 +3,12 @@ package http
 import (
 	"fmt"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/audit"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
-	"github.com/gofiber/fiber/v2"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/utils"
 	"go.uber.org/zap"
 )
 
@@ -57,9 +58,9 @@ func (h *CompanyHandler) CreateCompany(c *fiber.Ctx) error {
 	companyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
 
-	// Superadmin can create company at any level
+	// Superadmin/administrator can create company at any level
 	// Admin can only create sub-company under their company
-	if roleName != "superadmin" && companyID != nil {
+	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr
@@ -137,7 +138,7 @@ func (h *CompanyHandler) CreateCompanyFull(c *fiber.Ctx) error {
 
 	// Superadmin can create company at any level
 	// Admin can only create sub-company under their company
-	if roleName != "superadmin" && companyID != nil {
+	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr
@@ -221,7 +222,7 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 	)
 
 	// Check access
-	if roleName != "superadmin" && companyID != nil {
+	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr
@@ -233,7 +234,7 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 				Message: "Invalid company ID format",
 			})
 		}
-		
+
 		// CRITICAL: For admin, check holding company access
 		// Admin holding boleh edit holding mereka sendiri, tapi tidak boleh edit holding lain
 		targetCompany, err := h.companyUseCase.GetCompanyByID(id)
@@ -257,7 +258,7 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 				zap.String("target_company_id", id),
 			)
 		}
-		
+
 		hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, id)
 		if err != nil || !hasAccess {
 			zapLog.Warn("Access denied for company update",
@@ -309,8 +310,8 @@ func (h *CompanyHandler) GetCompany(c *fiber.Ctx) error {
 	companyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
 
-	// Superadmin can access any company
-	if roleName != "superadmin" && companyID != nil {
+	// Superadmin/administrator can access any company
+	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr
@@ -359,8 +360,8 @@ func (h *CompanyHandler) GetAllCompanies(c *fiber.Ctx) error {
 	var companies []domain.CompanyModel
 	var err error
 
-	// Superadmin sees all companies
-	if roleName == "superadmin" {
+	// Superadmin/administrator sees all companies
+	if utils.IsSuperAdminLike(roleName) {
 		companies, err = h.companyUseCase.GetAllCompanies()
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -455,8 +456,8 @@ func (h *CompanyHandler) GetCompanyUsers(c *fiber.Ctx) error {
 	userCompanyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
 
-	// Superadmin can access any company users
-	if roleName != "superadmin" && userCompanyID != nil {
+	// Superadmin/administrator can access any company users
+	if !utils.IsSuperAdminLike(roleName) && userCompanyID != nil {
 		var currentUserCompanyID string
 		if companyIDPtr, ok := userCompanyID.(*string); ok && companyIDPtr != nil {
 			currentUserCompanyID = *companyIDPtr
@@ -509,7 +510,7 @@ func (h *CompanyHandler) GetCompanyChildren(c *fiber.Ctx) error {
 	roleName := c.Locals("roleName").(string)
 
 	// Check access
-	if roleName != "superadmin" && companyID != nil {
+	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr
@@ -572,7 +573,7 @@ func (h *CompanyHandler) UpdateCompany(c *fiber.Ctx) error {
 	roleName := c.Locals("roleName").(string)
 
 	// Check access
-	if roleName != "superadmin" && companyID != nil {
+	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr
@@ -626,7 +627,7 @@ func (h *CompanyHandler) DeleteCompany(c *fiber.Ctx) error {
 	roleName := c.Locals("roleName").(string)
 
 	// Check access
-	if roleName != "superadmin" && companyID != nil {
+	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr
@@ -652,7 +653,7 @@ func (h *CompanyHandler) DeleteCompany(c *fiber.Ctx) error {
 				Message: "Admin tidak dapat menghapus perusahaan mereka sendiri. Hanya superadmin yang dapat menghapus perusahaan.",
 			})
 		}
-		
+
 		// CRITICAL: Admin tidak boleh menghapus holding company (bahkan jika bukan perusahaan mereka sendiri)
 		targetCompany, err := h.companyUseCase.GetCompanyByID(id)
 		if err == nil && targetCompany != nil && targetCompany.Code == "PDV" {
@@ -694,4 +695,3 @@ func (h *CompanyHandler) DeleteCompany(c *fiber.Ctx) error {
 		"message": "Company deleted successfully",
 	})
 }
-

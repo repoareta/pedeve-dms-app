@@ -240,6 +240,8 @@ const getRoleColor = (role?: string) => {
   switch (role?.toLowerCase()) {
     case 'superadmin':
       return 'red'
+    case 'administrator':
+      return 'magenta'
     case 'admin':
       return 'blue'
     case 'manager':
@@ -294,4 +296,3 @@ onMounted(async () => {
   margin-bottom: 24px;
 }
 </style>
-

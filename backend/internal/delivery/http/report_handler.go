@@ -13,6 +13,7 @@ import (
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/audit"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/utils"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -59,8 +60,8 @@ func (h *ReportHandler) CreateReport(c *fiber.Ctx) error {
 	companyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
 
-	// Validate access: non-superadmin can only create reports for their own company
-	if roleName != "superadmin" && companyID != nil {
+	// Validate access: non-superadmin/administrator can only create reports for their own company
+	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr
@@ -147,13 +148,15 @@ func (h *ReportHandler) GetReport(c *fiber.Ctx) error {
 		})
 	}
 
-	// Audit log
-	userID := c.Locals("userID").(string)
-	username := c.Locals("username").(string)
-	audit.LogAction(userID, username, "view_report", audit.ResourceReport, report.ID, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
-		"company_id": report.CompanyID,
-		"period":     report.Period,
-	})
+	// Audit log (opsional untuk view)
+	if audit.ShouldLogView() {
+		userID := c.Locals("userID").(string)
+		username := c.Locals("username").(string)
+		audit.LogAction(userID, username, "view_report", audit.ResourceReport, report.ID, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
+			"company_id": report.CompanyID,
+			"period":     report.Period,
+		})
+	}
 
 	return c.JSON(report)
 }
@@ -265,16 +268,18 @@ func (h *ReportHandler) GetAllReports(c *fiber.Ctx) error {
 	c.Set("X-Page", string(rune(page)))
 	c.Set("X-Page-Size", string(rune(pageSize)))
 
-	// Audit log
-	userID := c.Locals("userID").(string)
-	username := c.Locals("username").(string)
-	audit.LogAction(userID, username, "list_reports", audit.ResourceReport, "", getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
-		"total":          total,
-		"page":           page,
-		"page_size":      pageSize,
-		"company_filter": companyIDFilter,
-		"period_filter":  periodFilter,
-	})
+	// Audit log (opsional untuk view)
+	if audit.ShouldLogView() {
+		userID := c.Locals("userID").(string)
+		username := c.Locals("username").(string)
+		audit.LogAction(userID, username, "list_reports", audit.ResourceReport, "", getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
+			"total":          total,
+			"page":           page,
+			"page_size":      pageSize,
+			"company_filter": companyIDFilter,
+			"period_filter":  periodFilter,
+		})
+	}
 
 	return c.JSON(map[string]interface{}{
 		"data":        paginatedReports,

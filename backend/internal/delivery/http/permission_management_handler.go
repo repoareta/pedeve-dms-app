@@ -1,10 +1,11 @@
 package http
 
 import (
+	"github.com/gofiber/fiber/v2"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/audit"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
-	"github.com/gofiber/fiber/v2"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/utils"
 )
 
 // PermissionManagementHandler handles permission management HTTP requests
@@ -32,11 +33,20 @@ func NewPermissionManagementHandler(permissionUseCase usecase.PermissionManageme
 // @Failure      403         {object}  domain.ErrorResponse
 // @Router       /api/v1/permissions [post]
 func (h *PermissionManagementHandler) CreatePermission(c *fiber.Ctx) error {
+	// Hanya superadmin/administrator yang boleh membuat permission baru
+	roleName := c.Locals("roleName")
+	if roleName == nil || !utils.IsSuperAdminLike(roleName.(string)) {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Only superadmin/administrator can create permissions",
+		})
+	}
+
 	var req struct {
-		Name        string                `json:"name" validate:"required"`
-		Description string                `json:"description"`
-		Resource    string                `json:"resource" validate:"required"`
-		Action      string                `json:"action" validate:"required"`
+		Name        string                 `json:"name" validate:"required"`
+		Description string                 `json:"description"`
+		Resource    string                 `json:"resource" validate:"required"`
+		Action      string                 `json:"action" validate:"required"`
 		Scope       domain.PermissionScope `json:"scope" validate:"required"`
 	}
 
@@ -98,6 +108,14 @@ func (h *PermissionManagementHandler) GetPermission(c *fiber.Ctx) error {
 // @Success      200       {array}   domain.PermissionModel
 // @Router       /api/v1/permissions [get]
 func (h *PermissionManagementHandler) GetAllPermissions(c *fiber.Ctx) error {
+	roleName := c.Locals("roleName")
+	if roleName == nil || !utils.IsSuperAdminLike(roleName.(string)) {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Only superadmin/administrator can view permissions",
+		})
+	}
+
 	resource := c.Query("resource")
 	scope := c.Query("scope")
 
@@ -135,6 +153,15 @@ func (h *PermissionManagementHandler) GetAllPermissions(c *fiber.Ctx) error {
 // @Failure      400         {object}  domain.ErrorResponse
 // @Router       /api/v1/permissions/{id} [put]
 func (h *PermissionManagementHandler) UpdatePermission(c *fiber.Ctx) error {
+	// Hanya superadmin/administrator yang boleh mengubah permission
+	roleName := c.Locals("roleName")
+	if roleName == nil || !utils.IsSuperAdminLike(roleName.(string)) {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Only superadmin/administrator can update permissions",
+		})
+	}
+
 	id := c.Params("id")
 	var req struct {
 		Name        string `json:"name"`
@@ -175,6 +202,15 @@ func (h *PermissionManagementHandler) UpdatePermission(c *fiber.Ctx) error {
 // @Failure      400  {object}  domain.ErrorResponse
 // @Router       /api/v1/permissions/{id} [delete]
 func (h *PermissionManagementHandler) DeletePermission(c *fiber.Ctx) error {
+	// Hanya superadmin/administrator yang boleh menghapus permission
+	roleName := c.Locals("roleName")
+	if roleName == nil || !utils.IsSuperAdminLike(roleName.(string)) {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Only superadmin/administrator can delete permissions",
+		})
+	}
+
 	id := c.Params("id")
 	if err := h.permissionUseCase.DeletePermission(id); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
@@ -191,4 +227,3 @@ func (h *PermissionManagementHandler) DeletePermission(c *fiber.Ctx) error {
 		"message": "Permission deleted successfully",
 	})
 }
-

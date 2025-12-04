@@ -157,7 +157,7 @@ router.beforeEach(async (to, from, next) => {
       
       // Validasi role - hanya izinkan role yang dikenali
       const userRole = authStore.user?.role?.toLowerCase() || ''
-      const validRoles = ['superadmin', 'admin', 'manager', 'staff']
+      const validRoles = ['superadmin', 'administrator', 'admin', 'manager', 'staff']
       const isRoleValid = validRoles.includes(userRole)
       
       // Jika role tidak dikenali dan bukan di dashboard, redirect ke dashboard

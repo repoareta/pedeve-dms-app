@@ -83,11 +83,8 @@ func main() {
 	// Mulai cleanup audit logs (retention policy)
 	usecase.StartAuditLogCleanup()
 
-	// Seed roles and permissions
-	seed.SeedRolesAndPermissions()
-
-	// Seed user superadmin
-	seed.SeedSuperAdmin()
+	// Seed roles, superadmin, and default administrator user
+	seed.SeedAll()
 
 	// Setup Fiber app
 	app := fiber.New(fiber.Config{

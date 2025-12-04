@@ -71,6 +71,11 @@ const userPagination = ref({
 
 const filteredUsers = computed(() => {
   let filtered = [...users.value]
+
+  // Administrator tidak melihat entri superadmin (jaga agar peran superadmin tetap tersembunyi)
+  if (userRole.value === 'administrator') {
+    filtered = filtered.filter(u => u.role.toLowerCase() !== 'superadmin')
+  }
   
   // Search filter
   if (userSearchText.value) {
@@ -125,9 +130,17 @@ watch(userSearchText, () => {
   userPagination.value.current = 1 // Reset to first page on search
 })
 
-// Filter roles untuk exclude superadmin
+// Filter roles untuk form/selector:
+// - superadmin tidak pernah tampil
+// - role administrator hanya tampil jika current user adalah superadmin
 const availableRoles = computed(() => {
-  return roles.value.filter(r => r.name !== 'superadmin')
+  const current = userRole.value
+  return roles.value.filter(r => {
+    const name = r.name.toLowerCase()
+    if (name === 'superadmin') return false
+    if (name === 'administrator' && current !== 'superadmin') return false
+    return true
+  })
 })
 
 // Computed: Check user roles
@@ -135,17 +148,18 @@ const userRole = computed(() => {
   return authStore.user?.role?.toLowerCase() || ''
 })
 
-const isSuperAdmin = computed(() => userRole.value === 'superadmin')
+const isSuperAdmin = computed(() => userRole.value === 'superadmin' || userRole.value === 'administrator')
 const isAdmin = computed(() => userRole.value === 'admin')
 const isManager = computed(() => userRole.value === 'manager')
 const isStaff = computed(() => userRole.value === 'staff')
 
 // Check if current user is superadmin (for backward compatibility)
 const isCurrentUserSuperadmin = computed(() => {
-  return authStore.user?.role === 'superadmin'
+  const role = authStore.user?.role?.toLowerCase()
+  return role === 'superadmin' || role === 'administrator'
 })
 
-// RBAC: Edit untuk semua role (staff, manager, admin, superadmin)
+// RBAC: Edit untuk semua role (staff, manager, admin, superadmin/administrator)
 const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value)
 
 // RBAC: Delete hanya untuk admin
@@ -156,7 +170,12 @@ const canCreateUser = computed(() => isAdmin.value || isSuperAdmin.value)
 
 // Check if user is superadmin (for edit/delete protection)
 const isUserSuperadmin = (user: User) => {
-  return user.role === 'superadmin' || user.role_id === roles.value.find(r => r.name === 'superadmin')?.id
+  const roleName = user.role?.toLowerCase()
+  return (
+    roleName === 'superadmin' ||
+    roleName === 'administrator' ||
+    user.role_id === roles.value.find(r => ['superadmin', 'administrator'].includes(r.name.toLowerCase()))?.id
+  )
 }
 
 // Check if user is current logged in user
@@ -200,7 +219,14 @@ const userColumns = computed(() => [
     title: 'Peran', 
     dataIndex: 'role', 
     key: 'role', 
-    filters: roles.value.filter(r => r.name !== 'superadmin').map(r => ({ text: r.name, value: r.name })), 
+    filters: roles.value
+      .filter(r => {
+        const name = r.name.toLowerCase()
+        if (name === 'superadmin') return false
+        if (name === 'administrator' && userRole.value !== 'superadmin') return false
+        return true
+      })
+      .map(r => ({ text: r.name, value: r.name })), 
     onFilter: (value: string, record: User) => record.role === value 
   },
   { title: 'Perusahaan', dataIndex: 'company_id', key: 'company_id' },
@@ -375,7 +401,14 @@ const handleCreateUser = () => {
 
 const handleEditUser = (user: User) => {
   editingUser.value = user
-  userForm.value = { ...user }
+  // Pastikan role_id terisi: gunakan role_id jika ada, jika tidak cari berdasarkan nama role
+  const userWithRoleId = user as User & { role_id?: string }
+  let resolvedRoleId: string | undefined = userWithRoleId.role_id
+  if (!resolvedRoleId && user.role) {
+    const match = roles.value.find(r => r.name.toLowerCase() === user.role.toLowerCase())
+    if (match) resolvedRoleId = match.id
+  }
+  userForm.value = { ...user, role_id: resolvedRoleId }
   userModalVisible.value = true
 }
 
@@ -673,16 +706,16 @@ const getScopeColor = (scope: string): string => {
                   :filter-option="(input: string, option: any) => 
                     (option?.label || '').toLowerCase().includes(input.toLowerCase())"
                 >
-                  <a-select-option 
-                    v-for="company in companies" 
-                    :key="company.id" 
-                    :value="company.id"
-                    :label="company.name"
-                  >
-                    {{ company.name }}
-                  </a-select-option>
+                <a-select-option 
+                  v-for="company in companies" 
+                  :key="company.id" 
+                  :value="company.id"
+                  :label="company.name"
+                >
+                  {{ company.name }}
+                </a-select-option>
                 </a-select>
-                <a-tag v-if="isUserSuperadmin(record)" color="purple" style="margin-left: 8px;">Superadmin (Global)</a-tag>
+                <a-tag v-if="isUserSuperadmin(record)" color="purple" style="margin-left: 8px;">Admin Global</a-tag>
               </template>
               <template v-if="column.key === 'is_active'">
                 <a-switch
@@ -796,13 +829,13 @@ const getScopeColor = (scope: string): string => {
                 <div class="info-item">
                   <strong>Tipe Role:</strong>
                   <ul>
-                    <li><strong>Sistem:</strong> Role bawaan sistem yang tidak bisa dihapus atau diubah (superadmin, admin, manager, staff)</li>
+                    <li><strong>Sistem:</strong> Role bawaan sistem yang tidak bisa dihapus atau diubah (superadmin, administrator, admin, manager, staff)</li>
                     <li><strong>Kustom:</strong> Role yang dibuat khusus oleh administrator, bisa diubah atau dihapus</li>
                   </ul>
                 </div>
                 <div class="info-item">
                   <strong>Tingkat Role:</strong>
-                  <p>Angka yang menunjukkan hierarki role. Semakin kecil angkanya, semakin tinggi wewenangnya (0 = superadmin, 1 = admin, dst).</p>
+                  <p>Angka yang menunjukkan hierarki role. Semakin kecil angkanya, semakin tinggi wewenangnya (mis. 0 = superadmin/administrator, 1 = admin, dst).</p>
                 </div>
               </div>
             </a-collapse-panel>

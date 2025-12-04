@@ -14,14 +14,13 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 // Check if user is superadmin
-const isSuperadmin = computed(() => {
-  return authStore.user?.role?.toLowerCase() === 'superadmin'
-})
+const isSuperadmin = computed(() => authStore.user?.role?.toLowerCase() === 'superadmin')
+
+// Superadmin-like: superadmin atau administrator (akses penuh, kecuali fitur development tetap superadmin-only)
+const isSuperadminLike = computed(() => ['superadmin', 'administrator'].includes(authStore.user?.role?.toLowerCase() || ''))
 
 // Check if user is admin
-const isAdmin = computed(() => {
-  return authStore.user?.role?.toLowerCase() === 'admin'
-})
+const isAdmin = computed(() => authStore.user?.role?.toLowerCase() === 'admin')
 
 const loading = ref(false)
 const is2FAEnabled = ref(false)
@@ -794,14 +793,17 @@ const handleOpenChange = (keys: string[]) => {
 
 onMounted(() => {
   check2FAStatus()
-  // Only fetch audit logs if user is superadmin
-  if (isSuperadmin.value) {
+  // Fetch audit logs/stats untuk superadmin-like (superadmin & administrator)
+  if (isSuperadminLike.value) {
     fetchAuditLogs()
     fetchAuditStats()
-    checkAllSeederStatus()
+    // Fitur development: cek status seeder hanya untuk superadmin
+    if (isSuperadmin.value) {
+      checkAllSeederStatus()
+    }
     
-    // Check SonarQube Monitor status (only for superadmin/admin)
-    if (isSuperadmin.value || isAdmin.value) {
+    // Check SonarQube Monitor status (superadmin/administrator/admin)
+    if (isSuperadminLike.value || isAdmin.value) {
       checkSonarQubeStatus()
     }
     
@@ -869,14 +871,14 @@ onUnmounted(() => {
                   <span>Fitur untuk Development</span>
                 </a-menu-item>
                 
-                <a-menu-item v-if="isSuperadmin" key="audit">
+                <a-menu-item v-if="isSuperadminLike" key="audit">
                   <template #icon>
                     <IconifyIcon icon="mdi:file-document-outline" width="20" />
                   </template>
                   <span>Audit Log</span>
                 </a-menu-item>
                 
-                <a-menu-item v-if="(isSuperadmin || isAdmin) && sonarqubeEnabled" key="sonarqube">
+                <a-menu-item v-if="(isSuperadminLike || isAdmin) && sonarqubeEnabled" key="sonarqube">
                   <template #icon>
                     <IconifyIcon icon="mdi:code-tags-check" width="20" />
                   </template>
@@ -1119,7 +1121,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Audit Logs Content -->
-          <div v-if="selectedMenuKey === 'audit' && isSuperadmin" class="settings-section">
+          <div v-if="selectedMenuKey === 'audit' && isSuperadminLike" class="settings-section">
             <a-card class="audit-logs-card">
               <template #title>
                 <div class="card-title">
@@ -1505,7 +1507,7 @@ onUnmounted(() => {
           </div>
 
           <!-- SonarQube Monitor Content -->
-          <div v-if="selectedMenuKey === 'sonarqube' && (isSuperadmin || isAdmin) && sonarqubeEnabled" class="settings-section">
+          <div v-if="selectedMenuKey === 'sonarqube' && (isSuperadminLike || isAdmin) && sonarqubeEnabled" class="settings-section">
             <a-card class="sonarqube-card">
               <template #title>
                 <div class="card-title">
@@ -2528,4 +2530,3 @@ background: white;
   }
 }
 </style>
-

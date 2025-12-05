@@ -345,18 +345,19 @@ const userRole = computed(() => {
 })
 
 const isSuperAdmin = computed(() => userRole.value === 'superadmin')
+const isAdministrator = computed(() => userRole.value === 'administrator')
 const isAdmin = computed(() => userRole.value === 'admin')
 const isManager = computed(() => userRole.value === 'manager')
 const isStaff = computed(() => userRole.value === 'staff')
 
-// RBAC: Assign Role hanya untuk admin
-const canAssignRole = computed(() => isAdmin.value || isSuperAdmin.value)
+// RBAC: Assign Role untuk admin/superadmin/administrator
+const canAssignRole = computed(() => isAdmin.value || isSuperAdmin.value || isAdministrator.value)
 
-// RBAC: Delete hanya untuk admin
-const canDelete = computed(() => isAdmin.value || isSuperAdmin.value)
+// RBAC: Delete untuk admin/superadmin/administrator
+const canDelete = computed(() => isAdmin.value || isSuperAdmin.value || isAdministrator.value)
 
-// RBAC: Edit untuk semua role (staff, manager, admin, superadmin)
-const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value)
+// RBAC: Edit untuk semua role (staff, manager, admin, superadmin, administrator)
+const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value || isAdministrator.value)
 
 // Note: Actions dropdown always shown because "Lihat Detail" menu is always available
 

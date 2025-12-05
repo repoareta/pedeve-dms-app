@@ -107,10 +107,11 @@ jobs:
         run: |
           echo "🧪 Running backend tests..."
           go test ./... -v -coverprofile=coverage.out
+          TEST_EXIT_CODE=$?
           echo "📊 Test coverage:"
           go tool cover -func=coverage.out | grep total || echo "No coverage data"
-          # Fail if critical tests fail (coverage check is optional for now)
-          if [ $? -ne 0 ]; then
+          # Fail if tests failed (check exit code from go test, not coverage report)
+          if [ $TEST_EXIT_CODE -ne 0 ]; then
             echo "❌ Tests failed!"
             exit 1
           fi

@@ -161,7 +161,7 @@
                       <a-upload
                         :file-list="attachmentFileList"
                         :before-upload="handleAttachmentUpload"
-                        :remove="handleAttachmentRemove"
+                        @remove="handleAttachmentRemove"
                         :max-count="1"
                       >
                         <a-button>
@@ -306,10 +306,9 @@ const handleAttachmentUpload = (file: File): boolean => {
   return false // Prevent default upload
 }
 
-const handleAttachmentRemove = (): boolean => {
+const handleAttachmentRemove = (): void => {
   formData.value.attachment = undefined
   attachmentFileList.value = []
-  return true
 }
 
 // Form handlers

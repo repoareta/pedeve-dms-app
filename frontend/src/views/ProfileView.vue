@@ -2,6 +2,18 @@
   <div class="profile-layout">
     <DashboardHeader @logout="handleLogout" />
 
+
+    <!-- Page Header Section -->
+    <div class="page-header-container">
+      <div class="page-header">
+        <h1 class="page-title">Profile Saya</h1>
+        <p class="page-description">
+          Perbaharui data profil Anda.
+        </p>
+      </div>
+    </div>
+
+
     <div class="profile-content">
       <a-card class="profile-card">
         <template #title>
@@ -37,21 +49,12 @@
 
           <!-- Edit Email Tab -->
           <a-tab-pane key="email" tab="Ubah Email">
-            <a-form
-              :model="emailForm"
-              :rules="emailRules"
-              layout="vertical"
-              @finish="handleUpdateEmail"
-            >
+            <a-form :model="emailForm" :rules="emailRules" layout="vertical" @finish="handleUpdateEmail">
               <a-form-item label="Email Saat Ini">
                 <a-input :value="user?.email" disabled />
               </a-form-item>
               <a-form-item label="Email Baru" name="email">
-                <a-input
-                  v-model:value="emailForm.email"
-                  placeholder="Masukkan email baru"
-                  type="email"
-                />
+                <a-input v-model:value="emailForm.email" placeholder="Masukkan email baru" type="email" />
               </a-form-item>
               <a-form-item>
                 <a-button type="primary" html-type="submit" :loading="emailLoading">
@@ -67,29 +70,16 @@
 
           <!-- Change Password Tab -->
           <a-tab-pane key="password" tab="Ubah Password">
-            <a-form
-              :model="passwordForm"
-              :rules="passwordRules"
-              layout="vertical"
-              @finish="handleChangePassword"
-            >
+            <a-form :model="passwordForm" :rules="passwordRules" layout="vertical" @finish="handleChangePassword">
               <a-form-item label="Password Lama" name="oldPassword">
-                <a-input-password
-                  v-model:value="passwordForm.oldPassword"
-                  placeholder="Masukkan password lama"
-                />
+                <a-input-password v-model:value="passwordForm.oldPassword" placeholder="Masukkan password lama" />
               </a-form-item>
               <a-form-item label="Password Baru" name="newPassword">
-                <a-input-password
-                  v-model:value="passwordForm.newPassword"
-                  placeholder="Masukkan password baru (min 8 karakter)"
-                />
+                <a-input-password v-model:value="passwordForm.newPassword"
+                  placeholder="Masukkan password baru (min 8 karakter)" />
               </a-form-item>
               <a-form-item label="Konfirmasi Password Baru" name="confirmPassword">
-                <a-input-password
-                  v-model:value="passwordForm.confirmPassword"
-                  placeholder="Konfirmasi password baru"
-                />
+                <a-input-password v-model:value="passwordForm.confirmPassword" placeholder="Konfirmasi password baru" />
               </a-form-item>
               <a-form-item>
                 <a-button type="primary" html-type="submit" :loading="passwordLoading">
@@ -267,6 +257,20 @@ onMounted(async () => {
 .profile-layout {
   min-height: 100vh;
   background: #f5f5f5;
+}
+
+.page-header-container {
+  /* max-width: 1200px; */
+  width: 100%;
+  /* background: orange; */
+  /* margin: 0 auto; */
+
+}
+
+.page-header {
+  max-width: 950px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .profile-content {

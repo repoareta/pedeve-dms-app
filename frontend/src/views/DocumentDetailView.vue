@@ -23,6 +23,7 @@ const document = ref<DocumentItem | null>(null)
 const loading = ref(true)
 const pageLoading = ref(true)
 const userMap = ref<Record<string, string>>({})
+const documentStatus = ref<string>('active')
 
 // Activity feed
 const activities = ref<UserActivityLog[]>([])
@@ -34,6 +35,7 @@ const zoomLevel = ref(100)
 // Metadata
 const metadata = ref<Record<string, unknown>>({})
 const editMode = ref(false)
+const updatingStatus = ref(false)
 
 // Load document
 const loadDocument = async () => {
@@ -41,6 +43,7 @@ const loadDocument = async () => {
   try {
     const data = await documentsApi.getDocument(documentId.value)
     document.value = data
+    documentStatus.value = data.status || 'active'
     metadata.value = data.metadata || {}
     
     // Debug: log document data
@@ -495,13 +498,29 @@ const getUploadedBy = () =>
       '-',
   )
 
-const getDocStatus = () => {
-  const statusVal = getMetaValue(['status'])
-  if (statusVal && statusVal !== '-') return statusVal
-  const isActiveVal = metadata.value.is_active
-  if (typeof isActiveVal === 'string') return isActiveVal
-  if (typeof isActiveVal === 'boolean') return isActiveVal ? 'Aktif' : 'Tidak Aktif'
-  return document.value?.status || '-'
+// Removed unused functions: getDocStatus and getDocumentStatus
+
+// Update status independently
+const handleStatusChange = async (newStatus: string) => {
+  if (!document.value) return
+  
+  updatingStatus.value = true
+  try {
+    await documentsApi.updateDocument(document.value.id, { status: newStatus })
+    // Update local state immediately
+    if (document.value) {
+      document.value.status = newStatus
+    }
+    documentStatus.value = newStatus
+    message.success('Status dokumen berhasil diperbarui')
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    message.error(err.message || 'Gagal memperbarui status dokumen')
+    // Revert on error
+    documentStatus.value = document.value?.status || 'active'
+  } finally {
+    updatingStatus.value = false
+  }
 }
 
 const getIssuedDate = () =>
@@ -722,9 +741,21 @@ onBeforeUnmount(() => {
               <div class="metadata-field">
                 <label>Status Dokumen</label>
                 <div class="metadata-value">
-                  <a-tag :color="getDocStatus() === 'Disetujui' || getDocStatus() === 'Approved' || getDocStatus() === 'Aktif' ? 'success' : 'default'">
-                    {{ getDocStatus() }}
-                  </a-tag>
+                  <a-select
+                    v-model:value="documentStatus"
+                    :loading="updatingStatus"
+                    style="width: 100%;"
+                    @change="handleStatusChange"
+                  >
+                    <a-select-option value="active">Active</a-select-option>
+                    <a-select-option value="draft">Draft</a-select-option>
+                    <a-select-option value="approved">Approved</a-select-option>
+                    <a-select-option value="rejected">Rejected</a-select-option>
+                    <a-select-option value="archived">Archived</a-select-option>
+                    <a-select-option value="Disetujui">Disetujui</a-select-option>
+                    <a-select-option value="Draft">Draft</a-select-option>
+                    <a-select-option value="Ditolak">Ditolak</a-select-option>
+                  </a-select>
                 </div>
               </div>
               <div class="metadata-field">

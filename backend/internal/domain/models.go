@@ -158,6 +158,7 @@ func (DocumentFolderModel) TableName() string {
 }
 
 // DocumentModel merepresentasikan file dokumen yang diupload
+// @Description Document model dengan metadata dalam format JSON
 type DocumentModel struct {
 	ID         string         `gorm:"primaryKey" json:"id"`
 	FolderID   *string        `gorm:"index" json:"folder_id"`
@@ -167,7 +168,7 @@ type DocumentModel struct {
 	MimeType   string         `gorm:"not null" json:"mime_type"`
 	Size       int64          `gorm:"not null" json:"size"` // Size in bytes
 	Status     string         `gorm:"default:'active'" json:"status"`
-	Metadata   datatypes.JSON `json:"metadata"` // Metadata tambahan (opsional)
+	Metadata   datatypes.JSON `json:"metadata" swaggertype:"object"` // Metadata tambahan (opsional, format JSON)
 	UploaderID string         `gorm:"index" json:"uploader_id"`
 	CreatedAt  time.Time      `json:"created_at"`
 	UpdatedAt  time.Time      `json:"updated_at"`
@@ -184,6 +185,21 @@ type DocumentFolderStat struct {
 	FolderID  *string `json:"folder_id"`
 	FileCount int64   `json:"file_count"`
 	TotalSize int64   `json:"total_size"`
+}
+
+// DocumentTypeModel merepresentasikan jenis dokumen yang bisa digunakan
+type DocumentTypeModel struct {
+	ID          string    `gorm:"primaryKey" json:"id"`
+	Name        string    `gorm:"uniqueIndex;not null" json:"name"` // Nama jenis dokumen (unique)
+	IsActive    bool      `gorm:"default:true;index" json:"is_active"` // Soft delete: false jika dihapus
+	UsageCount  int64     `gorm:"default:0" json:"usage_count"` // Jumlah dokumen yang menggunakan jenis ini
+	CreatedBy   string    `gorm:"index;not null" json:"created_by"` // User yang membuat
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+func (DocumentTypeModel) TableName() string {
+	return "document_types"
 }
 
 // ============================================================================

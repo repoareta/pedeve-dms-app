@@ -81,7 +81,7 @@ const chartDataComputed = computed(() => {
 
 // Calculate summary info for chart extra
 const chartInfo = computed(() => {
-  if (!props.chartData || props.chartData.revenueData.length === 0) {
+  if (!props.chartData || props.chartData.revenueData.length === 0 || props.chartData.labels.length === 0) {
     return 'No data'
   }
   
@@ -93,7 +93,33 @@ const chartInfo = computed(() => {
   const change = prevRevenue > 0 ? ((latestRevenue - prevRevenue) / prevRevenue) * 100 : 0
   const sign = change >= 0 ? '+' : ''
   
-  return `Q${Math.ceil((props.chartData.labels.length) / 3)} ${new Date().getFullYear()} ${sign}${change.toFixed(0)}% $${latestRevenue.toFixed(0)}M`
+  // Ambil label terakhir untuk mendapatkan bulan dan tahun
+  const lastLabel = props.chartData.labels[props.chartData.labels.length - 1]
+  
+  // Parse label untuk mendapatkan bulan dan tahun (format: "Januari 2025")
+  const labelParts = lastLabel.split(' ')
+  if (labelParts.length < 2) {
+    // Fallback jika format tidak sesuai
+    return `Q4 ${new Date().getFullYear()} ${sign}${change.toFixed(0)}% $${latestRevenue.toFixed(0)}M`
+  }
+  
+  const monthName = labelParts[0]
+  const year = parseInt(labelParts[1]) || new Date().getFullYear()
+  
+  // Tentukan quarter berdasarkan nama bulan
+  const monthNames = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ]
+  const monthIndex = monthNames.indexOf(monthName)
+  
+  // Hitung quarter (Q1: Jan-Mar, Q2: Apr-Jun, Q3: Jul-Sep, Q4: Oct-Dec)
+  let quarter = 1
+  if (monthIndex >= 0) {
+    quarter = Math.floor(monthIndex / 3) + 1
+  }
+  
+  return `Q${quarter} ${year} ${sign}${change.toFixed(0)}% $${latestRevenue.toFixed(0)}M`
 })
 
 const chartOptions = ref({

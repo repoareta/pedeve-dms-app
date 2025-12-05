@@ -211,6 +211,13 @@ func main() {
 	protected.Put("/documents/:id", documentHandler.UpdateDocument)
 	protected.Delete("/documents/:id", documentHandler.DeleteDocument)
 
+	// Route document types (dilindungi)
+	documentTypeHandler := http.NewDocumentTypeHandler(usecase.NewDocumentTypeUseCase())
+	protected.Get("/document-types", documentTypeHandler.GetAllDocumentTypes)
+	protected.Post("/document-types", documentTypeHandler.CreateDocumentType)
+	protected.Put("/document-types/:id", documentTypeHandler.UpdateDocumentType)
+	protected.Delete("/document-types/:id", documentTypeHandler.DeleteDocumentType)
+
 	// Route Upload (dilindungi)
 	protected.Post("/upload/logo", http.UploadLogo)
 

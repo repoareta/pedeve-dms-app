@@ -118,8 +118,9 @@ func (uc *documentUseCase) UpdateFolderName(id, name, requesterID, roleName stri
 		return nil, err
 	}
 
-	// Only owner or superadmin can rename
-	if strings.ToLower(roleName) != "superadmin" && folder.CreatedBy != requesterID {
+	// Only owner or superadmin/administrator can rename
+	roleLower := strings.ToLower(roleName)
+	if roleLower != "superadmin" && roleLower != "administrator" && folder.CreatedBy != requesterID {
 		return nil, fmt.Errorf("forbidden")
 	}
 
@@ -136,7 +137,8 @@ func (uc *documentUseCase) DeleteFolder(id, requesterID, roleName string) error 
 		return err
 	}
 
-	if strings.ToLower(roleName) != "superadmin" && folder.CreatedBy != requesterID {
+	roleLower := strings.ToLower(roleName)
+	if roleLower != "superadmin" && roleLower != "administrator" && folder.CreatedBy != requesterID {
 		return fmt.Errorf("forbidden")
 	}
 

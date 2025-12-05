@@ -201,23 +201,6 @@
                     </div>
                   </a-form-item>
                 </a-col>
-                <a-col :xs="24" :md="12">
-                  <a-form-item label="Perusahaan Induk Utama">
-                    <a-select
-                      v-model:value="formData.main_parent_company"
-                      placeholder="Pilih perusahaan induk utama (opsional)"
-                      allow-clear
-                    >
-                      <a-select-option
-                        v-for="company in availableCompanies"
-                        :key="company.id"
-                        :value="company.id"
-                      >
-                        {{ company.name }} ({{ getLevelLabel(company.level) }})
-                      </a-select-option>
-                    </a-select>
-                  </a-form-item>
-                </a-col>
               </a-row>
           </div>
 
@@ -502,7 +485,6 @@ const formData = ref({
   operational_address: '',
   code: '',
   parent_id: undefined as string | undefined,
-  main_parent_company: undefined as string | undefined,
   
   // Step 2: Struktur Kepemilikan
   shareholders: [] as Array<{
@@ -700,7 +682,6 @@ const handleSubmit = async () => {
       parent_id: isSuperAdmin.value 
         ? (hasRootHolding.value ? (formData.value.parent_id || null) : (formData.value.parent_id || null))
         : (formData.value.parent_id || userCompanyId.value || null),
-      main_parent_company: formData.value.main_parent_company || null,
       shareholders: formData.value.shareholders.map(sh => ({
         type: sh.type,
         name: sh.name,
@@ -827,8 +808,6 @@ const loadCompanyData = async () => {
       formData.value.operational_address = company.operational_address || ''
       formData.value.code = company.code || ''
       formData.value.parent_id = company.parent_id
-      // Ambil main_parent_company langsung dari response
-      formData.value.main_parent_company = company.main_parent_company || undefined
       formData.value.shareholders = (company.shareholders || []).map((sh: Shareholder) => ({
         id: sh.id,
         type: sh.type,

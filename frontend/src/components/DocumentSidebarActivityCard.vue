@@ -78,86 +78,112 @@ const emit = defineEmits([
 </template>
 
 <style scoped>
-
-
 .activity-card {
-  /* background: orange !important; */
-  
+  margin-top: 16px;
 }
 
 .activity-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
-  margin-bottom: -10px;
-  
+  margin-bottom: 16px;
+  padding-bottom: -0px;
+  /* border-bottom: 1px solid #ff6b35; */
 }
 
 .activity-title {
   font-size: 14px;
   font-weight: 600;
+  margin: 0;
+  color: #333;
 }
 
 .see-all-btn {
   padding: 0;
+  height: auto;
+  color: #1890ff;
+}
+
+.see-all-btn:hover {
+  color: #40a9ff;
 }
 
 .activity-list {
-  padding: 3px 0;
+  padding: 8px 0;
 }
 
 .activity-timeline {
   position: relative;
+  padding-left: 8px;
 }
 
 .activity-item {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   position: relative;
-  padding: 10px 0;
+  padding: 12px 0;
+  padding-left: 4px;
+}
+
+.activity-item:not(:last-child) {
+  /* border-bottom: 1px solid #f0f0f0; */
 }
 
 .activity-avatar {
-  width: 25px;
-  height: 25px;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px;
+  min-height: 32px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
   font-weight: 600;
-  font-size: 12px;
-  margin:0 0 0 5px;
+  font-size: 13px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .activity-content {
   flex: 1;
-}
-
-.activity-user {
-  font-weight: 600;
-  font-size: 12px;
-  text-transform: lowercase;
-}
-
-.activity-description {
-  color: #555;
-  font-size: 12px;
+  min-width: 0;
+  padding-right: 8px;
 }
 
 .activity-time {
-  color: #555555;
+  color: #8c8c8c;
+  font-size: 11px;
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.activity-description {
+  color: #333;
   font-size: 12px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.activity-description strong {
+  color: #1890ff;
+  font-weight: 600;
 }
 
 .activity-line {
   position: absolute;
-  left: 18px;
-  top: 48px;
-  width: 1px;
-  height: calc(100% - 48px);
-  background: #ddd;
+  left: 16px;
+  top: 44px;
+  bottom: 0;
+  width: 2px;
+  background: #e8e8e8;
+  z-index: 0;
+}
+
+.activity-item:last-child .activity-line {
+  display: none;
 }
 
 .activity-skeleton,
@@ -167,6 +193,7 @@ const emit = defineEmits([
 
 .activity-empty {
   text-align: center;
-  color: #888;
+  color: #8c8c8c;
+  font-size: 12px;
 }
 </style>

@@ -69,7 +69,7 @@
             showTotal: (total: number) => `Total ${total} reports`,
             pageSizeOptions: ['10', '20', '50', '100'],
           }" :loading="loading" row-key="id" :scroll="{ x: 'max-content' }" class="striped-table"
-            @change="handleTableChange">
+            @change="handleTableChange" :locale="{ emptyText: 'Tidak ada data reports' }">
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'name'">
                 <div class="name-cell">
@@ -420,8 +420,18 @@ const loadReports = async () => {
     const axiosError = error as { response?: { status?: number; data?: { message?: string } }; message?: string }
     const status = axiosError.response?.status
 
-    // Check if it's a network error or 404/empty result
-    if (status === 404 || (axiosError.message && axiosError.message.includes('Network Error'))) {
+    // Check if it's a 404 (no data) or empty response
+    if (status === 404) {
+      // Clear table data - this is normal when no reports exist
+      reportsData.value = []
+      totalReports.value = 0
+      totalPages.value = 0
+      // Don't show error message for empty data, let table show empty state
+      return
+    }
+
+    // Check if it's a network error
+    if (axiosError.message && axiosError.message.includes('Network Error')) {
       // Clear table data so previous results are not shown when nothing matches filters
       reportsData.value = []
       totalReports.value = 0

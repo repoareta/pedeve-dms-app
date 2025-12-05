@@ -1,4 +1,4 @@
-.PHONY: dev up down restart logs clean help seed-companies test test-frontend
+.PHONY: dev up down restart logs clean help seed-companies test test-frontend lint lint-backend lint-frontend
 
 # Default target
 .DEFAULT_GOAL := help
@@ -76,6 +76,19 @@ test-frontend: ## Run frontend unit tests
 	@echo "🧪 Running frontend tests..."
 	@cd frontend && npm run test:unit
 
+# Lint backend
+lint-backend: ## Run backend linter
+	@echo "🔍 Linting backend..."
+	@cd backend && golangci-lint run
+
+# Lint frontend
+lint-frontend: ## Run frontend linter
+	@echo "🔍 Linting frontend..."
+	@cd frontend && npm run lint
+
+# Lint all
+lint: lint-backend lint-frontend ## Run linters for both backend and frontend
+
 # Help
 help:
 	@echo "DMS App - Development Commands"
@@ -98,6 +111,9 @@ help:
 	@echo "  seed-companies - Seed sample companies and users (10 subsidiaries)"
 	@echo "  test          - Run backend tests"
 	@echo "  test-frontend - Run frontend unit tests"
+	@echo "  lint          - Run linters for both backend and frontend"
+	@echo "  lint-backend  - Run backend linter only"
+	@echo "  lint-frontend - Run frontend linter only"
 	@echo "  help          - Show this help message"
 	@echo ""
 	@echo "Examples:"

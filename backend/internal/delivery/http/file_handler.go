@@ -20,14 +20,16 @@ import (
 // ServeFile serves a file from GCP Storage or local storage as a proxy
 // This allows frontend to access files without requiring public access to the bucket
 // @Summary      Serve File
-// @Description  Serve file dari storage (GCP Storage atau local) sebagai proxy. Endpoint ini public untuk memungkinkan frontend mengakses file.
+// @Description  Serve file dari storage (GCP Storage atau local) sebagai proxy. Endpoint ini protected dan memerlukan authentication untuk keamanan file documents.
 // @Tags         Files
 // @Accept       json
-// @Produce      image/png,image/jpeg,image/jpg,application/octet-stream
-// @Param        path  path      string  true  "File path (e.g., logos/filename.png)"
+// @Produce      image/png,image/jpeg,image/jpg,application/octet-stream,application/pdf
+// @Security     BearerAuth
+// @Param        path  path      string  true  "File path (e.g., logos/filename.png atau documents/filename.pdf)"
 // @Success      200   {file}    file    "File content"
-// @Failure      400   {object}  ErrorResponse
-// @Failure      404   {object}  ErrorResponse
+// @Failure      400   {object}  domain.ErrorResponse
+// @Failure      401   {object}  domain.ErrorResponse  "Unauthorized"
+// @Failure      404   {object}  domain.ErrorResponse
 // @Router       /api/v1/files/{path} [get]
 func ServeFile(c *fiber.Ctx) error {
 	zapLog := logger.GetLogger()

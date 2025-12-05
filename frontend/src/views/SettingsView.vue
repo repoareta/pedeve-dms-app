@@ -8,6 +8,8 @@ import { Icon as IconifyIcon } from '@iconify/vue'
 import { auditApi, type AuditLog, type AuditLogsParams, type AuditLogStats, type UserActivityLog, type UserActivityLogsParams } from '../api/audit'
 import developmentApi from '../api/development'
 import { sonarqubeApi, type SonarQubeIssue, type SonarQubeIssuesParams } from '../api/sonarqube'
+import documentsApi, { type DocumentType } from '../api/documents'
+import { userApi, type User } from '../api/userManagement'
 import type { TableColumnsType } from 'ant-design-vue'
 
 const router = useRouter()
@@ -90,6 +92,17 @@ const sonarqubeFilters = ref<SonarQubeIssuesParams>({
   statuses: ['OPEN', 'CONFIRMED', 'REOPENED'],
 })
 const sonarqubeComponents = ref<Record<string, string>>({})
+
+// Master Data state
+const masterDataActiveTab = ref<string>('document-types')
+const documentTypes = ref<DocumentType[]>([])
+const documentTypesLoading = ref(false)
+const updatingDocumentTypeIds = ref<Set<string>>(new Set())
+const documentTypeModalVisible = ref(false)
+const documentTypeModalMode = ref<'create' | 'edit'>('create')
+const editingDocumentType = ref<DocumentType | null>(null)
+const newDocumentTypeName = ref('')
+const userNamesMap = ref<Map<string, string>>(new Map()) // Map user ID -> username
 
 // Navigation state
 const selectedMenuKey = ref<string>('2fa') // Default: 2FA Setting
@@ -806,6 +819,113 @@ const handleOpenChange = (keys: string[]) => {
   openKeys.value = keys
 }
 
+// Master Data functions
+const loadDocumentTypes = async () => {
+  documentTypesLoading.value = true
+  try {
+    const data = await documentsApi.getDocumentTypes(true) // Include inactive
+    documentTypes.value = data
+    
+    // Collect unique user IDs from created_by
+    const uniqueUserIds = new Set<string>()
+    data.forEach((docType: DocumentType) => {
+      if (docType.created_by) {
+        uniqueUserIds.add(docType.created_by)
+      }
+    })
+    
+    // Fetch user data for all unique IDs
+    const userNames = new Map<string, string>()
+    if (uniqueUserIds.size > 0) {
+      try {
+        const users = await userApi.getAll()
+        users.forEach((user: User) => {
+          userNames.set(user.id, user.username)
+        })
+      } catch (err) {
+        console.error('Failed to load user names:', err)
+        // If fetch fails, try to get individual users
+        for (const userId of uniqueUserIds) {
+          try {
+            const user = await userApi.getById(userId)
+            userNames.set(user.id, user.username)
+          } catch {
+            // If individual fetch fails, use ID as fallback
+            userNames.set(userId, userId)
+          }
+        }
+      }
+    }
+    
+    userNamesMap.value = userNames
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    message.error(err.message || 'Gagal memuat jenis dokumen')
+  } finally {
+    documentTypesLoading.value = false
+  }
+}
+
+const handleCreateDocumentType = () => {
+  documentTypeModalMode.value = 'create'
+  editingDocumentType.value = null
+  newDocumentTypeName.value = ''
+  documentTypeModalVisible.value = true
+}
+
+const handleEditDocumentType = (docType: DocumentType) => {
+  documentTypeModalMode.value = 'edit'
+  editingDocumentType.value = docType
+  newDocumentTypeName.value = docType.name
+  documentTypeModalVisible.value = true
+}
+
+const handleSaveDocumentType = async () => {
+  if (!newDocumentTypeName.value.trim()) {
+    message.warning('Nama jenis dokumen tidak boleh kosong')
+    return
+  }
+
+  try {
+    if (documentTypeModalMode.value === 'create') {
+      await documentsApi.createDocumentType(newDocumentTypeName.value.trim())
+      message.success('Jenis dokumen berhasil dibuat')
+    } else if (editingDocumentType.value) {
+      // Edit mode - update name
+      await documentsApi.updateDocumentType(editingDocumentType.value.id, {
+        name: newDocumentTypeName.value.trim(),
+      })
+      message.success('Nama jenis dokumen berhasil diperbarui')
+    }
+    documentTypeModalVisible.value = false
+    await loadDocumentTypes()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = err.response?.data?.message || err.message || 'Gagal menyimpan jenis dokumen'
+    message.error(errorMessage)
+  }
+}
+
+const handleToggleDocumentTypeStatus = async (id: string, name: string, isActive: boolean) => {
+  updatingDocumentTypeIds.value.add(id)
+  try {
+    await documentsApi.updateDocumentType(id, { is_active: isActive })
+    message.success(`Jenis dokumen "${name}" berhasil ${isActive ? 'diaktifkan' : 'dinonaktifkan'}`)
+    await loadDocumentTypes()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = err.response?.data?.message || err.message || `Gagal ${isActive ? 'mengaktifkan' : 'menonaktifkan'} jenis dokumen`
+    message.error(errorMessage)
+    // Reload to revert switch state
+    await loadDocumentTypes()
+  } finally {
+    updatingDocumentTypeIds.value.delete(id)
+  }
+}
+
+// Removed unused function: handleDeleteDocumentType
+// Note: Document type deletion is handled via soft delete through the status toggle switch
+
 // Sinkronkan data sesuai tab yang dipilih
 watch(
   () => auditLogActiveTab.value,
@@ -840,6 +960,11 @@ onMounted(() => {
   // Check SonarQube Monitor status (superadmin/administrator/admin)
   if (isSuperadminLike.value || isAdmin.value) {
     checkSonarQubeStatus()
+  }
+
+  // Load Master Data if user has access
+  if (isSuperadminLike.value) {
+    loadDocumentTypes()
   }
 })
 
@@ -911,6 +1036,13 @@ onUnmounted(() => {
                     <IconifyIcon icon="mdi:code-tags-check" width="20" />
                   </template>
                   <span>SonarQube Monitor</span>
+                </a-menu-item>
+                
+                <a-menu-item v-if="isSuperadminLike" key="master-data">
+                  <template #icon>
+                    <IconifyIcon icon="mdi:database-cog" width="20" />
+                  </template>
+                  <span>Master Data</span>
                 </a-menu-item>
               </a-menu>
             </div>
@@ -1704,6 +1836,68 @@ onUnmounted(() => {
               </div>
             </a-card>
           </div>
+
+          <!-- Master Data Content -->
+          <div v-if="selectedMenuKey === 'master-data' && isSuperadminLike" class="settings-section">
+            <a-card class="master-data-card">
+              <template #title>
+                <div class="card-title">
+                  <IconifyIcon icon="mdi:database-cog" width="24" height="24" />
+                  <span>Master Data</span>
+                </div>
+              </template>
+
+              <a-tabs v-model:activeKey="masterDataActiveTab">
+                <a-tab-pane key="document-types" tab="Jenis Dokumen">
+                  <div style="margin-bottom: 16px;">
+                    <a-button type="primary" @click="handleCreateDocumentType">
+                      <IconifyIcon icon="mdi:plus" width="18" style="margin-right: 8px;" />
+                      Tambah Jenis Dokumen
+                    </a-button>
+                  </div>
+
+                  <a-table
+                    :columns="[
+                      { title: 'Nama', dataIndex: 'name', key: 'name' },
+                      { title: 'Status', key: 'is_active', width: 120 },
+                      { title: 'Dibuat Oleh', key: 'created_by', width: 200 },
+                      { title: 'Aksi', key: 'action', width: 150, align: 'center' },
+                    ]"
+                    :data-source="documentTypes"
+                    :loading="documentTypesLoading"
+                    :pagination="{ pageSize: 20 }"
+                    row-key="id"
+                  >
+                    <template #bodyCell="{ column, record }">
+                      <template v-if="column.key === 'is_active'">
+                        <a-tag :color="record.is_active ? 'success' : 'default'">
+                          {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
+                        </a-tag>
+                      </template>
+                      <template v-if="column.key === 'created_by'">
+                        {{ userNamesMap.get(record.created_by) || record.created_by || '-' }}
+                      </template>
+                      <template v-if="column.key === 'action'">
+                        <a-space>
+                          <a-button type="link" size="small" @click="handleEditDocumentType(record)">
+                            <IconifyIcon icon="mdi:pencil" width="16" />
+                          </a-button>
+                          <a-switch
+                            :checked="record.is_active"
+                            :loading="updatingDocumentTypeIds.has(record.id)"
+                            :disabled="updatingDocumentTypeIds.has(record.id)"
+                            @change="(checked: boolean) => handleToggleDocumentTypeStatus(record.id, record.name, checked)"
+                            checked-children="Aktif"
+                            un-checked-children="Non Aktif"
+                          />
+                        </a-space>
+                      </template>
+                    </template>
+                  </a-table>
+                </a-tab-pane>
+              </a-tabs>
+            </a-card>
+          </div>
             </div>
           </div>
         </a-card>
@@ -1769,9 +1963,9 @@ onUnmounted(() => {
       </div>
     </a-modal>
 
-    <!-- User Activity Log Detail Modal (Superadmin Only) -->
+    <!-- User Activity Log Detail Modal (Superadmin/Administrator) -->
     <a-modal
-      v-if="isSuperadmin"
+      v-if="isSuperadminLike"
       v-model:open="userActivityDetailModalVisible"
       title="Detail User Activity Log"
       width="800px"
@@ -1819,6 +2013,31 @@ onUnmounted(() => {
           </a-descriptions-item>
         </a-descriptions>
       </div>
+    </a-modal>
+
+    <!-- Document Type Modal -->
+    <a-modal
+      v-model:open="documentTypeModalVisible"
+      :title="documentTypeModalMode === 'create' ? 'Tambah Jenis Dokumen' : 'Edit Jenis Dokumen'"
+      @ok="handleSaveDocumentType"
+      @cancel="documentTypeModalVisible = false"
+    >
+      <a-form-item label="Nama Jenis Dokumen" :required="true">
+        <a-input
+          v-model:value="newDocumentTypeName"
+          placeholder="Masukkan nama jenis dokumen"
+          @pressEnter="handleSaveDocumentType"
+        />
+      </a-form-item>
+      <template v-if="documentTypeModalMode === 'edit' && editingDocumentType">
+        <a-alert
+          message="Info"
+          description="Fitur edit nama jenis dokumen akan segera tersedia. Untuk saat ini, Anda dapat menghapus dan membuat ulang jenis dokumen baru."
+          type="info"
+          show-icon
+          style="margin-top: 16px;"
+        />
+      </template>
     </a-modal>
   </div>
 </template>

@@ -29,7 +29,6 @@ input {
   }
 }
 
-
 .ant-input-number-input-wrap {
   // background: red !important;
   height: var(--input-height-default) !important;
@@ -38,7 +37,6 @@ input {
     // background: red !important;
   }
 }
-
 
 // Prefix untuk dukungan browser lama (Firefox, Safari lawas)
 input::-moz-placeholder,
@@ -53,7 +51,6 @@ textarea:-ms-input-placeholder,
 .ant-input:-ms-input-placeholder {
   color: var(--placeholder-color) !important;
 }
-
 
 // Reset dan base styles
 * {
@@ -245,10 +242,8 @@ textarea::placeholder,
 }
 
 .subsidiary-form-layout {
-
   // background: red !important;
   .form-content {
-
     // background: orange;
     .form-card {
       // background: blue;
@@ -319,7 +314,8 @@ button {
     font-size: 25px !important;
   }
 
-  .page-description {}
+  .page-description {
+  }
 }
 
 .dashboard-header {
@@ -541,13 +537,11 @@ button {
 
   // Responsive Design
   @media (max-width: 992px) {
-
     // Tablet
     .header-center {
       padding: 0 12px;
 
       .desktop-menu {
-
         :deep(.ant-menu-item) {
           padding: 0 12px;
           font-size: 14px;
@@ -563,7 +557,6 @@ button {
   }
 
   @media (max-width: 768px) {
-
     // Mobile
     .header-container {
       padding: 10px 16px;
@@ -1175,15 +1168,13 @@ button {
 //   }
 // }
 
-
-
-.sidebar-stack{
+.sidebar-stack {
   display: flex;
   flex-direction: column;
   gap: 16px;
   background: white;
   border-radius: 12px;
-  .ant-card{
+  .ant-card {
     background: transparent !important;
     box-shadow: none !important;
   }
@@ -1202,7 +1193,7 @@ button {
     display: flex;
     flex-direction: column;
 
-    >* {
+    > * {
       width: 100%;
       height: 100%;
     }
@@ -1235,15 +1226,15 @@ button {
 }
 
 /* Global Striped Table Styles - Fallback for non-scoped components */
-.striped-table .ant-table-tbody>tr:nth-child(even)>td {
+.striped-table .ant-table-tbody > tr:nth-child(even) > td {
   background-color: #fafafa !important;
 }
 
-.striped-table .ant-table-tbody>tr:nth-child(odd)>td {
+.striped-table .ant-table-tbody > tr:nth-child(odd) > td {
   background-color: #ffffff !important;
 }
 
-.striped-table .ant-table-tbody>tr:hover>td {
+.striped-table .ant-table-tbody > tr:hover > td {
   background-color: #e6f7ff !important;
 }
 
@@ -1269,8 +1260,6 @@ button {
   --input-disabled-color: rgba(0, 0, 0, 0.25);
 }
 
-
-
 // ==========================================
 // Text Input (a-input)
 // ==========================================
@@ -1284,7 +1273,6 @@ button {
   font-size: 14px !important;
   padding: 4px 11px !important;
   transition: all 0.3s ease !important;
-
 
   &:hover {
     border-color: var(--input-border-color-hover) !important;
@@ -1311,7 +1299,6 @@ button {
 
 // Styling untuk prefix dan suffix icon
 .ant-input-affix-wrapper {
-
   .ant-input-prefix,
   .ant-input-suffix {
     color: rgba(0, 0, 0, 0.25) !important;
@@ -1366,7 +1353,7 @@ button {
   }
 }
 
-:where(.css-dev-only-do-not-override-1fflfus).ant-input-affix-wrapper>input.ant-input {
+:where(.css-dev-only-do-not-override-1fflfus).ant-input-affix-wrapper > input.ant-input {
   padding: 0;
   font-size: inherit;
   border: none;
@@ -1374,7 +1361,6 @@ button {
   outline: none;
   height: auto !important;
 }
-
 
 .ant-input-password-lg {
   height: var(--input-height-large) !important;
@@ -1453,6 +1439,24 @@ textarea.ant-input {
     min-height: var(--input-height-default) !important;
     transition: all 0.3s ease !important;
 
+    // .ant-select-selection-item-content {
+    //   > div {
+    //     background-color: red !important;
+    //     // height: 20px !important;
+    //     display: flex !important;
+    //     flex-direction: row !important;
+    //     justify-content: center !important;
+    //     align-items: center !important;
+    //     width: 100%;
+    //     margin: 0 !important;
+    //     padding: 0 !important;
+    //     > span {
+    //       background: green;
+    //       height: 20px !important;
+    //     }
+    //   }
+    // }
+
     .ant-select-selection-item {
       line-height: calc(var(--input-height-default) - 2px) !important;
       color: var(--input-text-color) !important;
@@ -1519,7 +1523,7 @@ textarea.ant-input {
   transition: all 0.3s ease !important;
 
   .ant-picker-input {
-    >input {
+    > input {
       color: var(--input-text-color) !important;
       font-size: 14px !important;
 
@@ -1577,7 +1581,7 @@ textarea.ant-input {
 // Time Picker (a-time-picker)
 // ==========================================
 .ant-picker-time-panel-column {
-  >li.ant-picker-time-panel-cell-selected {
+  > li.ant-picker-time-panel-cell-selected {
     background-color: rgba(3, 92, 171, 0.1) !important;
   }
 }
@@ -1601,7 +1605,7 @@ textarea.ant-input {
   margin-bottom: 24px !important;
 
   .ant-form-item-label {
-    >label {
+    > label {
       color: var(--text-color) !important;
       font-weight: 500 !important;
     }
@@ -1614,7 +1618,6 @@ textarea.ant-input {
 .ant-cascader-picker,
 .ant-mentions,
 .ant-auto-complete {
-
   .ant-input,
   .ant-select-selector {
     background-color: var(--input-bg-color) !important;

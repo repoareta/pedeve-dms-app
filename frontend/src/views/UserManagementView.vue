@@ -152,6 +152,7 @@ const isSuperAdmin = computed(() => userRole.value === 'superadmin' || userRole.
 const isAdmin = computed(() => userRole.value === 'admin')
 const isManager = computed(() => userRole.value === 'manager')
 const isStaff = computed(() => userRole.value === 'staff')
+const showStatusColumn = computed(() => ['superadmin', 'administrator', 'admin'].includes(userRole.value))
 
 // Check if current user is superadmin (for backward compatibility)
 const isCurrentUserSuperadmin = computed(() => {
@@ -167,6 +168,16 @@ const canDelete = computed(() => isAdmin.value || isSuperAdmin.value)
 
 // RBAC: Create User hanya untuk admin
 const canCreateUser = computed(() => isAdmin.value || isSuperAdmin.value)
+
+// RBAC: view permissions hanya untuk superadmin/administrator
+const canViewPermissions = computed(() => isSuperAdmin.value)
+
+// Pastikan tab aktif tidak berada di permissions jika tidak punya akses
+watch(canViewPermissions, (val) => {
+  if (!val && activeTab.value === 'permissions') {
+    activeTab.value = 'users'
+  }
+}, { immediate: true })
 
 // Check if user is superadmin (for edit/delete protection)
 const isUserSuperadmin = (user: User) => {
@@ -207,41 +218,48 @@ const isCurrentUser = (user: User) => {
 //   { title: 'Aksi', key: 'actions', width: 150 },
 // ])
 
-const userColumns = computed(() => [
-  { 
-    title: 'Nama Pengguna', 
-    dataIndex: 'username', 
-    key: 'username', 
-    sorter: (a: User, b: User) => a.username.localeCompare(b.username),
-  },
-  { title: 'Email', dataIndex: 'email', key: 'email', sorter: (a: User, b: User) => a.email.localeCompare(b.email) },
-  { 
-    title: 'Peran', 
-    dataIndex: 'role', 
-    key: 'role', 
-    filters: roles.value
-      .filter(r => {
-        const name = r.name.toLowerCase()
-        if (name === 'superadmin') return false
-        if (name === 'administrator' && userRole.value !== 'superadmin') return false
-        return true
-      })
-      .map(r => ({ text: r.name, value: r.name })), 
-    onFilter: (value: string, record: User) => record.role === value 
-  },
-  { title: 'Perusahaan', dataIndex: 'company_id', key: 'company_id' },
-  { 
-    title: 'Status', 
-    dataIndex: 'is_active', 
-    key: 'is_active', 
-    filters: [
-      { text: 'Aktif', value: true },
-      { text: 'Tidak Aktif', value: false }
-    ], 
-    onFilter: (value: boolean, record: User) => record.is_active === value 
-  },
-  { title: 'Aksi', key: 'actions', width: 150 },
-])
+const userColumns = computed(() => {
+  const cols: Array<Record<string, unknown>> = [
+    { 
+      title: 'Nama Pengguna', 
+      dataIndex: 'username', 
+      key: 'username', 
+      sorter: (a: User, b: User) => a.username.localeCompare(b.username),
+    },
+    { title: 'Email', dataIndex: 'email', key: 'email', sorter: (a: User, b: User) => a.email.localeCompare(b.email) },
+    { 
+      title: 'Peran', 
+      dataIndex: 'role', 
+      key: 'role', 
+      filters: roles.value
+        .filter(r => {
+          const name = r.name.toLowerCase()
+          if (name === 'superadmin') return false
+          if (name === 'administrator' && userRole.value !== 'superadmin') return false
+          return true
+        })
+        .map(r => ({ text: r.name, value: r.name })), 
+      onFilter: (value: string, record: User) => record.role === value 
+    },
+    { title: 'Perusahaan', dataIndex: 'company_id', key: 'company_id' },
+  ]
+
+  if (showStatusColumn.value) {
+    cols.push({
+      title: 'Status',
+      dataIndex: 'is_active',
+      key: 'is_active',
+      filters: [
+        { text: 'Aktif', value: true },
+        { text: 'Tidak Aktif', value: false }
+      ],
+      onFilter: (value: boolean, record: User) => record.is_active === value
+    })
+  }
+
+  cols.push({ title: 'Aksi', key: 'actions', width: 150 })
+  return cols
+})
 
 const permissionColumns = computed(() => [
   { 
@@ -332,6 +350,12 @@ const loadRoles = async () => {
 }
 
 const loadPermissions = async () => {
+  // Hanya superadmin/administrator yang boleh memuat permissions
+  if (!canViewPermissions.value) {
+    permissions.value = []
+    permissionsLoading.value = false
+    return
+  }
   permissionsLoading.value = true
   try {
     permissions.value = await permissionApi.getAll()
@@ -506,7 +530,7 @@ onMounted(() => {
   loadCompanies()
   loadUsers()
   loadRoles()
-  loadPermissions()
+  if (canViewPermissions.value) loadPermissions()
 })
 
 const handleLogout = async () => {
@@ -668,7 +692,7 @@ const getScopeColor = (scope: string): string => {
                 <IconifyIcon icon="mdi:magnify" width="16" />
               </template>
             </a-input>
-            <a-button v-if="canCreateUser" type="primary" @click="handleCreateUser">
+            <a-button v-if="canCreateUser" type="primary" @click="handleCreateUser" class="buttonAction">
               <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
               Tambah Pengguna
             </a-button>
@@ -686,14 +710,14 @@ const getScopeColor = (scope: string): string => {
               showTotal: (total: number) => `Total ${total} user`,
               pageSizeOptions: ['10', '20', '50', '100'],
             }"
-            @change="(pagination: any) => { 
+            @change="(pagination: { current?: number; pageSize?: number }) => { 
               userPagination.current = pagination.current || 1
               userPagination.pageSize = pagination.pageSize || 10
             }"
             row-key="id"
             class="striped-table"
           >
-            <template #bodyCell="{ column, record }">
+              <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'company_id'">
                 <a-select
                   :value="record.company_id"
@@ -720,7 +744,7 @@ const getScopeColor = (scope: string): string => {
               <template v-if="column.key === 'is_active'">
                 <a-switch
                   :checked="record.is_active"
-                  :disabled="isCurrentUser(record) && isUserSuperadmin(record)"
+                  :disabled="(userRole === 'admin' && record.role?.toLowerCase() === 'administrator') || (isCurrentUser(record) && isUserSuperadmin(record))"
                   @change="() => handleToggleUserStatus(record)"
                   :checked-children="'Aktif'"
                   :un-checked-children="'Nonaktif'"
@@ -843,7 +867,7 @@ const getScopeColor = (scope: string): string => {
         </a-tab-pane>
 
         <!-- Permissions Tab -->
-        <a-tab-pane key="permissions" tab="Izin">
+        <a-tab-pane v-if="canViewPermissions" key="permissions" tab="Izin">
           <div class="table-header">
             <a-input
               v-model:value="permissionSearchText"
@@ -1042,6 +1066,13 @@ const getScopeColor = (scope: string): string => {
   
 }
 
+.page-header{
+  /* background: orange; */
+  max-width: 1350px;
+  margin: 0 auto;
+  width: 100%;
+}
+
 .user-management-wrapper {
   width: 100%;
 }
@@ -1217,5 +1248,12 @@ const getScopeColor = (scope: string): string => {
 .striped-table :deep(.ant-table-tbody > tr:hover > td),
 .striped-table :deep(.ant-table-tbody tr:hover td) {
   background-color: #e6f7ff !important;
+}
+
+.buttonAction{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 35px;
 }
 </style>

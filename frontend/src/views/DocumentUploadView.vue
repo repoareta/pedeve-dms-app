@@ -183,18 +183,18 @@ const loadFolders = async () => {
 // Load document data for edit mode
 const loadDocument = async () => {
   if (!documentId.value) return
-  
+
   loading.value = true
   try {
     const doc = await documentsApi.getDocument(documentId.value)
     document.value = doc
-    
+
     // Populate form with existing data
     formState.value.title = doc.name
     formState.value.folder_id = doc.folder_id || undefined
     formState.value.status = doc.status || 'active'
     formState.value.documentId = doc.id
-    
+
     // Load metadata
     if (doc.metadata) {
       let meta: Record<string, unknown> = {}
@@ -215,7 +215,7 @@ const loadDocument = async () => {
       formState.value.expiredDate = toDayjs(meta.expired_date)
       formState.value.isActive = (meta.is_active as string) || ''
     }
-    
+
     // Set file list to show existing file (read-only)
     fileList.value = [{
       uid: doc.id,
@@ -244,7 +244,19 @@ onMounted(async () => {
 <template>
   <a-layout class="upload-layout">
     <DashboardHeader />
+     <!-- Page Header Section -->
+     <div class="page-header-container">
+        <div class="page-header">
+          <div class="header-left">
+            <h1 class="page-title">Upload Dokumen</h1>
+          </div>
+        </div>
+      </div>
     <a-layout-content class="upload-content">
+
+     
+
+
       <a-card class="upload-card" :bordered="false">
         <div class="card-header">
           <div>
@@ -261,13 +273,8 @@ onMounted(async () => {
 
         <div v-if="!isEditMode" class="form-section">
           <h4>Upload file</h4>
-          <a-upload-dragger
-            name="file"
-            :file-list="fileList"
-            :before-upload="() => false"
-            :max-count="1"
-            @change="handleUploadChange"
-          >
+          <a-upload-dragger name="file" :file-list="fileList" :before-upload="() => false" :max-count="1"
+            @change="handleUploadChange">
             <p class="ant-upload-drag-icon">
               <IconifyIcon icon="mdi:cloud-upload-outline" width="40" />
             </p>
@@ -278,13 +285,8 @@ onMounted(async () => {
 
         <div v-else-if="document" class="form-section">
           <h4>File</h4>
-          <a-upload-dragger
-            :file-list="fileList"
-            name="file"
-            :before-upload="() => false"
-            :max-count="1"
-            @change="handleUploadChange"
-          >
+          <a-upload-dragger :file-list="fileList" name="file" :before-upload="() => false" :max-count="1"
+            @change="handleUploadChange">
             <p class="ant-upload-drag-icon">
               <IconifyIcon icon="mdi:file-document-outline" width="40" />
             </p>
@@ -299,17 +301,9 @@ onMounted(async () => {
             <a-row :gutter="[16, 8]">
               <a-col :xs="24" :md="12">
                 <a-form-item label="Folder">
-                  <a-select
-                    v-model:value="formState.folder_id"
-                    placeholder="Pilih folder (opsional)"
-                    :loading="loadingFolders"
-                    allow-clear
-                  >
-                    <a-select-option
-                      v-for="folder in folders"
-                      :key="folder.id"
-                      :value="folder.id"
-                    >
+                  <a-select v-model:value="formState.folder_id" placeholder="Pilih folder (opsional)"
+                    :loading="loadingFolders" allow-clear>
+                    <a-select-option v-for="folder in folders" :key="folder.id" :value="folder.id">
                       {{ folder.name }}
                     </a-select-option>
                   </a-select>
@@ -398,6 +392,13 @@ onMounted(async () => {
   /* background: #f7f8fb; */
 }
 
+.page-header{
+  /* background: orange; */
+  max-width: 1150px;
+  margin: 0 auto;
+  width: 100%;
+}
+
 .upload-content {
   max-width: 1200px;
   margin: 0 auto;
@@ -406,7 +407,7 @@ onMounted(async () => {
 
 .upload-card {
   border-radius: 14px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
 }
 
 .card-header {

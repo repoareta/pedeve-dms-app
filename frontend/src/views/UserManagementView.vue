@@ -308,6 +308,11 @@ const permissionColumns = computed(() => [
 const roles = ref<Role[]>([])
 const rolesLoading = ref(false)
 
+// Filter roles untuk ditampilkan di tabel (sembunyikan Superadmin)
+const filteredRoles = computed(() => {
+  return roles.value.filter(r => r.name.toLowerCase() !== 'superadmin')
+})
+
 // Permissions
 const permissions = ref<Permission[]>([])
 const permissionsLoading = ref(false)
@@ -816,7 +821,7 @@ const getScopeColor = (scope: string): string => {
               { title: 'Tingkat', dataIndex: 'level', key: 'level' },
               { title: 'Tipe Peran', dataIndex: 'is_system', key: 'is_system' },
             ]"
-            :data-source="roles"
+            :data-source="filteredRoles"
             :loading="rolesLoading"
             :scroll="{ x: 'max-content' }"
             class="striped-table"

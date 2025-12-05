@@ -122,6 +122,28 @@ const handleMenuItemClick = (path: string) => {
   showMobileMenu.value = false
 }
 
+const handleMenuClick = (e: { key: string }) => {
+  // Handle menu item clicks safely
+  switch (e.key) {
+    case 'profile':
+      handleMenuItemClick('/profile')
+      showUserMenu.value = false
+      break
+    case 'my-company':
+      handleMenuItemClick('/my-company')
+      showUserMenu.value = false
+      break
+    case 'settings':
+      handleMenuItemClick('/settings')
+      showUserMenu.value = false
+      break
+    case 'logout':
+      handleLogout()
+      showUserMenu.value = false
+      break
+  }
+}
+
 const toggleMobileMenu = () => {
   showMobileMenu.value = !showMobileMenu.value
 }
@@ -312,22 +334,22 @@ onUnmounted(() => {
             <IconifyIcon icon="mdi:chevron-down" width="16" class="desktop-icon" />
           </div>
           <template #overlay>
-            <a-menu style="z-index: 1002;" @click="(e: Event) => e.stopPropagation()">
-              <a-menu-item key="profile" @click="() => { handleMenuItemClick('/profile'); showUserMenu = false; }">
+            <a-menu style="z-index: 1002;" @click="handleMenuClick">
+              <a-menu-item key="profile">
                 <IconifyIcon icon="mdi:account" width="16" style="margin-right: 8px;" />
                 Profil
               </a-menu-item>
-              <a-menu-item key="my-company" @click="() => { handleMenuItemClick('/my-company'); showUserMenu = false; }">
+              <a-menu-item key="my-company">
                 <IconifyIcon icon="mdi:office-building" width="16" style="margin-right: 8px;" />
                 My Company
                 <a-badge v-if="userCompaniesCount > 1" :count="userCompaniesCount" :number-style="{ backgroundColor: '#52c41a' }" style="margin-left: 8px;" />
               </a-menu-item>
-              <a-menu-item key="settings" @click="() => { handleMenuItemClick('/settings'); showUserMenu = false; }">
+              <a-menu-item key="settings">
                 <IconifyIcon icon="mdi:cog" width="16" style="margin-right: 8px;" />
                 Pengaturan
               </a-menu-item>
               <a-menu-divider />
-              <a-menu-item key="logout" @click="() => { handleLogout(); showUserMenu = false; }">
+              <a-menu-item key="logout">
                 <IconifyIcon icon="mdi:logout" width="16" style="margin-right: 8px;" />
                 Keluar
               </a-menu-item>

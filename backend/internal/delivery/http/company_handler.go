@@ -492,6 +492,97 @@ func (h *CompanyHandler) GetCompanyUsers(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(users)
 }
 
+// GetCompanyAncestors handles getting company ancestors
+// @Summary      Ambil Ancestors Company
+// @Description  Mengambil daftar ancestors (parent companies) dari company tertentu.
+// @Tags         Company Management
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Company ID"
+// @Success      200  {array}   domain.CompanyModel
+// @Failure      401  {object}  domain.ErrorResponse
+// @Failure      403  {object}  domain.ErrorResponse
+// @Failure      404  {object}  domain.ErrorResponse
+// @Router       /api/v1/companies/{id}/ancestors [get]
+func (h *CompanyHandler) GetCompanyAncestors(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_request",
+			Message: "Company ID is required",
+		})
+	}
+
+	// Get user info for access validation
+	roleNameVal := c.Locals("roleName")
+	if roleNameVal == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User role not found",
+		})
+	}
+	roleName := roleNameVal.(string)
+	companyID := c.Locals("companyID")
+
+	// Check if company exists
+	_, err := h.companyUseCase.GetCompanyByID(id)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
+			Error:   "not_found",
+			Message: "Company not found",
+		})
+	}
+
+	// Access control: Superadmin/administrator can see all companies
+	if !utils.IsSuperAdminLike(roleName) {
+		if companyID == nil {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "User company not found",
+			})
+		}
+
+		// Handle *string type
+		var userCompanyID string
+		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
+			userCompanyID = *companyIDPtr
+		} else if companyIDStr, ok := companyID.(string); ok {
+			userCompanyID = companyIDStr
+		} else {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Invalid company ID format",
+			})
+		}
+
+		// Check if user has access to this company or its descendants
+		hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, id)
+		if err != nil || !hasAccess {
+			// Also check if the target company is an ancestor of user's company
+			// (user can view ancestors of companies that are ancestors of their company)
+			isDescendant, err := h.companyUseCase.ValidateCompanyAccess(id, userCompanyID)
+			if err != nil || !isDescendant {
+				return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+					Error:   "forbidden",
+					Message: "You don't have permission to view ancestors of this company",
+				})
+			}
+		}
+	}
+
+	// Get ancestors
+	ancestors, err := h.companyUseCase.GetCompanyAncestors(id)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to get company ancestors: " + err.Error(),
+		})
+	}
+
+	return c.JSON(ancestors)
+}
+
 // GetCompanyChildren handles getting company children
 // @Summary      Ambil Children Company
 // @Description  Mengambil daftar children (sub-companies) dari company tertentu.

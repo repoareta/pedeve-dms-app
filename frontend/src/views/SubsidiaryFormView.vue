@@ -6,15 +6,13 @@
       <!-- Page Header Section -->
       <div class="page-header-container">
         <div class="page-header">
-          <div class="header-left">
-            <h1 class="page-title">{{ isEditMode ? 'Edit Perusahaan' : 'Tambah Perusahaan Baru' }}</h1>
+          <h1 class="page-title">{{ isEditMode ? 'Edit Perusahaan' : 'Tambah Perusahaan Baru' }}</h1>
             <p class="page-description">
               {{ isEditMode 
                 ? 'Perbarui informasi perusahaan, struktur kepemilikan, bidang usaha, dan data pengurus perusahaan.'
                 : 'Tambah perusahaan baru ke dalam sistem. Lengkapi informasi identitas, struktur kepemilikan, bidang usaha, dan data pengurus.' 
               }}
             </p>
-          </div>
         </div>
       </div>
 
@@ -83,7 +81,7 @@
                   <a-upload
                     :file-list="logoFileList"
                     :before-upload="handleLogoUpload"
-                    :remove="handleLogoRemove"
+                    @remove="handleLogoRemove"
                     accept="image/png,image/jpeg,image/jpg"
                     :max-count="1"
                     list-type="picture-card"
@@ -614,10 +612,9 @@ const handleLogoUpload = async (file: File): Promise<boolean> => {
   }
 }
 
-const handleLogoRemove = (): boolean => {
+const handleLogoRemove = (): void => {
   formData.value.logo = ''
   logoFileList.value = []
-  return true
 }
 
 const nextStep = () => {
@@ -864,20 +861,22 @@ onMounted(async () => {
   width: 100%;
 }
 
-/* .page-header-container {
-  background: #fff;
-  border-bottom: 1px solid #e8e8e8;
-  padding: 24px;
-  margin-bottom: 0;
-} */
+.page-header-container {
+  /* background: #fff;
+  border-bottom: 1px solid #e8e8e8; */
+  /* padding: 24px; */
+  /* margin-bottom: 0; */
+  max-width: 1200px;
+}
 
-/* .page-header {
-  max-width: 1400px;
-  margin: 0 auto;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-} */
+.page-header {
+  margin: 0 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  align-items: flex-start !important;
+}
+
 
 /* .header-left {
   flex: 1;

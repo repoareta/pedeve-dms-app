@@ -21,7 +21,7 @@ Gunakan script yang sudah ada atau manual:
 ```bash
 # Set environment variables terlebih dahulu
 export SONARCLOUD_URL=https://sonarcloud.io
-export SONARCLOUD_TOKEN=774c9d86b48efe7b4979256e89f9d5015316ec29
+export SONARCLOUD_TOKEN=your-sonarcloud-token-here
 export SONARCLOUD_PROJECT_KEY=repoareta_pedeve-dms-app
 
 # Store ke Vault
@@ -40,7 +40,7 @@ export VAULT_TOKEN=dev-root-token-12345
 # Store SonarCloud secrets
 vault kv put secret/dms-app \
     SONARCLOUD_URL=https://sonarcloud.io \
-    SONARCLOUD_TOKEN=774c9d86b48efe7b4979256e89f9d5015316ec29 \
+    SONARCLOUD_TOKEN=your-sonarcloud-token-here \
     SONARCLOUD_PROJECT_KEY=repoareta_pedeve-dms-app
 ```
 
@@ -74,7 +74,7 @@ export GCP_PROJECT_ID=your-gcp-project-id
 ```bash
 # Install gcloud CLI jika belum
 gcloud secrets create SONARCLOUD_URL --data-file=- <<< "https://sonarcloud.io"
-gcloud secrets create SONARCLOUD_TOKEN --data-file=- <<< "774c9d86b48efe7b4979256e89f9d5015316ec29"
+gcloud secrets create SONARCLOUD_TOKEN --data-file=- <<< "your-sonarcloud-token-here"
 gcloud secrets create SONARCLOUD_PROJECT_KEY --data-file=- <<< "repoareta_pedeve-dms-app"
 ```
 
@@ -84,11 +84,13 @@ Jika Secret Manager tidak tersedia, backend akan fallback ke environment variabl
 
 ```bash
 export SONARCLOUD_URL=https://sonarcloud.io
-export SONARCLOUD_TOKEN=774c9d86b48efe7b4979256e89f9d5015316ec29
+export SONARCLOUD_TOKEN=your-sonarcloud-token-here
 export SONARCLOUD_PROJECT_KEY=repoareta_pedeve-dms-app
 ```
 
 **Catatan**: Fallback ini hanya untuk development/testing. Untuk production, gunakan Secret Manager.
+
+**⚠️ SECURITY WARNING**: Jangan pernah commit token real ke version control. Gunakan placeholder seperti `your-sonarcloud-token-here` di dokumentasi.
 
 ### Cara Mendapatkan Token
 
@@ -174,7 +176,7 @@ vault kv get secret/dms-app | grep SONARCLOUD
 Jika tidak ada, simpan secrets:
 ```bash
 export SONARCLOUD_URL=https://sonarcloud.io
-export SONARCLOUD_TOKEN=774c9d86b48efe7b4979256e89f9d5015316ec29
+export SONARCLOUD_TOKEN=your-sonarcloud-token-here
 export SONARCLOUD_PROJECT_KEY=repoareta_pedeve-dms-app
 cd backend
 ./scripts/store-all-secrets.sh
@@ -194,7 +196,7 @@ export VAULT_SECRET_PATH=secret/dms-app
 Jika Vault tidak tersedia, backend akan fallback ke environment variables:
 ```bash
 export SONARCLOUD_URL=https://sonarcloud.io
-export SONARCLOUD_TOKEN=774c9d86b48efe7b4979256e89f9d5015316ec29
+export SONARCLOUD_TOKEN=your-sonarcloud-token-here
 export SONARCLOUD_PROJECT_KEY=repoareta_pedeve-dms-app
 ```
 

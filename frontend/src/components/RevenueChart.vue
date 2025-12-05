@@ -96,15 +96,22 @@ const chartInfo = computed(() => {
   // Ambil label terakhir untuk mendapatkan bulan dan tahun
   const lastLabel = props.chartData.labels[props.chartData.labels.length - 1]
   
+  // Check if lastLabel exists
+  if (!lastLabel) {
+    // Fallback jika label tidak ada
+    return `Q4 ${new Date().getFullYear()} ${sign}${change.toFixed(0)}% $${latestRevenue.toFixed(0)}M`
+  }
+  
   // Parse label untuk mendapatkan bulan dan tahun (format: "Januari 2025")
   const labelParts = lastLabel.split(' ')
-  if (labelParts.length < 2) {
+  if (labelParts.length < 2 || !labelParts[0] || !labelParts[1]) {
     // Fallback jika format tidak sesuai
     return `Q4 ${new Date().getFullYear()} ${sign}${change.toFixed(0)}% $${latestRevenue.toFixed(0)}M`
   }
   
   const monthName = labelParts[0]
-  const year = parseInt(labelParts[1]) || new Date().getFullYear()
+  const yearStr = labelParts[1]
+  const year = parseInt(yearStr) || new Date().getFullYear()
   
   // Tentukan quarter berdasarkan nama bulan
   const monthNames = [

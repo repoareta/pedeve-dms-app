@@ -264,9 +264,9 @@ func (h *ReportHandler) GetAllReports(c *fiber.Ctx) error {
 	}
 
 	// Set pagination headers
-	c.Set("X-Total-Count", string(rune(total)))
-	c.Set("X-Page", string(rune(page)))
-	c.Set("X-Page-Size", string(rune(pageSize)))
+	c.Set("X-Total-Count", strconv.Itoa(total))
+	c.Set("X-Page", strconv.Itoa(page))
+	c.Set("X-Page-Size", strconv.Itoa(pageSize))
 
 	// Audit log (opsional untuk view)
 	if audit.ShouldLogView() {

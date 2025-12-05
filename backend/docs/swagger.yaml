@@ -7,6 +7,35 @@ definitions:
       user:
         $ref: '#/definitions/domain.User'
     type: object
+  domain.BusinessFieldModel:
+    properties:
+      additional_activities:
+        description: Kegiatan usaha tambahan
+        type: string
+      company_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      industry_sector:
+        description: Sektor industri
+        type: string
+      is_main:
+        description: Apakah bidang usaha utama
+        type: boolean
+      kbli:
+        description: Klasifikasi Baku Lapangan Usaha Indonesia
+        type: string
+      main_business_activity:
+        description: Uraian kegiatan usaha utama
+        type: string
+      start_operation_date:
+        description: Tanggal mulai beroperasi
+        type: string
+      updated_at:
+        type: string
+    type: object
   domain.Company:
     properties:
       children:
@@ -46,12 +75,29 @@ definitions:
     type: object
   domain.CompanyModel:
     properties:
+      address:
+        description: Alamat perusahaan
+        type: string
+      business_fields:
+        items:
+          $ref: '#/definitions/domain.BusinessFieldModel'
+        type: array
       code:
         description: Unique company code
         type: string
       created_at:
         type: string
       description:
+        type: string
+      directors:
+        items:
+          $ref: '#/definitions/domain.DirectorModel'
+        type: array
+      email:
+        description: Email
+        type: string
+      fax:
+        description: Fax
         type: string
       id:
         type: string
@@ -60,27 +106,162 @@ definitions:
       level:
         description: 0=root, 1=holding, 2=subsidiary, etc
         type: integer
+      logo:
+        description: Path/URL logo
+        type: string
+      main_parent_company:
+        description: ID perusahaan induk utama
+        type: string
       name:
+        type: string
+      nib:
+        description: Nomor Induk Berusaha
+        type: string
+      npwp:
+        description: Nomor Pokok Wajib Pajak
+        type: string
+      operational_address:
+        description: Alamat operasional
         type: string
       parent_id:
         description: NULL untuk root/holding company
         type: string
+      phone:
+        description: Telepon
+        type: string
+      shareholders:
+        description: Relationships
+        items:
+          $ref: '#/definitions/domain.ShareholderModel'
+        type: array
+      short_name:
+        description: Nama singkat
+        type: string
+      status:
+        description: Status perusahaan
+        type: string
       updated_at:
         type: string
+      website:
+        description: Website
+        type: string
     type: object
-  domain.Document:
+  domain.CreateReportRequest:
     properties:
-      content:
+      attachment:
+        description: Optional
+        type: string
+      company_id:
+        type: string
+      dividend:
+        type: integer
+      financial_ratio:
+        type: number
+      inputter_id:
+        description: Optional
+        type: string
+      npat:
+        type: integer
+      opex:
+        type: integer
+      period:
+        description: 'Format: YYYY-MM'
+        type: string
+      remark:
+        description: Optional
+        type: string
+      revenue:
+        type: integer
+    required:
+    - company_id
+    - dividend
+    - financial_ratio
+    - npat
+    - opex
+    - period
+    - revenue
+    type: object
+  domain.DirectorModel:
+    properties:
+      company_id:
         type: string
       created_at:
         type: string
-      description:
+      domicile_address:
+        description: Alamat domisili
+        type: string
+      full_name:
+        description: Nama lengkap
         type: string
       id:
         type: string
-      title:
+      ktp:
+        description: Nomor KTP
+        type: string
+      npwp:
+        description: Nomor NPWP
+        type: string
+      position:
+        description: 'Jabatan: Direktur Utama, Komisaris, dll'
+        type: string
+      start_date:
+        description: Tanggal awal jabatan (nullable)
         type: string
       updated_at:
+        type: string
+    type: object
+  domain.DocumentFolderModel:
+    properties:
+      children:
+        items:
+          $ref: '#/definitions/domain.DocumentFolderModel'
+        type: array
+      created_at:
+        type: string
+      created_by:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      parent_id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  domain.DocumentModel:
+    description: Document model dengan metadata dalam format JSON
+    properties:
+      created_at:
+        type: string
+      file_name:
+        description: Nama file asli
+        type: string
+      file_path:
+        description: URL/path hasil upload
+        type: string
+      folder:
+        $ref: '#/definitions/domain.DocumentFolderModel'
+      folder_id:
+        type: string
+      id:
+        type: string
+      metadata:
+        description: Metadata tambahan (opsional, format JSON)
+        type: object
+      mime_type:
+        type: string
+      name:
+        description: Judul dokumen
+        type: string
+      size:
+        description: Size in bytes
+        type: integer
+      status:
+        type: string
+      updated_at:
+        type: string
+      uploader_id:
         type: string
     type: object
   domain.ErrorResponse:
@@ -171,6 +352,47 @@ definitions:
     - ScopeGlobal
     - ScopeCompany
     - ScopeSubCompany
+  domain.ReportModel:
+    properties:
+      attachment:
+        description: Optional, bisa null
+        type: string
+      company:
+        allOf:
+        - $ref: '#/definitions/domain.CompanyModel'
+        description: Relationships
+      company_id:
+        type: string
+      created_at:
+        type: string
+      dividend:
+        type: integer
+      financial_ratio:
+        description: Mandatory
+        type: number
+      id:
+        type: string
+      inputter:
+        $ref: '#/definitions/domain.UserModel'
+      inputter_id:
+        description: User yang menginput (bisa null)
+        type: string
+      npat:
+        description: Net Profit After Tax
+        type: integer
+      opex:
+        type: integer
+      period:
+        description: 'Format: YYYY-MM (e.g., "2025-09")'
+        type: string
+      remark:
+        description: Optional, bisa null
+        type: string
+      revenue:
+        type: integer
+      updated_at:
+        type: string
+    type: object
   domain.Role:
     properties:
       created_at:
@@ -220,6 +442,58 @@ definitions:
       updated_at:
         type: string
     type: object
+  domain.ShareholderModel:
+    properties:
+      company_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      identity_number:
+        description: KTP/NPWP
+        type: string
+      is_main_parent:
+        description: Apakah perusahaan induk utama
+        type: boolean
+      name:
+        description: Nama pemegang saham
+        type: string
+      ownership_percent:
+        description: Persentase kepemilikan
+        type: number
+      share_count:
+        description: Jumlah saham
+        type: integer
+      type:
+        description: 'Jenis: Badan Hukum, Individu, dll'
+        type: string
+      updated_at:
+        type: string
+    type: object
+  domain.UpdateReportRequest:
+    properties:
+      attachment:
+        type: string
+      company_id:
+        type: string
+      dividend:
+        type: integer
+      financial_ratio:
+        type: number
+      inputter_id:
+        type: string
+      npat:
+        type: integer
+      opex:
+        type: integer
+      period:
+        type: string
+      remark:
+        type: string
+      revenue:
+        type: integer
+    type: object
   domain.User:
     properties:
       company:
@@ -250,6 +524,19 @@ definitions:
       username:
         type: string
     type: object
+  domain.UserCompanyResponse:
+    properties:
+      company:
+        $ref: '#/definitions/domain.CompanyModel'
+      role:
+        description: Role name
+        type: string
+      role_id:
+        type: string
+      role_level:
+        description: Role level untuk sorting (0=superadmin, 1=admin, 2=manager, 3=staff)
+        type: integer
+    type: object
   domain.UserModel:
     properties:
       company_id:
@@ -264,7 +551,9 @@ definitions:
       is_active:
         type: boolean
       role:
-        description: Legacy field, akan deprecated
+        description: |-
+          Role is a legacy field. We intentionally do NOT set a default here so that
+          new users can be created in "standby" mode without any role.
         type: string
       role_id:
         description: Reference ke Role table
@@ -274,27 +563,21 @@ definitions:
       username:
         type: string
     type: object
+  http.UploadFileResponse:
+    properties:
+      filename:
+        type: string
+      size:
+        type: integer
+      url:
+        type: string
+    type: object
   main.AuthResponse:
     properties:
       token:
         type: string
       user:
         $ref: '#/definitions/main.User'
-    type: object
-  main.Document:
-    properties:
-      content:
-        type: string
-      created_at:
-        type: string
-      description:
-        type: string
-      id:
-        type: string
-      title:
-        type: string
-      updated_at:
-        type: string
     type: object
   main.ErrorResponse:
     properties:
@@ -331,6 +614,88 @@ definitions:
         type: string
       username:
         type: string
+    type: object
+  sonarqube.Component:
+    properties:
+      key:
+        type: string
+      name:
+        type: string
+      path:
+        type: string
+      qualifier:
+        type: string
+    type: object
+  sonarqube.Issue:
+    properties:
+      author:
+        type: string
+      component:
+        type: string
+      creationDate:
+        type: string
+      debt:
+        type: string
+      effort:
+        type: string
+      key:
+        type: string
+      line:
+        type: integer
+      message:
+        type: string
+      project:
+        type: string
+      rule:
+        type: string
+      severity:
+        type: string
+      status:
+        type: string
+      type:
+        type: string
+      updateDate:
+        type: string
+    type: object
+  sonarqube.IssuesResponse:
+    properties:
+      components:
+        items:
+          $ref: '#/definitions/sonarqube.Component'
+        type: array
+      issues:
+        items:
+          $ref: '#/definitions/sonarqube.Issue'
+        type: array
+      p:
+        type: integer
+      paging:
+        $ref: '#/definitions/sonarqube.Paging'
+      ps:
+        type: integer
+      total:
+        type: integer
+    type: object
+  sonarqube.Paging:
+    properties:
+      pageIndex:
+        type: integer
+      pageSize:
+        type: integer
+      total:
+        type: integer
+    type: object
+  sonarqube.SoftwareQualityMetrics:
+    properties:
+      maintainability:
+        description: code_smells count
+        type: integer
+      reliability:
+        description: bugs count
+        type: integer
+      security:
+        description: vulnerabilities count
+        type: integer
     type: object
 host: localhost:8080
 info:
@@ -383,10 +748,12 @@ paths:
     get:
       consumes:
       - application/json
-      description: Mengambil audit logs dengan pagination dan filter. User reguler
-        hanya bisa melihat audit logs mereka sendiri, sedangkan admin/superadmin bisa
-        melihat semua audit logs. Endpoint ini tidak memerlukan CSRF token karena
-        menggunakan method GET (read-only).
+      description: 'Mengambil audit logs dengan pagination dan filter. Data ini memiliki
+        retention policy: 90 hari untuk user actions, 30 hari untuk technical errors.
+        User reguler hanya bisa melihat audit logs mereka sendiri, sedangkan admin/superadmin
+        bisa melihat semua audit logs. Endpoint ini tidak memerlukan CSRF token karena
+        menggunakan method GET (read-only). Catatan: Data penting (report, document,
+        company, user) disimpan di endpoint /user-activity-logs dengan permanent storage.'
       parameters:
       - description: 'Nomor halaman (default: 1)'
         in: query
@@ -400,7 +767,8 @@ paths:
         in: query
         name: action
         type: string
-      - description: 'Filter berdasarkan resource (contoh: auth, document, user)'
+      - description: 'Filter berdasarkan resource (contoh: auth, document, user, company,
+          report)'
         in: query
         name: resource
         type: string
@@ -707,6 +1075,74 @@ paths:
       summary: Ambil Profil User
       tags:
       - Authentication
+  /api/v1/auth/profile/email:
+    put:
+      consumes:
+      - application/json
+      description: Mengupdate email user yang sedang terautentikasi. User hanya bisa
+        mengupdate email mereka sendiri.
+      parameters:
+      - description: New email
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.User'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update Email User
+      tags:
+      - Authentication
+  /api/v1/auth/profile/password:
+    put:
+      consumes:
+      - application/json
+      description: Mengubah password user yang sedang terautentikasi. User harus memberikan
+        password lama untuk verifikasi.
+      parameters:
+      - description: Old password and new password
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Change Password User
+      tags:
+      - Authentication
   /api/v1/companies:
     get:
       consumes:
@@ -903,6 +1339,119 @@ paths:
       summary: Ambil Children Company
       tags:
       - Company Management
+  /api/v1/companies/{id}/full:
+    put:
+      consumes:
+      - application/json
+      description: Mengupdate company dengan data lengkap termasuk shareholders, business
+        fields, dan directors
+      parameters:
+      - description: Company ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Company full data to update
+        in: body
+        name: company
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.CompanyModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update Company (Full Data)
+      tags:
+      - Company Management
+  /api/v1/companies/{id}/users:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil daftar users yang di-assign ke company tertentu (menggunakan
+        junction table, support multiple assignments).
+      parameters:
+      - description: Company ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.UserModel'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Users di Company
+      tags:
+      - Company Management
+  /api/v1/companies/full:
+    post:
+      consumes:
+      - application/json
+      description: Membuat company baru dengan data lengkap termasuk shareholders,
+        business fields, dan directors
+      parameters:
+      - description: Company full data
+        in: body
+        name: company
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.CompanyModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Buat Company Baru (Full Data)
+      tags:
+      - Company Management
   /api/v1/csrf-token:
     get:
       consumes:
@@ -932,61 +1481,72 @@ paths:
     get:
       consumes:
       - application/json
-      description: Returns a list of all documents (requires authentication)
+      description: Mengambil daftar dokumen dengan opsi pagination, search, sort,
+        dan filter. Superadmin/administrator melihat semua dokumen, user reguler hanya
+        melihat dokumen milik mereka sendiri.
+      parameters:
+      - description: Filter by folder ID
+        in: query
+        name: folder_id
+        type: string
+      - description: 'Page number (default: 0, no pagination)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Page size (default: 0, no pagination, max: 100)'
+        in: query
+        name: page_size
+        type: integer
+      - description: Search by title or filename
+        in: query
+        name: search
+        type: string
+      - description: Sort field (created_at, title, size)
+        in: query
+        name: sort_by
+        type: string
+      - description: Sort direction (asc, desc)
+        in: query
+        name: sort_dir
+        type: string
+      - description: Filter by file type (pdf, docx, xlsx, etc)
+        in: query
+        name: type
+        type: string
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Daftar dokumen (tanpa pagination) atau {object} dengan data,
+            total, page, page_size (dengan pagination). Metadata field menggunakan
+            format JSON.
           schema:
             items:
-              $ref: '#/definitions/main.Document'
+              $ref: '#/definitions/domain.DocumentModel'
             type: array
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/main.ErrorResponse'
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Get all documents
-      tags:
-      - Documents
-    post:
-      consumes:
-      - application/json
-      description: Creates a new document (requires authentication)
-      parameters:
-      - description: Document object
-        in: body
-        name: document
-        required: true
-        schema:
-          $ref: '#/definitions/main.Document'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/main.Document'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/main.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/main.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create document
+      summary: Ambil Semua Documents
       tags:
       - Documents
   /api/v1/documents/{id}:
     delete:
       consumes:
       - application/json
-      description: Deletes a document by ID (requires authentication)
+      description: Menghapus dokumen. Hanya owner dokumen atau superadmin/administrator
+        yang dapat menghapus dokumen.
       parameters:
       - description: Document ID
         in: path
@@ -997,7 +1557,7 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Dokumen berhasil dihapus
           schema:
             additionalProperties:
               type: string
@@ -1005,20 +1565,30 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/main.ErrorResponse'
-        "404":
-          description: Not Found
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
           schema:
-            $ref: '#/definitions/main.ErrorResponse'
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Document tidak ditemukan
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Delete document
+      summary: Hapus Document
       tags:
       - Documents
     get:
       consumes:
       - application/json
-      description: Returns a single document by ID (requires authentication)
+      description: Mengambil detail dokumen berdasarkan ID. Superadmin/administrator
+        dapat melihat semua dokumen, user reguler hanya dapat melihat dokumen milik
+        mereka sendiri.
       parameters:
       - description: Document ID
         in: path
@@ -1029,58 +1599,357 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Detail dokumen berhasil diambil
           schema:
-            $ref: '#/definitions/main.Document'
+            $ref: '#/definitions/domain.DocumentModel'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/main.ErrorResponse'
-        "404":
-          description: Not Found
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
           schema:
-            $ref: '#/definitions/main.ErrorResponse'
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Document tidak ditemukan
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Get document by ID
+      summary: Ambil Document by ID
       tags:
       - Documents
     put:
       consumes:
       - application/json
-      description: Updates an existing document (requires authentication)
+      - multipart/form-data
+      description: Mengupdate metadata dokumen (folder_id, title, status, metadata)
+        dan opsional mengganti file. Mendukung JSON payload (metadata only) atau multipart/form-data
+        (dengan file). Hanya owner dokumen atau superadmin/administrator yang dapat
+        mengupdate.
       parameters:
       - description: Document ID
         in: path
         name: id
         required: true
         type: string
-      - description: Document object
+      - description: JSON payload untuk update metadata only
         in: body
-        name: document
-        required: true
+        name: payload
         schema:
-          $ref: '#/definitions/main.Document'
+          type: object
+      - description: 'File baru (opsional, hanya jika Content-Type: multipart/form-data)'
+        in: formData
+        name: file
+        type: file
+      - description: 'ID folder (opsional, hanya jika Content-Type: multipart/form-data)'
+        in: formData
+        name: folder_id
+        type: string
+      - description: 'Judul dokumen (opsional, hanya jika Content-Type: multipart/form-data)'
+        in: formData
+        name: title
+        type: string
+      - description: 'Status dokumen (opsional, hanya jika Content-Type: multipart/form-data)'
+        in: formData
+        name: status
+        type: string
+      - description: 'Metadata dalam format JSON string (opsional, hanya jika Content-Type:
+          multipart/form-data)'
+        in: formData
+        name: metadata
+        type: string
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Dokumen berhasil diupdate
           schema:
-            $ref: '#/definitions/main.Document'
+            $ref: '#/definitions/domain.DocumentModel'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/main.ErrorResponse'
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Document atau folder tidak ditemukan
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update Document
+      tags:
+      - Documents
+  /api/v1/documents/folders:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil daftar semua folder. Superadmin/administrator melihat
+        semua folder, user reguler hanya melihat folder milik mereka sendiri.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Daftar folder berhasil diambil
+          schema:
+            items:
+              $ref: '#/definitions/domain.DocumentFolderModel'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Semua Folders
+      tags:
+      - Documents
+    post:
+      consumes:
+      - application/json
+      description: Membuat folder baru. Folder dapat memiliki parent folder (opsional)
+        untuk membuat struktur hierarki.
+      parameters:
+      - description: Folder data
+        in: body
+        name: payload
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Folder berhasil dibuat
+          schema:
+            $ref: '#/definitions/domain.DocumentFolderModel'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Buat Folder Baru
+      tags:
+      - Documents
+  /api/v1/documents/folders/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Menghapus folder beserta semua dokumen di dalamnya. Hanya owner
+        folder atau superadmin/administrator yang dapat menghapus folder.
+      parameters:
+      - description: Folder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Folder berhasil dihapus
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Hapus Folder
+      tags:
+      - Documents
+    put:
+      consumes:
+      - application/json
+      description: Mengubah nama folder. Hanya owner folder atau superadmin/administrator
+        yang dapat mengubah nama folder.
+      parameters:
+      - description: Folder ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Folder data
+        in: body
+        name: payload
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Folder berhasil diupdate
+          schema:
+            $ref: '#/definitions/domain.DocumentFolderModel'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update Nama Folder
+      tags:
+      - Documents
+  /api/v1/documents/summary:
+    get:
+      consumes:
+      - application/json
+      description: Mengembalikan statistik folder (file_count, total_size) dan total
+        storage. Data bersifat global untuk semua dokumen.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Ringkasan dokumen berhasil diambil. Response berisi folder_stats
+            (array) dan total_size (number)
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Ringkasan Documents
+      tags:
+      - Documents
+  /api/v1/documents/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Mengupload dokumen baru dengan file, title, status, dan metadata.
+        File wajib diupload dalam format multipart/form-data.
+      parameters:
+      - description: File dokumen yang akan diupload
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: ID folder (opsional)
+        in: formData
+        name: folder_id
+        type: string
+      - description: Judul dokumen (opsional)
+        in: formData
+        name: title
+        type: string
+      - description: 'Status dokumen (default: active)'
+        in: formData
+        name: status
+        type: string
+      - description: Metadata dalam format JSON string (opsional)
+        in: formData
+        name: metadata
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Dokumen berhasil diupload
+          schema:
+            $ref: '#/definitions/domain.DocumentModel'
+        "400":
+          description: Invalid request atau file tidak valid
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden (tidak memiliki akses ke folder)
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Folder tidak ditemukan
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upload Document Baru
+      tags:
+      - Documents
+  /api/v1/files/{path}:
+    get:
+      consumes:
+      - application/json
+      description: Serve file dari storage (GCP Storage atau local) sebagai proxy.
+        Endpoint ini protected dan memerlukan authentication untuk keamanan file documents.
+      parameters:
+      - description: File path (e.g., logos/filename.png atau documents/filename.pdf)
+        in: path
+        name: path
+        required: true
+        type: string
+      produces:
+      - image/png
+      - image/jpeg
+      - image/jpg
+      - application/octet-stream
+      - application/pdf
+      responses:
+        "200":
+          description: File content
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/main.ErrorResponse'
+            $ref: '#/definitions/domain.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Update document
+      summary: Serve File
       tags:
-      - Documents
+      - Files
   /api/v1/permissions:
     get:
       consumes:
@@ -1228,6 +2097,406 @@ paths:
       summary: Update Permission
       tags:
       - Permission Management
+  /api/v1/reports:
+    get:
+      consumes:
+      - application/json
+      description: Mendapatkan semua reports. Superadmin melihat semua, admin melihat
+        reports dari perusahaan mereka dan anak perusahaan, user biasa hanya melihat
+        reports dari perusahaan mereka.
+      parameters:
+      - description: Filter by company ID
+        in: query
+        name: company_id
+        type: string
+      - description: Filter by period (YYYY-MM)
+        in: query
+        name: period
+        type: string
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Page size (default: 10)'
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get All Reports
+      tags:
+      - Reports
+    post:
+      consumes:
+      - application/json
+      description: Membuat report bulanan baru untuk perusahaan. Setiap perusahaan
+        hanya bisa membuat report untuk perusahaan mereka sendiri.
+      parameters:
+      - description: Report data
+        in: body
+        name: report
+        required: true
+        schema:
+          $ref: '#/definitions/domain.CreateReportRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.ReportModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Buat Report Baru
+      tags:
+      - Reports
+  /api/v1/reports/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Menghapus report. User hanya bisa menghapus report dari perusahaan
+        mereka.
+      parameters:
+      - description: Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete Report
+      tags:
+      - Reports
+    get:
+      consumes:
+      - application/json
+      description: Mendapatkan detail report berdasarkan ID. User hanya bisa melihat
+        report dari perusahaan mereka (atau anak perusahaan untuk admin).
+      parameters:
+      - description: Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.ReportModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Report by ID
+      tags:
+      - Reports
+    put:
+      consumes:
+      - application/json
+      description: Mengupdate report. User hanya bisa mengupdate report dari perusahaan
+        mereka.
+      parameters:
+      - description: Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Report update data
+        in: body
+        name: report
+        required: true
+        schema:
+          $ref: '#/definitions/domain.UpdateReportRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.ReportModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update Report
+      tags:
+      - Reports
+  /api/v1/reports/company/{company_id}:
+    get:
+      consumes:
+      - application/json
+      description: Mendapatkan semua reports untuk perusahaan tertentu. User hanya
+        bisa melihat reports dari perusahaan mereka (atau anak perusahaan untuk admin).
+      parameters:
+      - description: Company ID
+        in: path
+        name: company_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.ReportModel'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Reports by Company ID
+      tags:
+      - Reports
+  /api/v1/reports/export/excel:
+    get:
+      consumes:
+      - application/json
+      description: Export semua reports yang dapat diakses user ke format Excel
+      parameters:
+      - description: Filter by company ID
+        in: query
+        name: company_id
+        type: string
+      - description: Filter by period (YYYY-MM)
+        in: query
+        name: period
+        type: string
+      produces:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Export Reports to Excel
+      tags:
+      - Reports
+  /api/v1/reports/export/pdf:
+    get:
+      consumes:
+      - application/json
+      description: Export semua reports yang dapat diakses user ke format PDF
+      parameters:
+      - description: Filter by company ID
+        in: query
+        name: company_id
+        type: string
+      - description: Filter by period (YYYY-MM)
+        in: query
+        name: period
+        type: string
+      produces:
+      - application/pdf
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Export Reports to PDF
+      tags:
+      - Reports
+  /api/v1/reports/template:
+    get:
+      consumes:
+      - application/json
+      description: Download template Excel file untuk upload reports. Template berisi
+        kolom-kolom yang diperlukan dengan contoh data.
+      produces:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Download Report Template
+      tags:
+      - Reports
+  /api/v1/reports/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload Excel file, validate rows, and create reports in database.
+      parameters:
+      - description: Excel file (.xlsx, .xls)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response dengan success, failed, dan errors
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upload Reports from Excel
+      tags:
+      - Reports
+  /api/v1/reports/validate:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Validates Excel file format and data before upload. Returns validation
+        errors and parsed data.
+      parameters:
+      - description: Excel file (.xlsx, .xls)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response dengan valid, errors, dan data
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Validate Excel File
+      tags:
+      - Reports
   /api/v1/roles:
     get:
       consumes:
@@ -1458,11 +2727,134 @@ paths:
       summary: Assign Permission ke Role
       tags:
       - Role Management
+  /api/v1/swagger/regenerate:
+    post:
+      consumes:
+      - application/json
+      description: Regenerate Swagger documentation dari source code. Endpoint ini
+        berguna untuk development agar Swagger selalu up-to-date tanpa perlu restart
+        server.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Regenerate Swagger Documentation
+      tags:
+      - System
+  /api/v1/upload/logo:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload logo perusahaan dengan validasi format (PNG, JPG, JPEG)
+        dan ukuran maksimal 5MB
+      parameters:
+      - description: File logo (PNG, JPG, JPEG, max 5MB)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.UploadFileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upload Logo Perusahaan
+      tags:
+      - Upload
+  /api/v1/user-activity-logs:
+    get:
+      consumes:
+      - application/json
+      description: 'Mengambil user activity logs (permanent) untuk resource penting:
+        report, document, company, user. Data ini tidak akan dihapus (permanent storage
+        tanpa retention policy) untuk keperluan compliance dan legal. User reguler
+        hanya bisa melihat logs mereka sendiri, sedangkan admin/superadmin bisa melihat
+        semua logs. Endpoint ini tidak memerlukan CSRF token karena menggunakan method
+        GET (read-only).'
+      parameters:
+      - description: 'Nomor halaman (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Jumlah item per halaman (default: 10, maksimal: 100)'
+        in: query
+        name: pageSize
+        type: integer
+      - description: 'Filter berdasarkan action (contoh: create_report, update_document,
+          create_company, create_user)'
+        in: query
+        name: action
+        type: string
+      - description: Filter berdasarkan resource (report, document, company, user)
+        in: query
+        name: resource
+        type: string
+      - description: Filter berdasarkan status (success, failure, error)
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User activity logs berhasil diambil. Response berisi data (array
+            user activity logs), total, page, pageSize, dan totalPages
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Token tidak valid atau user tidak terautentikasi
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: User tidak ditemukan di database
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Gagal mengambil user activity logs
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil User Activity Logs
+      tags:
+      - Audit
   /api/v1/users:
     get:
       consumes:
       - application/json
-      description: Mengambil daftar semua users. Filtered berdasarkan company access.
+      description: Mengambil daftar semua users. Filtered berdasarkan company access
+        (RBAC). Superadmin melihat semua users. Non-superadmin hanya melihat users
+        di company mereka dan descendants.
       produces:
       - application/json
       responses:
@@ -1610,6 +3002,439 @@ paths:
       summary: Update User
       tags:
       - User Management
+  /api/v1/users/{id}/assign-company:
+    post:
+      consumes:
+      - application/json
+      description: Mengassign user ke company tertentu. Superadmin bisa assign ke
+        semua company, admin bisa assign ke company mereka sendiri.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Company ID and Role ID
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.UserModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Assign User ke Company
+      tags:
+      - User Management
+  /api/v1/users/{id}/reset-password:
+    post:
+      consumes:
+      - application/json
+      description: Reset password untuk user. Hanya superadmin yang bisa melakukan
+        reset password. Superadmin tidak bisa reset password dirinya sendiri.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New password
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Reset Password User
+      tags:
+      - User Management
+  /api/v1/users/{id}/toggle-status:
+    patch:
+      consumes:
+      - application/json
+      description: Mengaktifkan atau menonaktifkan user. Superadmin tidak bisa menonaktifkan
+        dirinya sendiri atau user superadmin lainnya.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.UserModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Toggle Status User
+      tags:
+      - User Management
+  /api/v1/users/{id}/unassign-company:
+    post:
+      consumes:
+      - application/json
+      description: Menghapus assignment user dari company tertentu. User bisa tetap
+        di-assign ke company lain.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Company ID
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.UserModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Unassign User dari Company
+      tags:
+      - User Management
+  /api/v1/users/me/companies:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil daftar semua companies yang di-assign ke user yang sedang
+        login (dari junction table, support multiple assignments).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.UserCompanyResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Companies User Saat Ini
+      tags:
+      - User Management
+  /development/check-all-seeder-status:
+    get:
+      consumes:
+      - application/json
+      description: Mengecek status semua seeder data (company, reports, dll)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Cek Status Semua Seeder
+      tags:
+      - Development
+  /development/check-report-status:
+    get:
+      consumes:
+      - application/json
+      description: Mengecek apakah data seeder reports sudah ada (hanya superadmin)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Cek Status Seeder Data Reports
+      tags:
+      - Development
+  /development/check-seeder-status:
+    get:
+      consumes:
+      - application/json
+      description: Mengecek apakah data seeder sudah ada (hanya superadmin)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Cek Status Seeder Data
+      tags:
+      - Development
+  /development/reset-all-seeded-data:
+    post:
+      consumes:
+      - application/json
+      description: 'Mereset semua data yang sudah di-seed secara berurutan: Reports
+        -> Company. Memastikan relasi data dihapus dengan benar.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Reset Semua Data Seeder
+      tags:
+      - Development
+  /development/reset-reports:
+    post:
+      consumes:
+      - application/json
+      description: Menghapus semua data reports (hanya superadmin)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Reset Data Reports
+      tags:
+      - Development
+  /development/reset-subsidiary:
+    post:
+      consumes:
+      - application/json
+      description: Menghapus semua data subsidiary dan user yang terkait (hanya superadmin)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Reset Data Subsidiary
+      tags:
+      - Development
+  /development/run-all-seeders:
+    post:
+      consumes:
+      - application/json
+      description: 'Menjalankan semua seeder secara berurutan: Company -> Reports.
+        Memastikan relasi data terjaga.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Jalankan Semua Seeder Data
+      tags:
+      - Development
+  /development/run-report-seeder:
+    post:
+      consumes:
+      - application/json
+      description: Menjalankan seeder untuk membuat sample data reports (hanya superadmin)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Jalankan Seeder Data Reports
+      tags:
+      - Development
+  /development/run-subsidiary-seeder:
+    post:
+      consumes:
+      - application/json
+      description: Menjalankan seeder untuk membuat sample data subsidiary (hanya
+        superadmin)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Jalankan Seeder Data Subsidiary
+      tags:
+      - Development
   /health:
     get:
       consumes:
@@ -1627,6 +3452,146 @@ paths:
       summary: Health check
       tags:
       - General
+  /sonarqube/issues:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil daftar issues dari SonarCloud untuk project ini (hanya
+        superadmin/admin)
+      parameters:
+      - collectionFormat: csv
+        description: Filter by severity (BLOCKER, CRITICAL, MAJOR, MINOR, INFO)
+        in: query
+        items:
+          type: string
+        name: severities
+        type: array
+      - collectionFormat: csv
+        description: Filter by type (BUG, VULNERABILITY, CODE_SMELL)
+        in: query
+        items:
+          type: string
+        name: types
+        type: array
+      - collectionFormat: csv
+        description: Filter by status (OPEN, CONFIRMED, REOPENED, RESOLVED)
+        in: query
+        items:
+          type: string
+        name: statuses
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/sonarqube.IssuesResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get SonarCloud Issues
+      tags:
+      - SonarQube
+  /sonarqube/issues/export:
+    get:
+      consumes:
+      - application/json
+      description: Export daftar issues dari SonarCloud dalam format JSON untuk download
+        (hanya superadmin/admin)
+      parameters:
+      - collectionFormat: csv
+        description: Filter by severity (BLOCKER, CRITICAL, MAJOR, MINOR, INFO)
+        in: query
+        items:
+          type: string
+        name: severities
+        type: array
+      - collectionFormat: csv
+        description: Filter by type (BUG, VULNERABILITY, CODE_SMELL)
+        in: query
+        items:
+          type: string
+        name: types
+        type: array
+      - collectionFormat: csv
+        description: Filter by status (OPEN, CONFIRMED, REOPENED, RESOLVED)
+        in: query
+        items:
+          type: string
+        name: statuses
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Export SonarCloud Issues
+      tags:
+      - SonarQube
+  /sonarqube/quality:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil metrics Software Quality (Security, Reliability, Maintainability)
+        dari SonarCloud (hanya superadmin/admin)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/sonarqube.SoftwareQualityMetrics'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Software Quality Metrics
+      tags:
+      - SonarQube
+  /sonarqube/status:
+    get:
+      consumes:
+      - application/json
+      description: Mengecek apakah fitur SonarQube Monitor tersedia/enabled (public
+        endpoint, tidak perlu auth)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+      summary: Get SonarQube Monitor Status
+      tags:
+      - SonarQube
 securityDefinitions:
   BearerAuth:
     description: Type "Bearer" followed by a space and JWT token. Atau menggunakan

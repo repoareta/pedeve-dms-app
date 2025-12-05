@@ -43,6 +43,16 @@ export interface DocumentSummary {
   total_size: number
 }
 
+export interface DocumentType {
+  id: string
+  name: string
+  is_active: boolean
+  usage_count: number
+  created_by: string
+  created_at?: string
+  updated_at?: string
+}
+
 const documentsApi = {
   async listFolders(): Promise<DocumentFolder[]> {
     const res = await apiClient.get<DocumentFolder[]>('/documents/folders')
@@ -159,6 +169,28 @@ const documentsApi = {
   async getDocumentSummary(): Promise<DocumentSummary> {
     const res = await apiClient.get<DocumentSummary>('/documents/summary')
     return res.data
+  },
+
+  // Document Types API
+  async getDocumentTypes(includeInactive = false): Promise<DocumentType[]> {
+    const res = await apiClient.get<DocumentType[]>('/document-types', {
+      params: { include_inactive: includeInactive },
+    })
+    return res.data
+  },
+
+  async createDocumentType(name: string): Promise<DocumentType> {
+    const res = await apiClient.post<DocumentType>('/document-types', { name })
+    return res.data
+  },
+
+  async updateDocumentType(id: string, payload: { name?: string; is_active?: boolean }): Promise<DocumentType> {
+    const res = await apiClient.put<DocumentType>(`/document-types/${id}`, payload)
+    return res.data
+  },
+
+  async deleteDocumentType(id: string): Promise<void> {
+    await apiClient.delete(`/document-types/${id}`)
   },
 }
 

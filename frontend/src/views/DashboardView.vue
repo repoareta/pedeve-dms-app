@@ -72,6 +72,7 @@ const currentDate = computed(() => {
 // Reports data
 const allReports = ref<Report[]>([])
 const previousPeriodReports = ref<Report[]>([])
+const sparklineReports = ref<Report[]>([]) // Reports untuk sparkline chart (6 bulan terakhir)
 const companies = ref<Company[]>([])
 
 // Load reports based on period filter
@@ -110,11 +111,63 @@ const loadReports = async () => {
     } else {
       previousPeriodReports.value = []
     }
+
+    // Load reports untuk sparkline chart (6 bulan terakhir dari selected period)
+    if (selectedPeriod.value) {
+      const currentPeriod = dayjs(selectedPeriod.value)
+      const sparklinePeriods: string[] = []
+      
+      // Generate 6 bulan terakhir (termasuk bulan terpilih)
+      for (let i = 5; i >= 0; i--) {
+        const period = currentPeriod.subtract(i, 'month').format('YYYY-MM')
+        sparklinePeriods.push(period)
+      }
+
+      // Load reports untuk semua period tersebut
+      const sparklineData: Report[] = []
+      for (const period of sparklinePeriods) {
+        try {
+          const periodResponse = await reportsApi.getAll({
+            page: 1,
+            page_size: 9999,
+            period: period,
+          })
+          sparklineData.push(...periodResponse.data)
+        } catch {
+          // Silently fail if period doesn't exist
+        }
+      }
+      sparklineReports.value = sparklineData
+    } else {
+      // Jika tidak ada period terpilih, ambil 6 bulan terakhir dari sekarang
+      const now = dayjs()
+      const sparklinePeriods: string[] = []
+      for (let i = 5; i >= 0; i--) {
+        const period = now.subtract(i, 'month').format('YYYY-MM')
+        sparklinePeriods.push(period)
+      }
+
+      const sparklineData: Report[] = []
+      for (const period of sparklinePeriods) {
+        try {
+          const periodResponse = await reportsApi.getAll({
+            page: 1,
+            page_size: 9999,
+            period: period,
+          })
+          sparklineData.push(...periodResponse.data)
+        } catch {
+          // Silently fail if period doesn't exist
+        }
+      }
+      sparklineReports.value = sparklineData
+    }
   } catch (error: unknown) {
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     console.error('Failed to load reports:', axiosError.response?.data?.message || axiosError.message)
     allReports.value = []
     previousPeriodReports.value = []
+    sparklineReports.value = []
   } finally {
     loading.value = false
   }
@@ -134,16 +187,6 @@ const loadCompanies = async () => {
 const kpiMetrics = computed(() => {
   const reports = allReports.value
   
-  if (reports.length === 0) {
-    return {
-      revenue: { value: 0, change: 0 },
-      opex: { value: 0, change: 0 },
-      npat: { value: 0, change: 0 },
-      financialRatio: { value: 0, change: 0 },
-      dividend: { value: 0, change: 0 },
-    }
-  }
-
   // Calculate totals for current period
   const currentRevenue = reports.reduce((sum, r) => sum + (r.revenue || 0), 0)
   const currentOpex = reports.reduce((sum, r) => sum + (r.opex || 0), 0)
@@ -164,31 +207,39 @@ const kpiMetrics = computed(() => {
     : 0
 
   // Calculate percentage changes
-  const calculateChange = (current: number, previous: number): number => {
-    if (previous === 0) return 0
+  // Return null jika tidak ada data untuk dibandingkan (baik current atau previous = 0 dan tidak ada reports)
+  const calculateChange = (current: number, previous: number, hasCurrentData: boolean, hasPreviousData: boolean): number | null => {
+    // Jika tidak ada data current period DAN tidak ada data previous period, tidak bisa dibandingkan
+    if (!hasCurrentData && !hasPreviousData) return null
+    // Jika tidak ada data previous period, tidak bisa dibandingkan
+    if (!hasPreviousData || previous === 0) return null
+    // Jika ada data previous tapi current = 0, tetap hitung (bisa jadi turun jadi 0)
     return ((current - previous) / previous) * 100
   }
+
+  const hasCurrentData = reports.length > 0
+  const hasPreviousData = prevReports.length > 0
 
   return {
     revenue: {
       value: currentRevenue,
-      change: calculateChange(currentRevenue, previousRevenue),
+      change: calculateChange(currentRevenue, previousRevenue, hasCurrentData, hasPreviousData),
     },
     opex: {
       value: currentOpex,
-      change: calculateChange(currentOpex, previousOpex),
+      change: calculateChange(currentOpex, previousOpex, hasCurrentData, hasPreviousData),
     },
     npat: {
       value: currentNpat,
-      change: calculateChange(currentNpat, previousNpat),
+      change: calculateChange(currentNpat, previousNpat, hasCurrentData, hasPreviousData),
     },
     financialRatio: {
       value: currentFinancialRatio,
-      change: calculateChange(currentFinancialRatio, previousFinancialRatio),
+      change: calculateChange(currentFinancialRatio, previousFinancialRatio, hasCurrentData, hasPreviousData),
     },
     dividend: {
       value: currentDividend,
-      change: calculateChange(currentDividend, previousDividend),
+      change: calculateChange(currentDividend, previousDividend, hasCurrentData, hasPreviousData),
     },
   }
 })
@@ -206,7 +257,8 @@ const formatCurrency = (value: number): string => {
 }
 
 // Format change percentage
-const formatChange = (change: number): string => {
+const formatChange = (change: number | null): string => {
+  if (change === null) return ''
   const sign = change >= 0 ? '+' : ''
   return `${sign}${change.toFixed(0)}%`
 }
@@ -277,7 +329,7 @@ const chartData = computed(() => {
   }
 })
 
-// Sparkline data untuk KPI cards (per period, diurutkan)
+// Sparkline data untuk KPI cards (6 bulan terakhir, diurutkan)
 const kpiSparkData = computed(() => {
   const seriesMap = new Map<string, { revenue: number; opex: number; npat: number; dividend: number; frSum: number; count: number }>()
 
@@ -296,9 +348,19 @@ const kpiSparkData = computed(() => {
     entry.count += 1
   }
 
-  ;[...allReports.value, ...previousPeriodReports.value].forEach(addReport)
+  // Gunakan sparklineReports (6 bulan terakhir) untuk chart
+  sparklineReports.value.forEach(addReport)
 
-  const periods = Array.from(seriesMap.keys()).sort()
+  // Generate 6 bulan terakhir dari selected period (atau current month jika tidak ada)
+  const basePeriod = selectedPeriod.value || dayjs().format('YYYY-MM')
+  const baseDate = dayjs(basePeriod)
+  const periods: string[] = []
+  for (let i = 5; i >= 0; i--) {
+    const period = baseDate.subtract(i, 'month').format('YYYY-MM')
+    periods.push(period)
+  }
+
+  // Map data ke periods yang diurutkan (pastikan urutan konsisten)
   const toSeries = (selector: (entry: NonNullable<ReturnType<typeof seriesMap.get>>) => number) =>
     periods.map(p => {
       const entry = seriesMap.get(p)
@@ -531,7 +593,7 @@ onMounted(async () => {
               title="Revenue" 
               :value="formatCurrency(kpiMetrics.revenue.value)" 
               :change="formatChange(kpiMetrics.revenue.change)" 
-              :change-type="kpiMetrics.revenue.change >= 0 ? 'increase' : 'decrease'" 
+              :change-type="kpiMetrics.revenue.change !== null ? (kpiMetrics.revenue.change >= 0 ? 'increase' : 'decrease') : undefined" 
               icon="mdi:currency-usd" 
               :chart-data="kpiSparkData.revenue"
             />
@@ -539,7 +601,7 @@ onMounted(async () => {
               title="Opex" 
               :value="formatCurrency(kpiMetrics.opex.value)" 
               :change="formatChange(kpiMetrics.opex.change)" 
-              :change-type="kpiMetrics.opex.change >= 0 ? 'decrease' : 'increase'" 
+              :change-type="kpiMetrics.opex.change !== null ? (kpiMetrics.opex.change >= 0 ? 'decrease' : 'increase') : undefined" 
               icon="mdi:chart-line" 
               :chart-data="kpiSparkData.opex"
             />
@@ -547,7 +609,7 @@ onMounted(async () => {
               title="NPAT" 
               :value="formatCurrency(kpiMetrics.npat.value)" 
               :change="formatChange(kpiMetrics.npat.change)" 
-              :change-type="kpiMetrics.npat.change >= 0 ? 'increase' : 'decrease'" 
+              :change-type="kpiMetrics.npat.change !== null ? (kpiMetrics.npat.change >= 0 ? 'increase' : 'decrease') : undefined" 
               icon="mdi:chart-bar" 
               :chart-data="kpiSparkData.npat"
             />
@@ -555,7 +617,7 @@ onMounted(async () => {
               title="Financial Ratios" 
               :value="`${kpiMetrics.financialRatio.value.toFixed(1)}x`" 
               :change="formatChange(kpiMetrics.financialRatio.change)" 
-              :change-type="kpiMetrics.financialRatio.change >= 0 ? 'increase' : 'decrease'" 
+              :change-type="kpiMetrics.financialRatio.change !== null ? (kpiMetrics.financialRatio.change >= 0 ? 'increase' : 'decrease') : undefined" 
               icon="mdi:chart-pie" 
               :chart-data="kpiSparkData.financialRatio"
             />
@@ -563,7 +625,7 @@ onMounted(async () => {
               title="Dividend" 
               :value="formatCurrency(kpiMetrics.dividend.value)" 
               :change="formatChange(kpiMetrics.dividend.change)" 
-              :change-type="kpiMetrics.dividend.change >= 0 ? 'increase' : 'decrease'" 
+              :change-type="kpiMetrics.dividend.change !== null ? (kpiMetrics.dividend.change >= 0 ? 'increase' : 'decrease') : undefined" 
               icon="mdi:cash-multiple" 
               :chart-data="kpiSparkData.dividend"
             />

@@ -6,15 +6,28 @@ import axios from 'axios'
 import dayjs, { type Dayjs } from 'dayjs'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { Icon as IconifyIcon } from '@iconify/vue'
-import documentsApi, { type DocumentFolder, type DocumentItem } from '../api/documents'
+import documentsApi, { type DocumentFolder, type DocumentItem, type DocumentType } from '../api/documents'
+import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
 
 // Check if this is edit mode
 const isEditMode = computed(() => !!route.params.id)
 const documentId = computed(() => route.params.id as string | undefined)
 const loading = ref(false)
+
+// Document types
+const documentTypes = ref<DocumentType[]>([])
+const loadingDocumentTypes = ref(false)
+const documentTypeSearchValue = ref('')
+
+// Check if user can manage document types (superadmin/administrator only)
+const canManageDocumentTypes = computed(() => {
+  const role = authStore.user?.role?.toLowerCase() || ''
+  return role === 'superadmin' || role === 'administrator'
+})
 
 type UploadItem = {
   uid: string
@@ -36,7 +49,7 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const formState = ref({
   title: '',
   documentId: '',
-  docType: '',
+  docType: [] as string[], // Changed to array for multiple selection
   reference: '',
   unit: '',
   uploader: '',
@@ -72,6 +85,69 @@ const handleUploadChange = ({ fileList: newList }: { fileList: UploadItem[] }) =
 }
 
 const handleSubmit = async () => {
+  // Wait for any ongoing document type creation to complete
+  if (loadingDocumentTypes.value) {
+    message.warning('Sedang membuat jenis dokumen, harap tunggu...')
+    return
+  }
+
+  // Reload document types to ensure we have the latest data from database
+  await loadDocumentTypes(false)
+  
+  // Validate: ensure all docType values exist in document_types table (case-insensitive)
+  // If not found and user has permission, try to create them automatically
+  const invalidDocTypes: string[] = []
+  const docTypesToCreate: string[] = []
+  
+  for (const docTypeName of formState.value.docType) {
+    const exists = documentTypes.value.find((dt: DocumentType) => 
+      dt.name === docTypeName || dt.name.toLowerCase() === docTypeName.toLowerCase()
+    )
+    if (!exists) {
+      // Try to create if user has permission
+      if (canManageDocumentTypes.value && docTypeName.trim()) {
+        docTypesToCreate.push(docTypeName.trim())
+      } else {
+        invalidDocTypes.push(docTypeName)
+      }
+    } else {
+      // Update formState to use the exact name from database (in case of casing differences)
+      const index = formState.value.docType.indexOf(docTypeName)
+      if (index !== -1 && exists.name !== docTypeName) {
+        formState.value.docType[index] = exists.name
+      }
+    }
+  }
+  
+  // Try to create missing document types
+  if (docTypesToCreate.length > 0) {
+    message.loading('Membuat jenis dokumen yang belum ada...', 0)
+    const failedCreates: string[] = []
+    
+    for (const docTypeName of docTypesToCreate) {
+      try {
+        await handleDocumentTypeCreate(docTypeName)
+        // Reload after each create to ensure latest data
+        await loadDocumentTypes(false)
+      } catch (error) {
+        console.error(`Failed to create document type "${docTypeName}":`, error)
+        failedCreates.push(docTypeName)
+      }
+    }
+    
+    message.destroy() // Close loading message
+    
+    if (failedCreates.length > 0) {
+      invalidDocTypes.push(...failedCreates)
+    }
+  }
+  
+  // Final validation after attempting to create missing types
+  if (invalidDocTypes.length > 0) {
+    message.error(`Jenis dokumen berikut tidak ditemukan di database: ${invalidDocTypes.join(', ')}. Silakan hapus atau buat jenis dokumen tersebut terlebih dahulu.`)
+    return
+  }
+
   if (isEditMode.value) {
     // Update document metadata (dan opsional ganti file)
     if (!documentId.value) {
@@ -114,45 +190,45 @@ const handleSubmit = async () => {
     }
   } else {
     // Upload new document
-    if (!fileList.value.length) {
-      message.warning('Silakan pilih file untuk diupload')
-      return
-    }
-    const file = fileList.value[0]?.originFileObj as File | undefined
-    if (!file) {
-      message.error('File tidak valid')
-      return
-    }
+  if (!fileList.value.length) {
+    message.warning('Silakan pilih file untuk diupload')
+    return
+  }
+  const file = fileList.value[0]?.originFileObj as File | undefined
+  if (!file) {
+    message.error('File tidak valid')
+    return
+  }
     if (file.size > MAX_FILE_SIZE) {
       message.error('File terlalu besar, batas maksimal 5MB')
-      return
-    }
+    return
+  }
 
     loading.value = true
-    try {
-      await documentsApi.uploadDocument({
-        file,
-        folder_id: formState.value.folder_id,
-        title: formState.value.title,
-        status: formState.value.status,
-        metadata: {
+  try {
+    await documentsApi.uploadDocument({
+      file,
+      folder_id: formState.value.folder_id,
+      title: formState.value.title,
+      status: formState.value.status,
+      metadata: {
           doc_type: formState.value.docType,
-          reference: formState.value.reference,
-          unit: formState.value.unit,
+        reference: formState.value.reference,
+        unit: formState.value.unit,
           issued_date: toIsoString(formState.value.issuedDate),
           effective_date: toIsoString(formState.value.effectiveDate),
           expired_date: toIsoString(formState.value.expiredDate),
           is_active: formState.value.isActive,
-        },
-      })
-      message.success('File berhasil diupload')
-      router.push('/documents')
-    } catch (error: unknown) {
+      },
+    })
+    message.success('File berhasil diupload')
+    router.push('/documents')
+  } catch (error: unknown) {
       if (axios.isAxiosError(error) && error.response?.status === 413) {
         message.error('File terlalu besar, server menolak upload (413). Silakan pilih file yang lebih kecil atau hubungi admin.')
       } else {
-        const err = error as { message?: string }
-        message.error(err.message || 'Gagal upload dokumen')
+    const err = error as { message?: string }
+    message.error(err.message || 'Gagal upload dokumen')
       }
     } finally {
       loading.value = false
@@ -164,7 +240,7 @@ const handleCancel = () => {
   if (isEditMode.value && documentId.value) {
     router.push('/documents')
   } else {
-    router.push('/documents')
+  router.push('/documents')
   }
 }
 
@@ -207,7 +283,15 @@ const loadDocument = async () => {
       } else {
         meta = doc.metadata as Record<string, unknown>
       }
-      formState.value.docType = (meta.doc_type as string) || ''
+      // Handle doc_type as string or array
+      const docTypeValue = meta.doc_type
+      if (Array.isArray(docTypeValue)) {
+        formState.value.docType = docTypeValue as string[]
+      } else if (typeof docTypeValue === 'string' && docTypeValue) {
+        formState.value.docType = [docTypeValue]
+      } else {
+        formState.value.docType = []
+      }
       formState.value.reference = (meta.reference as string) || ''
       formState.value.unit = (meta.unit as string) || ''
       formState.value.issuedDate = toDayjs(meta.issued_date)
@@ -233,10 +317,267 @@ const loadDocument = async () => {
   }
 }
 
+const loadDocumentTypes = async (includeInactive = false) => {
+  loadingDocumentTypes.value = true
+  try {
+    documentTypes.value = await documentsApi.getDocumentTypes(includeInactive)
+  } catch (error) {
+    console.error('Failed to load document types:', error)
+    message.error('Gagal memuat jenis dokumen')
+  } finally {
+    loadingDocumentTypes.value = false
+  }
+}
+
+const handleDocumentTypeSearch = (value: string) => {
+  documentTypeSearchValue.value = value
+}
+
+const handleDocumentTypeChange = async (values: string[]) => {
+  // Filter out __CREATE__ values (they should not appear in the input)
+  const filteredValues = values.filter((v: string) => !v.startsWith('__CREATE__'))
+  
+  // Validate: check if any of the selected values are inactive (and not already in document)
+  const invalidValues: string[] = []
+  const currentValues = formState.value.docType || []
+  
+  for (const value of filteredValues) {
+    const docType = documentTypes.value.find((dt: DocumentType) => dt.name === value)
+    if (docType && !docType.is_active) {
+      // Only allow inactive types if they were already selected (edit mode)
+      const wasAlreadySelected = currentValues.includes(value)
+      if (!wasAlreadySelected) {
+        invalidValues.push(value)
+      }
+    }
+  }
+  
+  // Remove invalid (inactive) values that weren't already selected
+  if (invalidValues.length > 0) {
+    message.warning(`Jenis dokumen berikut tidak aktif dan tidak dapat dipilih: ${invalidValues.join(', ')}`)
+    filteredValues.splice(0, filteredValues.length, ...filteredValues.filter(v => !invalidValues.includes(v)))
+  }
+  
+  // Handle when new tag is added (user typed and pressed Enter)
+  const newValues = filteredValues.filter((v: string) => !currentValues.includes(v))
+  
+  // Track which values failed to create
+  const failedValues: string[] = []
+  
+  for (const newValue of newValues) {
+    // Check if this is a new value that doesn't exist in documentTypes (case-insensitive)
+    const exists = documentTypes.value.find((dt: DocumentType) => 
+      dt.name === newValue || dt.name.toLowerCase() === newValue.toLowerCase()
+    )
+    if (!exists && canManageDocumentTypes.value && newValue.trim()) {
+      // User typed a new value, create it
+      try {
+        await handleDocumentTypeCreate(newValue.trim())
+        // After successful create, reload to get latest data
+        await loadDocumentTypes(false)
+        // Verify it was added to documentTypes (case-insensitive)
+        const created = documentTypes.value.find((dt: DocumentType) => 
+          dt.name.toLowerCase() === newValue.trim().toLowerCase()
+        )
+        if (!created) {
+          // Creation failed silently, mark as failed
+          console.error(`[DocumentUploadView] Document type "${newValue}" was not found after creation`)
+          failedValues.push(newValue)
+        } else {
+          // Use the actual name from database (might have different casing)
+          const index = filteredValues.indexOf(newValue)
+          if (index !== -1) {
+            filteredValues[index] = created.name
+          }
+        }
+      } catch (error) {
+        // Creation failed, mark as failed
+        console.error(`[DocumentUploadView] Failed to create document type "${newValue}":`, error)
+        failedValues.push(newValue)
+      }
+    } else if (!exists) {
+      // Value doesn't exist and user can't create it, mark as failed
+      failedValues.push(newValue)
+    } else {
+      // Value exists, use the exact name from database
+      const index = filteredValues.indexOf(newValue)
+      if (index !== -1 && exists.name !== newValue) {
+        filteredValues[index] = exists.name
+      }
+    }
+  }
+  
+  // Remove failed values from filteredValues before assigning
+  const finalValues = filteredValues.filter((v: string) => !failedValues.includes(v))
+  
+  // IMPORTANT: Always update formState to remove failed values
+  // This ensures that if create fails, the value is removed from formState
+  formState.value.docType = finalValues
+  
+  // Show warning if any values were removed
+  if (failedValues.length > 0) {
+    message.warning(`Jenis dokumen berikut gagal dibuat atau tidak ditemukan: ${failedValues.join(', ')}`)
+    console.warn(`[DocumentUploadView] Removed failed document types from formState:`, failedValues)
+  }
+  
+  // Log final state for debugging
+  console.log(`[DocumentUploadView] handleDocumentTypeChange completed. Final docTypes:`, formState.value.docType)
+}
+
+const handleDocumentTypeSelect = async (value: string) => {
+  // Check if it's a create action (using __CREATE__ prefix to distinguish from user input)
+  if (value.startsWith('__CREATE__')) {
+    const newName = value.replace('__CREATE__', '')
+    await handleDocumentTypeCreate(newName)
+    // handleDocumentTypeCreate will add the actual name to the array
+    return
+  }
+  
+  // Validate: check if the selected document type is active
+  const selectedDocType = documentTypes.value.find((dt: DocumentType) => dt.name === value)
+  if (selectedDocType && !selectedDocType.is_active) {
+    // Only allow selecting inactive types if they are already in the document (edit mode)
+    const isAlreadySelected = formState.value.docType.includes(value)
+    if (!isAlreadySelected) {
+      message.warning(`Jenis dokumen "${value}" tidak aktif dan tidak dapat dipilih. Silakan pilih jenis dokumen aktif lainnya.`)
+      return
+    }
+  }
+  
+  // Add to array if not already exists
+  if (!formState.value.docType.includes(value)) {
+    formState.value.docType.push(value)
+  }
+  documentTypeSearchValue.value = ''
+}
+
+const handleDocumentTypeCreate = async (value: string) => {
+  if (!canManageDocumentTypes.value) {
+    message.warning('Hanya superadmin dan administrator yang dapat membuat jenis dokumen baru')
+    return
+  }
+
+  const trimmedValue = value.trim()
+  if (!trimmedValue) {
+    message.warning('Nama jenis dokumen tidak boleh kosong')
+    return
+  }
+
+  // Check if already exists
+  const existing = documentTypes.value.find(
+    (dt: DocumentType) => dt.name.toLowerCase() === trimmedValue.toLowerCase()
+  )
+  if (existing) {
+    message.warning(`Jenis dokumen "${trimmedValue}" sudah ada`)
+    // Add to array if not already exists
+    if (!formState.value.docType.includes(existing.name)) {
+      formState.value.docType.push(existing.name)
+    }
+    return
+  }
+
+  try {
+    loadingDocumentTypes.value = true
+    console.log(`[DocumentUploadView] Creating document type: "${trimmedValue}"`)
+    const newDocType = await documentsApi.createDocumentType(trimmedValue)
+    console.log(`[DocumentUploadView] Document type created:`, newDocType)
+    
+    // Verify response is valid - MUST have id to confirm it's saved to document_types table
+    if (!newDocType || !newDocType.id) {
+      console.error(`[DocumentUploadView] Invalid response: document type not created in database`, newDocType)
+      throw new Error('Invalid response from server: document type not created in database')
+    }
+    
+    // Reload document types to ensure we have the latest from database
+    // This ensures the new document type is available for validation
+    await loadDocumentTypes(false)
+    
+    // Verify it was actually saved by checking if it exists in documentTypes
+    const verified = documentTypes.value.find((dt: DocumentType) => dt.id === newDocType.id || dt.name.toLowerCase() === trimmedValue.toLowerCase())
+    if (!verified) {
+      console.error(`[DocumentUploadView] Document type not found after creation:`, newDocType.id)
+      throw new Error('Document type was not saved to database')
+    }
+    
+    // Use the verified document type (might have different name casing)
+    const finalDocType = verified
+    
+    // Add to array if not already exists
+    if (!formState.value.docType.includes(finalDocType.name)) {
+      formState.value.docType.push(finalDocType.name)
+    }
+    message.success(`Jenis dokumen "${trimmedValue}" berhasil dibuat dan disimpan ke database`)
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal membuat jenis dokumen'
+    console.error(`[DocumentUploadView] Failed to create document type:`, error)
+    message.error(errorMessage)
+    // Re-throw error so caller knows creation failed
+    throw error
+  } finally {
+    loadingDocumentTypes.value = false
+    documentTypeSearchValue.value = ''
+  }
+}
+
+const handleDocumentTypeDelete = async (id: string, name: string) => {
+  if (!canManageDocumentTypes.value) {
+    message.warning('Hanya superadmin dan administrator yang dapat menghapus jenis dokumen')
+    return
+  }
+
+  try {
+    await documentsApi.deleteDocumentType(id)
+    documentTypes.value = documentTypes.value.filter((dt: DocumentType) => dt.id !== id)
+    // Remove from selected array if exists
+    formState.value.docType = formState.value.docType.filter((dt: string) => dt !== name)
+    message.success(`Jenis dokumen "${name}" berhasil dihapus`)
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal menghapus jenis dokumen'
+    message.error(errorMessage)
+  }
+}
+
+// Filter document types based on search and active status
+const filteredDocumentTypes = computed(() => {
+  // Get currently selected document types (for edit mode, these might be inactive)
+  const selectedDocTypeNames = formState.value.docType || []
+  
+  // Filter: show active types OR inactive types that are already selected (for edit mode)
+  let filtered = documentTypes.value.filter((dt: DocumentType) => {
+    // Always show active types
+    if (dt.is_active) return true
+    // Show inactive types only if they are already selected (for edit mode)
+    return selectedDocTypeNames.includes(dt.name)
+  })
+  
+  // Apply search filter if there's a search value
+  if (documentTypeSearchValue.value) {
+    const searchLower = documentTypeSearchValue.value.toLowerCase()
+    filtered = filtered.filter((dt: DocumentType) => 
+      dt.name.toLowerCase().includes(searchLower)
+    )
+  }
+  
+  return filtered
+})
+
 onMounted(async () => {
-  await loadFolders()
+  await Promise.all([
+    loadFolders(),
+    loadDocumentTypes(false), // Load active types first
+  ])
   if (isEditMode.value) {
     await loadDocument()
+    // After loading document, check if any docType exists in active types
+    // If not, reload with inactive types included to show the document's types
+    const hasInactiveType = formState.value.docType.some((dt: string) => 
+      !documentTypes.value.find((d: DocumentType) => d.name === dt)
+    )
+    if (hasInactiveType) {
+      await loadDocumentTypes(true) // Include inactive to show the document's types
+    }
   }
 })
 </script>
@@ -326,11 +667,57 @@ onMounted(async () => {
               </a-col>
               <a-col :xs="24" :md="12">
                 <a-form-item label="Jenis Dokumen">
-                  <a-select v-model:value="formState.docType" placeholder="Pilih jenis dokumen">
-                    <a-select-option value="RUPS">RUPS</a-select-option>
-                    <a-select-option value="Legal">Legal</a-select-option>
-                    <a-select-option value="Keuangan">Keuangan</a-select-option>
+                  <a-select
+                    v-model:value="formState.docType"
+                    mode="tags"
+                    placeholder="Pilih atau ketik jenis dokumen baru (tekan Enter untuk membuat)"
+                    show-search
+                    allow-clear
+                    :filter-option="false"
+                    :loading="loadingDocumentTypes"
+                    :search-value="documentTypeSearchValue"
+                    @search="handleDocumentTypeSearch"
+                    @change="handleDocumentTypeChange"
+                    @select="handleDocumentTypeSelect"
+                    @deselect="(value: string) => {
+                      formState.docType = formState.docType.filter((dt: string) => dt !== value)
+                    }"
+                  >
+                    <a-select-option
+                      v-for="docType in filteredDocumentTypes"
+                      :key="docType.id"
+                      :value="docType.name"
+                      :disabled="!docType.is_active && !formState.docType.includes(docType.name)"
+                    >
+                      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <span :style="{ opacity: docType.is_active ? 1 : 0.6 }">
+                          {{ docType.name }}
+                          <a-tag v-if="!docType.is_active" color="default" size="small" style="margin-left: 8px;">
+                            Tidak Aktif
+                          </a-tag>
+                        </span>
+                        <IconifyIcon
+                          v-if="canManageDocumentTypes && docType.is_active"
+                          icon="mdi:delete-outline"
+                          style="margin-left: 8px; cursor: pointer; color: #ff4d4f;"
+                          @click.stop="handleDocumentTypeDelete(docType.id, docType.name)"
+                          :title="docType.usage_count > 0 ? `Digunakan oleh ${docType.usage_count} dokumen (soft delete)` : 'Hapus jenis dokumen'"
+                        />
+                      </div>
+                    </a-select-option>
+                    <a-select-option
+                      v-if="documentTypeSearchValue && !filteredDocumentTypes.find((dt: DocumentType) => dt.name.toLowerCase() === documentTypeSearchValue.toLowerCase()) && canManageDocumentTypes"
+                      :value="`__CREATE__${documentTypeSearchValue}`"
+                      style="color: #1890ff;"
+                    >
+                      <IconifyIcon icon="mdi:plus-circle" style="margin-right: 4px;" />
+                      Buat "{{ documentTypeSearchValue }}"
+                    </a-select-option>
                   </a-select>
+                  <div v-if="canManageDocumentTypes" style="margin-top: 4px; font-size: 12px; color: #1890ff;">
+                    <IconifyIcon icon="mdi:information-outline" style="margin-right: 4px;" />
+                    Ketik nama baru dan tekan Enter untuk membuat jenis dokumen baru. Klik icon hapus di dropdown untuk menghapus jenis dokumen.
+                  </div>
                 </a-form-item>
               </a-col>
               <a-col :xs="24" :md="12">
@@ -439,3 +826,4 @@ onMounted(async () => {
   margin-bottom: 12px;
 }
 </style>
+

@@ -30,9 +30,9 @@ type UploadFileResponse struct {
 // @Security     BearerAuth
 // @Param        file  formData  file  true  "File logo (PNG, JPG, JPEG, max 5MB)"
 // @Success      200   {object}  UploadFileResponse
-// @Failure      400   {object}  ErrorResponse
-// @Failure      401   {object}  ErrorResponse
-// @Failure      413   {object}  ErrorResponse
+// @Failure      400   {object}  domain.ErrorResponse
+// @Failure      401   {object}  domain.ErrorResponse
+// @Failure      413   {object}  domain.ErrorResponse
 // @Router       /api/v1/upload/logo [post]
 func UploadLogo(c *fiber.Ctx) error {
 	zapLog := logger.GetLogger()

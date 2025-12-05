@@ -75,7 +75,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Mengambil audit logs dengan pagination dan filter. User reguler hanya bisa melihat audit logs mereka sendiri, sedangkan admin/superadmin bisa melihat semua audit logs. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).",
+                "description": "Mengambil audit logs dengan pagination dan filter. Data ini memiliki retention policy: 90 hari untuk user actions, 30 hari untuk technical errors. User reguler hanya bisa melihat audit logs mereka sendiri, sedangkan admin/superadmin bisa melihat semua audit logs. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only). Catatan: Data penting (report, document, company, user) disimpan di endpoint /user-activity-logs dengan permanent storage.",
                 "consumes": [
                     "application/json"
                 ],
@@ -107,7 +107,7 @@
                     },
                     {
                         "type": "string",
-                        "description": "Filter berdasarkan resource (contoh: auth, document, user)",
+                        "description": "Filter berdasarkan resource (contoh: auth, document, user, company, report)",
                         "name": "resource",
                         "in": "query"
                     },
@@ -532,6 +532,111 @@
                 }
             }
         },
+        "/api/v1/auth/profile/email": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengupdate email user yang sedang terautentikasi. User hanya bisa mengupdate email mereka sendiri.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Update Email User",
+                "parameters": [
+                    {
+                        "description": "New email",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.User"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/profile/password": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengubah password user yang sedang terautentikasi. User harus memberikan password lama untuk verifikasi.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Change Password User",
+                "parameters": [
+                    {
+                        "description": "Old password and new password",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/companies": {
             "get": {
                 "security": [
@@ -588,6 +693,63 @@
                 "parameters": [
                     {
                         "description": "Company data (name, code, description, parent_id optional)",
+                        "name": "company",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/domain.CompanyModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/companies/full": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Membuat company baru dengan data lengkap termasuk shareholders, business fields, dan directors",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Company Management"
+                ],
+                "summary": "Buat Company Baru (Full Data)",
+                "parameters": [
+                    {
+                        "description": "Company full data",
                         "name": "company",
                         "in": "body",
                         "required": true,
@@ -831,6 +993,122 @@
                 }
             }
         },
+        "/api/v1/companies/{id}/full": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengupdate company dengan data lengkap termasuk shareholders, business fields, dan directors",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Company Management"
+                ],
+                "summary": "Update Company (Full Data)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Company ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Company full data to update",
+                        "name": "company",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.CompanyModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/companies/{id}/users": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil daftar users yang di-assign ke company tertentu (menggunakan junction table, support multiple assignments).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Company Management"
+                ],
+                "summary": "Ambil Users di Company",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Company ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.UserModel"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/csrf-token": {
             "get": {
                 "description": "Mengambil token CSRF baru untuk digunakan pada request yang mengubah state (POST, PUT, DELETE, PATCH). Token CSRF juga disimpan dalam cookie (csrf_token) untuk double-submit cookie pattern. Endpoint ini public dan tidak memerlukan authentication.",
@@ -870,7 +1148,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns a list of all documents (requires authentication)",
+                "description": "Mengambil daftar dokumen dengan opsi pagination, search, sort, dan filter. Superadmin/administrator melihat semua dokumen, user reguler hanya melihat dokumen milik mereka sendiri.",
                 "consumes": [
                     "application/json"
                 ],
@@ -880,21 +1158,120 @@
                 "tags": [
                     "Documents"
                 ],
-                "summary": "Get all documents",
+                "summary": "Ambil Semua Documents",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by folder ID",
+                        "name": "folder_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default: 0, no pagination)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default: 0, no pagination, max: 100)",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search by title or filename",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field (created_at, title, size)",
+                        "name": "sort_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort direction (asc, desc)",
+                        "name": "sort_dir",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by file type (pdf, docx, xlsx, etc)",
+                        "name": "type",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Daftar dokumen (tanpa pagination) atau {object} dengan data, total, page, page_size (dengan pagination). Metadata field menggunakan format JSON.",
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/main.Document"
+                                "$ref": "#/definitions/domain.DocumentModel"
                             }
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrorResponse"
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/documents/folders": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil daftar semua folder. Superadmin/administrator melihat semua folder, user reguler hanya melihat folder milik mereka sendiri.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Ambil Semua Folders",
+                "responses": {
+                    "200": {
+                        "description": "Daftar folder berhasil diambil",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.DocumentFolderModel"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     }
                 }
@@ -905,7 +1282,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates a new document (requires authentication)",
+                "description": "Membuat folder baru. Folder dapat memiliki parent folder (opsional) untuk membuat struktur hierarki.",
                 "consumes": [
                     "application/json"
                 ],
@@ -915,35 +1292,281 @@
                 "tags": [
                     "Documents"
                 ],
-                "summary": "Create document",
+                "summary": "Buat Folder Baru",
                 "parameters": [
                     {
-                        "description": "Document object",
-                        "name": "document",
+                        "description": "Folder data",
+                        "name": "payload",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/main.Document"
+                            "type": "object"
                         }
                     }
                 ],
                 "responses": {
                     "201": {
-                        "description": "Created",
+                        "description": "Folder berhasil dibuat",
                         "schema": {
-                            "$ref": "#/definitions/main.Document"
+                            "$ref": "#/definitions/domain.DocumentFolderModel"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Invalid request",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrorResponse"
+                            "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrorResponse"
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/documents/folders/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengubah nama folder. Hanya owner folder atau superadmin/administrator yang dapat mengubah nama folder.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Update Nama Folder",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Folder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Folder data",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Folder berhasil diupdate",
+                        "schema": {
+                            "$ref": "#/definitions/domain.DocumentFolderModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menghapus folder beserta semua dokumen di dalamnya. Hanya owner folder atau superadmin/administrator yang dapat menghapus folder.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Hapus Folder",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Folder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Folder berhasil dihapus",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/documents/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengembalikan statistik folder (file_count, total_size) dan total storage. Data bersifat global untuk semua dokumen.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Ambil Ringkasan Documents",
+                "responses": {
+                    "200": {
+                        "description": "Ringkasan dokumen berhasil diambil. Response berisi folder_stats (array) dan total_size (number)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/documents/upload": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengupload dokumen baru dengan file, title, status, dan metadata. File wajib diupload dalam format multipart/form-data.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Upload Document Baru",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "File dokumen yang akan diupload",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID folder (opsional)",
+                        "name": "folder_id",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Judul dokumen (opsional)",
+                        "name": "title",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status dokumen (default: active)",
+                        "name": "status",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Metadata dalam format JSON string (opsional)",
+                        "name": "metadata",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Dokumen berhasil diupload",
+                        "schema": {
+                            "$ref": "#/definitions/domain.DocumentModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request atau file tidak valid",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden (tidak memiliki akses ke folder)",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Folder tidak ditemukan",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     }
                 }
@@ -956,7 +1579,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns a single document by ID (requires authentication)",
+                "description": "Mengambil detail dokumen berdasarkan ID. Superadmin/administrator dapat melihat semua dokumen, user reguler hanya dapat melihat dokumen milik mereka sendiri.",
                 "consumes": [
                     "application/json"
                 ],
@@ -966,7 +1589,7 @@
                 "tags": [
                     "Documents"
                 ],
-                "summary": "Get document by ID",
+                "summary": "Ambil Document by ID",
                 "parameters": [
                     {
                         "type": "string",
@@ -978,21 +1601,27 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Detail dokumen berhasil diambil",
                         "schema": {
-                            "$ref": "#/definitions/main.Document"
+                            "$ref": "#/definitions/domain.DocumentModel"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrorResponse"
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Document tidak ditemukan",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrorResponse"
+                            "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     }
                 }
@@ -1003,9 +1632,10 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Updates an existing document (requires authentication)",
+                "description": "Mengupdate metadata dokumen (folder_id, title, status, metadata) dan opsional mengganti file. Mendukung JSON payload (metadata only) atau multipart/form-data (dengan file). Hanya owner dokumen atau superadmin/administrator yang dapat mengupdate.",
                 "consumes": [
-                    "application/json"
+                    "application/json",
+                    "multipart/form-data"
                 ],
                 "produces": [
                     "application/json"
@@ -1013,7 +1643,7 @@
                 "tags": [
                     "Documents"
                 ],
-                "summary": "Update document",
+                "summary": "Update Document",
                 "parameters": [
                     {
                         "type": "string",
@@ -1023,32 +1653,73 @@
                         "required": true
                     },
                     {
-                        "description": "Document object",
-                        "name": "document",
+                        "description": "JSON payload untuk update metadata only",
+                        "name": "payload",
                         "in": "body",
-                        "required": true,
                         "schema": {
-                            "$ref": "#/definitions/main.Document"
+                            "type": "object"
                         }
+                    },
+                    {
+                        "type": "file",
+                        "description": "File baru (opsional, hanya jika Content-Type: multipart/form-data)",
+                        "name": "file",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID folder (opsional, hanya jika Content-Type: multipart/form-data)",
+                        "name": "folder_id",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Judul dokumen (opsional, hanya jika Content-Type: multipart/form-data)",
+                        "name": "title",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status dokumen (opsional, hanya jika Content-Type: multipart/form-data)",
+                        "name": "status",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Metadata dalam format JSON string (opsional, hanya jika Content-Type: multipart/form-data)",
+                        "name": "metadata",
+                        "in": "formData"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Dokumen berhasil diupdate",
                         "schema": {
-                            "$ref": "#/definitions/main.Document"
+                            "$ref": "#/definitions/domain.DocumentModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrorResponse"
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "Document atau folder tidak ditemukan",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrorResponse"
+                            "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     }
                 }
@@ -1059,7 +1730,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Deletes a document by ID (requires authentication)",
+                "description": "Menghapus dokumen. Hanya owner dokumen atau superadmin/administrator yang dapat menghapus dokumen.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1069,7 +1740,7 @@
                 "tags": [
                     "Documents"
                 ],
-                "summary": "Delete document",
+                "summary": "Hapus Document",
                 "parameters": [
                     {
                         "type": "string",
@@ -1081,7 +1752,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Dokumen berhasil dihapus",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1092,13 +1763,84 @@
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrorResponse"
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Document tidak ditemukan",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/files/{path}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Serve file dari storage (GCP Storage atau local) sebagai proxy. Endpoint ini protected dan memerlukan authentication untuk keamanan file documents.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "image/png",
+                    "image/jpeg",
+                    "image/jpg",
+                    "application/octet-stream",
+                    "application/pdf"
+                ],
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Serve File",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File path (e.g., logos/filename.png atau documents/filename.pdf)",
+                        "name": "path",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File content",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrorResponse"
+                            "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     }
                 }
@@ -1328,6 +2070,619 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/reports": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mendapatkan semua reports. Superadmin melihat semua, admin melihat reports dari perusahaan mereka dan anak perusahaan, user biasa hanya melihat reports dari perusahaan mereka.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Get All Reports",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by company ID",
+                        "name": "company_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by period (YYYY-MM)",
+                        "name": "period",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default: 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default: 10)",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Membuat report bulanan baru untuk perusahaan. Setiap perusahaan hanya bisa membuat report untuk perusahaan mereka sendiri.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Buat Report Baru",
+                "parameters": [
+                    {
+                        "description": "Report data",
+                        "name": "report",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/domain.CreateReportRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ReportModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/reports/company/{company_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mendapatkan semua reports untuk perusahaan tertentu. User hanya bisa melihat reports dari perusahaan mereka (atau anak perusahaan untuk admin).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Get Reports by Company ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Company ID",
+                        "name": "company_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.ReportModel"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/reports/export/excel": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Export semua reports yang dapat diakses user ke format Excel",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                ],
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Export Reports to Excel",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by company ID",
+                        "name": "company_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by period (YYYY-MM)",
+                        "name": "period",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/reports/export/pdf": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Export semua reports yang dapat diakses user ke format PDF",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/pdf"
+                ],
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Export Reports to PDF",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by company ID",
+                        "name": "company_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by period (YYYY-MM)",
+                        "name": "period",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/reports/template": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Download template Excel file untuk upload reports. Template berisi kolom-kolom yang diperlukan dengan contoh data.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                ],
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Download Report Template",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/reports/upload": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upload Excel file, validate rows, and create reports in database.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Upload Reports from Excel",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Excel file (.xlsx, .xls)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Response dengan success, failed, dan errors",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/reports/validate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Validates Excel file format and data before upload. Returns validation errors and parsed data.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Validate Excel File",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Excel file (.xlsx, .xls)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Response dengan valid, errors, dan data",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/reports/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mendapatkan detail report berdasarkan ID. User hanya bisa melihat report dari perusahaan mereka (atau anak perusahaan untuk admin).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Get Report by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Report ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ReportModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengupdate report. User hanya bisa mengupdate report dari perusahaan mereka.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Update Report",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Report ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Report update data",
+                        "name": "report",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/domain.UpdateReportRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ReportModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menghapus report. User hanya bisa menghapus report dari perusahaan mereka.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Delete Report",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Report ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
@@ -1698,6 +3053,180 @@
                 }
             }
         },
+        "/api/v1/swagger/regenerate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Regenerate Swagger documentation dari source code. Endpoint ini berguna untuk development agar Swagger selalu up-to-date tanpa perlu restart server.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System"
+                ],
+                "summary": "Regenerate Swagger Documentation",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/upload/logo": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upload logo perusahaan dengan validasi format (PNG, JPG, JPEG) dan ukuran maksimal 5MB",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Upload"
+                ],
+                "summary": "Upload Logo Perusahaan",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "File logo (PNG, JPG, JPEG, max 5MB)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.UploadFileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/user-activity-logs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil user activity logs (permanent) untuk resource penting: report, document, company, user. Data ini tidak akan dihapus (permanent storage tanpa retention policy) untuk keperluan compliance dan legal. User reguler hanya bisa melihat logs mereka sendiri, sedangkan admin/superadmin bisa melihat semua logs. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Audit"
+                ],
+                "summary": "Ambil User Activity Logs",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Nomor halaman (default: 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Jumlah item per halaman (default: 10, maksimal: 100)",
+                        "name": "pageSize",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter berdasarkan action (contoh: create_report, update_document, create_company, create_user)",
+                        "name": "action",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter berdasarkan resource (report, document, company, user)",
+                        "name": "resource",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter berdasarkan status (success, failure, error)",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User activity logs berhasil diambil. Response berisi data (array user activity logs), total, page, pageSize, dan totalPages",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Token tidak valid atau user tidak terautentikasi",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "User tidak ditemukan di database",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Gagal mengambil user activity logs",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users": {
             "get": {
                 "security": [
@@ -1705,7 +3234,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Mengambil daftar semua users. Filtered berdasarkan company access.",
+                "description": "Mengambil daftar semua users. Filtered berdasarkan company access (RBAC). Superadmin melihat semua users. Non-superadmin hanya melihat users di company mereka dan descendants.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1771,6 +3300,49 @@
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/users/me/companies": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil daftar semua companies yang di-assign ke user yang sedang login (dari junction table, support multiple assignments).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Management"
+                ],
+                "summary": "Ambil Companies User Saat Ini",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.UserCompanyResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
@@ -1933,6 +3505,631 @@
                 }
             }
         },
+        "/api/v1/users/{id}/assign-company": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengassign user ke company tertentu. Superadmin bisa assign ke semua company, admin bisa assign ke company mereka sendiri.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Management"
+                ],
+                "summary": "Assign User ke Company",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Company ID and Role ID",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.UserModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/users/{id}/reset-password": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Reset password untuk user. Hanya superadmin yang bisa melakukan reset password. Superadmin tidak bisa reset password dirinya sendiri.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Management"
+                ],
+                "summary": "Reset Password User",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New password",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/users/{id}/toggle-status": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengaktifkan atau menonaktifkan user. Superadmin tidak bisa menonaktifkan dirinya sendiri atau user superadmin lainnya.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Management"
+                ],
+                "summary": "Toggle Status User",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.UserModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/users/{id}/unassign-company": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menghapus assignment user dari company tertentu. User bisa tetap di-assign ke company lain.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Management"
+                ],
+                "summary": "Unassign User dari Company",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Company ID",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.UserModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/development/check-all-seeder-status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengecek status semua seeder data (company, reports, dll)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Cek Status Semua Seeder",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/development/check-report-status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengecek apakah data seeder reports sudah ada (hanya superadmin)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Cek Status Seeder Data Reports",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/development/check-seeder-status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengecek apakah data seeder sudah ada (hanya superadmin)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Cek Status Seeder Data",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/development/reset-all-seeded-data": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mereset semua data yang sudah di-seed secara berurutan: Reports -\u003e Company. Memastikan relasi data dihapus dengan benar.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Reset Semua Data Seeder",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/development/reset-reports": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menghapus semua data reports (hanya superadmin)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Reset Data Reports",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/development/reset-subsidiary": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menghapus semua data subsidiary dan user yang terkait (hanya superadmin)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Reset Data Subsidiary",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/development/run-all-seeders": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menjalankan semua seeder secara berurutan: Company -\u003e Reports. Memastikan relasi data terjaga.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Jalankan Semua Seeder Data",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/development/run-report-seeder": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menjalankan seeder untuk membuat sample data reports (hanya superadmin)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Jalankan Seeder Data Reports",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/development/run-subsidiary-seeder": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menjalankan seeder untuk membuat sample data subsidiary (hanya superadmin)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Jalankan Seeder Data Subsidiary",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "description": "Returns health status",
@@ -1958,6 +4155,216 @@
                     }
                 }
             }
+        },
+        "/sonarqube/issues": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil daftar issues dari SonarCloud untuk project ini (hanya superadmin/admin)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SonarQube"
+                ],
+                "summary": "Get SonarCloud Issues",
+                "parameters": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Filter by severity (BLOCKER, CRITICAL, MAJOR, MINOR, INFO)",
+                        "name": "severities",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Filter by type (BUG, VULNERABILITY, CODE_SMELL)",
+                        "name": "types",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Filter by status (OPEN, CONFIRMED, REOPENED, RESOLVED)",
+                        "name": "statuses",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/sonarqube.IssuesResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/sonarqube/issues/export": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Export daftar issues dari SonarCloud dalam format JSON untuk download (hanya superadmin/admin)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SonarQube"
+                ],
+                "summary": "Export SonarCloud Issues",
+                "parameters": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Filter by severity (BLOCKER, CRITICAL, MAJOR, MINOR, INFO)",
+                        "name": "severities",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Filter by type (BUG, VULNERABILITY, CODE_SMELL)",
+                        "name": "types",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Filter by status (OPEN, CONFIRMED, REOPENED, RESOLVED)",
+                        "name": "statuses",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/sonarqube/quality": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil metrics Software Quality (Security, Reliability, Maintainability) dari SonarCloud (hanya superadmin/admin)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SonarQube"
+                ],
+                "summary": "Get Software Quality Metrics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/sonarqube.SoftwareQualityMetrics"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/sonarqube/status": {
+            "get": {
+                "description": "Mengecek apakah fitur SonarQube Monitor tersedia/enabled (public endpoint, tidak perlu auth)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SonarQube"
+                ],
+                "summary": "Get SonarQube Monitor Status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -1969,6 +4376,47 @@
                 },
                 "user": {
                     "$ref": "#/definitions/domain.User"
+                }
+            }
+        },
+        "domain.BusinessFieldModel": {
+            "type": "object",
+            "properties": {
+                "additional_activities": {
+                    "description": "Kegiatan usaha tambahan",
+                    "type": "string"
+                },
+                "company_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "industry_sector": {
+                    "description": "Sektor industri",
+                    "type": "string"
+                },
+                "is_main": {
+                    "description": "Apakah bidang usaha utama",
+                    "type": "boolean"
+                },
+                "kbli": {
+                    "description": "Klasifikasi Baku Lapangan Usaha Indonesia",
+                    "type": "string"
+                },
+                "main_business_activity": {
+                    "description": "Uraian kegiatan usaha utama",
+                    "type": "string"
+                },
+                "start_operation_date": {
+                    "description": "Tanggal mulai beroperasi",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         },
@@ -2031,6 +4479,16 @@
         "domain.CompanyModel": {
             "type": "object",
             "properties": {
+                "address": {
+                    "description": "Alamat perusahaan",
+                    "type": "string"
+                },
+                "business_fields": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.BusinessFieldModel"
+                    }
+                },
                 "code": {
                     "description": "Unique company code",
                     "type": "string"
@@ -2039,6 +4497,20 @@
                     "type": "string"
                 },
                 "description": {
+                    "type": "string"
+                },
+                "directors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.DirectorModel"
+                    }
+                },
+                "email": {
+                    "description": "Email",
+                    "type": "string"
+                },
+                "fax": {
+                    "description": "Fax",
                     "type": "string"
                 },
                 "id": {
@@ -2051,11 +4523,143 @@
                     "description": "0=root, 1=holding, 2=subsidiary, etc",
                     "type": "integer"
                 },
+                "logo": {
+                    "description": "Path/URL logo",
+                    "type": "string"
+                },
+                "main_parent_company": {
+                    "description": "ID perusahaan induk utama",
+                    "type": "string"
+                },
                 "name": {
+                    "type": "string"
+                },
+                "nib": {
+                    "description": "Nomor Induk Berusaha",
+                    "type": "string"
+                },
+                "npwp": {
+                    "description": "Nomor Pokok Wajib Pajak",
+                    "type": "string"
+                },
+                "operational_address": {
+                    "description": "Alamat operasional",
                     "type": "string"
                 },
                 "parent_id": {
                     "description": "NULL untuk root/holding company",
+                    "type": "string"
+                },
+                "phone": {
+                    "description": "Telepon",
+                    "type": "string"
+                },
+                "shareholders": {
+                    "description": "Relationships",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.ShareholderModel"
+                    }
+                },
+                "short_name": {
+                    "description": "Nama singkat",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status perusahaan",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "website": {
+                    "description": "Website",
+                    "type": "string"
+                }
+            }
+        },
+        "domain.CreateReportRequest": {
+            "type": "object",
+            "required": [
+                "company_id",
+                "dividend",
+                "financial_ratio",
+                "npat",
+                "opex",
+                "period",
+                "revenue"
+            ],
+            "properties": {
+                "attachment": {
+                    "description": "Optional",
+                    "type": "string"
+                },
+                "company_id": {
+                    "type": "string"
+                },
+                "dividend": {
+                    "type": "integer"
+                },
+                "financial_ratio": {
+                    "type": "number"
+                },
+                "inputter_id": {
+                    "description": "Optional",
+                    "type": "string"
+                },
+                "npat": {
+                    "type": "integer"
+                },
+                "opex": {
+                    "type": "integer"
+                },
+                "period": {
+                    "description": "Format: YYYY-MM",
+                    "type": "string"
+                },
+                "remark": {
+                    "description": "Optional",
+                    "type": "string"
+                },
+                "revenue": {
+                    "type": "integer"
+                }
+            }
+        },
+        "domain.DirectorModel": {
+            "type": "object",
+            "properties": {
+                "company_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "domicile_address": {
+                    "description": "Alamat domisili",
+                    "type": "string"
+                },
+                "full_name": {
+                    "description": "Nama lengkap",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "ktp": {
+                    "description": "Nomor KTP",
+                    "type": "string"
+                },
+                "npwp": {
+                    "description": "Nomor NPWP",
+                    "type": "string"
+                },
+                "position": {
+                    "description": "Jabatan: Direktur Utama, Komisaris, dll",
+                    "type": "string"
+                },
+                "start_date": {
+                    "description": "Tanggal awal jabatan (nullable)",
                     "type": "string"
                 },
                 "updated_at": {
@@ -2063,25 +4667,81 @@
                 }
             }
         },
-        "domain.Document": {
+        "domain.DocumentFolderModel": {
             "type": "object",
             "properties": {
-                "content": {
-                    "type": "string"
+                "children": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.DocumentFolderModel"
+                    }
                 },
                 "created_at": {
                     "type": "string"
                 },
-                "description": {
+                "created_by": {
                     "type": "string"
                 },
                 "id": {
                     "type": "string"
                 },
-                "title": {
+                "name": {
+                    "type": "string"
+                },
+                "parent_id": {
                     "type": "string"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.DocumentModel": {
+            "description": "Document model dengan metadata dalam format JSON",
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "file_name": {
+                    "description": "Nama file asli",
+                    "type": "string"
+                },
+                "file_path": {
+                    "description": "URL/path hasil upload",
+                    "type": "string"
+                },
+                "folder": {
+                    "$ref": "#/definitions/domain.DocumentFolderModel"
+                },
+                "folder_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "description": "Metadata tambahan (opsional, format JSON)",
+                    "type": "object"
+                },
+                "mime_type": {
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Judul dokumen",
+                    "type": "string"
+                },
+                "size": {
+                    "description": "Size in bytes",
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uploader_id": {
                     "type": "string"
                 }
             }
@@ -2212,6 +4872,67 @@
                 "ScopeSubCompany"
             ]
         },
+        "domain.ReportModel": {
+            "type": "object",
+            "properties": {
+                "attachment": {
+                    "description": "Optional, bisa null",
+                    "type": "string"
+                },
+                "company": {
+                    "description": "Relationships",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/domain.CompanyModel"
+                        }
+                    ]
+                },
+                "company_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "dividend": {
+                    "type": "integer"
+                },
+                "financial_ratio": {
+                    "description": "Mandatory",
+                    "type": "number"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "inputter": {
+                    "$ref": "#/definitions/domain.UserModel"
+                },
+                "inputter_id": {
+                    "description": "User yang menginput (bisa null)",
+                    "type": "string"
+                },
+                "npat": {
+                    "description": "Net Profit After Tax",
+                    "type": "integer"
+                },
+                "opex": {
+                    "type": "integer"
+                },
+                "period": {
+                    "description": "Format: YYYY-MM (e.g., \"2025-09\")",
+                    "type": "string"
+                },
+                "remark": {
+                    "description": "Optional, bisa null",
+                    "type": "string"
+                },
+                "revenue": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
         "domain.Role": {
             "type": "object",
             "properties": {
@@ -2283,6 +5004,82 @@
                 }
             }
         },
+        "domain.ShareholderModel": {
+            "type": "object",
+            "properties": {
+                "company_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "identity_number": {
+                    "description": "KTP/NPWP",
+                    "type": "string"
+                },
+                "is_main_parent": {
+                    "description": "Apakah perusahaan induk utama",
+                    "type": "boolean"
+                },
+                "name": {
+                    "description": "Nama pemegang saham",
+                    "type": "string"
+                },
+                "ownership_percent": {
+                    "description": "Persentase kepemilikan",
+                    "type": "number"
+                },
+                "share_count": {
+                    "description": "Jumlah saham",
+                    "type": "integer"
+                },
+                "type": {
+                    "description": "Jenis: Badan Hukum, Individu, dll",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.UpdateReportRequest": {
+            "type": "object",
+            "properties": {
+                "attachment": {
+                    "type": "string"
+                },
+                "company_id": {
+                    "type": "string"
+                },
+                "dividend": {
+                    "type": "integer"
+                },
+                "financial_ratio": {
+                    "type": "number"
+                },
+                "inputter_id": {
+                    "type": "string"
+                },
+                "npat": {
+                    "type": "integer"
+                },
+                "opex": {
+                    "type": "integer"
+                },
+                "period": {
+                    "type": "string"
+                },
+                "remark": {
+                    "type": "string"
+                },
+                "revenue": {
+                    "type": "integer"
+                }
+            }
+        },
         "domain.User": {
             "type": "object",
             "properties": {
@@ -2329,6 +5126,25 @@
                 }
             }
         },
+        "domain.UserCompanyResponse": {
+            "type": "object",
+            "properties": {
+                "company": {
+                    "$ref": "#/definitions/domain.CompanyModel"
+                },
+                "role": {
+                    "description": "Role name",
+                    "type": "string"
+                },
+                "role_id": {
+                    "type": "string"
+                },
+                "role_level": {
+                    "description": "Role level untuk sorting (0=superadmin, 1=admin, 2=manager, 3=staff)",
+                    "type": "integer"
+                }
+            }
+        },
         "domain.UserModel": {
             "type": "object",
             "properties": {
@@ -2349,7 +5165,7 @@
                     "type": "boolean"
                 },
                 "role": {
-                    "description": "Legacy field, akan deprecated",
+                    "description": "Role is a legacy field. We intentionally do NOT set a default here so that\nnew users can be created in \"standby\" mode without any role.",
                     "type": "string"
                 },
                 "role_id": {
@@ -2364,6 +5180,20 @@
                 }
             }
         },
+        "http.UploadFileResponse": {
+            "type": "object",
+            "properties": {
+                "filename": {
+                    "type": "string"
+                },
+                "size": {
+                    "type": "integer"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
         "main.AuthResponse": {
             "type": "object",
             "properties": {
@@ -2372,29 +5202,6 @@
                 },
                 "user": {
                     "$ref": "#/definitions/main.User"
-                }
-            }
-        },
-        "main.Document": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "title": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
                 }
             }
         },
@@ -2448,6 +5255,130 @@
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "sonarqube.Component": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "qualifier": {
+                    "type": "string"
+                }
+            }
+        },
+        "sonarqube.Issue": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "type": "string"
+                },
+                "component": {
+                    "type": "string"
+                },
+                "creationDate": {
+                    "type": "string"
+                },
+                "debt": {
+                    "type": "string"
+                },
+                "effort": {
+                    "type": "string"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "line": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "project": {
+                    "type": "string"
+                },
+                "rule": {
+                    "type": "string"
+                },
+                "severity": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "updateDate": {
+                    "type": "string"
+                }
+            }
+        },
+        "sonarqube.IssuesResponse": {
+            "type": "object",
+            "properties": {
+                "components": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/sonarqube.Component"
+                    }
+                },
+                "issues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/sonarqube.Issue"
+                    }
+                },
+                "p": {
+                    "type": "integer"
+                },
+                "paging": {
+                    "$ref": "#/definitions/sonarqube.Paging"
+                },
+                "ps": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "sonarqube.Paging": {
+            "type": "object",
+            "properties": {
+                "pageIndex": {
+                    "type": "integer"
+                },
+                "pageSize": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "sonarqube.SoftwareQualityMetrics": {
+            "type": "object",
+            "properties": {
+                "maintainability": {
+                    "description": "code_smells count",
+                    "type": "integer"
+                },
+                "reliability": {
+                    "description": "bugs count",
+                    "type": "integer"
+                },
+                "security": {
+                    "description": "vulnerabilities count",
+                    "type": "integer"
                 }
             }
         }

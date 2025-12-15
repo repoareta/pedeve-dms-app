@@ -1487,9 +1487,9 @@ textarea.ant-input {
   }
 }
 
-:where(.css-1fflfus).ant-input-affix-wrapper >input.ant-input {
-  height: auto;
-  background: orange !important;
+.ant-input-affix-wrapper >input.ant-input {
+  height: auto !important;
+  // background: green !important;
 }
 
 .ant-notification-notice-message{

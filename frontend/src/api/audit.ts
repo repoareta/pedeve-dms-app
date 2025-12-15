@@ -74,6 +74,7 @@ export interface UserActivityLogsParams {
   pageSize?: number
   action?: string
   resource?: string
+  resource_id?: string
   status?: string
 }
 
@@ -120,6 +121,9 @@ export const auditApi = {
     }
     if (params?.resource) {
       queryParams.append('resource', params.resource)
+    }
+    if (params?.resource_id) {
+      queryParams.append('resource_id', params.resource_id)
     }
     if (params?.status) {
       queryParams.append('status', params.status)

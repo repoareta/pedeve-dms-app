@@ -1,8 +1,15 @@
 package usecase
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"math/rand"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
@@ -10,7 +17,6 @@ import (
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/uuid"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -23,29 +29,29 @@ type DevelopmentUseCase interface {
 	RunReportSeeder() error
 	CheckReportDataExists() (bool, error)
 	// Combined operations
-	RunAllSeeders() error // Run all seeders in order: company -> reports
-	ResetAllSeededData() error // Reset all seeded data: reports -> company
+	RunAllSeeders() error                           // Run all seeders in order: company -> reports
+	ResetAllSeededData() error                      // Reset all seeded data: reports -> company
 	CheckAllSeederStatus() (map[string]bool, error) // Check status of all seeders
 }
 
 type developmentUseCase struct {
 	db                        *gorm.DB
-	companyRepo              repository.CompanyRepository
-	userRepo                 repository.UserRepository
-	roleRepo                 repository.RoleRepository
+	companyRepo               repository.CompanyRepository
+	userRepo                  repository.UserRepository
+	roleRepo                  repository.RoleRepository
 	userCompanyAssignmentRepo repository.UserCompanyAssignmentRepository
-	reportRepo               repository.ReportRepository
+	reportRepo                repository.ReportRepository
 }
 
 // NewDevelopmentUseCaseWithDB creates a new development use case with injected DB (for testing)
 func NewDevelopmentUseCaseWithDB(db *gorm.DB) DevelopmentUseCase {
 	return &developmentUseCase{
 		db:                        db,
-		companyRepo:              repository.NewCompanyRepositoryWithDB(db),
-		userRepo:                 repository.NewUserRepositoryWithDB(db),
-		roleRepo:                 repository.NewRoleRepositoryWithDB(db),
+		companyRepo:               repository.NewCompanyRepositoryWithDB(db),
+		userRepo:                  repository.NewUserRepositoryWithDB(db),
+		roleRepo:                  repository.NewRoleRepositoryWithDB(db),
 		userCompanyAssignmentRepo: repository.NewUserCompanyAssignmentRepositoryWithDB(db),
-		reportRepo:               repository.NewReportRepositoryWithDB(db),
+		reportRepo:                repository.NewReportRepositoryWithDB(db),
 	}
 }
 
@@ -85,7 +91,7 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 		tx.Rollback()
 		return fmt.Errorf("failed to get companies: %w", err)
 	}
-	
+
 	// Double check: juga exclude holding by code untuk extra safety
 	// Filter out any company with code 'PDV' (holding) just in case
 	filteredCompanies := make([]domain.CompanyModel, 0)
@@ -117,20 +123,20 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 		tx.Rollback()
 		return fmt.Errorf("failed to get user company assignments: %w", err)
 	}
-	
+
 	// Collect unique user IDs from assignments
 	userIDsFromAssignments := make(map[string]bool)
 	for _, assignment := range assignments {
 		userIDsFromAssignments[assignment.UserID] = true
 	}
-	
+
 	// Also get users from UserModel.CompanyID
 	var usersFromCompanyID []domain.UserModel
 	if err := tx.Where("company_id IN ?", companyIDs).Find(&usersFromCompanyID).Error; err != nil {
 		tx.Rollback()
 		return fmt.Errorf("failed to get users from company_id: %w", err)
 	}
-	
+
 	// Combine user IDs from both sources
 	allUserIDs := make(map[string]bool)
 	for userID := range userIDsFromAssignments {
@@ -170,7 +176,50 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 		zapLog.Info("Deleted user assignments by user_id", zap.Int("user_count", len(userIDsToDelete)))
 	}
 
-	// 5. Delete users (hard delete for development reset)
+	// 5. Delete all related data for companies (shareholders, directors, business_fields)
+	// Delete shareholders (both as company owner and as shareholder company reference)
+	// Delete shareholders where company_id IN companyIDs (shareholders of these companies)
+	if err := tx.Where("company_id IN ?", companyIDs).Delete(&domain.ShareholderModel{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete shareholders: %w", err)
+	}
+	// Delete shareholders where shareholder_company_id IN companyIDs (these companies as shareholders in other companies)
+	if err := tx.Where("shareholder_company_id IN ?", companyIDs).Delete(&domain.ShareholderModel{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete shareholders by shareholder_company_id: %w", err)
+	}
+	zapLog.Info("Deleted shareholders", zap.Int("company_count", len(companyIDs)))
+
+	// Delete directors
+	if err := tx.Where("company_id IN ?", companyIDs).Delete(&domain.DirectorModel{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete directors: %w", err)
+	}
+	zapLog.Info("Deleted directors", zap.Int("company_count", len(companyIDs)))
+
+	// Delete business_fields
+	if err := tx.Where("company_id IN ?", companyIDs).Delete(&domain.BusinessFieldModel{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete business_fields: %w", err)
+	}
+	zapLog.Info("Deleted business_fields", zap.Int("company_count", len(companyIDs)))
+
+	// Delete reports (from reports table)
+	if err := tx.Where("company_id IN ?", companyIDs).Delete(&domain.ReportModel{}).Error; err != nil {
+		// Log warning but don't fail - reports might not exist
+		zapLog.Warn("Failed to delete reports (might not exist)", zap.Error(err))
+	} else {
+		zapLog.Info("Deleted reports", zap.Int("company_count", len(companyIDs)))
+	}
+
+	// Delete financial_reports (from financial_reports table) - CRITICAL: must be deleted before companies
+	if err := tx.Where("company_id IN ?", companyIDs).Delete(&domain.FinancialReportModel{}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to delete financial_reports: %w", err)
+	}
+	zapLog.Info("Deleted financial_reports", zap.Int("company_count", len(companyIDs)))
+
+	// 6. Delete users (hard delete for development reset)
 	if len(userIDsToDelete) > 0 {
 		if err := tx.Where("id IN ?", userIDsToDelete).Delete(&domain.UserModel{}).Error; err != nil {
 			tx.Rollback()
@@ -179,14 +228,14 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 		zapLog.Info("Deleted users", zap.Int("user_count", len(userIDsToDelete)))
 	}
 
-	// 6. Delete all companies (soft delete: set is_active = false)
-	if err := tx.Model(&domain.CompanyModel{}).Where("id IN ?", companyIDs).Update("is_active", false).Error; err != nil {
+	// 7. Delete all companies (hard delete for development reset)
+	if err := tx.Where("id IN ?", companyIDs).Delete(&domain.CompanyModel{}).Error; err != nil {
 		tx.Rollback()
 		return fmt.Errorf("failed to delete companies: %w", err)
 	}
-	zapLog.Info("Deleted companies (soft delete)", zap.Int("company_count", len(companyIDs)))
+	zapLog.Info("Deleted companies (hard delete)", zap.Int("company_count", len(companyIDs)))
 
-	// 7. CRITICAL: Reset holding company level to 0 dan ensure parent_id is NULL
+	// 8. CRITICAL: Reset holding company level to 0 dan ensure parent_id is NULL
 	// Ini penting untuk memastikan holding level tidak kacau setelah reset
 	holding, err := uc.companyRepo.GetByCode("PDV")
 	if err == nil && holding != nil {
@@ -218,7 +267,7 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 }
 
 // CheckSeederDataExists checks if seeder data already exists
-// It checks for the holding company with code "PDV" and its expected subsidiaries
+// It checks for the holding company with code "PDV" and at least one subsidiary
 func (uc *developmentUseCase) CheckSeederDataExists() (bool, error) {
 	// Check if holding company exists
 	holding, err := uc.companyRepo.GetByCode("PDV")
@@ -231,19 +280,18 @@ func (uc *developmentUseCase) CheckSeederDataExists() (bool, error) {
 		return false, nil
 	}
 
-	// Check if at least one expected subsidiary exists (e.g., "ENU", "PTG", etc.)
-	expectedCodes := []string{"ENU", "PTG", "PLB", "PRT", "PSH"}
-	for _, code := range expectedCodes {
-		company, err := uc.companyRepo.GetByCode(code)
-		if err == nil && company != nil && company.IsActive {
-			return true, nil
-		}
+	// Check if at least one subsidiary exists (any company with parent_id pointing to holding or any company)
+	var count int64
+	if err := uc.db.Model(&domain.CompanyModel{}).
+		Where("parent_id IS NOT NULL AND is_active = ?", true).
+		Count(&count).Error; err != nil {
+		return false, fmt.Errorf("failed to count subsidiaries: %w", err)
 	}
 
-	return false, nil
+	return count > 0, nil
 }
 
-// RunSubsidiarySeeder runs the subsidiary seeder
+// RunSubsidiarySeeder runs the subsidiary seeder using the latest seeder command
 // Returns (alreadyExists, error)
 // If alreadyExists is true, it means seeder data already exists and the operation was cancelled
 func (uc *developmentUseCase) RunSubsidiarySeeder() (bool, error) {
@@ -260,469 +308,226 @@ func (uc *developmentUseCase) RunSubsidiarySeeder() (bool, error) {
 		return true, nil
 	}
 
-	// Get admin role
-	adminRole, err := uc.roleRepo.GetByName("admin")
-	if err != nil {
-		return false, fmt.Errorf("admin role not found: %w", err)
+	// Get the backend directory path
+	// Try multiple strategies to find backend directory
+	var backendDir string
+	var found bool
+
+	// Strategy 1: Try current working directory
+	wd, err := os.Getwd()
+	if err == nil {
+		// Check if we're in backend directory
+		if _, err := os.Stat(filepath.Join(wd, "cmd", "seed-companies")); err == nil {
+			backendDir = wd
+			found = true
+		} else if _, err := os.Stat(filepath.Join(wd, "backend", "cmd", "seed-companies")); err == nil {
+			backendDir = filepath.Join(wd, "backend")
+			found = true
+		}
 	}
 
-	// 1. Create or Update Holding Company
-	// CRITICAL: Pastikan holding selalu level 0 dan parent_id NULL
-	var holdingID string
-	existingHolding, _ := uc.companyRepo.GetByCode("PDV")
-	if existingHolding != nil {
-		holdingID = existingHolding.ID
-		existingHolding.Name = "Pedeve Pertamina"
-		existingHolding.ShortName = "Pedeve"
-		existingHolding.Description = "Perusahaan Holding Induk Pedeve Pertamina"
-		existingHolding.Status = "Aktif"
-		existingHolding.ParentID = nil // CRITICAL: Must be NULL for holding
-		existingHolding.Level = 0      // CRITICAL: Must be 0 for holding
-		existingHolding.IsActive = true
-		
-		// Log before update untuk debugging
-		zapLog.Info("Updating holding company",
-			zap.String("holding_id", holdingID),
-			zap.Int("old_level", existingHolding.Level),
-			zap.Bool("old_parent_is_null", existingHolding.ParentID == nil),
+	// Strategy 2: Try from executable path
+	if !found {
+		execPath, err := os.Executable()
+		if err == nil {
+			// Get backend directory (assuming executable is in backend/cmd/api/)
+			candidateDir := filepath.Dir(filepath.Dir(filepath.Dir(execPath)))
+			if _, err := os.Stat(filepath.Join(candidateDir, "cmd", "seed-companies")); err == nil {
+				backendDir = candidateDir
+				found = true
+			}
+		}
+	}
+
+	if !found {
+		return false, fmt.Errorf("failed to find backend directory with cmd/seed-companies")
+	}
+
+	seedPath := filepath.Join(backendDir, "cmd", "seed-companies")
+	zapLog.Info("Running company seeder", zap.String("backend_dir", backendDir), zap.String("seed_path", seedPath))
+
+	// Run the seeder command
+	cmd := exec.Command("go", "run", "./cmd/seed-companies")
+	cmd.Dir = backendDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// Preserve DATABASE_URL environment variable - CRITICAL for same database connection
+	// Helper function to mask sensitive parts of DB URL for logging
+	maskDBURL := func(url string) string {
+		if len(url) <= 20 {
+			return "***"
+		}
+		return url[:10] + "***" + url[len(url)-10:]
+	}
+
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		// Try to get from secrets (same way database.InitDB does)
+		// This ensures seeder uses the same database connection
+		zapLog.Warn("DATABASE_URL not in environment, seeder may use different database")
+	} else {
+		zapLog.Info("Using DATABASE_URL for seeder command", zap.String("db_url", maskDBURL(dbURL)))
+	}
+
+	// Always set DATABASE_URL in command environment to ensure same database
+	cmdEnv := os.Environ()
+	if dbURL != "" {
+		// Override DATABASE_URL in command environment
+		cmdEnv = append(cmdEnv, "DATABASE_URL="+dbURL)
+	}
+	cmd.Env = cmdEnv
+
+	// Capture command output for debugging
+	// Use separate writers to ensure we capture all output
+	var stdout, stderr bytes.Buffer
+	// Write to both original streams AND buffers to ensure output is visible
+	cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+
+	// Set unbuffered output to ensure immediate flushing
+	cmd.Env = append(cmd.Env, "GODEBUG=gctrace=0") // Disable GC tracing
+
+	// Run command and capture exit code
+	runErr := cmd.Run()
+	var exitCode int
+	if runErr != nil {
+		if exitError, ok := runErr.(*exec.ExitError); ok {
+			exitCode = exitError.ExitCode()
+		}
+		zapLog.Error("Seeder command failed",
+			zap.Error(runErr),
+			zap.Int("exit_code", exitCode),
+			zap.String("stdout", stdout.String()),
+			zap.String("stderr", stderr.String()),
 		)
-		
-		if err := uc.companyRepo.Update(existingHolding); err != nil {
-			return false, fmt.Errorf("failed to update holding: %w", err)
+		return false, fmt.Errorf("failed to run company seeder (exit code %d): %w (stdout: %s, stderr: %s)", exitCode, runErr, stdout.String(), stderr.String())
+	}
+
+	// Log seeder output for debugging (even if exit code is 0, check if companies were created)
+	stdoutStr := stdout.String()
+	stderrStr := stderr.String()
+
+	// Check if seeder output indicates success or failure
+	if len(stdoutStr) > 0 {
+		zapLog.Info("Seeder stdout", zap.String("output", stdoutStr))
+		// Check for common error messages in output (seeder exits early with return, not error)
+		// But now seeder will continue even if admin role not found, so check for actual success indicators
+		if strings.Contains(stdoutStr, "❌ Failed to create holding") ||
+			strings.Contains(stdoutStr, "❌ Failed to create") ||
+			(!strings.Contains(stdoutStr, "Creating/Updating Holding Company") && !strings.Contains(stdoutStr, "Created:") && !strings.Contains(stdoutStr, "Updated:")) {
+			// Only error if we don't see any company creation/update messages
+			if !strings.Contains(stdoutStr, "Created:") && !strings.Contains(stdoutStr, "Updated:") {
+				zapLog.Error("Seeder output indicates failure or early exit", zap.String("output", stdoutStr))
+				return false, fmt.Errorf("seeder exited early or failed. output: %s", stdoutStr)
+			}
 		}
-		
-		// Double check: Verify holding level after update
-		updatedHolding, _ := uc.companyRepo.GetByID(holdingID)
-		if updatedHolding != nil {
-			if updatedHolding.Level != 0 {
-				zapLog.Error("Holding level is not 0 after update!",
-					zap.String("holding_id", holdingID),
-					zap.Int("actual_level", updatedHolding.Level),
-					zap.Int("expected_level", 0),
+	}
+	if len(stderrStr) > 0 {
+		zapLog.Warn("Seeder stderr", zap.String("output", stderrStr))
+	} else {
+		zapLog.Warn("Seeder stderr is EMPTY - this suggests stderr was not captured or seeder exited before writing to stderr")
+	}
+
+	// Verify that subsidiaries were created by checking the database
+	// This ensures data is committed and visible before proceeding
+	db := uc.db
+	if db == nil {
+		db = database.GetDB()
+	}
+
+	// Refresh connection to ensure we see the latest data
+	if sqlDB, err := db.DB(); err == nil {
+		if err := sqlDB.Ping(); err != nil {
+			zapLog.Warn("Failed to ping database connection", zap.Error(err))
+		}
+	}
+
+	// Verify that companies were created - CRITICAL check
+	// Add small delay to ensure data is committed (especially if seeder uses different transaction)
+	time.Sleep(1 * time.Second)
+
+	// Check output first to see if seeder actually ran (variables already declared above)
+	// stdoutStr and stderrStr are already declared at line 403-404
+
+	// Check if seeder output contains actual seeder messages (not just GORM logs)
+	// Also check stderr for STEP messages
+	hasSeederOutput := strings.Contains(stdoutStr, "Creating/Updating Holding Company") ||
+		strings.Contains(stdoutStr, "Created:") ||
+		strings.Contains(stdoutStr, "Updated:") ||
+		strings.Contains(stdoutStr, "Found admin role") ||
+		strings.Contains(stdoutStr, "Admin role not found") ||
+		strings.Contains(stdoutStr, "Database initialized") ||
+		strings.Contains(stdoutStr, "Connected to database") ||
+		strings.Contains(stderrStr, "STEP:") ||
+		strings.Contains(stderrStr, "Initializing database") ||
+		strings.Contains(stderrStr, "Repositories initialized")
+
+	zapLog.Info("Checking seeder output",
+		zap.Bool("has_seeder_output", hasSeederOutput),
+		zap.Int("stdout_length", len(stdoutStr)),
+		zap.Int("stderr_length", len(stderrStr)),
+		zap.String("stdout_preview", truncateString(stdoutStr, 500)),
+		zap.String("stderr_preview", truncateString(stderrStr, 500)),
+	)
+
+	var totalCount int64
+	if err := db.Model(&domain.CompanyModel{}).Where("is_active = ?", true).Count(&totalCount).Error; err != nil {
+		zapLog.Error("Failed to verify companies after seeder", zap.Error(err))
+		return false, fmt.Errorf("failed to verify companies after seeder: %w", err)
+	}
+
+	if totalCount == 0 {
+		if !hasSeederOutput {
+			zapLog.Error("No companies found and no seeder output detected - seeder may have exited early or output not captured",
+				zap.String("stdout_preview", truncateString(stdoutStr, 1000)),
+				zap.String("stderr_preview", truncateString(stderrStr, 1000)),
+			)
+			return false, fmt.Errorf("seeder command completed but no companies were created and no seeder output detected. this suggests seeder exited before creating companies or output was not captured. stdout (first 1000 chars): %s", truncateString(stdoutStr, 1000))
+		}
+
+		zapLog.Error("No companies found after seeder execution - seeder failed to create companies",
+			zap.String("stdout_preview", truncateString(stdoutStr, 1000)),
+			zap.String("stderr_preview", truncateString(stderrStr, 1000)),
+		)
+		return false, fmt.Errorf("seeder command completed but no companies were created. stdout (first 1000 chars): %s", truncateString(stdoutStr, 1000))
+	}
+
+	var subsidiariesCount int64
+	if err := db.Model(&domain.CompanyModel{}).
+		Where("parent_id IS NOT NULL AND is_active = ? AND code != ?", true, "PDV").
+		Count(&subsidiariesCount).Error; err != nil {
+		zapLog.Warn("Failed to count subsidiaries after seeder", zap.Error(err))
+	} else {
+		zapLog.Info("Verified companies after seeder",
+			zap.Int64("total_companies", totalCount),
+			zap.Int64("subsidiaries", subsidiariesCount),
+		)
+		if subsidiariesCount == 0 {
+			// Try fallback query
+			if err := db.Model(&domain.CompanyModel{}).
+				Where("level > ? AND is_active = ?", 0, true).
+				Count(&subsidiariesCount).Error; err == nil && subsidiariesCount > 0 {
+				zapLog.Info("Found subsidiaries using fallback verification", zap.Int64("count", subsidiariesCount))
+			} else {
+				zapLog.Warn("No subsidiaries found after seeder execution",
+					zap.Int64("total_companies", totalCount),
+					zap.String("stdout", stdout.String()),
 				)
-				// Force fix: Update directly via repository
-				updatedHolding.Level = 0
-				updatedHolding.ParentID = nil
-				if err := uc.companyRepo.Update(updatedHolding); err != nil {
-					zapLog.Error("Failed to fix holding level", zap.Error(err))
-				} else {
-					zapLog.Info("Fixed holding level to 0")
-				}
-			}
-		}
-	} else {
-		holdingID = uuid.GenerateUUID()
-		holding := &domain.CompanyModel{
-			ID:          holdingID,
-			Name:        "Pedeve Pertamina",
-			ShortName:   "Pedeve",
-			Code:        "PDV",
-			Description: "Perusahaan Holding Induk Pedeve Pertamina",
-			Status:      "Aktif",
-			ParentID:    nil,
-			Level:       0,
-			IsActive:    true,
-		}
-		if err := uc.companyRepo.Create(holding); err != nil {
-			return false, fmt.Errorf("failed to create holding: %w", err)
-		}
-	}
-
-	// Create admin user for holding
-	adminRoleID := adminRole.ID
-	existingHoldingUser, _ := uc.userRepo.GetByUsername("admin.pedeve")
-	
-	var holdingAdminID string
-	if existingHoldingUser != nil {
-		// User already exists - update CompanyID and RoleID, then create/update assignment
-		holdingAdminID = existingHoldingUser.ID
-		existingHoldingUser.CompanyID = &holdingID
-		existingHoldingUser.RoleID = &adminRoleID
-		existingHoldingUser.Role = "admin"
-		if err := uc.userRepo.Update(existingHoldingUser); err != nil {
-			zapLog.Warn("Failed to update holding admin user", zap.Error(err))
-		}
-	} else {
-		// Create new user
-		holdingAdminID = uuid.GenerateUUID()
-		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-		holdingAdmin := &domain.UserModel{
-			ID:        holdingAdminID,
-			Username:  "admin.pedeve",
-			Email:     "admin.pedeve@pedeve.com",
-			Password:  string(hashedPassword),
-			Role:      "admin",
-			RoleID:    &adminRoleID,
-			CompanyID: &holdingID,
-			IsActive:  true,
-		}
-		if err := uc.userRepo.Create(holdingAdmin); err != nil {
-			zapLog.Warn("Failed to create holding admin user", zap.Error(err))
-		}
-	}
-	
-	// Create or update entry in junction table for user-company assignment
-	if holdingAdminID != "" {
-		existingAssignment, _ := uc.userCompanyAssignmentRepo.GetByUserAndCompany(holdingAdminID, holdingID)
-		if existingAssignment != nil {
-			// Assignment exists - update it
-			existingAssignment.RoleID = &adminRoleID
-			existingAssignment.IsActive = true
-			if err := uc.userCompanyAssignmentRepo.Update(existingAssignment); err != nil {
-				zapLog.Warn("Failed to update assignment for holding admin", zap.Error(err))
-			}
-		} else {
-			// Create new assignment
-			assignment := &domain.UserCompanyAssignmentModel{
-				ID:        uuid.GenerateUUID(),
-				UserID:    holdingAdminID,
-				CompanyID: holdingID,
-				RoleID:    &adminRoleID,
-				IsActive:  true,
-			}
-			if err := uc.userCompanyAssignmentRepo.Create(assignment); err != nil {
-				zapLog.Warn("Failed to create assignment for holding admin", zap.Error(err))
-			}
-		}
-	}
-
-	// 2. Create Level 1 Companies
-	level1Companies := []struct {
-		name        string
-		code        string
-		description string
-		username    string
-		email       string
-	}{
-		{"PT Energi Nusantara", "ENU", "Perusahaan energi dan migas", "admin.enu", "admin.enu@pedeve.com"},
-		{"PT Pertamina Gas", "PTG", "Perusahaan gas dan LNG", "admin.ptg", "admin.ptg@pedeve.com"},
-		{"PT Pertamina Lubricants", "PLB", "Perusahaan pelumas", "admin.plb", "admin.plb@pedeve.com"},
-		{"PT Pertamina Retail", "PRT", "Perusahaan retail dan SPBU", "admin.prt", "admin.prt@pedeve.com"},
-		{"PT Pertamina Shipping", "PSH", "Perusahaan shipping dan logistik", "admin.psh", "admin.psh@pedeve.com"},
-	}
-
-	level1IDs := make([]string, len(level1Companies))
-	for i, comp := range level1Companies {
-		existing, _ := uc.companyRepo.GetByCode(comp.code)
-		if existing != nil {
-			level1IDs[i] = existing.ID
-			existing.ParentID = &holdingID
-			existing.Level = 1
-			existing.IsActive = true
-			existing.Name = comp.name
-			existing.ShortName = comp.name
-			existing.Description = comp.description
-			existing.Status = "Aktif"
-			if err := uc.companyRepo.Update(existing); err != nil {
-				zapLog.Warn("Failed to update company", zap.String("code", comp.code), zap.Error(err))
-				continue
-			}
-		} else {
-			companyID := uuid.GenerateUUID()
-			level1IDs[i] = companyID
-			company := &domain.CompanyModel{
-				ID:          companyID,
-				Name:        comp.name,
-				ShortName:   comp.name,
-				Code:        comp.code,
-				Description: comp.description,
-				Status:      "Aktif",
-				ParentID:    &holdingID,
-				Level:       1,
-				IsActive:    true,
-			}
-			if err := uc.companyRepo.Create(company); err != nil {
-				zapLog.Warn("Failed to create company", zap.String("code", comp.code), zap.Error(err))
-				continue
-			}
-		}
-
-		// Create admin user
-		companyIDToUse := level1IDs[i]
-		adminRoleID := adminRole.ID
-		existingUser, _ := uc.userRepo.GetByUsername(comp.username)
-		
-		var userID string
-		if existingUser != nil {
-			// User already exists - update CompanyID and RoleID, then create/update assignment
-			userID = existingUser.ID
-			existingUser.CompanyID = &companyIDToUse
-			existingUser.RoleID = &adminRoleID
-			existingUser.Role = "admin"
-			if err := uc.userRepo.Update(existingUser); err != nil {
-				zapLog.Warn("Failed to update user", zap.String("username", comp.username), zap.Error(err))
-			}
-		} else {
-			// Create new user
-			userID = uuid.GenerateUUID()
-			hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-			user := &domain.UserModel{
-				ID:        userID,
-				Username:  comp.username,
-				Email:     comp.email,
-				Password:  string(hashedPassword),
-				Role:      "admin",
-				RoleID:    &adminRoleID,
-				CompanyID: &companyIDToUse,
-				IsActive:  true,
-			}
-			if err := uc.userRepo.Create(user); err != nil {
-				zapLog.Warn("Failed to create user", zap.String("username", comp.username), zap.Error(err))
-				continue // Skip assignment if user creation failed
-			}
-		}
-		
-		// Create or update entry in junction table for user-company assignment
-		if userID != "" {
-			existingAssignment, _ := uc.userCompanyAssignmentRepo.GetByUserAndCompany(userID, companyIDToUse)
-			if existingAssignment != nil {
-				// Assignment exists - update it
-				existingAssignment.RoleID = &adminRoleID
-				existingAssignment.IsActive = true
-				if err := uc.userCompanyAssignmentRepo.Update(existingAssignment); err != nil {
-					zapLog.Warn("Failed to update assignment", zap.String("username", comp.username), zap.Error(err))
-				}
-			} else {
-				// Create new assignment
-				assignment := &domain.UserCompanyAssignmentModel{
-					ID:        uuid.GenerateUUID(),
-					UserID:    userID,
-					CompanyID: companyIDToUse,
-					RoleID:    &adminRoleID,
-					IsActive:  true,
-				}
-				if err := uc.userCompanyAssignmentRepo.Create(assignment); err != nil {
-					zapLog.Warn("Failed to create assignment", zap.String("username", comp.username), zap.Error(err))
-				}
-			}
-		}
-	}
-
-	// 3. Create Level 2 Companies
-	level2Companies := []struct {
-		name        string
-		code        string
-		description string
-		parentIndex  int
-		username    string
-		email       string
-	}{
-		{"PT ENU Exploration", "ENU-EXP", "Eksplorasi minyak dan gas", 0, "admin.enu.exp", "admin.enu.exp@pedeve.com"},
-		{"PT ENU Production", "ENU-PRO", "Produksi minyak dan gas", 0, "admin.enu.pro", "admin.enu.pro@pedeve.com"},
-		{"PT PTG Distribution", "PTG-DIST", "Distribusi gas", 1, "admin.ptg.dist", "admin.ptg.dist@pedeve.com"},
-	}
-
-	level2IDs := make([]string, len(level2Companies))
-	for i, comp := range level2Companies {
-		parentID := level1IDs[comp.parentIndex]
-		existing, _ := uc.companyRepo.GetByCode(comp.code)
-		if existing != nil {
-			level2IDs[i] = existing.ID
-			existing.ParentID = &parentID
-			existing.Level = 2
-			existing.IsActive = true
-			existing.Name = comp.name
-			existing.ShortName = comp.name
-			existing.Description = comp.description
-			existing.Status = "Aktif"
-			if err := uc.companyRepo.Update(existing); err != nil {
-				zapLog.Warn("Failed to update company", zap.String("code", comp.code), zap.Error(err))
-				continue
-			}
-		} else {
-			companyID := uuid.GenerateUUID()
-			level2IDs[i] = companyID
-			company := &domain.CompanyModel{
-				ID:          companyID,
-				Name:        comp.name,
-				ShortName:   comp.name,
-				Code:        comp.code,
-				Description: comp.description,
-				Status:      "Aktif",
-				ParentID:    &parentID,
-				Level:       2,
-				IsActive:    true,
-			}
-			if err := uc.companyRepo.Create(company); err != nil {
-				zapLog.Warn("Failed to create company", zap.String("code", comp.code), zap.Error(err))
-				continue
-			}
-		}
-
-		// Create admin user
-		companyIDToUse := level2IDs[i]
-		adminRoleID := adminRole.ID
-		existingUser, _ := uc.userRepo.GetByUsername(comp.username)
-		
-		var userID string
-		if existingUser != nil {
-			// User already exists - update CompanyID and RoleID, then create/update assignment
-			userID = existingUser.ID
-			existingUser.CompanyID = &companyIDToUse
-			existingUser.RoleID = &adminRoleID
-			existingUser.Role = "admin"
-			if err := uc.userRepo.Update(existingUser); err != nil {
-				zapLog.Warn("Failed to update user", zap.String("username", comp.username), zap.Error(err))
-			}
-		} else {
-			// Create new user
-			userID = uuid.GenerateUUID()
-			hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-			user := &domain.UserModel{
-				ID:        userID,
-				Username:  comp.username,
-				Email:     comp.email,
-				Password:  string(hashedPassword),
-				Role:      "admin",
-				RoleID:    &adminRoleID,
-				CompanyID: &companyIDToUse,
-				IsActive:  true,
-			}
-			if err := uc.userRepo.Create(user); err != nil {
-				zapLog.Warn("Failed to create user", zap.String("username", comp.username), zap.Error(err))
-				continue // Skip assignment if user creation failed
-			}
-		}
-		
-		// Create or update entry in junction table for user-company assignment
-		if userID != "" {
-			existingAssignment, _ := uc.userCompanyAssignmentRepo.GetByUserAndCompany(userID, companyIDToUse)
-			if existingAssignment != nil {
-				// Assignment exists - update it
-				existingAssignment.RoleID = &adminRoleID
-				existingAssignment.IsActive = true
-				if err := uc.userCompanyAssignmentRepo.Update(existingAssignment); err != nil {
-					zapLog.Warn("Failed to update assignment", zap.String("username", comp.username), zap.Error(err))
-				}
-			} else {
-				// Create new assignment
-				assignment := &domain.UserCompanyAssignmentModel{
-					ID:        uuid.GenerateUUID(),
-					UserID:    userID,
-					CompanyID: companyIDToUse,
-					RoleID:    &adminRoleID,
-					IsActive:  true,
-				}
-				if err := uc.userCompanyAssignmentRepo.Create(assignment); err != nil {
-					zapLog.Warn("Failed to create assignment", zap.String("username", comp.username), zap.Error(err))
-				}
-			}
-		}
-	}
-
-	// 4. Create Level 3 Companies
-	level3Companies := []struct {
-		name        string
-		code        string
-		description string
-		parentIndex  int
-		username    string
-		email       string
-	}{
-		{"PT ENU-EXP Drilling", "ENU-EXP-DRL", "Layanan pengeboran", 0, "admin.enu.exp.drl", "admin.enu.exp.drl@pedeve.com"},
-		{"PT ENU-PRO Refinery", "ENU-PRO-REF", "Kilang minyak", 1, "admin.enu.pro.ref", "admin.enu.pro.ref@pedeve.com"},
-	}
-
-	for _, comp := range level3Companies {
-		parentID := level2IDs[comp.parentIndex]
-		var companyID string
-		
-		existing, _ := uc.companyRepo.GetByCode(comp.code)
-		if existing != nil {
-			companyID = existing.ID
-			existing.ParentID = &parentID
-			existing.Level = 3
-			existing.IsActive = true
-			existing.Name = comp.name
-			existing.ShortName = comp.name
-			existing.Description = comp.description
-			existing.Status = "Aktif"
-			if err := uc.companyRepo.Update(existing); err != nil {
-				zapLog.Warn("Failed to update company", zap.String("code", comp.code), zap.Error(err))
-				continue
-			}
-		} else {
-			companyID = uuid.GenerateUUID()
-			company := &domain.CompanyModel{
-				ID:          companyID,
-				Name:        comp.name,
-				ShortName:   comp.name,
-				Code:        comp.code,
-				Description: comp.description,
-				Status:      "Aktif",
-				ParentID:    &parentID,
-				Level:       3,
-				IsActive:    true,
-			}
-			if err := uc.companyRepo.Create(company); err != nil {
-				zapLog.Warn("Failed to create company", zap.String("code", comp.code), zap.Error(err))
-				continue
-			}
-		}
-
-		// Create admin user
-		companyIDToUse := companyID
-		adminRoleID := adminRole.ID
-		existingUser, _ := uc.userRepo.GetByUsername(comp.username)
-		
-		var userID string
-		if existingUser != nil {
-			// User already exists - update CompanyID and RoleID, then create/update assignment
-			userID = existingUser.ID
-			existingUser.CompanyID = &companyIDToUse
-			existingUser.RoleID = &adminRoleID
-			existingUser.Role = "admin"
-			if err := uc.userRepo.Update(existingUser); err != nil {
-				zapLog.Warn("Failed to update user", zap.String("username", comp.username), zap.Error(err))
-			}
-		} else {
-			// Create new user
-			userID = uuid.GenerateUUID()
-			hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-			user := &domain.UserModel{
-				ID:        userID,
-				Username:  comp.username,
-				Email:     comp.email,
-				Password:  string(hashedPassword),
-				Role:      "admin",
-				RoleID:    &adminRoleID,
-				CompanyID: &companyIDToUse,
-				IsActive:  true,
-			}
-			if err := uc.userRepo.Create(user); err != nil {
-				zapLog.Warn("Failed to create user", zap.String("username", comp.username), zap.Error(err))
-				continue // Skip assignment if user creation failed
-			}
-		}
-		
-		// Create or update entry in junction table for user-company assignment
-		if userID != "" {
-			existingAssignment, _ := uc.userCompanyAssignmentRepo.GetByUserAndCompany(userID, companyIDToUse)
-			if existingAssignment != nil {
-				// Assignment exists - update it
-				existingAssignment.RoleID = &adminRoleID
-				existingAssignment.IsActive = true
-				if err := uc.userCompanyAssignmentRepo.Update(existingAssignment); err != nil {
-					zapLog.Warn("Failed to update assignment", zap.String("username", comp.username), zap.Error(err))
-				}
-			} else {
-				// Create new assignment
-				assignment := &domain.UserCompanyAssignmentModel{
-					ID:        uuid.GenerateUUID(),
-					UserID:    userID,
-					CompanyID: companyIDToUse,
-					RoleID:    &adminRoleID,
-					IsActive:  true,
-				}
-				if err := uc.userCompanyAssignmentRepo.Create(assignment); err != nil {
-					zapLog.Warn("Failed to create assignment", zap.String("username", comp.username), zap.Error(err))
-				}
 			}
 		}
 	}
 
 	zapLog.Info("Subsidiary seeder completed successfully")
 	return false, nil
+}
+
+// truncateString truncates a string to max length
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // ResetReportData deletes all reports
@@ -763,21 +568,47 @@ func (uc *developmentUseCase) RunReportSeeder() error {
 		return fmt.Errorf("report data already exists")
 	}
 
-	// Get all subsidiaries
-	allCompanies, err := uc.companyRepo.GetAll()
-	if err != nil {
-		return fmt.Errorf("failed to get companies: %w", err)
+	// Get all subsidiaries directly from database with specific filter
+	// Use direct DB query to ensure we get the latest data after seeder execution
+	db := uc.db
+	if db == nil {
+		db = database.GetDB()
 	}
 
 	var subsidiaries []domain.CompanyModel
-	for _, comp := range allCompanies {
-		if comp.Level > 0 && comp.IsActive {
-			subsidiaries = append(subsidiaries, comp)
-		}
+	// Query for active subsidiaries (companies with parent_id IS NOT NULL, excluding holding)
+	err = db.Where("parent_id IS NOT NULL AND is_active = ? AND code != ?", true, "PDV").
+		Find(&subsidiaries).Error
+	if err != nil {
+		return fmt.Errorf("failed to get subsidiaries: %w", err)
 	}
 
 	if len(subsidiaries) == 0 {
-		return fmt.Errorf("no subsidiaries found. please run seed-companies first")
+		// Try to get any active company with level > 0 as fallback
+		err = db.Where("level > ? AND is_active = ?", 0, true).
+			Find(&subsidiaries).Error
+		if err != nil {
+			return fmt.Errorf("failed to get subsidiaries: %w", err)
+		}
+		if len(subsidiaries) == 0 {
+			// Debug: Check what companies actually exist
+			var allCompanies []domain.CompanyModel
+			db.Where("is_active = ?", true).Find(&allCompanies)
+			zapLog.Error("No subsidiaries found",
+				zap.Int("total_active_companies", len(allCompanies)),
+				zap.Any("company_codes", func() []string {
+					codes := make([]string, 0, len(allCompanies))
+					for _, c := range allCompanies {
+						codes = append(codes, c.Code)
+					}
+					return codes
+				}()),
+			)
+			return fmt.Errorf("no subsidiaries found. please run seed-companies first. found %d active companies total", len(allCompanies))
+		}
+		zapLog.Info("Found subsidiaries using fallback query (by level)", zap.Int("count", len(subsidiaries)))
+	} else {
+		zapLog.Info("Found subsidiaries", zap.Int("count", len(subsidiaries)))
 	}
 
 	// Get all users for random assignment
@@ -869,9 +700,24 @@ func (uc *developmentUseCase) CheckReportDataExists() (bool, error) {
 }
 
 // RunAllSeeders runs all seeders in the correct order
-// Order: 1. Company seeder, 2. Report seeder
+// Order: 0. Roles & Permissions (if needed), 1. Company seeder, 2. Report seeder
 func (uc *developmentUseCase) RunAllSeeders() error {
 	zapLog := logger.GetLogger()
+
+	// Step 0: Ensure roles exist (required for company seeder)
+	zapLog.Info("Step 0: Ensuring roles and permissions exist...")
+	checkDB := uc.db
+	if checkDB == nil {
+		checkDB = database.GetDB()
+	}
+
+	// Check if admin role exists
+	var adminRole domain.RoleModel
+	if err := checkDB.Where("name = ?", "admin").First(&adminRole).Error; err != nil {
+		zapLog.Warn("Admin role not found, this may cause company seeder to fail. Please ensure roles are seeded first.")
+	} else {
+		zapLog.Info("Admin role found, proceeding with company seeder")
+	}
 
 	// Step 1: Run company seeder first
 	zapLog.Info("Step 1: Running company seeder...")
@@ -883,6 +729,19 @@ func (uc *developmentUseCase) RunAllSeeders() error {
 		zapLog.Info("Company seeder data already exists, skipping")
 	} else {
 		zapLog.Info("Company seeder completed successfully")
+	}
+
+	// Refresh database connection to ensure we see the latest data
+	refreshDB := uc.db
+	if refreshDB == nil {
+		refreshDB = database.GetDB()
+	}
+	if sqlDB, sqlErr := refreshDB.DB(); sqlErr == nil {
+		if err := sqlDB.Ping(); err != nil {
+			zapLog.Warn("Failed to ping database connection", zap.Error(err))
+		} else {
+			zapLog.Info("Database connection refreshed before report seeder")
+		}
 	}
 
 	// Step 2: Run report seeder (depends on companies)
@@ -947,5 +806,3 @@ func (uc *developmentUseCase) CheckAllSeederStatus() (map[string]bool, error) {
 
 	return status, nil
 }
-
-

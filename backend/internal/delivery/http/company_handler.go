@@ -273,6 +273,9 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 		}
 	}
 
+	// Get old company data before update for audit log
+	oldCompany, _ := h.companyUseCase.GetCompanyByID(id)
+
 	company, err := h.companyUseCase.UpdateCompanyFull(id, &req)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
@@ -284,10 +287,302 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 	// Get full company data with relationships
 	fullCompany, _ := h.companyUseCase.GetCompanyByID(company.ID)
 
-	// Audit log
+	// Prepare audit details with changes
 	userID := c.Locals("userID").(string)
 	username := c.Locals("username").(string)
-	audit.LogAction(userID, username, audit.ActionUpdateCompany, audit.ResourceCompany, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+
+	// Compare old and new values to create changes map
+	changes := make(map[string]map[string]interface{})
+	if oldCompany != nil {
+		if oldCompany.Name != company.Name {
+			changes["name"] = map[string]interface{}{"old": oldCompany.Name, "new": company.Name}
+		}
+		if oldCompany.ShortName != company.ShortName {
+			changes["short_name"] = map[string]interface{}{"old": oldCompany.ShortName, "new": company.ShortName}
+		}
+		if oldCompany.Description != company.Description {
+			changes["description"] = map[string]interface{}{"old": oldCompany.Description, "new": company.Description}
+		}
+		if oldCompany.NPWP != company.NPWP {
+			changes["npwp"] = map[string]interface{}{"old": oldCompany.NPWP, "new": company.NPWP}
+		}
+		if oldCompany.NIB != company.NIB {
+			changes["nib"] = map[string]interface{}{"old": oldCompany.NIB, "new": company.NIB}
+		}
+		if oldCompany.Status != company.Status {
+			changes["status"] = map[string]interface{}{"old": oldCompany.Status, "new": company.Status}
+		}
+		if oldCompany.Logo != company.Logo {
+			changes["logo"] = map[string]interface{}{"old": oldCompany.Logo, "new": company.Logo}
+		}
+		if oldCompany.Phone != company.Phone {
+			changes["phone"] = map[string]interface{}{"old": oldCompany.Phone, "new": company.Phone}
+		}
+		if oldCompany.Fax != company.Fax {
+			changes["fax"] = map[string]interface{}{"old": oldCompany.Fax, "new": company.Fax}
+		}
+		if oldCompany.Email != company.Email {
+			changes["email"] = map[string]interface{}{"old": oldCompany.Email, "new": company.Email}
+		}
+		if oldCompany.Website != company.Website {
+			changes["website"] = map[string]interface{}{"old": oldCompany.Website, "new": company.Website}
+		}
+		if oldCompany.Address != company.Address {
+			changes["address"] = map[string]interface{}{"old": oldCompany.Address, "new": company.Address}
+		}
+		if oldCompany.OperationalAddress != company.OperationalAddress {
+			changes["operational_address"] = map[string]interface{}{"old": oldCompany.OperationalAddress, "new": company.OperationalAddress}
+		}
+		if oldCompany.Code != company.Code {
+			changes["code"] = map[string]interface{}{"old": oldCompany.Code, "new": company.Code}
+		}
+
+		// Handle parent_id comparison (handle nil pointers)
+		oldParentID := ""
+		if oldCompany.ParentID != nil {
+			oldParentID = *oldCompany.ParentID
+		}
+		newParentID := ""
+		if company.ParentID != nil {
+			newParentID = *company.ParentID
+		}
+		if oldParentID != newParentID {
+			changes["parent_id"] = map[string]interface{}{"old": oldParentID, "new": newParentID}
+		}
+
+		// Handle authorized_capital comparison
+		oldAuthCapital := int64(0)
+		if oldCompany.AuthorizedCapital != nil {
+			oldAuthCapital = *oldCompany.AuthorizedCapital
+		}
+		newAuthCapital := int64(0)
+		if company.AuthorizedCapital != nil {
+			newAuthCapital = *company.AuthorizedCapital
+		}
+		if oldAuthCapital != newAuthCapital {
+			changes["authorized_capital"] = map[string]interface{}{"old": oldAuthCapital, "new": newAuthCapital}
+		}
+
+		// Handle paid_up_capital comparison
+		oldPaidCapital := int64(0)
+		if oldCompany.PaidUpCapital != nil {
+			oldPaidCapital = *oldCompany.PaidUpCapital
+		}
+		newPaidCapital := int64(0)
+		if company.PaidUpCapital != nil {
+			newPaidCapital = *company.PaidUpCapital
+		}
+		if oldPaidCapital != newPaidCapital {
+			changes["paid_up_capital"] = map[string]interface{}{"old": oldPaidCapital, "new": newPaidCapital}
+		}
+
+		// Handle currency comparison
+		if oldCompany.Currency != company.Currency {
+			changes["currency"] = map[string]interface{}{"old": oldCompany.Currency, "new": company.Currency}
+		}
+
+		// Handle main_parent_company comparison (handle nil pointers)
+		oldMainParent := ""
+		if oldCompany.MainParentCompanyID != nil {
+			oldMainParent = *oldCompany.MainParentCompanyID
+		}
+		newMainParent := ""
+		if company.MainParentCompanyID != nil {
+			newMainParent = *company.MainParentCompanyID
+		}
+		if oldMainParent != newMainParent {
+			changes["main_parent_company"] = map[string]interface{}{"old": oldMainParent, "new": newMainParent}
+		}
+
+		// Compare shareholders - track additions, deletions, and modifications
+		oldShareholders := oldCompany.Shareholders
+		newShareholders := fullCompany.Shareholders
+
+		// If count changed, record added/removed shareholders with details
+		if len(oldShareholders) < len(newShareholders) {
+			// Shareholders were added
+			for i := len(oldShareholders); i < len(newShareholders); i++ {
+				newSh := newShareholders[i]
+				shareholderInfo := map[string]interface{}{
+					"action": "added",
+					"name":   newSh.Name,
+				}
+				if newSh.Type != "" {
+					shareholderInfo["type"] = newSh.Type
+				}
+				if newSh.IdentityNumber != "" {
+					shareholderInfo["identity_number"] = newSh.IdentityNumber
+				}
+				if newSh.ShareholderCompanyID != nil {
+					shareholderInfo["shareholder_company_id"] = *newSh.ShareholderCompanyID
+				}
+				changes[fmt.Sprintf("shareholder_added_%d", i-len(oldShareholders))] = shareholderInfo
+			}
+		} else if len(oldShareholders) > len(newShareholders) {
+			// Shareholders were removed
+			for i := len(newShareholders); i < len(oldShareholders); i++ {
+				oldSh := oldShareholders[i]
+				shareholderInfo := map[string]interface{}{
+					"action": "removed",
+					"name":   oldSh.Name,
+				}
+				if oldSh.Type != "" {
+					shareholderInfo["type"] = oldSh.Type
+				}
+				if oldSh.IdentityNumber != "" {
+					shareholderInfo["identity_number"] = oldSh.IdentityNumber
+				}
+				if oldSh.ShareholderCompanyID != nil {
+					shareholderInfo["shareholder_company_id"] = *oldSh.ShareholderCompanyID
+				}
+				changes[fmt.Sprintf("shareholder_removed_%d", i-len(newShareholders))] = shareholderInfo
+			}
+		}
+
+		// Check for individual shareholder changes (for shareholders that exist in both)
+		maxLen := len(oldShareholders)
+		if len(newShareholders) < maxLen {
+			maxLen = len(newShareholders)
+		}
+		for i := 0; i < maxLen; i++ {
+			oldSh := oldShareholders[i]
+			newSh := newShareholders[i]
+			if oldSh.Name != newSh.Name {
+				changes[fmt.Sprintf("shareholder_%d_name", i)] = map[string]interface{}{"old": oldSh.Name, "new": newSh.Name}
+			}
+			if oldSh.Type != newSh.Type {
+				changes[fmt.Sprintf("shareholder_%d_type", i)] = map[string]interface{}{"old": oldSh.Type, "new": newSh.Type}
+			}
+			// Handle shareholder_company_id comparison
+			oldShCompanyID := ""
+			if oldSh.ShareholderCompanyID != nil {
+				oldShCompanyID = *oldSh.ShareholderCompanyID
+			}
+			newShCompanyID := ""
+			if newSh.ShareholderCompanyID != nil {
+				newShCompanyID = *newSh.ShareholderCompanyID
+			}
+			if oldShCompanyID != newShCompanyID {
+				changes[fmt.Sprintf("shareholder_%d_company_id", i)] = map[string]interface{}{"old": oldShCompanyID, "new": newShCompanyID}
+			}
+			if oldSh.IdentityNumber != newSh.IdentityNumber {
+				changes[fmt.Sprintf("shareholder_%d_identity_number", i)] = map[string]interface{}{"old": oldSh.IdentityNumber, "new": newSh.IdentityNumber}
+			}
+			if oldSh.OwnershipPercent != newSh.OwnershipPercent {
+				changes[fmt.Sprintf("shareholder_%d_ownership_percent", i)] = map[string]interface{}{"old": oldSh.OwnershipPercent, "new": newSh.OwnershipPercent}
+			}
+			if oldSh.ShareSheetCount != nil && newSh.ShareSheetCount != nil && *oldSh.ShareSheetCount != *newSh.ShareSheetCount {
+				changes[fmt.Sprintf("shareholder_%d_share_sheet_count", i)] = map[string]interface{}{"old": *oldSh.ShareSheetCount, "new": *newSh.ShareSheetCount}
+			}
+			if oldSh.ShareValuePerSheet != nil && newSh.ShareValuePerSheet != nil && *oldSh.ShareValuePerSheet != *newSh.ShareValuePerSheet {
+				changes[fmt.Sprintf("shareholder_%d_share_value_per_sheet", i)] = map[string]interface{}{"old": *oldSh.ShareValuePerSheet, "new": *newSh.ShareValuePerSheet}
+			}
+		}
+
+		// Compare directors - track additions, deletions, and modifications
+		oldDirectors := oldCompany.Directors
+		newDirectors := fullCompany.Directors
+
+		// If count changed, record added/removed directors with details
+		if len(oldDirectors) < len(newDirectors) {
+			// Directors were added
+			for i := len(oldDirectors); i < len(newDirectors); i++ {
+				newDir := newDirectors[i]
+				changes[fmt.Sprintf("director_added_%d", i-len(oldDirectors))] = map[string]interface{}{
+					"action":    "added",
+					"position":  newDir.Position,
+					"full_name": newDir.FullName,
+					"ktp":       newDir.KTP,
+				}
+			}
+		} else if len(oldDirectors) > len(newDirectors) {
+			// Directors were removed
+			for i := len(newDirectors); i < len(oldDirectors); i++ {
+				oldDir := oldDirectors[i]
+				changes[fmt.Sprintf("director_removed_%d", i-len(newDirectors))] = map[string]interface{}{
+					"action":    "removed",
+					"position":  oldDir.Position,
+					"full_name": oldDir.FullName,
+					"ktp":       oldDir.KTP,
+				}
+			}
+		}
+
+		// Check for individual director changes (for directors that exist in both)
+		directorMaxLen := len(oldDirectors)
+		if len(newDirectors) < directorMaxLen {
+			directorMaxLen = len(newDirectors)
+		}
+		for i := 0; i < directorMaxLen; i++ {
+			oldDir := oldDirectors[i]
+			newDir := newDirectors[i]
+			if oldDir.FullName != newDir.FullName {
+				changes[fmt.Sprintf("director_%d_full_name", i)] = map[string]interface{}{"old": oldDir.FullName, "new": newDir.FullName}
+			}
+			if oldDir.Position != newDir.Position {
+				changes[fmt.Sprintf("director_%d_position", i)] = map[string]interface{}{"old": oldDir.Position, "new": newDir.Position}
+			}
+			if oldDir.KTP != newDir.KTP {
+				changes[fmt.Sprintf("director_%d_ktp", i)] = map[string]interface{}{"old": oldDir.KTP, "new": newDir.KTP}
+			}
+			if oldDir.NPWP != newDir.NPWP {
+				changes[fmt.Sprintf("director_%d_npwp", i)] = map[string]interface{}{"old": oldDir.NPWP, "new": newDir.NPWP}
+			}
+			if oldDir.DomicileAddress != newDir.DomicileAddress {
+				changes[fmt.Sprintf("director_%d_domicile_address", i)] = map[string]interface{}{"old": oldDir.DomicileAddress, "new": newDir.DomicileAddress}
+			}
+		}
+
+		// Compare business fields (main business)
+		// Get main business from BusinessFields (is_main = true) or first one
+		var oldMainBusiness *domain.BusinessFieldModel
+		if len(oldCompany.BusinessFields) > 0 {
+			for _, bf := range oldCompany.BusinessFields {
+				if bf.IsMain {
+					oldMainBusiness = &bf
+					break
+				}
+			}
+			if oldMainBusiness == nil {
+				oldMainBusiness = &oldCompany.BusinessFields[0]
+			}
+		}
+
+		var newMainBusiness *domain.BusinessFieldModel
+		if len(fullCompany.BusinessFields) > 0 {
+			for _, bf := range fullCompany.BusinessFields {
+				if bf.IsMain {
+					newMainBusiness = &bf
+					break
+				}
+			}
+			if newMainBusiness == nil {
+				newMainBusiness = &fullCompany.BusinessFields[0]
+			}
+		}
+		if oldMainBusiness != nil && newMainBusiness != nil {
+			if oldMainBusiness.IndustrySector != newMainBusiness.IndustrySector {
+				changes["business_industry_sector"] = map[string]interface{}{"old": oldMainBusiness.IndustrySector, "new": newMainBusiness.IndustrySector}
+			}
+			if oldMainBusiness.KBLI != newMainBusiness.KBLI {
+				changes["business_kbli"] = map[string]interface{}{"old": oldMainBusiness.KBLI, "new": newMainBusiness.KBLI}
+			}
+			if oldMainBusiness.MainBusinessActivity != newMainBusiness.MainBusinessActivity {
+				changes["business_main_activity"] = map[string]interface{}{"old": oldMainBusiness.MainBusinessActivity, "new": newMainBusiness.MainBusinessActivity}
+			}
+			if oldMainBusiness.AdditionalActivities != newMainBusiness.AdditionalActivities {
+				changes["business_additional_activities"] = map[string]interface{}{"old": oldMainBusiness.AdditionalActivities, "new": newMainBusiness.AdditionalActivities}
+			}
+		}
+	}
+
+	// Audit log with changes details
+	auditDetails := map[string]interface{}{}
+	if len(changes) > 0 {
+		auditDetails["changes"] = changes
+	}
+
+	audit.LogAction(userID, username, audit.ActionUpdateCompany, audit.ResourceCompany, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, auditDetails)
 
 	return c.Status(fiber.StatusOK).JSON(fullCompany)
 }

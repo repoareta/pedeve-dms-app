@@ -2,13 +2,16 @@ package http
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/audit"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
 	"github.com/gofiber/fiber/v2"
+	"go.uber.org/zap"
 )
 
 // GetAuditLogsHandler menangani request GET untuk audit logs (untuk Fiber)
@@ -225,6 +228,7 @@ func GetUserActivityLogsHandler(c *fiber.Ctx) error {
 	pageSize := 10
 	action := c.Query("action")
 	resource := c.Query("resource")
+	resourceID := c.Query("resource_id")
 	status := c.Query("status")
 
 	if pageStr := c.Query("page"); pageStr != "" {
@@ -248,20 +252,68 @@ func GetUserActivityLogsHandler(c *fiber.Ctx) error {
 		})
 	}
 
+	// Determine role: prefer RoleModel.Name if RoleID exists, fallback to legacy Role field
+	userRole := currentUser.Role
+	if currentUser.RoleID != nil && *currentUser.RoleID != "" {
+		var roleModel domain.RoleModel
+		if err := database.GetDB().First(&roleModel, "id = ?", *currentUser.RoleID).Error; err == nil {
+			userRole = roleModel.Name
+		}
+	}
+
 	// User reguler hanya bisa lihat logs mereka sendiri.
 	// Admin/superadmin/administrator bisa lihat semua logs, namun administrator tidak boleh melihat log milik superadmin.
+	zapLog := logger.GetLogger()
+	
+	// Debug: Log role information
+	zapLog.Info("GetUserActivityLogsHandler - Role check",
+		zap.String("current_user_id", currentUserID),
+		zap.String("user_role_legacy", currentUser.Role),
+		zap.String("user_role_id", func() string {
+			if currentUser.RoleID != nil {
+				return *currentUser.RoleID
+			}
+			return ""
+		}()),
+		zap.String("user_role_final", userRole),
+		zap.String("user_role_trimmed", strings.TrimSpace(userRole)),
+		zap.String("user_role_lower", strings.ToLower(strings.TrimSpace(userRole))),
+	)
+	
 	filterUserID := currentUserID
-	isAdminLike := currentUser.Role == "admin" || currentUser.Role == "superadmin" || currentUser.Role == "administrator"
-	isAdministrator := currentUser.Role == "administrator"
+	// Normalize role to lowercase for comparison (handle case sensitivity issues)
+	roleLower := strings.ToLower(strings.TrimSpace(userRole))
+	
+	// Determine access level:
+	// - superadmin: bisa lihat semua logs termasuk milik superadmin
+	// - administrator: bisa lihat semua logs kecuali milik superadmin
+	// - admin, manager, staff: bisa lihat semua logs kecuali milik superadmin
+	// - user reguler lainnya: hanya bisa lihat logs mereka sendiri
+	isSuperadmin := roleLower == "superadmin"
+	isAdministrator := roleLower == "administrator"
+	isAdminLike := roleLower == "admin" || roleLower == "manager" || roleLower == "staff" || isAdministrator || isSuperadmin
+	
+	zapLog.Info("GetUserActivityLogsHandler - RBAC check",
+		zap.String("role", roleLower),
+		zap.Bool("is_superadmin", isSuperadmin),
+		zap.Bool("is_administrator", isAdministrator),
+		zap.Bool("is_admin_like", isAdminLike),
+		zap.String("original_filter_user_id", filterUserID),
+	)
+	
 	if isAdminLike {
+		// Admin, manager, staff, administrator, dan superadmin bisa lihat semua logs (tidak filter berdasarkan userID)
 		filterUserID = ""
+		zapLog.Info("GetUserActivityLogsHandler - Admin access granted, removing user filter")
+	} else {
+		zapLog.Info("GetUserActivityLogsHandler - Regular user, filtering by userID", zap.String("filter_user_id", filterUserID))
 	}
 
 	// Hitung offset
 	offset := (page - 1) * pageSize
 
 	// Ambil user activity logs
-	logs, total, err := repository.GetUserActivityLogs(filterUserID, action, resource, status, pageSize, offset)
+	logs, total, err := repository.GetUserActivityLogs(filterUserID, action, resource, resourceID, status, pageSize, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
 			Error:   "internal_error",
@@ -269,18 +321,29 @@ func GetUserActivityLogsHandler(c *fiber.Ctx) error {
 		})
 	}
 
-	// Administrator: sembunyikan log milik superadmin
-	if isAdministrator {
+	// Filter out superadmin logs untuk administrator, admin, manager, dan staff
+	// Superadmin tetap bisa melihat semua logs termasuk milik superadmin
+	if !isSuperadmin && isAdminLike {
+		zapLog.Info("GetUserActivityLogsHandler - Filtering out superadmin logs",
+			zap.String("role", roleLower),
+		)
 		filtered := make([]domain.UserActivityLog, 0, len(logs))
 		for _, l := range logs {
+			// Sembunyikan log milik superadmin untuk non-superadmin admin users
 			if l.Username != "" && l.Username != "superadmin" {
 				filtered = append(filtered, l)
 			}
 		}
+		zapLog.Info("GetUserActivityLogsHandler - After filtering",
+			zap.Int("original_count", len(logs)),
+			zap.Int("filtered_count", len(filtered)),
+		)
 		logs = filtered
 		if total > int64(len(filtered)) {
 			total = int64(len(filtered))
 		}
+	} else if isSuperadmin {
+		zapLog.Info("GetUserActivityLogsHandler - Superadmin access, showing all logs including superadmin")
 	}
 
 	// Kembalikan response

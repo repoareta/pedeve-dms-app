@@ -47,6 +47,10 @@ backend/cmd/*/*/main
 backend/uploads/*
 !backend/uploads/README.md
 
+# HTTP handler uploads (user uploaded files should not be in git)
+backend/internal/delivery/http/uploads/*
+!backend/internal/delivery/http/uploads/.gitkeep
+
 # Frontend
 frontend/node_modules/
 frontend/dist/

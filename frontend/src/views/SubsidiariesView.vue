@@ -30,7 +30,7 @@
                 <IconifyIcon icon="mdi:view-list" width="20" />
               </a-button>
             </div>
-            <a-button type="primary" @click="handleCreateCompany" style="display: flex; align-items: center;">
+            <a-button v-if="isSuperAdmin || isAdministrator || isAdmin" type="primary" @click="handleCreateCompany" style="display: flex; align-items: center;">
               <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
               Add new Subsidiary
             </a-button>
@@ -40,10 +40,9 @@
 
       <div class="mainContentPage">
         <!-- Subsidiary Cards Grid -->
-        <div class="subsidiary-cards-grid"
-          v-if="viewMode === 'grid' && !companiesLoading && filteredCompanies.length > 0">
-          <div v-for="company in paginatedCompanies" :key="company.id" class="subsidiary-card"
-            @click="handleViewDetail(company.id)">
+        <a-row :gutter="[24, 24]" v-if="viewMode === 'grid' && !companiesLoading && filteredCompanies.length > 0">
+          <a-col v-for="company in paginatedCompanies" :key="company.id" :xs="24" :sm="12" :md="12" :lg="8" :xl="6">
+            <div class="subsidiary-card" @click="handleViewDetail(company.id)">
             <!-- Card Header -->
             <div class="card-header">
               <div class="company-icon">
@@ -65,31 +64,42 @@
             <!-- Card Content -->
             <div class="card-content">
               <div class="latest-month-header">
-                <IconifyIcon icon="mdi:information-outline" width="16" style="margin-right: 4px;" />
-                <span>Latest Month</span>
+                <a-popover :title="getPopoverTitle(company.id)" placement="top" trigger="hover">
+                  <template #content>
+                    <div style="max-width: 350px;">
+                      <div v-html="getPopoverContent(company.id)"></div>
+                    </div>
+                  </template>
+                  <div style="display: flex; align-items: center; cursor: help;">
+                    <IconifyIcon icon="mdi:information-outline" width="16" style="margin-right: 4px;" />
+                    <span>Latest Month</span>
+                  </div>
+                </a-popover>
               </div>
 
               <div class="metrics-row">
-                <!-- RKAP vs Realization -->
+                <!-- Net Profit (NPAT) -->
                 <div class="metric-item">
-                  <div class="metric-value">{{ formatCurrency(getRKAPData(company.id)) }}</div>
+                  <div class="metric-value">{{ formatCurrency(getNetProfitData(company.id), company.id) }}</div>
                   <div class="metric-meta">
-                    <span class="metric-year">{{ getRKAPYear(company.id) }}</span>
-                    <span class="metric-change" :class="getRKAPChange(company.id) >= 0 ? 'positive' : 'negative'">
-                      {{ getRKAPChange(company.id) >= 0 ? '+' : '' }}{{ getRKAPChange(company.id) }}%
+                    <span class="metric-year">{{ getNetProfitPeriod(company.id) }}</span>
+                    <span class="metric-change" :class="getNetProfitChange(company.id) >= 0 ? 'positive' : 'negative'">
+                      {{ getNetProfitChange(company.id) >= 0 ? '+' : '' }}{{ getNetProfitChange(company.id) }}%
                     </span>
                   </div>
-                  <div class="metric-label">RKAP vs Realization</div>
+                  <div class="metric-label">Net Profit</div>
                 </div>
 
-                <!-- Opex Trend -->
+                <!-- Financial Health Score -->
                 <div class="metric-item">
-                  <div class="metric-value">{{ formatCurrency(getOpexData(company.id)) }}</div>
+                  <div class="metric-value">{{ getFinancialHealthScore(company.id) }}</div>
                   <div class="metric-meta">
-                    <span class="metric-quarter">{{ getOpexQuarter(company.id) }}</span>
-                    <span class="metric-change negative">-{{ getOpexChange(company.id) }}%</span>
+                    <span class="metric-quarter">{{ getFinancialHealthPeriod(company.id) }}</span>
+                    <span class="metric-change" :class="getFinancialHealthStatus(company.id).color">
+                      {{ getFinancialHealthStatus(company.id).label }}
+                    </span>
                   </div>
-                  <div class="metric-label">Opex Trend</div>
+                  <div class="metric-label">Financial Health</div>
                 </div>
               </div>
             </div>
@@ -101,8 +111,9 @@
                 <IconifyIcon icon="mdi:arrow-right" width="16" style="margin-left: 4px;" />
               </a-button>
             </div>
-          </div>
-        </div>
+            </div>
+          </a-col>
+        </a-row>
 
         <!-- Subsidiary Table View -->
         <div v-if="viewMode === 'list'">
@@ -125,6 +136,17 @@
                 showTotal: (total: number) => `Total ${total} subsidiaries`,
                 pageSizeOptions: ['10', '20', '50', '100'],
               }" @change="handleTableChange" row-key="id" :scroll="{ x: 'max-content' }" class="striped-table">
+              <template #emptyText>
+                <div class="empty-state" style="padding: 40px 20px;">
+                  <IconifyIcon icon="mdi:office-building-outline" width="64" style="color: #ccc; margin-bottom: 16px;" />
+                  <p v-if="isSuperAdmin || isAdministrator">Belum ada data subsidiary</p>
+                  <p v-else>Anda belum di-assign ke perusahaan manapun. Silakan hubungi administrator untuk mendapatkan akses.</p>
+                  <a-button v-if="isSuperAdmin || isAdministrator" type="primary" @click="handleCreateCompany" style="margin-top: 16px;">
+                    <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
+                    Tambah Subsidiary Pertama
+                  </a-button>
+                </div>
+              </template>
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'logo'">
                   <div class="table-logo-cell">
@@ -187,8 +209,9 @@
         <!-- Empty State -->
         <div v-if="viewMode === 'grid' && !companiesLoading && companies.length === 0" class="empty-state">
           <IconifyIcon icon="mdi:office-building-outline" width="64" style="color: #ccc; margin-bottom: 16px;" />
-          <p>Belum ada data subsidiary</p>
-          <a-button type="primary" @click="handleCreateCompany">
+          <p v-if="isSuperAdmin || isAdministrator">Belum ada data subsidiary</p>
+          <p v-else>Anda belum di-assign ke perusahaan manapun. Silakan hubungi administrator untuk mendapatkan akses.</p>
+          <a-button v-if="isSuperAdmin || isAdministrator" type="primary" @click="handleCreateCompany">
             <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
             Tambah Subsidiary Pertama
           </a-button>
@@ -326,12 +349,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { companyApi, userApi, roleApi, type Company, type User, type Role } from '../api/userManagement'
-import reportsApi, { type Report } from '../api/reports'
+// NOTE: reportsApi (old Reports module) is NOT used anymore - only use financialReportsApi (Input Laporan)
+import { financialReportsApi, type FinancialReport } from '../api/financialReports'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
@@ -388,9 +412,10 @@ const tablePagination = ref({
   total: 0,
 })
 
-// Reports data per company
-const companyReportsMap = ref<Record<string, Report[]>>({})
-const reportsLoading = ref(false)
+// Financial reports data per company (from Input Laporan feature)
+// NOTE: companyReportsMap (old Reports module) is NOT used anymore
+const companyFinancialReportsMap = ref<Record<string, FinancialReport[]>>({})
+const financialReportsLoading = ref(false)
 
 // Format period helper
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -453,117 +478,636 @@ watch(searchText, () => {
   currentPage.value = 1
 })
 
-// Get financial data from real reports
-const getRKAPData = (companyId: string): number => {
-  const reports = companyReportsMap.value[companyId] || []
-  if (reports.length === 0) return 0
-
-  // Get latest report
-  const latest = [...reports].sort((a, b) => {
-    if (!a.period || !b.period) return 0
-    return b.period.localeCompare(a.period)
-  })[0]
-
-  return latest?.revenue || 0
-}
-
-const getRKAPYear = (companyId: string): string => {
-  const reports = companyReportsMap.value[companyId] || []
-  if (reports.length === 0) return '2025'
-
-  const latest = [...reports].sort((a, b) => {
-    if (!a.period || !b.period) return 0
-    return b.period.localeCompare(a.period)
-  })[0]
-
-  if (!latest?.period) return '2025'
-  const year = latest.period.split('-')[0]
-  return year || '2025'
-}
-
-const getRKAPChange = (companyId: string): number => {
-  const reports = companyReportsMap.value[companyId] || []
-  if (reports.length < 2) return 0
-
-  // Sort by period
-  const sorted = [...reports].sort((a, b) => {
-    if (!a.period || !b.period) return 0
-    return a.period.localeCompare(b.period)
-  })
-
-  const latest = sorted[sorted.length - 1]
-  const previous = sorted[sorted.length - 2]
-
-  if (!latest || !previous) return 0
-
-  const latestRevenue = latest.revenue || 0
-  const prevRevenue = previous.revenue || 0
-
-  if (prevRevenue === 0) return 0
-
-  const change = ((latestRevenue - prevRevenue) / prevRevenue) * 100
-  return Math.round(change * 10) / 10
-}
-
-const getOpexData = (companyId: string): number => {
-  const reports = companyReportsMap.value[companyId] || []
-  if (reports.length === 0) return 0
-
-  // Get latest report
-  const latest = [...reports].sort((a, b) => {
-    if (!a.period || !b.period) return 0
-    return b.period.localeCompare(a.period)
-  })[0]
-
-  return latest?.opex || 0
-}
-
-const getOpexQuarter = (companyId: string): string => {
-  const reports = companyReportsMap.value[companyId] || []
-  if (reports.length === 0) return 'Q1 2025'
-
-  const latest = [...reports].sort((a, b) => {
-    if (!a.period || !b.period) return 0
-    return b.period.localeCompare(a.period)
-  })[0]
-
-  return getQuarterFromPeriod(latest?.period)
-}
-
-const getOpexChange = (companyId: string): number => {
-  const reports = companyReportsMap.value[companyId] || []
-  if (reports.length < 2) return 0
-
-  // Sort by period
-  const sorted = [...reports].sort((a, b) => {
-    if (!a.period || !b.period) return 0
-    return a.period.localeCompare(b.period)
-  })
-
-  const latest = sorted[sorted.length - 1]
-  const previous = sorted[sorted.length - 2]
-
-  if (!latest || !previous) return 0
-
-  const latestOpex = latest.opex || 0
-  const prevOpex = previous.opex || 0
-
-  if (prevOpex === 0) return 0
-
-  const change = ((latestOpex - prevOpex) / prevOpex) * 100
-  return Math.round(Math.abs(change) * 10) / 10
-}
-
-// Format currency
-const formatCurrency = (value: number): string => {
-  if (value >= 1000000000) {
-    return `$${(value / 1000000000).toFixed(0)}B`
-  } else if (value >= 1000000) {
-    return `${(value / 1000000).toFixed(0)}M`
-  } else if (value >= 1000) {
-    return `${(value / 1000).toFixed(0)}K`
+// Get financial data from financial reports (detailed with ratios)
+// Net Profit (NPAT) functions - using Financial Reports (Realisasi from Input Laporan tab)
+// CRITICAL: Only use data from Input Laporan (Financial Reports), NOT from old Reports module
+const getNetProfitData = (companyId: string): number => {
+  // ONLY use financial reports (Realisasi) from Input Laporan tab
+  // These are the data entered in: Input Laporan > Realisasi (Bulanan) tabs
+  const financialReports = companyFinancialReportsMap.value[companyId] || []
+  if (financialReports.length > 0) {
+    // Filter only Realisasi (monthly reports), exclude RKAP (yearly)
+    // Realisasi has is_rkap = false and period format: YYYY-MM
+    const realisasiReports = financialReports.filter(r => !r.is_rkap && r.period && r.period.includes('-'))
+    if (realisasiReports.length > 0) {
+      // Get latest Realisasi by period (newest first)
+      const latest = [...realisasiReports].sort((a, b) => {
+        if (!a.period || !b.period) return 0
+        return b.period.localeCompare(a.period)
+      })[0]
+      
+      // Debug log untuk verifikasi
+      if (import.meta.env.DEV && latest) {
+        console.log(`[Net Profit] Company ${companyId}:`, {
+          period: latest.period,
+          net_profit: latest.net_profit,
+          is_rkap: latest.is_rkap,
+          source: 'Financial Reports (Realisasi) - Input Laporan'
+        })
+      }
+      
+      return latest?.net_profit || 0
+    }
   }
-  return `$${value.toFixed(0)}`
+  
+  // NO FALLBACK to old Reports module - return 0 if no data from Input Laporan
+  return 0
+}
+
+const getNetProfitPeriod = (companyId: string): string => {
+  // ONLY use financial reports (Realisasi) from Input Laporan
+  const financialReports = companyFinancialReportsMap.value[companyId] || []
+  if (financialReports.length > 0) {
+    const realisasiReports = financialReports.filter(r => !r.is_rkap && r.period && r.period.includes('-'))
+    if (realisasiReports.length > 0) {
+      const latest = [...realisasiReports].sort((a, b) => {
+        if (!a.period || !b.period) return 0
+        return b.period.localeCompare(a.period)
+      })[0]
+      
+      if (latest?.period) {
+        const [year, month] = latest.period.split('-')
+        if (year && month) {
+          const months = [
+            'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+            'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+          ]
+          const monthIndex = parseInt(month, 10) - 1
+          if (monthIndex >= 0 && monthIndex < months.length) {
+            return `${months[monthIndex]} ${year}`
+          }
+        }
+        return year || '2025'
+      }
+    }
+  }
+  
+  // NO FALLBACK - return default if no data
+  return '2025'
+}
+
+const getNetProfitChange = (companyId: string): number => {
+  // ONLY use financial reports (Realisasi) from Input Laporan
+  const financialReports = companyFinancialReportsMap.value[companyId] || []
+  if (financialReports.length > 0) {
+    const realisasiReports = financialReports.filter(r => !r.is_rkap && r.period && r.period.includes('-'))
+    if (realisasiReports.length >= 2) {
+      const sorted = [...realisasiReports].sort((a, b) => {
+        if (!a.period || !b.period) return 0
+        return a.period.localeCompare(b.period)
+      })
+
+      const latest = sorted[sorted.length - 1]
+      const previous = sorted[sorted.length - 2]
+
+      if (latest && previous) {
+        const latestNPAT = latest.net_profit || 0
+        const prevNPAT = previous.net_profit || 0
+
+        // Handle edge cases
+        if (prevNPAT === 0) {
+          if (latestNPAT > 0) return 100
+          if (latestNPAT < 0) return -100
+          return 0
+        }
+
+        // Cap the change percentage to reasonable values (±1000%)
+        const change = ((latestNPAT - prevNPAT) / Math.abs(prevNPAT)) * 100
+        const cappedChange = Math.max(-1000, Math.min(1000, change))
+        return Math.round(cappedChange * 10) / 10
+      }
+    }
+  }
+  
+  // NO FALLBACK - return 0 if no data or less than 2 periods
+  return 0
+}
+
+// Financial Health Score functions - using Financial Reports with full ratio data from Input Laporan
+// CRITICAL: Only use data from Input Laporan (Financial Reports), NOT from old Reports module
+const getFinancialHealthScore = (companyId: string): string => {
+  // ONLY use financial reports (Realisasi) from Input Laporan tab
+  // These contain full ratio data: ROE, ROI, Current Ratio, Net Profit Margin, etc.
+  // Data is entered in: Input Laporan > Realisasi (Bulanan) > Rasio Keuangan tab
+  const financialReports = companyFinancialReportsMap.value[companyId] || []
+  if (financialReports.length > 0) {
+    // Filter only Realisasi (monthly reports with ratio data)
+    const realisasiReports = financialReports.filter(r => !r.is_rkap && r.period && r.period.includes('-'))
+    if (realisasiReports.length > 0) {
+      const latest = [...realisasiReports].sort((a, b) => {
+        if (!a.period || !b.period) return 0
+        return b.period.localeCompare(a.period)
+      })[0]
+
+      if (latest) {
+        // Debug log untuk verifikasi
+        if (import.meta.env.DEV) {
+          console.log(`[Financial Health] Company ${companyId}:`, {
+            period: latest.period,
+            roe: latest.roe,
+            current_ratio: latest.current_ratio,
+            net_profit_margin: latest.net_profit_margin,
+            net_profit: latest.net_profit,
+            source: 'Financial Reports (Realisasi with Ratios) - Input Laporan'
+          })
+        }
+        
+        const score = calculateFinancialHealthScoreFromFinancialReport(latest)
+        return score.grade
+      }
+    }
+  }
+  
+  // NO FALLBACK to old Reports module - return 'N/A' if no data from Input Laporan
+  return 'N/A'
+}
+
+const getFinancialHealthPeriod = (companyId: string): string => {
+  // ONLY use financial reports (Realisasi) from Input Laporan
+  const financialReports = companyFinancialReportsMap.value[companyId] || []
+  if (financialReports.length > 0) {
+    const realisasiReports = financialReports.filter(r => !r.is_rkap && r.period && r.period.includes('-'))
+    if (realisasiReports.length > 0) {
+      const latest = [...realisasiReports].sort((a, b) => {
+        if (!a.period || !b.period) return 0
+        return b.period.localeCompare(a.period)
+      })[0]
+      return getQuarterFromPeriod(latest?.period)
+    }
+  }
+  
+  // NO FALLBACK - return default if no data
+  return 'Q1 2025'
+}
+
+const getFinancialHealthStatus = (companyId: string): { label: string; color: string } => {
+  // ONLY use financial reports (Realisasi) from Input Laporan
+  const financialReports = companyFinancialReportsMap.value[companyId] || []
+  if (financialReports.length > 0) {
+    const realisasiReports = financialReports.filter(r => !r.is_rkap && r.period && r.period.includes('-'))
+    if (realisasiReports.length > 0) {
+      const latest = [...realisasiReports].sort((a, b) => {
+        if (!a.period || !b.period) return 0
+        return b.period.localeCompare(a.period)
+      })[0]
+
+      if (latest) {
+        const score = calculateFinancialHealthScoreFromFinancialReport(latest)
+        return { label: score.status, color: score.color }
+      }
+    }
+  }
+  
+  // NO FALLBACK - return 'No Data' if no data from Input Laporan
+  return { label: 'No Data', color: 'neutral' }
+}
+
+// Calculate Financial Health Score from Financial Report (with full ratio data)
+const calculateFinancialHealthScoreFromFinancialReport = (report: FinancialReport): { grade: string; status: string; color: string } => {
+  let score = 0
+
+  // Factor 1: Profitability (Net Profit) - 30%
+  const netProfit = report.net_profit || 0
+  if (netProfit > 0) {
+    score += 30
+  } else if (netProfit === 0) {
+    score += 10
+  }
+
+  // Factor 2: Revenue Growth - 20%
+  const revenue = report.revenue || 0
+  if (revenue > 0) {
+    score += 20
+  }
+
+  // Factor 3: Financial Ratios - 30% (using actual ratio data)
+  let ratioScore = 0
+  
+  // ROE (Return on Equity) - 10%
+  const roe = report.roe || 0
+  if (roe >= 15) {
+    ratioScore += 10
+  } else if (roe >= 10) {
+    ratioScore += 7
+  } else if (roe >= 5) {
+    ratioScore += 5
+  } else if (roe > 0) {
+    ratioScore += 2
+  }
+  
+  // Current Ratio (Liquidity) - 10%
+  const currentRatio = report.current_ratio || 0
+  if (currentRatio >= 2) {
+    ratioScore += 10
+  } else if (currentRatio >= 1.5) {
+    ratioScore += 7
+  } else if (currentRatio >= 1) {
+    ratioScore += 5
+  } else if (currentRatio > 0) {
+    ratioScore += 2
+  }
+  
+  // Net Profit Margin - 10%
+  const netProfitMargin = report.net_profit_margin || 0
+  if (netProfitMargin >= 20) {
+    ratioScore += 10
+  } else if (netProfitMargin >= 10) {
+    ratioScore += 7
+  } else if (netProfitMargin >= 5) {
+    ratioScore += 5
+  } else if (netProfitMargin > 0) {
+    ratioScore += 2
+  }
+  
+  score += ratioScore
+
+  // Factor 4: Operating Efficiency - 20%
+  const operatingExpenses = report.operating_expenses || 0
+  if (revenue > 0 && operatingExpenses > 0) {
+    const efficiency = ((revenue - operatingExpenses) / revenue) * 100
+    if (efficiency >= 20) {
+      score += 20
+    } else if (efficiency >= 10) {
+      score += 15
+    } else if (efficiency >= 0) {
+      score += 10
+    } else {
+      score += 5
+    }
+  } else {
+    score += 5
+  }
+
+  // Determine grade and status
+  let grade: string
+  let status: string
+  let color: string
+
+  if (score >= 80) {
+    grade = 'A'
+    status = 'Excellent'
+    color = 'positive'
+  } else if (score >= 65) {
+    grade = 'B'
+    status = 'Good'
+    color = 'positive'
+  } else if (score >= 50) {
+    grade = 'C'
+    status = 'Fair'
+    color = 'neutral'
+  } else if (score >= 35) {
+    grade = 'D'
+    status = 'Poor'
+    color = 'negative'
+  } else {
+    grade = 'F'
+    status = 'Critical'
+    color = 'negative'
+  }
+
+  return { grade, status, color }
+}
+
+// Get detailed breakdown for Financial Health Score calculation
+const getFinancialHealthBreakdown = (companyId: string): {
+  netProfit: number
+  revenue: number
+  roe: number
+  currentRatio: number
+  netProfitMargin: number
+  operatingEfficiency: number
+  score: number
+  grade: string
+  breakdown: Array<{ factor: string; points: number; maxPoints: number; details: string }>
+} | null => {
+  const financialReports = companyFinancialReportsMap.value[companyId] || []
+  if (financialReports.length === 0) return null
+  
+  const realisasiReports = financialReports.filter(r => !r.is_rkap && r.period && r.period.includes('-'))
+  if (realisasiReports.length === 0) return null
+  
+  const latest = [...realisasiReports].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return b.period.localeCompare(a.period)
+  })[0]
+  
+  if (!latest) return null
+  
+  const netProfit = latest.net_profit || 0
+  const revenue = latest.revenue || 0
+  const roe = latest.roe || 0
+  const currentRatio = latest.current_ratio || 0
+  const netProfitMargin = latest.net_profit_margin || 0
+  const operatingExpenses = latest.operating_expenses || 0
+  
+  let score = 0
+  const breakdown: Array<{ factor: string; points: number; maxPoints: number; details: string }> = []
+  
+  // Factor 1: Profitability
+  let profitPoints = 0
+  let profitDetails = ''
+  if (netProfit > 0) {
+    profitPoints = 30
+    profitDetails = `Profit: ${formatCurrency(netProfit, companyId)}`
+  } else if (netProfit === 0) {
+    profitPoints = 10
+    profitDetails = 'Break-even (tidak untung tidak rugi)'
+  } else {
+    profitPoints = 0
+    profitDetails = `Rugi: ${formatCurrency(Math.abs(netProfit), companyId)}`
+  }
+  score += profitPoints
+  breakdown.push({ factor: 'Profitabilitas (Net Profit)', points: profitPoints, maxPoints: 30, details: profitDetails })
+  
+  // Factor 2: Revenue
+  const revenuePoints = revenue > 0 ? 20 : 0
+  score += revenuePoints
+  breakdown.push({ 
+    factor: 'Revenue', 
+    points: revenuePoints, 
+    maxPoints: 20, 
+    details: revenue > 0 ? `Revenue: ${formatCurrency(revenue, companyId)}` : 'Tidak ada revenue' 
+  })
+  
+  // Factor 3: Ratios
+  let ratioScore = 0
+  let roePoints = 0
+  if (roe >= 15) roePoints = 10
+  else if (roe >= 10) roePoints = 7
+  else if (roe >= 5) roePoints = 5
+  else if (roe > 0) roePoints = 2
+  ratioScore += roePoints
+  
+  let currentRatioPoints = 0
+  if (currentRatio >= 2) currentRatioPoints = 10
+  else if (currentRatio >= 1.5) currentRatioPoints = 7
+  else if (currentRatio >= 1) currentRatioPoints = 5
+  else if (currentRatio > 0) currentRatioPoints = 2
+  ratioScore += currentRatioPoints
+  
+  let marginPoints = 0
+  if (netProfitMargin >= 20) marginPoints = 10
+  else if (netProfitMargin >= 10) marginPoints = 7
+  else if (netProfitMargin >= 5) marginPoints = 5
+  else if (netProfitMargin > 0) marginPoints = 2
+  ratioScore += marginPoints
+  
+  score += ratioScore
+  breakdown.push({ 
+    factor: 'Rasio Keuangan', 
+    points: ratioScore, 
+    maxPoints: 30, 
+    details: `ROE: ${roe.toFixed(1)}% (${roePoints}p) | Current Ratio: ${currentRatio.toFixed(2)} (${currentRatioPoints}p) | Margin: ${netProfitMargin.toFixed(1)}% (${marginPoints}p)` 
+  })
+  
+  // Factor 4: Efficiency
+  let efficiencyPoints = 5
+  let efficiencyDetails = 'Tidak ada data'
+  if (revenue > 0 && operatingExpenses > 0) {
+    const efficiency = ((revenue - operatingExpenses) / revenue) * 100
+    if (efficiency >= 20) {
+      efficiencyPoints = 20
+      efficiencyDetails = `Efisiensi tinggi: ${efficiency.toFixed(1)}%`
+    } else if (efficiency >= 10) {
+      efficiencyPoints = 15
+      efficiencyDetails = `Efisiensi sedang: ${efficiency.toFixed(1)}%`
+    } else if (efficiency >= 0) {
+      efficiencyPoints = 10
+      efficiencyDetails = `Efisiensi rendah: ${efficiency.toFixed(1)}%`
+    } else {
+      efficiencyPoints = 5
+      efficiencyDetails = `Tidak efisien: ${efficiency.toFixed(1)}%`
+    }
+  }
+  score += efficiencyPoints
+  breakdown.push({ 
+    factor: 'Efisiensi Operasional', 
+    points: efficiencyPoints, 
+    maxPoints: 20, 
+    details: efficiencyDetails 
+  })
+  
+  const result = calculateFinancialHealthScoreFromFinancialReport(latest)
+  
+  return {
+    netProfit,
+    revenue,
+    roe,
+    currentRatio,
+    netProfitMargin,
+    operatingEfficiency: revenue > 0 && operatingExpenses > 0 ? ((revenue - operatingExpenses) / revenue) * 100 : 0,
+    score,
+    grade: result.grade,
+    breakdown
+  }
+}
+
+// Get popover title
+const getPopoverTitle = (companyId: string): string => {
+  const breakdown = getFinancialHealthBreakdown(companyId)
+  if (breakdown) {
+    return `Penjelasan Metrik - Grade ${breakdown.grade} (Skor: ${breakdown.score}/100)`
+  }
+  return 'Penjelasan Metrik'
+}
+
+// Get popover content with dynamic explanation
+const getPopoverContent = (companyId: string): string => {
+  const breakdown = getFinancialHealthBreakdown(companyId)
+  const netProfit = getNetProfitData(companyId)
+  const netProfitPeriod = getNetProfitPeriod(companyId)
+  const netProfitChange = getNetProfitChange(companyId)
+  
+  if (!breakdown) {
+    return `
+      <div style="font-size: 12px; color: #666;">
+        <p>Data belum tersedia. Silakan input data di tab <strong>Input Laporan > Realisasi (Bulanan)</strong>.</p>
+      </div>
+    `
+  }
+  
+  let html = `
+    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+      <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #eee;">
+        <strong style="color: #1890ff; display: block; margin-bottom: 4px;">Net Profit (NPAT)</strong>
+        <div style="font-size: 11px;">
+          <div>Nilai: <strong>${formatCurrency(netProfit, companyId)}</strong></div>
+          <div>Periode: ${netProfitPeriod}</div>
+          <div>Perubahan: <span style="color: ${netProfitChange >= 0 ? '#52c41a' : '#ff4d4f'}">${netProfitChange >= 0 ? '+' : ''}${netProfitChange}%</span></div>
+        </div>
+      </div>
+      
+      <div style="margin-bottom: 8px;">
+        <strong style="color: #52c41a; display: block; margin-bottom: 6px;">Financial Health Score: ${breakdown.grade}</strong>
+        <div style="font-size: 11px; margin-bottom: 8px;">
+          <div>Total Skor: <strong>${breakdown.score}/100</strong></div>
+          <div style="margin-top: 4px; color: #999;">Grade ${breakdown.grade} = Skor ${breakdown.score >= 80 ? '80-100' : breakdown.score >= 65 ? '65-79' : breakdown.score >= 50 ? '50-64' : breakdown.score >= 35 ? '35-49' : '0-34'}</div>
+        </div>
+      </div>
+      
+      <div style="font-size: 11px;">
+        <strong style="display: block; margin-bottom: 6px; color: #333;">Breakdown Perhitungan:</strong>
+  `
+  
+  breakdown.breakdown.forEach((item) => {
+    const percentage = Math.round((item.points / item.maxPoints) * 100)
+    const color = percentage >= 80 ? '#52c41a' : percentage >= 50 ? '#faad14' : '#ff4d4f'
+    html += `
+        <div style="margin-bottom: 8px; padding: 6px; background: #f5f5f5; border-radius: 4px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span><strong>${item.factor}</strong></span>
+            <span style="color: ${color}; font-weight: 600;">${item.points}/${item.maxPoints}</span>
+          </div>
+          <div style="font-size: 10px; color: #666; margin-top: 2px;">${item.details}</div>
+        </div>
+    `
+  })
+  
+  html += `
+      </div>
+    </div>
+  `
+  
+  return html
+}
+
+// NOTE: This function is DEPRECATED - no longer used
+// We only use calculateFinancialHealthScoreFromFinancialReport which uses data from Input Laporan
+// Keeping this for reference but it should never be called
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _calculateFinancialHealthScore_DEPRECATED = (_report: unknown): { grade: string; status: string; color: string } => {
+  let score = 0
+  const factors: string[] = []
+  
+  // Type assertion untuk deprecated function
+  const report = _report as { npat?: number; revenue?: number; financial_ratio?: number; opex?: number }
+
+  // Factor 1: Profitability (NPAT) - 30%
+  const npat = report.npat || 0
+  if (npat > 0) {
+    score += 30
+    factors.push('Profitable')
+  } else if (npat === 0) {
+    score += 10
+    factors.push('Break-even')
+  } else {
+    factors.push('Loss')
+  }
+
+  // Factor 2: Revenue Growth - 25%
+  // We'll use financial_ratio as a proxy if available, or calculate from revenue
+  const revenue = report.revenue || 0
+  if (revenue > 0) {
+    score += 20
+    factors.push('Revenue')
+  }
+
+  // Factor 3: Financial Ratio (if available) - 25%
+  const financialRatio = report.financial_ratio || 0
+  if (financialRatio > 0) {
+    if (financialRatio >= 80) {
+      score += 25
+      factors.push('Excellent Ratio')
+    } else if (financialRatio >= 60) {
+      score += 20
+      factors.push('Good Ratio')
+    } else if (financialRatio >= 40) {
+      score += 15
+      factors.push('Fair Ratio')
+    } else {
+      score += 5
+      factors.push('Poor Ratio')
+    }
+  } else {
+    score += 10 // Default if no ratio data
+  }
+
+  // Factor 4: Operating Efficiency (Revenue vs Opex) - 20%
+  const opex = report.opex || 0
+  if (revenue > 0 && opex > 0) {
+    const efficiency = ((revenue - opex) / revenue) * 100
+    if (efficiency >= 20) {
+      score += 20
+      factors.push('High Efficiency')
+    } else if (efficiency >= 10) {
+      score += 15
+      factors.push('Moderate Efficiency')
+    } else if (efficiency >= 0) {
+      score += 10
+      factors.push('Low Efficiency')
+    } else {
+      score += 5
+      factors.push('Inefficient')
+    }
+  } else {
+    score += 5 // Default if no data
+  }
+
+  // Determine grade and status
+  let grade: string
+  let status: string
+  let color: string
+
+  if (score >= 80) {
+    grade = 'A'
+    status = 'Excellent'
+    color = 'positive'
+  } else if (score >= 65) {
+    grade = 'B'
+    status = 'Good'
+    color = 'positive'
+  } else if (score >= 50) {
+    grade = 'C'
+    status = 'Fair'
+    color = 'neutral'
+  } else if (score >= 35) {
+    grade = 'D'
+    status = 'Poor'
+    color = 'negative'
+  } else {
+    grade = 'F'
+    status = 'Critical'
+    color = 'negative'
+  }
+
+  return { grade, status, color }
+}
+
+// Format currency (handles negative values) - uses company currency setting
+const formatCurrency = (value: number, companyId?: string): string => {
+  const absValue = Math.abs(value)
+  const sign = value < 0 ? '-' : ''
+  
+  // Get currency from company, default to IDR (Rupiah)
+  let currency = 'IDR'
+  if (companyId) {
+    const company = companies.value.find(c => c.id === companyId)
+    currency = company?.currency || 'IDR'
+  }
+  
+  // Format based on currency
+  if (currency === 'USD') {
+    // USD format: $32B, $129M, $5K
+    if (absValue >= 1000000000) {
+      return `${sign}$${(absValue / 1000000000).toFixed(0)}B`
+    } else if (absValue >= 1000000) {
+      return `${sign}$${(absValue / 1000000).toFixed(0)}M`
+    } else if (absValue >= 1000) {
+      return `${sign}$${(absValue / 1000).toFixed(0)}K`
+    }
+    return `${sign}$${absValue.toFixed(0)}`
+  } else {
+    // IDR format: 129M, 32B, 5K (no currency symbol prefix, just number with suffix)
+    if (absValue >= 1000000000) {
+      return `${sign}${(absValue / 1000000000).toFixed(0)}B`
+    } else if (absValue >= 1000000) {
+      return `${sign}${(absValue / 1000000).toFixed(0)}M`
+    } else if (absValue >= 1000) {
+      return `${sign}${(absValue / 1000).toFixed(0)}K`
+    }
+    // For values less than 1000, show full number with Rp prefix
+    return `${sign}Rp ${absValue.toLocaleString('id-ID')}`
+  }
 }
 
 // Get company logo atau generate icon
@@ -607,9 +1151,19 @@ const getIconColor = (name: string): string => {
 const loadCompanies = async () => {
   companiesLoading.value = true
   try {
-    companies.value = await companyApi.getAll()
-    // Load reports for all companies
-    await loadAllCompanyReports()
+    // Superadmin/Administrator melihat semua companies
+    // User lain hanya melihat companies yang di-assign ke mereka
+    if (isSuperAdmin.value || isAdministrator.value) {
+      companies.value = await companyApi.getAll()
+    } else {
+      // Get companies assigned to current user
+      const userCompanies = await userApi.getMyCompanies()
+      // Convert UserCompanyResponse[] to Company[]
+      companies.value = userCompanies.map(uc => uc.company)
+    }
+    // ONLY load financial reports from Input Laporan (new feature)
+    // DO NOT load old Reports module data
+    await loadAllCompanyFinancialReports()
   } catch (error: unknown) {
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     message.error('Gagal memuat perusahaan: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
@@ -618,29 +1172,51 @@ const loadCompanies = async () => {
   }
 }
 
-// Load reports for all companies
-const loadAllCompanyReports = async () => {
+// Load financial reports for all companies (with full ratio data)
+const loadAllCompanyFinancialReports = async () => {
   if (companies.value.length === 0) return
 
-  reportsLoading.value = true
+  financialReportsLoading.value = true
   try {
-    // Load reports for all companies in parallel
-    const reportPromises = companies.value.map(async (company) => {
+    // Load financial reports for all companies in parallel
+    const financialReportPromises = companies.value.map(async (company) => {
       try {
-        const reports = await reportsApi.getByCompanyId(company.id)
-        companyReportsMap.value[company.id] = reports
+        const financialReports = await financialReportsApi.getByCompanyId(company.id)
+        // Filter and sort: prioritize Realisasi (monthly) over RKAP (yearly)
+        // Sort by period descending to get latest first
+        const sortedReports = [...financialReports].sort((a, b) => {
+          if (!a.period || !b.period) return 0
+          return b.period.localeCompare(a.period)
+        })
+        companyFinancialReportsMap.value[company.id] = sortedReports
+        
+        // Debug: log data untuk memastikan data terambil dengan benar
+        const realisasiReports = sortedReports.filter(r => !r.is_rkap)
+        if (realisasiReports.length > 0) {
+          const latest = realisasiReports[0]
+          if (latest) {
+            console.log(`[${company.name}] Latest Realisasi:`, {
+              period: latest.period,
+              net_profit: latest.net_profit,
+              revenue: latest.revenue,
+              roe: latest.roe,
+              current_ratio: latest.current_ratio,
+              net_profit_margin: latest.net_profit_margin
+            })
+          }
+        }
       } catch (error) {
         // Silently fail for individual companies - just log it
-        console.warn(`Failed to load reports for company ${company.id}:`, error)
-        companyReportsMap.value[company.id] = []
+        console.warn(`Failed to load financial reports for company ${company.id}:`, error)
+        companyFinancialReportsMap.value[company.id] = []
       }
     })
 
-    await Promise.all(reportPromises)
+    await Promise.all(financialReportPromises)
   } catch (error) {
-    console.error('Error loading company reports:', error)
+    console.error('Error loading company financial reports:', error)
   } finally {
-    reportsLoading.value = false
+    financialReportsLoading.value = false
   }
 }
 
@@ -1175,6 +1751,13 @@ onMounted(async () => {
     await loadTableData()
   }
 })
+
+// Refresh financial reports when component is activated (e.g., returning from detail page)
+onActivated(async () => {
+  if (companies.value.length > 0) {
+    await loadAllCompanyFinancialReports()
+  }
+})
 </script>
 
 <style scoped>
@@ -1284,13 +1867,7 @@ onMounted(async () => {
   max-width: 300px;
 }
 
-/* Cards Grid */
-.subsidiary-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 24px;
-  margin-bottom: 32px;
-}
+/* Cards Grid - Now using Ant Design Row/Col */
 
 .subsidiary-card {
   background: white;
@@ -1437,6 +2014,11 @@ onMounted(async () => {
   background: rgba(255, 77, 79, 0.1);
 }
 
+.metric-change.neutral {
+  color: #faad14;
+  background: rgba(250, 173, 20, 0.1);
+}
+
 .metric-label {
   font-size: 12px;
   color: #999;
@@ -1490,10 +2072,6 @@ onMounted(async () => {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .subsidiary-cards-grid {
-    grid-template-columns: 1fr;
-  }
-
   .page-header {
     flex-direction: column;
   }
@@ -1505,24 +2083,6 @@ onMounted(async () => {
   .metrics-row {
     grid-template-columns: 1fr;
     gap: 12px;
-  }
-}
-
-@media (min-width: 769px) and (max-width: 1024px) {
-  .subsidiary-cards-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1025px) and (max-width: 1440px) {
-  .subsidiary-cards-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (min-width: 1441px) {
-  .subsidiary-cards-grid {
-    grid-template-columns: repeat(4, 1fr);
   }
 }
 

@@ -174,28 +174,120 @@
                     <a-input v-model:value="formData.code" placeholder="Kode perusahaan (unik)" />
                   </a-form-item>
                 </a-col>
-                <a-col v-if="!route.params.id" :xs="24" :md="12">
-                  <a-form-item label="Perusahaan Induk" :required="!isSuperAdmin">
+                <a-col :xs="24" :md="12">
+                  <a-form-item label="Perusahaan Induk">
                     <a-select
                       v-model:value="formData.parent_id"
-                      :placeholder="isSuperAdmin ? 'Pilih perusahaan induk (opsional - kosongkan untuk holding)' : 'Pilih perusahaan induk'"
+                      placeholder="Pilih perusahaan induk (opsional - bisa di-setup nanti)"
                       allow-clear
-                      :disabled="!isSuperAdmin && userCompanyId ? true : false"
+                      :disabled="isCompanyCapitalGreaterThanShareholders"
                     >
                       <a-select-option
                         v-for="company in availableCompanies"
                         :key="company.id"
                         :value="company.id"
+                        :disabled="route.params.id === company.id"
                       >
                         {{ company.name }} ({{ getLevelLabel(company.level) }})
                       </a-select-option>
                     </a-select>
-                    <div v-if="!isSuperAdmin && userCompanyId" style="margin-top: 4px; color: #666; font-size: 12px">
-                      Akan otomatis menjadi anak perusahaan dari perusahaan Anda
+                    <div v-if="!isCompanyCapitalGreaterThanShareholders" style="margin-top: 4px; color: #666; font-size: 12px">
+                      Kosongkan untuk sekarang, bisa di-setup nanti secara manual
                     </div>
-                    <div v-else-if="isSuperAdmin" style="margin-top: 4px; color: #666; font-size: 12px">
-                      <span v-if="hasRootHolding">Pilih perusahaan induk (holding sudah ada)</span>
-                      <span v-else>Kosongkan untuk membuat holding/perusahaan induk (belum ada holding)</span>
+                    <a-alert
+                      v-if="isCompanyCapitalGreaterThanShareholders"
+                      type="info"
+                      show-icon
+                      style="margin-top: 8px; font-size: 12px"
+                    >
+                      <template #message>
+                        <div style="line-height: 1.5;">
+                          <strong>Tidak ada perusahaan induk</strong><br/>
+                          Modal Disetor perusahaan ini ({{ (formData.paid_up_capital || 0).toLocaleString('id-ID') }}) lebih besar dari total Modal Disetor semua pemegang saham ({{ getTotalShareholderCapital().toLocaleString('id-ID') }}). 
+                          Perusahaan ini dianggap independen.<br/>
+                          <strong>Kepemilikan sendiri: {{ currentCompanyOwnershipPercent }}%</strong> dari total modal semua modal disetor dari perusahaan yang berkontribusi.
+                        </div>
+                      </template>
+                    </a-alert>
+                  </a-form-item>
+                </a-col>
+                <a-col :xs="24" :md="6">
+                  <a-form-item label="Modal Dasar">
+                    <a-input-number
+                      v-model:value="formData.authorized_capital"
+                      :min="0"
+                      :precision="0"
+                      style="width: 100%"
+                      placeholder="Modal Dasar"
+                      :formatter="(value: number | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
+                      :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
+                    />
+                  </a-form-item>
+                </a-col>
+                <a-col :xs="24" :md="6">
+                  <a-form-item label="Modal Disetor">
+                    <a-input-number
+                      v-model:value="formData.paid_up_capital"
+                      :min="0"
+                      :precision="0"
+                      style="width: 100%"
+                      placeholder="Modal Disetor"
+                      :formatter="(value: number | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
+                      :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
+                    />
+                    <div v-if="formData.paid_up_capital && formData.shareholders.some(sh => sh.shareholder_company_id)" style="margin-top: 4px; font-size: 12px; color: #666;">
+                      <a-popover
+                        :title="null"
+                        trigger="hover"
+                        placement="top"
+                      >
+                        <template #content>
+                          <div style="font-size: 12px; line-height: 1.6;">
+                            <div style="margin-bottom: 8px;">
+                              <strong>Persentase Kepemilikan Sendiri:</strong>
+                            </div>
+                            <div style="margin-bottom: 4px;">
+                              <strong>{{ currentCompanyOwnershipPercent }}%</strong>
+                            </div>
+                            <div style="margin-bottom: 4px;">
+                              Modal Disetor perusahaan sendiri: {{ formData.currency || 'IDR' }} {{ (formData.paid_up_capital || 0).toLocaleString('id-ID') }}
+                            </div>
+                            <div style="margin-bottom: 4px;">
+                              Total Modal Disetor semua pemegang saham: {{ formData.currency || 'IDR' }} {{ getTotalShareholderCapital().toLocaleString('id-ID') }}
+                            </div>
+                            <div style="margin-bottom: 4px;">
+                              Total modal: {{ formData.currency || 'IDR' }} {{ ((formData.paid_up_capital || 0) + getTotalShareholderCapital()).toLocaleString('id-ID') }}
+                            </div>
+                            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e8e8e8;">
+                              <strong>Rumus perhitungan:</strong><br/>
+                              Total modal = Modal perusahaan sendiri + Total modal semua pemegang saham<br/>
+                              Persentase kepemilikan sendiri = (Modal perusahaan sendiri ÷ Total modal) × 100%
+                            </div>
+                          </div>
+                        </template>
+                        <template #default>
+                          <span style="cursor: help; text-decoration: underline; color: #1890ff;">
+                            Kepemilikan sendiri: {{ currentCompanyOwnershipPercent }}%
+                          </span>
+                        </template>
+                      </a-popover>
+                    </div>
+                  </a-form-item>
+                </a-col>
+                <a-col :xs="24" :md="12">
+                  <a-form-item label="Mata Uang" required>
+                    <a-radio-group v-model:value="formData.currency" button-style="solid">
+                      <a-radio-button value="IDR">
+                        <IconifyIcon icon="mdi:cash" width="16" style="margin-right: 4px;" />
+                        Rupiah (IDR)
+                      </a-radio-button>
+                      <a-radio-button value="USD">
+                        <IconifyIcon icon="mdi:currency-usd" width="16" style="margin-right: 4px;" />
+                        Dollar (USD)
+                      </a-radio-button>
+                    </a-radio-group>
+                    <div style="margin-top: 4px; font-size: 12px; color: #8c8c8c;">
+                      Mata uang yang digunakan untuk laporan keuangan perusahaan ini. Semua nilai di laporan akan ditampilkan sesuai mata uang yang dipilih.
                     </div>
                   </a-form-item>
                 </a-col>
@@ -216,38 +308,172 @@
             >
               <template #bodyCell="{ column, record, index }">
                 <template v-if="column.key === 'type'">
-                  <a-select
-                    v-model:value="record.type"
-                    style="width: 100%"
-                    placeholder="Jenis pemegang saham"
-                  >
-                    <a-select-option value="Badan Hukum (Induk)">Badan Hukum (Induk)</a-select-option>
-                    <a-select-option value="Badan Hukum">Badan Hukum</a-select-option>
-                    <a-select-option value="Individu">Individu</a-select-option>
-                  </a-select>
+                  <div class="shareholder-type-select-wrapper">
+                    <a-select
+                      v-model:value="record.type"
+                      mode="multiple"
+                      placeholder="Pilih atau ketik jenis pemegang saham baru"
+                      show-search
+                      allow-clear
+                      :filter-option="false"
+                      :loading="loadingShareholderTypes"
+                      :search-value="shareholderTypeSearchValue"
+                      :max-tag-count="1"
+                      :max-tag-placeholder="(omittedValues: string[]) => `+${omittedValues.length} lainnya`"
+                      style="width: 100%"
+                      @search="handleShareholderTypeSearch"
+                      @change="handleShareholderTypeChange(record, $event)"
+                      @select="handleShareholderTypeSelect(record, $event)"
+                    >
+                      <a-select-option
+                        v-for="shareholderType in filteredShareholderTypes"
+                        :key="shareholderType.id"
+                        :value="shareholderType.name"
+                        :disabled="!shareholderType.is_active && !record.type.includes(shareholderType.name)"
+                      >
+                        <span :style="{ opacity: shareholderType.is_active ? 1 : 0.6 }">
+                          {{ shareholderType.name }}
+                          <a-tag v-if="!shareholderType.is_active" color="default" size="small" style="margin-left: 8px;">
+                            Tidak Aktif
+                          </a-tag>
+                        </span>
+                      </a-select-option>
+                      <a-select-option
+                        v-if="shareholderTypeSearchValue && !filteredShareholderTypes.find((st: ShareholderType) => st.name.toLowerCase() === shareholderTypeSearchValue.toLowerCase()) && canManageShareholderTypes"
+                        :value="shareholderTypeSearchValue"
+                        style="color: #1890ff;"
+                      >
+                        <IconifyIcon icon="mdi:plus-circle" style="margin-right: 4px;" />
+                        Buat "{{ shareholderTypeSearchValue }}"
+                      </a-select-option>
+                    </a-select>
+                    <!-- <div v-if="canManageShareholderTypes" class="shareholder-type-hint">
+                      <IconifyIcon icon="mdi:information-outline" style="margin-right: 4px;" />
+                      <span>Ketik nama baru dan tekan Enter untuk membuat jenis pemegang saham baru. Klik icon hapus di dropdown untuk menghapus jenis pemegang saham.</span>
+                    </div> -->
+                  </div>
                 </template>
                 <template v-if="column.key === 'name'">
-                  <a-input v-model:value="record.name" placeholder="Nama pemegang saham" />
+                  <!-- Always show dropdown first, if individual mode then show input below -->
+                  <a-select
+                    :value="record.shareholder_company_id || '__individual__'"
+                    style="width: 100%"
+                    placeholder="Pilih perusahaan atau individu/eksternal"
+                    show-search
+                    :filter-option="(input: string, option: { label?: string; children?: Array<{ children?: unknown }> }) => {
+                      const label = option?.label || (option?.children?.[0]?.children ? String(option.children[0].children) : '')
+                      return label.toLowerCase().includes(input.toLowerCase())
+                    }"
+                    @change="(value: string | null) => handleShareholderCompanyChange(record, value)"
+                  >
+                    <a-select-option value="__individual__" style="color: #1890ff; font-weight: 500;">
+                      <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
+                      Individu/Eksternal (Input Manual)
+                    </a-select-option>
+                    <a-select-option
+                      v-for="company in getAvailableShareholderCompanies()"
+                      :key="company.id"
+                      :value="company.id"
+                    >
+                      {{ company.name }} {{ company.code ? `(${company.code})` : '' }}
+                    </a-select-option>
+                  </a-select>
+                  <!-- Show input text if individual/external mode -->
+                  <a-input 
+                    v-if="!record.isCompany"
+                    v-model:value="record.name" 
+                    placeholder="Nama pemegang saham (Individu/Eksternal)"
+                    style="margin-top: 8px;"
+                  />
                 </template>
                 <template v-if="column.key === 'identity_number'">
-                  <a-input v-model:value="record.identity_number" placeholder="KTP/NPWP" />
+                  <a-input 
+                    v-model:value="record.identity_number" 
+                    :placeholder="record.isCompany ? 'Nomor Identitas (Otomatis dari NPWP/NIB)' : 'Nomor Identitas (KTP/NPWP)'"
+                    :disabled="record.isCompany && (record.shareholder_company_id ? true : false)"
+                  />
+                  <div v-if="record.isCompany && !record.identity_number" style="margin-top: 4px; font-size: 11px; color: #8c8c8c;">
+                    NPWP/NIB perusahaan belum tersedia. Isi manual jika diperlukan.
+                  </div>
                 </template>
                 <template v-if="column.key === 'ownership_percent'">
+                  <a-popover
+                    v-if="record.isCompany"
+                    :title="null"
+                    trigger="hover"
+                    placement="top"
+                  >
+                    <template #content>
+                      <div style="font-size: 12px; line-height: 1.6;">
+                        <div style="margin-bottom: 8px;">
+                          <strong>Persentase ini dihitung otomatis berdasarkan Modal Disetor:</strong>
+                        </div>
+                        <div style="margin-bottom: 4px;">
+                          Modal Disetor perusahaan pemegang saham: {{ getShareholderCapitalInfo(record) }}
+                        </div>
+                        <div style="margin-bottom: 4px;">
+                          Modal Disetor perusahaan sendiri: {{ formData.currency || 'IDR' }} {{ (formData.paid_up_capital || 0).toLocaleString('id-ID') }}
+                        </div>
+                        <div style="margin-bottom: 4px;">
+                          Total Modal Disetor semua pemegang saham: {{ formData.currency || 'IDR' }} {{ getTotalShareholderCapital().toLocaleString('id-ID') }}
+                        </div>
+                        <div style="margin-bottom: 4px;">
+                          Total modal: {{ formData.currency || 'IDR' }} {{ ((formData.paid_up_capital || 0) + getTotalShareholderCapital()).toLocaleString('id-ID') }}
+                        </div>
+                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e8e8e8;">
+                          <strong>Rumus perhitungan:</strong><br/>
+                          Total modal = Modal perusahaan sendiri + Total modal semua pemegang saham<br/>
+                          Persentase = (Modal Disetor perusahaan pemegang saham ÷ Total modal) × 100%
+                        </div>
+                      </div>
+                    </template>
+                    <template #default>
+                      <a-input-number
+                        v-model:value="record.ownership_percent"
+                        :min="0"
+                        :max="100"
+                        :precision="10"
+                        :disabled="record.isCompany"
+                        style="width: 100%"
+                        placeholder="%"
+                      />
+                    </template>
+                  </a-popover>
                   <a-input-number
+                    v-else
                     v-model:value="record.ownership_percent"
                     :min="0"
                     :max="100"
-                    :precision="2"
+                    :precision="10"
+                    :disabled="record.isCompany"
                     style="width: 100%"
                     placeholder="%"
                   />
+                  <div v-if="record.isCompany && record.ownership_percent === 0" style="margin-top: 4px; font-size: 11px; color: #ff4d4f;">
+                    <IconifyIcon icon="mdi:alert-circle" width="12" />
+                    Perusahaan belum memiliki Modal Disetor
+                  </div>
                 </template>
-                <template v-if="column.key === 'share_count'">
+                <template v-if="column.key === 'share_sheet_count'">
                   <a-input-number
-                    v-model:value="record.share_count"
+                    v-model:value="record.share_sheet_count"
                     :min="0"
+                    :precision="0"
                     style="width: 100%"
-                    placeholder="Jumlah saham"
+                    placeholder="Jumlah lembar saham"
+                    :formatter="(value: number | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
+                    :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
+                  />
+                </template>
+                <template v-if="column.key === 'share_value_per_sheet'">
+                  <a-input-number
+                    v-model:value="record.share_value_per_sheet"
+                    :min="0"
+                    :precision="0"
+                    style="width: 100%"
+                    placeholder="Nilai Rupiah per lembar"
+                    :formatter="(value: number | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
+                    :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
                   />
                 </template>
                 <template v-if="column.key === 'actions'">
@@ -344,17 +570,46 @@
             >
               <template #bodyCell="{ column, record, index }">
                 <template v-if="column.key === 'position'">
-                  <a-select
-                    v-model:value="record.position"
-                    style="width: 100%"
-                    placeholder="Jabatan"
-                  >
-                    <a-select-option value="Direktur Utama">Direktur Utama</a-select-option>
-                    <a-select-option value="Direktur Keuangan">Direktur Keuangan</a-select-option>
-                    <a-select-option value="Direktur Operasional">Direktur Operasional</a-select-option>
-                    <a-select-option value="Komisaris Utama">Komisaris Utama</a-select-option>
-                    <a-select-option value="Komisaris">Komisaris</a-select-option>
-                  </a-select>
+                  <div class="director-position-select-wrapper">
+                    <a-select
+                      v-model:value="record.position"
+                      mode="multiple"
+                      placeholder="Pilih atau ketik jabatan baru"
+                      show-search
+                      allow-clear
+                      :filter-option="false"
+                      :loading="loadingDirectorPositions"
+                      :search-value="directorPositionSearchValue"
+                      :max-tag-count="1"
+                      :max-tag-placeholder="(omittedValues: string[]) => `+${omittedValues.length} lainnya`"
+                      style="width: 100%"
+                      @search="handleDirectorPositionSearch"
+                      @change="handleDirectorPositionChange(record, $event)"
+                      @select="handleDirectorPositionSelect(record, $event)"
+                    >
+                      <a-select-option
+                        v-for="directorPosition in filteredDirectorPositions"
+                        :key="directorPosition.id"
+                        :value="directorPosition.name"
+                        :disabled="!directorPosition.is_active && !record.position.includes(directorPosition.name)"
+                      >
+                        <span :style="{ opacity: directorPosition.is_active ? 1 : 0.6 }">
+                          {{ directorPosition.name }}
+                          <a-tag v-if="!directorPosition.is_active" color="default" size="small" style="margin-left: 8px;">
+                            Tidak Aktif
+                          </a-tag>
+                        </span>
+                      </a-select-option>
+                      <a-select-option
+                        v-if="directorPositionSearchValue && !filteredDirectorPositions.find((dp: DirectorPosition) => dp.name.toLowerCase() === directorPositionSearchValue.toLowerCase()) && canManageDirectorPositions"
+                        :value="directorPositionSearchValue"
+                        style="color: #1890ff;"
+                      >
+                        <IconifyIcon icon="mdi:plus-circle" style="margin-right: 4px;" />
+                        Buat "{{ directorPositionSearchValue }}"
+                      </a-select-option>
+                    </a-select>
+                  </div>
                 </template>
                 <template v-if="column.key === 'full_name'">
                   <a-input v-model:value="record.full_name" placeholder="Nama lengkap" />
@@ -377,9 +632,16 @@
                   <a-input v-model:value="record.domicile_address" placeholder="Alamat domisili" />
                 </template>
                 <template v-if="column.key === 'actions'">
-                  <a-button type="link" danger size="small" @click="removeDirector(index)">
-                    <IconifyIcon icon="mdi:delete" width="16" />
-                  </a-button>
+                  <a-space>
+                    <a-badge :count="getDirectorDocumentCount(record, index)" :number-style="{ backgroundColor: '#52c41a' }">
+                      <a-button type="link" size="small" @click="handleAttachFiles(index)" title="Attach Files">
+                        <IconifyIcon icon="mdi:attachment" width="16" />
+                      </a-button>
+                    </a-badge>
+                    <a-button type="link" danger size="small" @click="removeDirector(index)">
+                      <IconifyIcon icon="mdi:delete" width="16" />
+                    </a-button>
+                  </a-space>
                 </template>
               </template>
             </a-table>
@@ -390,6 +652,118 @@
           </div>
           </a-form>
         </div>
+
+        <!-- Modal Upload Files untuk Director -->
+        <a-modal
+          v-model:open="attachFilesModalVisible"
+          title="Upload Dokumen Individu"
+          :confirm-loading="uploadingFiles"
+          :width="700"
+          :footer="null"
+          @cancel="handleCloseAttachModal"
+        >
+          <div v-if="selectedDirectorIndex !== null">
+            <div style="margin-bottom: 16px;">
+              <p><strong>Individu:</strong> {{ formData.directors[selectedDirectorIndex]?.full_name || '-' }}</p>
+              <p><strong>Jabatan:</strong> {{ formData.directors[selectedDirectorIndex]?.position?.join(', ') || '-' }}</p>
+            </div>
+            
+            <a-form-item label="Kategori Dokumen" required>
+              <a-select
+                v-model:value="attachFilesForm.documentCategory"
+                placeholder="Pilih kategori dokumen"
+                :options="documentCategories"
+              />
+            </a-form-item>
+
+            <a-form-item label="Upload File" required>
+              <a-upload
+                v-model:file-list="attachFilesForm.fileList"
+                :before-upload="handleBeforeUpload"
+                :custom-request="handleCustomUpload"
+                multiple
+                :accept="'.docx,.xlsx,.xls,.pptx,.ppt,.pdf,.jpg,.jpeg,.png'"
+              >
+                <a-button>
+                  <IconifyIcon icon="mdi:upload" width="16" style="margin-right: 8px;" />
+                  Pilih File
+                </a-button>
+                <template #tip>
+                  <div style="color: #666; font-size: 12px; margin-top: 8px;">
+                    Format yang diizinkan: DOCX, Excel (XLSX/XLS), PowerPoint (PPTX/PPT), PDF, dan gambar (JPG/JPEG/PNG)
+                  </div>
+                </template>
+              </a-upload>
+            </a-form-item>
+
+            <!-- Tabel Dokumen yang Sudah Di-upload -->
+            <a-divider style="margin: 16px 0;" />
+            <div style="margin-bottom: 16px;">
+              <h4 style="margin-bottom: 12px;">
+                Dokumen yang Sudah Di-upload ({{ currentDirectorDocuments.length }})
+                <span v-if="getPendingFilesCount(selectedDirectorIndex) > 0" style="color: #ff9800; font-size: 13px; font-weight: normal; margin-left: 8px;">
+                  (+ {{ getPendingFilesCount(selectedDirectorIndex) }} file menunggu upload)
+                </span>
+              </h4>
+              <a-table
+                :columns="documentTableColumns"
+                :data-source="currentDirectorDocuments"
+                :pagination="{ pageSize: 5 }"
+                size="small"
+                :loading="loadingDirectorDocuments"
+                row-key="id"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key === 'category'">
+                    <span>
+                      {{ getDocumentCategoryLabel(record) }}
+                    </span>
+                  </template>
+                  <template v-else-if="column.key === 'size'">
+                    <span>{{ formatFileSize(record.size) }}</span>
+                  </template>
+                  <template v-else-if="column.key === 'created_at'">
+                    <span>{{ record.created_at ? dayjs(record.created_at).format('DD/MM/YYYY HH:mm') : '-' }}</span>
+                  </template>
+                  <template v-else-if="column.key === 'action'">
+                    <a :href="getDocumentDownloadUrl(record.file_path)" target="_blank" style="color: #1890ff;">
+                      Download
+                    </a>
+                  </template>
+                </template>
+                <template #emptyText>
+                  <a-empty description="Belum ada dokumen yang di-upload" style="margin: 24px 0;" />
+                </template>
+              </a-table>
+              
+              <!-- Pending Files List -->
+              <div v-if="selectedDirectorIndex !== null && getPendingFilesCount(selectedDirectorIndex) > 0" style="margin-top: 12px;">
+                <div style="margin-bottom: 8px; font-weight: 600; color: #ff9800;">File Menunggu Upload:</div>
+                <div v-for="(file, fileIdx) in getPendingFilesForModal(selectedDirectorIndex)" :key="`pending-${selectedDirectorIndex}-${fileIdx}`" 
+                  style="display: flex; align-items: center; padding: 8px 12px; background: #fff7e6; border: 1px solid #ffd591; border-radius: 4px; margin-bottom: 6px;">
+                  <IconifyIcon icon="mdi:clock-outline" width="16" style="margin-right: 8px; color: #ff9800;" />
+                  <span style="flex: 1; font-size: 14px;">{{ file.name }}</span>
+                  <a-tag size="small" color="orange">Menunggu Upload</a-tag>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer dengan layout yang lebih rapi -->
+            <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center;">
+              <div style="flex: 1;">
+                <small style="color: #666; font-size: 12px;">
+                  File akan diupload saat form disubmit (klik Finish/Update)
+                </small>
+              </div>
+              <a-space>
+                <a-button @click="handleCloseAttachModal">Batal</a-button>
+                <a-button type="primary" @click="handleFinishAttachFiles" :disabled="attachFilesForm.fileList.length === 0 || !attachFilesForm.documentCategory">
+                  Simpan ke Daftar ({{ attachFilesForm.fileList.length }})
+                </a-button>
+              </a-space>
+            </div>
+          </div>
+        </a-modal>
 
         <!-- Navigation Buttons -->
         <div class="form-actions">
@@ -429,16 +803,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
-import { companyApi, uploadApi, type Company, type Shareholder, type BusinessField, type Director } from '../api/userManagement'
+import { companyApi, uploadApi, shareholderTypesApi, directorPositionsApi, type Company, type Shareholder, type ShareholderType, type DirectorPosition, type BusinessField, type Director } from '../api/userManagement'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import apiClient from '../api/client'
+import documentsApi, { type DocumentFolder, type DocumentItem } from '../api/documents'
 import dayjs from 'dayjs'
 import 'dayjs/locale/id'
+import type { UploadFile } from 'ant-design-vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -451,14 +827,74 @@ const logoFileList = ref<Array<{ uid: string; name: string; status?: string; url
 const uploadingLogo = ref(false)
 const hasRootHolding = ref(false)
 
-// Check if user is superadmin
-const isSuperAdmin = computed(() => {
-  return authStore.user?.role === 'superadmin'
+// Shareholder types (master data)
+const shareholderTypes = ref<ShareholderType[]>([])
+const loadingShareholderTypes = ref(false)
+const shareholderTypeSearchValue = ref('')
+
+// Director positions (master data)
+const directorPositions = ref<DirectorPosition[]>([])
+const loadingDirectorPositions = ref(false)
+const directorPositionSearchValue = ref('')
+
+// Attach files modal state
+const attachFilesModalVisible = ref(false)
+const selectedDirectorIndex = ref<number | null>(null)
+const uploadingFiles = ref(false)
+const attachFilesForm = ref<{
+  fileList: UploadFile[]
+  documentCategory: string | undefined
+}>({
+  fileList: [],
+  documentCategory: undefined,
 })
 
-// Get user's company ID
-const userCompanyId = computed(() => {
-  return authStore.user?.company_id || undefined
+// Store temporary files that will be uploaded on form submit
+// Format: { tempDirectorIndex: number, files: File[], category: string }[]
+const pendingDirectorFiles = ref<Array<{
+  tempDirectorIndex: number
+  directorId?: string // Director ID jika sudah ada (untuk existing directors)
+  fullName?: string // Full name untuk matching jika ID belum ada
+  ktp?: string // KTP untuk matching jika ID belum ada
+  files: File[]
+  category: string
+}>>([])
+
+// Store uploaded documents with temporary director reference (for backward compatibility with updateDirectorDocumentRelations)
+// Format: { tempDirectorIndex: number, documentIds: string[], category: string }[]
+const pendingDirectorDocuments = ref<Array<{
+  tempDirectorIndex: number
+  documentIds: string[]
+  category: string
+}>>([])
+
+// Store fetched documents per director (directorId -> DocumentItem[])
+const directorDocumentsMap = ref<Map<string, DocumentItem[]>>(new Map())
+
+// Loading state for fetching director documents
+const loadingDirectorDocuments = ref(false)
+
+// Current director documents displayed in modal
+const currentDirectorDocuments = ref<DocumentItem[]>([])
+
+// Document categories for individual documents
+const documentCategories = [
+  { label: 'KTP', value: 'ktp' },
+  { label: 'NPWP', value: 'npwp' },
+  { label: 'Sertifikat', value: 'certificate' },
+  { label: 'Ijazah', value: 'diploma' },
+  { label: 'SK Pengangkatan', value: 'appointment_letter' },
+  { label: 'Lainnya', value: 'other' },
+]
+
+// Check if user can manage shareholder types (superadmin/administrator only)
+const canManageShareholderTypes = computed(() => {
+  return authStore.user?.role?.toLowerCase() === 'superadmin' || authStore.user?.role?.toLowerCase() === 'administrator'
+})
+
+// Check if user can manage director positions (superadmin/administrator only)
+const canManageDirectorPositions = computed(() => {
+  return authStore.user?.role?.toLowerCase() === 'superadmin' || authStore.user?.role?.toLowerCase() === 'administrator'
 })
 
 // Check if edit mode
@@ -483,16 +919,22 @@ const formData = ref({
   operational_address: '',
   code: '',
   parent_id: undefined as string | undefined,
+  authorized_capital: undefined as number | undefined, // Modal Dasar
+  paid_up_capital: undefined as number | undefined, // Modal Disetor
+  currency: 'IDR' as string, // Mata uang: IDR (default) atau USD
   
   // Step 2: Struktur Kepemilikan
   shareholders: [] as Array<{
     id?: string
-    type: string
+    shareholder_company_id?: string | null // ID perusahaan pemegang saham (nullable)
+    type: string[] // Changed to array for multiple selection (tag system)
     name: string
     identity_number: string
-    ownership_percent: number
-    share_count: number
+    ownership_percent: number // 10 digit desimal (calculated automatically)
+    share_sheet_count?: number
+    share_value_per_sheet?: number
     is_main_parent: boolean
+    isCompany?: boolean // Flag untuk membedakan perusahaan dari sistem vs individu/eksternal
   }>,
   
   // Step 3: Bidang Usaha
@@ -507,7 +949,7 @@ const formData = ref({
   // Step 4: Pengurus/Dewan Direksi
   directors: [] as Array<{
     id?: string
-    position: string
+    position: string[] // Changed to array for multiple selection (tag system)
     full_name: string
     ktp: string
     npwp: string
@@ -517,11 +959,12 @@ const formData = ref({
 })
 
 const shareholderColumns = [
-  { title: 'Jenis Pemegang Saham', key: 'type', width: 200 },
+  { title: 'Jenis Pemegang Saham', key: 'type', width: 250 },
   { title: 'Nama Pemegang Saham', key: 'name', width: 200 },
-  { title: 'Nomor Identitas (KTP/NPWP)', key: 'identity_number', width: 180 },
+  { title: 'Nomor Identitas', key: 'identity_number', width: 180 },
   { title: 'Persentase Kepemilikan', key: 'ownership_percent', width: 150 },
-  { title: 'Jumlah Saham', key: 'share_count', width: 150 },
+  { title: 'Jumlah Lembar Saham', key: 'share_sheet_count', width: 180 },
+  { title: 'Nilai Rupiah per Lembar', key: 'share_value_per_sheet', width: 200 },
   { title: 'Aksi', key: 'actions', width: 80 },
 ]
 
@@ -537,22 +980,240 @@ const directorColumns = [
 
 const addShareholder = () => {
   formData.value.shareholders.push({
-    type: '',
+    type: [],
+    shareholder_company_id: null,
     name: '',
     identity_number: '',
     ownership_percent: 0,
-    share_count: 0,
+    share_sheet_count: undefined,
+    share_value_per_sheet: undefined,
     is_main_parent: false,
+    isCompany: false, // Default: individu/eksternal
   })
+  // Recalculate ownership percentages after adding
+  calculateOwnershipPercentages()
 }
 
 const removeShareholder = (index: number) => {
   formData.value.shareholders.splice(index, 1)
+  // Recalculate ownership percentages after removing
+  calculateOwnershipPercentages()
+}
+
+// Calculate ownership percentages automatically based on paid_up_capital
+// Only for shareholders that are companies (have shareholder_company_id)
+// If current company's paid_up_capital > total shareholder capital, include it in calculation
+const calculateOwnershipPercentages = () => {
+  // Get all company shareholders (those with shareholder_company_id)
+  const companyShareholders = formData.value.shareholders.filter(sh => sh.shareholder_company_id)
+  
+  // Calculate total paid_up_capital from all company shareholders
+  let totalShareholderCapital = 0
+  const shareholderCapitals: Map<number, number> = new Map()
+  
+  companyShareholders.forEach((sh, index) => {
+    const company = availableCompanies.value.find(c => c.id === sh.shareholder_company_id)
+    const capital = company?.paid_up_capital || 0
+    shareholderCapitals.set(index, capital)
+    totalShareholderCapital += capital
+  })
+  
+  // Get current company's paid_up_capital
+  const currentCompanyCapital = formData.value.paid_up_capital || 0
+  
+  // If current company's capital is greater than total shareholder capital, include it in total
+  const includeCurrentCompanyInTotal = currentCompanyCapital > totalShareholderCapital && totalShareholderCapital > 0
+  const totalCapital = includeCurrentCompanyInTotal 
+    ? currentCompanyCapital + totalShareholderCapital 
+    : totalShareholderCapital
+  
+  // Calculate percentage for each company shareholder (10 decimal places)
+  if (totalCapital > 0) {
+    companyShareholders.forEach((sh, index) => {
+      const capital = shareholderCapitals.get(index) || 0
+      const percentage = (capital / totalCapital) * 100
+      // Round to 10 decimal places
+      sh.ownership_percent = Math.round(percentage * 10000000000) / 10000000000
+    })
+  } else {
+    // If total capital is 0, set all to 0
+    companyShareholders.forEach(sh => {
+      sh.ownership_percent = 0
+    })
+  }
+  
+  // Update parent company based on highest percentage
+  updateParentCompanyBasedOnPercent()
+}
+
+// Handle change when user selects company or switches to individual/external
+const handleShareholderCompanyChange = (record: typeof formData.value.shareholders[number], value: string | null) => {
+  if (value === null || value === '') {
+    // Switch to individual/external mode
+    record.shareholder_company_id = null
+    record.isCompany = false
+    record.name = ''
+    record.identity_number = ''
+    record.ownership_percent = 0 // For individual/external, percentage is manual
+    
+    // Recalculate ownership percentages and update parent company
+    calculateOwnershipPercentages()
+  } else if (value === '__individual__') {
+    // User explicitly selected "Individu/Eksternal" option
+    record.shareholder_company_id = null
+    record.isCompany = false
+    record.name = ''
+    record.identity_number = ''
+    record.ownership_percent = 0
+    
+    // Recalculate ownership percentages and update parent company
+    calculateOwnershipPercentages()
+  } else {
+    // User selected a company from the list
+    const selectedCompany = availableCompanies.value.find(c => c.id === value)
+    if (selectedCompany) {
+      record.shareholder_company_id = value
+      record.isCompany = true
+      record.name = selectedCompany.name
+      // Auto-fill identity_number from NPWP or NIB
+      record.identity_number = selectedCompany.npwp || selectedCompany.nib || ''
+      
+      // Recalculate ownership percentages and update parent company
+      calculateOwnershipPercentages()
+      
+      // Show alert if company doesn't have paid_up_capital
+      if (!selectedCompany.paid_up_capital || selectedCompany.paid_up_capital === 0) {
+        message.warning(`Perusahaan "${selectedCompany.name}" belum memiliki data Modal Disetor. Persentase kepemilikan akan dihitung sebagai 0%.`)
+      }
+    }
+  }
+}
+
+// Get filtered companies for shareholder dropdown (exclude current company being edited)
+const getAvailableShareholderCompanies = () => {
+  const currentCompanyId = route.params.id as string
+  return availableCompanies.value.filter(c => c.id !== currentCompanyId)
+}
+
+// Get shareholder capital info for popover
+const getShareholderCapitalInfo = (record: typeof formData.value.shareholders[number]) => {
+  if (!record.shareholder_company_id) {
+    return '-'
+  }
+  
+  const shareholderCompany = availableCompanies.value.find(c => c.id === record.shareholder_company_id)
+  if (!shareholderCompany) {
+    return '-'
+  }
+  
+  const capital = shareholderCompany.paid_up_capital || 0
+  // Use currency from shareholder company if available, otherwise use form currency
+  const currency = shareholderCompany.currency || formData.value.currency || 'IDR'
+  const formattedCapital = capital.toLocaleString('id-ID')
+  
+  return `${currency} ${formattedCapital}`
+}
+
+// Calculate total capital from all company shareholders
+const getTotalShareholderCapital = () => {
+  const companyShareholders = formData.value.shareholders.filter(sh => sh.shareholder_company_id)
+  let totalCapital = 0
+  
+  companyShareholders.forEach((sh) => {
+    const company = availableCompanies.value.find(c => c.id === sh.shareholder_company_id)
+    if (company) {
+      const capital = company.paid_up_capital || 0
+      totalCapital += capital
+    }
+  })
+  
+  return totalCapital
+}
+
+// Check if current company's paid_up_capital is greater than total shareholder capital
+const isCompanyCapitalGreaterThanShareholders = computed(() => {
+  const currentCompanyCapital = formData.value.paid_up_capital || 0
+  const totalShareholderCapital = getTotalShareholderCapital()
+  return currentCompanyCapital > totalShareholderCapital && totalShareholderCapital > 0
+})
+
+// Calculate ownership percentage of current company (kepemilikan sendiri)
+// Always calculated: (Modal perusahaan sendiri / Total modal) × 100%
+// Total modal = Modal perusahaan sendiri + Total modal semua pemegang saham
+const currentCompanyOwnershipPercent = computed(() => {
+  const currentCompanyCapital = formData.value.paid_up_capital || 0
+  const totalShareholderCapital = getTotalShareholderCapital()
+  const totalCapital = currentCompanyCapital + totalShareholderCapital
+  
+  if (totalCapital === 0) {
+    return 0
+  }
+  
+  const percentage = (currentCompanyCapital / totalCapital) * 100
+  // Round to 2 decimal places for display
+  return Math.round(percentage * 100) / 100
+})
+
+// Auto-update parent company based on highest ownership percentage
+// This will always update to the company with highest percentage (only for company shareholders, not individuals)
+// BUT: If current company's paid_up_capital > total shareholder capital, set parent_id to null
+const updateParentCompanyBasedOnPercent = () => {
+  if (formData.value.shareholders.length === 0) {
+    // If no shareholders, don't change parent_id (keep existing or null)
+    return
+  }
+  
+  // Check if current company's capital is greater than total shareholder capital
+  const currentCompanyCapital = formData.value.paid_up_capital || 0
+  const totalShareholderCapital = getTotalShareholderCapital()
+  
+  // If current company's capital is greater than total shareholder capital, set parent to undefined
+  if (currentCompanyCapital > totalShareholderCapital && totalShareholderCapital > 0) {
+    if (formData.value.parent_id !== undefined) {
+      formData.value.parent_id = undefined
+      console.log('Auto-cleared parent company: Current company capital is greater than total shareholder capital', {
+        currentCompanyCapital,
+        totalShareholderCapital
+      })
+    }
+    return
+  }
+  
+  // Only consider company shareholders (those with shareholder_company_id)
+  const companyShareholders = formData.value.shareholders.filter(sh => sh.shareholder_company_id && sh.ownership_percent > 0)
+  
+  if (companyShareholders.length === 0) {
+    // If no company shareholders with percentage > 0, set to undefined
+    if (formData.value.parent_id !== undefined) {
+      formData.value.parent_id = undefined
+    }
+    return
+  }
+  
+  // Find shareholder with highest percentage (only from company shareholders)
+  const maxPercentShareholder = companyShareholders.reduce((max, sh) => {
+    return sh.ownership_percent > (max?.ownership_percent || 0) ? sh : max
+  }, companyShareholders[0])
+  
+  // Auto-update to the company with highest percentage
+  if (maxPercentShareholder && maxPercentShareholder.shareholder_company_id) {
+    const newParentId = maxPercentShareholder.shareholder_company_id
+    const previousParentId = formData.value.parent_id
+    if (previousParentId !== newParentId) {
+      formData.value.parent_id = newParentId
+      console.log('Auto-updated parent company:', {
+        previousParentId: previousParentId,
+        newParentId: newParentId,
+        shareholderName: maxPercentShareholder.name,
+        percentage: maxPercentShareholder.ownership_percent
+      })
+    }
+  }
 }
 
 const addDirector = () => {
   formData.value.directors.push({
-    position: '',
+    position: [], // Changed to array for multiple selection
     full_name: '',
     ktp: '',
     npwp: '',
@@ -563,6 +1224,269 @@ const addDirector = () => {
 
 const removeDirector = (index: number) => {
   formData.value.directors.splice(index, 1)
+  
+  // Remove pending files untuk director yang dihapus
+  pendingDirectorFiles.value = pendingDirectorFiles.value.filter(
+    (pf) => pf.tempDirectorIndex !== index
+  )
+  
+  // Update index untuk pending files yang index-nya lebih besar (karena array bergeser)
+  pendingDirectorFiles.value = pendingDirectorFiles.value.map((pf) => {
+    if (pf.tempDirectorIndex > index) {
+      return {
+        ...pf,
+        tempDirectorIndex: pf.tempDirectorIndex - 1,
+      }
+    }
+    return pf
+  })
+  
+  // Remove pending documents untuk director yang dihapus (legacy support)
+  pendingDirectorDocuments.value = pendingDirectorDocuments.value.filter(
+    (pd) => pd.tempDirectorIndex !== index
+  )
+  
+  // Update index untuk pending documents yang index-nya lebih besar
+  pendingDirectorDocuments.value = pendingDirectorDocuments.value.map((pd) => {
+    if (pd.tempDirectorIndex > index) {
+      return {
+        ...pd,
+        tempDirectorIndex: pd.tempDirectorIndex - 1,
+      }
+    }
+    return pd
+  })
+}
+
+// Attach files handlers
+// Load all director documents for form (pre-load saat edit mode)
+const loadAllDirectorDocumentsForForm = async (directors: Array<{ id?: string }>) => {
+  const loadPromises = directors
+    .filter(d => d.id)
+    .map(async (director) => {
+      if (!director.id) return
+      try {
+        const response = await documentsApi.listDocumentsPaginated({
+          director_id: director.id,
+          page: 1,
+          page_size: 100,
+        })
+        directorDocumentsMap.value.set(director.id, response.data)
+      } catch (error) {
+        console.error(`Failed to load documents for director ${director.id}:`, error)
+        directorDocumentsMap.value.set(director.id, [])
+      }
+    })
+  
+  await Promise.all(loadPromises)
+}
+
+const handleAttachFiles = async (index: number) => {
+  selectedDirectorIndex.value = index
+  attachFilesForm.value.fileList = []
+  attachFilesForm.value.documentCategory = undefined
+  attachFilesModalVisible.value = true
+  
+  // Fetch existing documents for this director
+  const director = formData.value.directors[index]
+  console.log('Opening attach modal for director:', { index, director: { id: director?.id, name: director?.full_name } })
+  
+  if (director?.id) {
+    loadingDirectorDocuments.value = true
+    try {
+      // Always fetch fresh data to ensure we have the latest documents
+      console.log(`Fetching documents for director ${director.id}`)
+      const response = await documentsApi.listDocumentsPaginated({
+        director_id: director.id,
+        page: 1,
+        page_size: 100, // Fetch all documents for this director
+      })
+      console.log(`Fetched ${response.data.length} documents for director ${director.id}`, response.data)
+      currentDirectorDocuments.value = response.data
+      directorDocumentsMap.value.set(director.id, response.data)
+    } catch (error) {
+      console.error('Failed to fetch director documents:', error)
+      // Fallback to cached data if fetch fails
+      const cachedDocs = directorDocumentsMap.value.get(director.id) || []
+      console.log(`Using cached documents for director ${director.id}: ${cachedDocs.length} docs`)
+      currentDirectorDocuments.value = cachedDocs
+    } finally {
+      loadingDirectorDocuments.value = false
+    }
+  } else {
+    console.log('Director does not have ID yet, cannot fetch documents')
+    // For new directors without ID yet, documents will be fetched after director ID is assigned
+    currentDirectorDocuments.value = []
+  }
+}
+
+const handleCloseAttachModal = () => {
+  attachFilesModalVisible.value = false
+  selectedDirectorIndex.value = null
+  attachFilesForm.value.fileList = []
+  attachFilesForm.value.documentCategory = undefined
+  currentDirectorDocuments.value = []
+}
+
+// Validasi file sebelum upload
+const handleBeforeUpload = (file: File): boolean => {
+  // Validasi tipe file
+  const allowedExtensions = ['.docx', '.xlsx', '.xls', '.pptx', '.ppt', '.pdf', '.jpg', '.jpeg', '.png']
+  const fileName = file.name.toLowerCase()
+  const ext = fileName.substring(fileName.lastIndexOf('.'))
+  
+  if (!allowedExtensions.includes(ext)) {
+    message.error(`Format file ${file.name} tidak diizinkan. Hanya DOCX, Excel (XLSX/XLS), PowerPoint (PPTX/PPT), PDF, dan gambar (JPG/JPEG/PNG) yang diperbolehkan.`)
+    return false
+  }
+  
+  // Validasi ukuran (max 50MB untuk dokumen)
+  const maxSize = 50 * 1024 * 1024 // 50MB
+  if (file.size > maxSize) {
+    message.error(`Ukuran file ${file.name} melebihi 50MB`)
+    return false
+  }
+  
+  // Return false untuk prevent auto upload, kita akan upload manual
+  return false
+}
+
+// Custom upload handler (tidak langsung upload, hanya add ke fileList)
+const handleCustomUpload = () => {
+  // Tidak melakukan apapun di sini, file sudah ditambahkan ke fileList
+  // Upload akan dilakukan saat user klik button "Upload"
+}
+
+// Helper function untuk menghitung jumlah dokumen per direktur
+const getDirectorDocumentCount = (director: typeof formData.value.directors[0], index: number): number => {
+  // Jika direktur sudah punya ID, ambil dari map (existing documents)
+  if (director?.id) {
+    const docs = directorDocumentsMap.value.get(director.id)
+    if (docs) {
+      // Tambahkan pending files count
+      const pendingFiles = pendingDirectorFiles.value.find(pf => pf.tempDirectorIndex === index)
+      return docs.length + (pendingFiles ? pendingFiles.files.length : 0)
+    }
+  }
+  
+  // Jika belum punya ID, cek pending files berdasarkan index
+  const pendingFiles = pendingDirectorFiles.value.find(pf => pf.tempDirectorIndex === index)
+  return pendingFiles ? pendingFiles.files.length : 0
+}
+
+// Helper functions untuk tabel dokumen
+const documentTableColumns = [
+  { title: 'Nama File', dataIndex: 'name', key: 'name' },
+  { title: 'Kategori', key: 'category' },
+  { title: 'Ukuran', key: 'size' },
+  { title: 'Tanggal Upload', key: 'created_at' },
+  { title: 'Aksi', key: 'action' },
+]
+
+const getDocumentCategoryLabel = (record: DocumentItem): string => {
+  const meta = record.metadata as { category?: string } | undefined
+  const categoryValue = meta?.category || '-'
+  const categoryLabel = documentCategories.find(cat => cat.value === categoryValue)?.label || categoryValue
+  return categoryLabel
+}
+
+const formatFileSize = (size: number): string => {
+  const sizeInMB = (size / (1024 * 1024)).toFixed(2)
+  return `${sizeInMB} MB`
+}
+
+const getDocumentDownloadUrl = (filePath: string): string => {
+  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+    return filePath
+  }
+  const apiURL = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:8080'
+  return `${apiURL}${filePath}`
+}
+
+// Helper untuk mendapatkan jumlah pending files untuk director index
+const getPendingFilesCount = (directorIndex: number | null): number => {
+  if (directorIndex === null) return 0
+  const pendingFiles = pendingDirectorFiles.value.find(pf => pf.tempDirectorIndex === directorIndex)
+  return pendingFiles ? pendingFiles.files.length : 0
+}
+
+// Helper untuk mendapatkan pending files di modal
+const getPendingFilesForModal = (directorIndex: number | null): File[] => {
+  if (directorIndex === null) return []
+  const pendingFiles = pendingDirectorFiles.value.find(pf => pf.tempDirectorIndex === directorIndex)
+  return pendingFiles ? pendingFiles.files : []
+}
+
+// Simpan files ke temporary state (tidak langsung upload)
+const handleFinishAttachFiles = () => {
+  if (selectedDirectorIndex.value === null) {
+    message.error('Individu tidak ditemukan')
+    return
+  }
+  
+  if (attachFilesForm.value.fileList.length === 0) {
+    message.error('Pilih minimal satu file untuk diupload')
+    return
+  }
+  
+  if (!attachFilesForm.value.documentCategory) {
+    message.error('Pilih kategori dokumen')
+    return
+  }
+  
+  // Extract files from UploadFile objects
+  const files: File[] = []
+  for (const uploadFile of attachFilesForm.value.fileList) {
+    if (uploadFile.originFileObj) {
+      files.push(uploadFile.originFileObj)
+    }
+  }
+  
+  if (files.length === 0) {
+    message.error('Tidak ada file yang valid untuk disimpan')
+    return
+  }
+  
+  // Cek apakah sudah ada pending files untuk director index ini
+  const existingPendingIndex = pendingDirectorFiles.value.findIndex(
+    (pf) => pf.tempDirectorIndex === selectedDirectorIndex.value
+  )
+  
+  if (existingPendingIndex >= 0) {
+    // Merge dengan existing files (append)
+    const existingPending = pendingDirectorFiles.value[existingPendingIndex]
+    const director = formData.value.directors[selectedDirectorIndex.value]
+    if (existingPending) {
+      existingPending.files.push(...files)
+      existingPending.category = attachFilesForm.value.documentCategory
+      // Update identifier jika belum ada atau berubah
+      if (!existingPending.directorId && director?.id) {
+        existingPending.directorId = director.id
+      }
+      if (!existingPending.fullName && director?.full_name) {
+        existingPending.fullName = director.full_name
+      }
+      if (!existingPending.ktp && director?.ktp) {
+        existingPending.ktp = director.ktp
+      }
+      message.success(`Berhasil menambahkan ${files.length} file ke daftar (total: ${existingPending.files.length} file). File akan diupload saat form disubmit.`)
+    }
+  } else {
+    // Tambah baru
+    const director = formData.value.directors[selectedDirectorIndex.value]
+    pendingDirectorFiles.value.push({
+      tempDirectorIndex: selectedDirectorIndex.value,
+      directorId: director?.id, // Simpan director ID jika sudah ada
+      fullName: director?.full_name, // Simpan full name untuk matching
+      ktp: director?.ktp, // Simpan KTP untuk matching
+      files: files,
+      category: attachFilesForm.value.documentCategory,
+    })
+    message.success(`Berhasil menambahkan ${files.length} file ke daftar. File akan diupload saat form disubmit.`)
+  }
+  
+  // Close modal
+  handleCloseAttachModal()
 }
 
 const handleLogoUpload = async (file: File): Promise<boolean> => {
@@ -640,11 +1564,10 @@ const handleSubmit = async () => {
     return
   }
 
-  // Validasi untuk superadmin: jika sudah ada holding, wajib pilih parent
-  if (isSuperAdmin.value && hasRootHolding.value && !formData.value.parent_id) {
-    message.error('Holding company sudah ada. Silakan pilih perusahaan induk.')
-    return
-  }
+  // Tidak ada validasi wajib untuk parent_id - bisa kosong dan di-setup nanti
+
+  // Recalculate ownership percentages before submit to ensure all calculations are up-to-date
+  calculateOwnershipPercentages()
 
   // Set loading IMMEDIATELY sebelum async operations untuk prevent race condition
   loading.value = true
@@ -657,6 +1580,13 @@ const handleSubmit = async () => {
   
   try {
     // Prepare data untuk API - menggunakan snake_case sesuai JSON tag
+    // Log currency sebelum submit untuk debugging
+    console.log('Submitting company data with currency:', {
+      currency: formData.value.currency,
+      formDataCurrency: formData.value.currency,
+      isEditMode: !!route.params.id
+    })
+
     const submitData = {
       name: formData.value.name,
       short_name: formData.value.short_name,
@@ -672,19 +1602,20 @@ const handleSubmit = async () => {
       website: formData.value.website,
       address: formData.value.address,
       operational_address: formData.value.operational_address,
-      // Set parent_id: 
-      // - Superadmin: jika belum ada holding, bisa null (jadi holding pertama)
-      // - Superadmin: jika sudah ada holding, wajib pilih parent
-      // - Non-superadmin: otomatis ke company mereka
-      parent_id: isSuperAdmin.value 
-        ? (hasRootHolding.value ? (formData.value.parent_id || null) : (formData.value.parent_id || null))
-        : (formData.value.parent_id || userCompanyId.value || null),
+      // Set parent_id: always send, even if null (to allow removing parent)
+      // CRITICAL: Always send parent_id field, even if null, so backend knows to update it
+      parent_id: formData.value.parent_id ? formData.value.parent_id : null,
+      authorized_capital: formData.value.authorized_capital !== undefined ? formData.value.authorized_capital : null,
+      paid_up_capital: formData.value.paid_up_capital !== undefined ? formData.value.paid_up_capital : null,
+      currency: formData.value.currency || 'IDR', // Default IDR jika tidak ada
       shareholders: formData.value.shareholders.map(sh => ({
-        type: sh.type,
+        shareholder_company_id: sh.shareholder_company_id || null, // Send company_id if exists, null if individual/external
+        type: Array.isArray(sh.type) ? sh.type.join(', ') : (sh.type || ''), // Convert array to comma-separated string for backend
         name: sh.name,
-        identity_number: sh.identity_number,
-        ownership_percent: sh.ownership_percent || 0,
-        share_count: sh.share_count || 0,
+        identity_number: sh.identity_number || '',
+        ownership_percent: sh.ownership_percent || 0, // For companies, this is calculated automatically; for individuals, it's manual
+        share_sheet_count: sh.share_sheet_count !== undefined ? sh.share_sheet_count : null,
+        share_value_per_sheet: sh.share_value_per_sheet !== undefined ? sh.share_value_per_sheet : null,
         is_main_parent: false,
       })),
       main_business: (formData.value.main_business.industry_sector || formData.value.main_business.kbli) ? {
@@ -695,7 +1626,7 @@ const handleSubmit = async () => {
         start_operation_date: formData.value.main_business.start_operation_date?.format('YYYY-MM-DD') || null,
       } : null,
       directors: formData.value.directors.map(d => ({
-        position: d.position,
+        position: Array.isArray(d.position) ? d.position.join(', ') : (d.position || ''), // Convert array to comma-separated string for backend
         full_name: d.full_name,
         ktp: d.ktp,
         npwp: d.npwp,
@@ -704,19 +1635,65 @@ const handleSubmit = async () => {
       })),
     }
 
+    let savedCompanyId: string
+    
     if (route.params.id) {
       // Edit mode - use full update endpoint
-      await apiClient.put(`/companies/${route.params.id}/full`, submitData)
+      console.log('Updating company with data:', JSON.stringify(submitData, null, 2))
+      const response = await apiClient.put(`/companies/${route.params.id}/full`, submitData)
+      console.log('Update response:', response.data)
       message.success('Perusahaan berhasil diupdate')
+      savedCompanyId = route.params.id as string
+      
+      // Reload company data setelah update untuk memastikan currency ter-update dan mendapatkan directors dengan ID
+      const updatedCompany = await companyApi.getById(savedCompanyId)
+      console.log('Reloaded company after update:', {
+        currency: updatedCompany.currency,
+        fullCompany: updatedCompany
+      })
+      formData.value.currency = updatedCompany.currency || 'IDR'
+      
+      // Upload pending files dan update director_id untuk pending documents
+      if (updatedCompany.directors) {
+        // Upload pending files (baru - files yang disimpan temporary)
+        if (pendingDirectorFiles.value.length > 0) {
+          await uploadPendingDirectorFiles(savedCompanyId, updatedCompany.directors)
+        }
+        // Update existing documents yang sudah diupload (legacy support)
+        if (pendingDirectorDocuments.value.length > 0) {
+          await updateDirectorDocumentRelations(savedCompanyId, updatedCompany.directors)
+        }
+      }
+      
+      // Success - redirect ke halaman detail subsidiaries setelah delay kecil
+      await new Promise(resolve => setTimeout(resolve, 100))
+      router.push(`/subsidiaries/${savedCompanyId}`)
     } else {
       // Create mode - use full create endpoint
-      await apiClient.post('/companies/full', submitData)
+      console.log('Creating company with data:', JSON.stringify(submitData, null, 2))
+      const response = await apiClient.post('/companies/full', submitData)
+      console.log('Create response:', response.data)
       message.success('Perusahaan berhasil dibuat')
+      savedCompanyId = response.data.id
+      
+      // Upload pending files dan update director_id untuk pending documents
+      // Reload company untuk mendapatkan directors dengan ID
+      const newCompany = await companyApi.getById(savedCompanyId)
+      if (newCompany.directors) {
+        // Upload pending files (baru - files yang disimpan temporary)
+        if (pendingDirectorFiles.value.length > 0) {
+          await uploadPendingDirectorFiles(savedCompanyId, newCompany.directors)
+        }
+        // Update existing documents yang sudah diupload (legacy support)
+        if (pendingDirectorDocuments.value.length > 0) {
+          await updateDirectorDocumentRelations(savedCompanyId, newCompany.directors)
+        }
+      }
+      
+      // Success - redirect ke halaman list subsidiaries setelah delay kecil
+      await new Promise(resolve => setTimeout(resolve, 100))
+      router.push('/subsidiaries')
     }
-    
-    // Success - redirect setelah delay kecil untuk memastikan state ter-update
-    await new Promise(resolve => setTimeout(resolve, 100))
-    router.push('/subsidiaries')
   } catch (error: unknown) {
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     message.error('Gagal menyimpan: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
@@ -727,6 +1704,154 @@ const handleSubmit = async () => {
     if (submitButton) {
       submitButton.disabled = false
     }
+  }
+}
+
+// Upload pending files untuk directors
+const uploadPendingDirectorFiles = async (companyId: string, directors: Director[]) => {
+  if (pendingDirectorFiles.value.length === 0) {
+    return
+  }
+  
+  try {
+    // Cari folder perusahaan
+    const folders = await documentsApi.listFolders()
+    let companyFolder = folders.find((f) => {
+      const folderWithCompany = f as DocumentFolder & { company_id?: string | null }
+      return folderWithCompany.company_id === companyId
+    })
+    
+    if (!companyFolder) {
+      // Jika folder belum ada, buat folder baru
+      const company = await companyApi.getById(companyId)
+      companyFolder = await documentsApi.createFolder(company.name)
+    }
+    
+    // Upload files untuk setiap pending file group
+    for (const pendingFileGroup of pendingDirectorFiles.value) {
+      // Cari director berdasarkan ID terlebih dahulu (lebih akurat)
+      let director: Director | undefined
+      
+      if (pendingFileGroup.directorId) {
+        // Cari berdasarkan ID jika ada
+        director = directors.find(d => d.id === pendingFileGroup.directorId)
+      }
+      
+      // Jika tidak ditemukan berdasarkan ID, cari berdasarkan identifier (full_name + ktp)
+      if (!director && pendingFileGroup.fullName) {
+        director = directors.find(d => {
+          const nameMatch = d.full_name === pendingFileGroup.fullName
+          const ktpMatch = !pendingFileGroup.ktp || d.ktp === pendingFileGroup.ktp
+          return nameMatch && ktpMatch
+        })
+      }
+      
+      // Fallback: gunakan index jika ID/identifier matching gagal
+      if (!director) {
+        const directorIndex = pendingFileGroup.tempDirectorIndex
+        if (directorIndex >= 0 && directorIndex < directors.length) {
+          director = directors[directorIndex]
+        }
+      }
+      
+      if (!director || !director.id) {
+        console.warn(`Director not found for pending file group:`, pendingFileGroup)
+        continue
+      }
+      
+      // Upload setiap file dengan director_id
+      for (const file of pendingFileGroup.files) {
+        try {
+          await documentsApi.uploadDocument({
+            file: file,
+            folder_id: companyFolder.id,
+            director_id: director.id,
+            title: file.name,
+            status: 'active',
+            metadata: {
+              category: pendingFileGroup.category,
+              director_id: director.id,
+              director_name: director.full_name,
+            },
+          })
+        } catch (error: unknown) {
+          const err = error as { message?: string }
+          console.error(`Failed to upload file ${file.name}:`, err.message || 'Unknown error')
+          // Continue dengan file lain meskipun ada error
+        }
+      }
+    }
+    
+    // Clear pending files setelah berhasil upload
+    pendingDirectorFiles.value = []
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    console.error('Failed to upload pending director files:', err.message || 'Unknown error')
+    message.warning('Beberapa file mungkin belum terupload. Silakan cek kembali di halaman dokumen.')
+  }
+}
+
+// Update director_id untuk documents yang sudah diupload
+const updateDirectorDocumentRelations = async (companyId: string, directors: Director[]) => {
+  if (pendingDirectorDocuments.value.length === 0) {
+    return
+  }
+  
+  try {
+    // Cari folder perusahaan
+    const folders = await documentsApi.listFolders()
+    let companyFolder = folders.find((f) => {
+      const folderWithCompany = f as DocumentFolder & { company_id?: string | null }
+      return folderWithCompany.company_id === companyId
+    })
+    
+    if (!companyFolder) {
+      // Jika folder belum ada, buat folder baru
+      const company = await companyApi.getById(companyId)
+      companyFolder = await documentsApi.createFolder(company.name)
+    }
+    
+    // Update director_id untuk setiap pending document
+    for (const pendingDoc of pendingDirectorDocuments.value) {
+      // Cari director berdasarkan index (legacy support untuk pendingDirectorDocuments)
+      // Note: pendingDirectorDocuments sudah deprecated, gunakan pendingDirectorFiles
+      const directorIndex = pendingDoc.tempDirectorIndex
+      let director: Director | undefined
+      
+      if (directorIndex >= 0 && directorIndex < directors.length) {
+        director = directors[directorIndex]
+      }
+      
+      if (!director || !director.id) {
+        console.warn(`Director not found at index ${directorIndex}`, pendingDoc)
+        continue
+      }
+      
+      // Update setiap document dengan director_id
+      for (const docId of pendingDoc.documentIds) {
+        try {
+          await documentsApi.updateDocument(docId, {
+            director_id: director.id,
+            metadata: {
+              category: pendingDoc.category,
+              director_id: director.id,
+              director_name: director.full_name,
+            },
+          })
+        } catch (error: unknown) {
+          const err = error as { message?: string }
+          console.error(`Failed to update document ${docId}:`, err.message || 'Unknown error')
+          // Continue dengan document lain meskipun ada error
+        }
+      }
+    }
+    
+    // Clear pending documents setelah berhasil update
+    pendingDirectorDocuments.value = []
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    console.error('Failed to update director document relations:', err.message || 'Unknown error')
+    message.warning('Beberapa dokumen mungkin belum terhubung dengan individu. Silakan cek kembali di halaman dokumen.')
   }
 }
 
@@ -768,7 +1893,8 @@ const loadCompanyData = async () => {
       if (availableCompanies.value.length === 0) {
         await loadAvailableCompanies()
       }
-      const company = await companyApi.getById(route.params.id as string)
+      const company: Company = await companyApi.getById(route.params.id as string)
+      
       // Populate form data
       formData.value.name = company.name || ''
       formData.value.short_name = company.short_name || ''
@@ -805,15 +1931,33 @@ const loadCompanyData = async () => {
       formData.value.operational_address = company.operational_address || ''
       formData.value.code = company.code || ''
       formData.value.parent_id = company.parent_id
+      formData.value.authorized_capital = company.authorized_capital || undefined
+      formData.value.paid_up_capital = company.paid_up_capital || undefined
+      // Load currency from company, default to IDR if not available
+      formData.value.currency = company.currency || 'IDR'
+      console.log('Loaded company currency:', {
+        companyId: company.id,
+        currencyFromAPI: company.currency,
+        currencySet: formData.value.currency,
+        fullCompany: company
+      })
       formData.value.shareholders = (company.shareholders || []).map((sh: Shareholder) => ({
         id: sh.id,
-        type: sh.type,
+        shareholder_company_id: sh.shareholder_company_id || null,
+        type: sh.type ? (typeof sh.type === 'string' ? sh.type.split(',').map(t => t.trim()).filter(t => t) : []) : [],
         name: sh.name,
-        identity_number: sh.identity_number,
+        identity_number: sh.identity_number || '',
         ownership_percent: sh.ownership_percent || 0,
-        share_count: sh.share_count || 0,
+        share_sheet_count: sh.share_sheet_count || undefined,
+        share_value_per_sheet: sh.share_value_per_sheet || undefined,
         is_main_parent: sh.is_main_parent ?? false,
+        isCompany: !!sh.shareholder_company_id, // Set flag based on whether shareholder_company_id exists
       }))
+      
+      // Recalculate ownership percentages after loading (this will also update parent company)
+      // Use nextTick to ensure Vue has finished updating the reactive data
+      await nextTick()
+      calculateOwnershipPercentages()
       // Transform business_fields array to main_business (ambil yang is_main = true atau yang pertama)
       if (company.business_fields && company.business_fields.length > 0) {
         const businessFieldsWithMain = company.business_fields as Array<BusinessField & { is_main?: boolean }>
@@ -835,8 +1979,15 @@ const loadCompanyData = async () => {
       }
       formData.value.directors = (company.directors || []).map((d: Director) => ({
         ...d,
+        position: d.position ? (typeof d.position === 'string' ? d.position.split(',').map(t => t.trim()).filter(t => t) : []) : [], // Convert comma-separated string to array
         start_date: d.start_date ? dayjs(d.start_date) : null,
       }))
+      
+      // Pre-load documents for all directors after directors are loaded
+      if (formData.value.directors && formData.value.directors.length > 0) {
+        console.log('Pre-loading documents for directors in edit mode', formData.value.directors.map(d => ({ id: d.id, name: d.full_name })))
+        await loadAllDirectorDocumentsForForm(formData.value.directors)
+      }
     } catch {
       message.error('Gagal memuat data perusahaan')
     } finally {
@@ -845,9 +1996,446 @@ const loadCompanyData = async () => {
   }
 }
 
+// Shareholder type functions (similar to document types)
+const loadShareholderTypes = async (includeInactive = false) => {
+  loadingShareholderTypes.value = true
+  try {
+    shareholderTypes.value = await shareholderTypesApi.getShareholderTypes(includeInactive)
+  } catch (error) {
+    console.error('Failed to load shareholder types:', error)
+    message.error('Gagal memuat jenis pemegang saham')
+  } finally {
+    loadingShareholderTypes.value = false
+  }
+}
+
+const handleShareholderTypeSearch = (value: string) => {
+  shareholderTypeSearchValue.value = value
+}
+
+const handleShareholderTypeChange = async (record: { type: string[] }, values: string[]) => {
+  // Validate: check if any of the selected values are inactive
+  const invalidValues: string[] = []
+  const currentValues = record.type || []
+  
+  for (const value of values) {
+    const shareholderType = shareholderTypes.value.find((st: ShareholderType) => st.name === value)
+    if (shareholderType && !shareholderType.is_active) {
+      const wasAlreadySelected = currentValues.includes(value)
+      if (!wasAlreadySelected) {
+        invalidValues.push(value)
+      }
+    }
+  }
+  
+  // Remove invalid (inactive) values
+  if (invalidValues.length > 0) {
+    message.warning(`Jenis pemegang saham berikut tidak aktif dan tidak dapat dipilih: ${invalidValues.join(', ')}`)
+    values = values.filter(v => !invalidValues.includes(v))
+  }
+  
+  // Handle when new value is added (not in existing types)
+  const newValues = values.filter((v: string) => {
+    const exists = shareholderTypes.value.find((st: ShareholderType) => 
+      st.name === v || st.name.toLowerCase() === v.toLowerCase()
+    )
+    return !exists && !currentValues.includes(v)
+  })
+  
+  const failedValues: string[] = []
+  const processedValues = [...values]
+  
+  for (const newValue of newValues) {
+    if (canManageShareholderTypes.value && newValue.trim()) {
+      try {
+        await handleShareholderTypeCreate(newValue.trim())
+        await loadShareholderTypes(false)
+        const created = shareholderTypes.value.find((st: ShareholderType) => 
+          st.name.toLowerCase() === newValue.trim().toLowerCase()
+        )
+        if (!created) {
+          failedValues.push(newValue)
+          const index = processedValues.indexOf(newValue)
+          if (index !== -1) {
+            processedValues.splice(index, 1)
+          }
+        } else {
+          // Replace the new value with the created one (exact name from DB)
+          const index = processedValues.indexOf(newValue)
+          if (index !== -1) {
+            processedValues[index] = created.name
+          }
+        }
+      } catch (error) {
+        console.error(`Failed to create shareholder type "${newValue}":`, error)
+        failedValues.push(newValue)
+        const index = processedValues.indexOf(newValue)
+        if (index !== -1) {
+          processedValues.splice(index, 1)
+        }
+      }
+    } else {
+      failedValues.push(newValue)
+      const index = processedValues.indexOf(newValue)
+      if (index !== -1) {
+        processedValues.splice(index, 1)
+      }
+    }
+  }
+  
+  // Normalize values: use exact names from database
+  const normalizedValues = processedValues.map((v: string) => {
+    const exists = shareholderTypes.value.find((st: ShareholderType) => 
+      st.name === v || st.name.toLowerCase() === v.toLowerCase()
+    )
+    return exists ? exists.name : v
+  })
+  
+  record.type = normalizedValues
+  
+  if (failedValues.length > 0) {
+    message.warning(`Jenis pemegang saham berikut gagal dibuat atau tidak ditemukan: ${failedValues.join(', ')}`)
+  }
+}
+
+const handleShareholderTypeSelect = async (record: { type: string[] }, value: string) => {
+  // Check if this is a new value that needs to be created
+  const existingType = shareholderTypes.value.find((st: ShareholderType) => 
+    st.name === value || st.name.toLowerCase() === value.toLowerCase()
+  )
+  
+  if (!existingType && canManageShareholderTypes.value && value.trim()) {
+    // This is a new value, create it
+    try {
+      await handleShareholderTypeCreate(value.trim())
+      await loadShareholderTypes(false)
+      const created = shareholderTypes.value.find((st: ShareholderType) => 
+        st.name.toLowerCase() === value.trim().toLowerCase()
+      )
+      if (created && !record.type.includes(created.name)) {
+        record.type.push(created.name)
+      }
+    } catch (error) {
+      console.error(`Failed to create shareholder type "${value}":`, error)
+      // Remove the value if creation failed
+      record.type = record.type.filter((t: string) => t !== value)
+    }
+  } else if (existingType) {
+    // Existing type selected
+    if (!existingType.is_active) {
+      const isAlreadySelected = record.type.includes(existingType.name)
+      if (!isAlreadySelected) {
+        message.warning(`Jenis pemegang saham "${value}" tidak aktif dan tidak dapat dipilih.`)
+        record.type = record.type.filter((t: string) => t !== value)
+        return
+      }
+    }
+    
+    // Use the exact name from database (case-sensitive)
+    if (!record.type.includes(existingType.name)) {
+      record.type.push(existingType.name)
+    }
+    // Remove the value if it's different from the database name
+    if (value !== existingType.name) {
+      record.type = record.type.filter((t: string) => t !== value)
+    }
+  }
+  
+  shareholderTypeSearchValue.value = ''
+}
+
+const handleShareholderTypeCreate = async (value: string) => {
+  if (!canManageShareholderTypes.value) {
+    message.warning('Hanya superadmin dan administrator yang dapat membuat jenis pemegang saham baru')
+    return
+  }
+
+  const trimmedValue = value.trim()
+  if (!trimmedValue) {
+    message.warning('Nama jenis pemegang saham tidak boleh kosong')
+    return
+  }
+
+  const existing = shareholderTypes.value.find(
+    (st: ShareholderType) => st.name.toLowerCase() === trimmedValue.toLowerCase()
+  )
+  if (existing) {
+    message.warning(`Jenis pemegang saham "${trimmedValue}" sudah ada`)
+    return
+  }
+
+  try {
+    loadingShareholderTypes.value = true
+    const newShareholderType = await shareholderTypesApi.createShareholderType(trimmedValue)
+    
+    if (!newShareholderType || !newShareholderType.id) {
+      throw new Error('Invalid response from server: shareholder type not created in database')
+    }
+    
+    await loadShareholderTypes(false)
+    
+    const verified = shareholderTypes.value.find((st: ShareholderType) => 
+      st.id === newShareholderType.id || st.name.toLowerCase() === trimmedValue.toLowerCase()
+    )
+    if (!verified) {
+      throw new Error('Shareholder type was not saved to database')
+    }
+    
+    message.success(`Jenis pemegang saham "${trimmedValue}" berhasil dibuat dan disimpan ke database`)
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal membuat jenis pemegang saham'
+    console.error(`Failed to create shareholder type:`, error)
+    message.error(errorMessage)
+    throw error
+  } finally {
+    loadingShareholderTypes.value = false
+    shareholderTypeSearchValue.value = ''
+  }
+}
+
+
+// Filter shareholder types based on search and active status
+const filteredShareholderTypes = computed(() => {
+  const selectedShareholderTypeNames = formData.value.shareholders.flatMap(sh => sh.type || [])
+  
+  let filtered = shareholderTypes.value.filter((st: ShareholderType) => {
+    if (st.is_active) return true
+    return selectedShareholderTypeNames.includes(st.name)
+  })
+  
+  if (shareholderTypeSearchValue.value) {
+    const searchLower = shareholderTypeSearchValue.value.toLowerCase()
+    filtered = filtered.filter((st: ShareholderType) => 
+      st.name.toLowerCase().includes(searchLower)
+    )
+  }
+  
+  return filtered
+})
+
+// Director position functions (similar to shareholder types)
+const loadDirectorPositions = async (includeInactive = false) => {
+  loadingDirectorPositions.value = true
+  try {
+    directorPositions.value = await directorPositionsApi.getDirectorPositions(includeInactive)
+  } catch (error) {
+    console.error('Failed to load director positions:', error)
+    message.error('Gagal memuat jabatan pengurus')
+  } finally {
+    loadingDirectorPositions.value = false
+  }
+}
+
+const handleDirectorPositionSearch = (value: string) => {
+  directorPositionSearchValue.value = value
+}
+
+const handleDirectorPositionChange = async (record: { position: string[] }, values: string[]) => {
+  record.position = values || []
+  
+  // Check for new values that don't exist in master data (case-insensitive)
+  const newValues = values.filter(v => {
+    const trimmed = v.trim()
+    if (!trimmed) return false
+    return !directorPositions.value.find((dp: DirectorPosition) => 
+      dp.name.toLowerCase() === trimmed.toLowerCase()
+    )
+  })
+  
+  if (newValues.length > 0 && canManageDirectorPositions.value) {
+    // Create new director positions sequentially to avoid race conditions
+    for (const newValue of newValues) {
+      try {
+        await handleDirectorPositionCreate(newValue)
+        // Reload positions after creation to ensure we have the latest data
+        await loadDirectorPositions(true) // Include inactive
+      } catch (error) {
+        console.error(`Failed to create director position "${newValue}":`, error)
+        // Don't remove the value if it's a duplicate - backend will return existing
+        // Only remove if it's a real error
+        const errorMessage = (error as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message || ''
+        if (!errorMessage.includes('sudah ada') && !errorMessage.includes('duplicate')) {
+          record.position = record.position.filter((p: string) => p !== newValue)
+        }
+      }
+    }
+  }
+}
+
+const handleDirectorPositionSelect = async (record: { position: string[] }, value: string) => {
+  // Check if this is a new value that needs to be created (case-insensitive)
+  const trimmedValue = value.trim()
+  const exists = directorPositions.value.find((dp: DirectorPosition) => 
+    dp.name.toLowerCase() === trimmedValue.toLowerCase()
+  )
+  if (!exists && canManageDirectorPositions.value && trimmedValue) {
+    try {
+      await handleDirectorPositionCreate(trimmedValue)
+      // Reload positions after creation to ensure we have the latest data
+      await loadDirectorPositions(true) // Include inactive
+    } catch (error) {
+      console.error(`Failed to create director position "${value}":`, error)
+      // Don't remove the value if it's a duplicate - backend will return existing
+      // Only remove if it's a real error
+      const errorMessage = (error as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message || ''
+      if (!errorMessage.includes('sudah ada') && !errorMessage.includes('duplicate')) {
+        record.position = record.position.filter((p: string) => p !== value)
+      }
+    }
+  }
+}
+
+const handleDirectorPositionCreate = async (name: string) => {
+  if (!canManageDirectorPositions.value) {
+    message.warning('Hanya superadmin dan administrator yang dapat membuat jabatan pengurus baru')
+    return
+  }
+
+  const trimmedValue = name.trim()
+  if (!trimmedValue) {
+    return
+  }
+
+  // Check if already exists (case-insensitive) before creating
+  const existing = directorPositions.value.find(
+    (dp: DirectorPosition) => dp.name.toLowerCase() === trimmedValue.toLowerCase()
+  )
+  if (existing) {
+    // If exists but inactive, it will be reactivated by backend
+    // If exists and active, backend will return error which we'll handle
+    if (existing.is_active) {
+      message.info(`Jabatan pengurus "${trimmedValue}" sudah ada`)
+      return
+    }
+  }
+
+  loadingDirectorPositions.value = true
+  try {
+    const newDirectorPosition = await directorPositionsApi.createDirectorPosition(trimmedValue)
+    
+    // Check if already in list (might have been added by another call or reactivated)
+    const alreadyExists = directorPositions.value.find(
+      (dp: DirectorPosition) => dp.id === newDirectorPosition.id || dp.name.toLowerCase() === trimmedValue.toLowerCase()
+    )
+    if (!alreadyExists) {
+      directorPositions.value.push(newDirectorPosition)
+    } else {
+      // Update existing if it was reactivated
+      const index = directorPositions.value.findIndex(
+        (dp: DirectorPosition) => dp.id === newDirectorPosition.id || dp.name.toLowerCase() === trimmedValue.toLowerCase()
+      )
+      if (index !== -1) {
+        directorPositions.value[index] = newDirectorPosition
+      }
+    }
+    
+    message.success(`Jabatan pengurus "${trimmedValue}" berhasil dibuat dan disimpan ke database`)
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal membuat jabatan pengurus'
+    
+    // If error is about duplicate, try to reload positions to get the existing one
+    if (errorMessage.includes('sudah ada') || errorMessage.includes('duplicate')) {
+      try {
+        await loadDirectorPositions(true) // Include inactive
+        const existingPosition = directorPositions.value.find(
+          (dp: DirectorPosition) => dp.name.toLowerCase() === trimmedValue.toLowerCase()
+        )
+        if (existingPosition) {
+          message.info(`Jabatan pengurus "${trimmedValue}" sudah ada`)
+          return // Don't throw error, just return
+        }
+      } catch (loadError) {
+        console.error('Failed to reload director positions:', loadError)
+      }
+    }
+    
+    console.error(`Failed to create director position:`, error)
+    message.error(errorMessage)
+    throw error
+  } finally {
+    loadingDirectorPositions.value = false
+    directorPositionSearchValue.value = ''
+  }
+}
+
+// Filter director positions based on search and active status
+const filteredDirectorPositions = computed(() => {
+  const selectedDirectorPositionNames = formData.value.directors.flatMap(d => d.position || [])
+  
+  let filtered = directorPositions.value.filter((dp: DirectorPosition) => {
+    if (dp.is_active) return true
+    return selectedDirectorPositionNames.includes(dp.name)
+  })
+  
+  if (directorPositionSearchValue.value) {
+    const searchLower = directorPositionSearchValue.value.toLowerCase()
+    filtered = filtered.filter((dp: DirectorPosition) => 
+      dp.name.toLowerCase().includes(searchLower)
+    )
+  }
+  
+  return filtered
+})
+
+// Watch for changes in shareholders to recalculate ownership percentages reactively
+watch(
+  () => formData.value.shareholders,
+  () => {
+    // Recalculate ownership percentages when shareholders change
+    calculateOwnershipPercentages()
+  },
+  { deep: true }
+)
+
+// Watch for changes in availableCompanies to recalculate when company data updates
+watch(
+  () => availableCompanies.value,
+  () => {
+    // Recalculate ownership percentages when available companies data changes
+    // This ensures that if a shareholder company's paid_up_capital changes, percentages update
+    calculateOwnershipPercentages()
+  },
+  { deep: true }
+)
+
+// Watch for changes in paid_up_capital (Modal Disetor) of the current company being edited
+// This ensures reactive updates when modal disetor changes
+watch(
+  () => formData.value.paid_up_capital,
+  () => {
+    // Recalculate ownership percentages when modal disetor changes
+    // Note: This affects calculation if this company is a shareholder in other companies
+    calculateOwnershipPercentages()
+  }
+)
+
 onMounted(async () => {
-  await loadAvailableCompanies()
+  await Promise.all([
+    loadAvailableCompanies(),
+    loadShareholderTypes(false),
+    loadDirectorPositions(false),
+  ])
   await loadCompanyData()
+  // After loading company, check if any shareholder type exists in active types
+  const hasInactiveType = formData.value.shareholders.some(sh => 
+    sh.type.some((t: string) => 
+      !shareholderTypes.value.find((st: ShareholderType) => st.name === t)
+    )
+  )
+  if (hasInactiveType) {
+    await loadShareholderTypes(true) // Include inactive to show the company's types
+  }
+  // After loading company, check if any director position exists in active positions
+  const hasInactivePosition = formData.value.directors.some(d => 
+    d.position.some((p: string) => 
+      !directorPositions.value.find((dp: DirectorPosition) => dp.name === p)
+    )
+  )
+  if (hasInactivePosition) {
+    await loadDirectorPositions(true) // Include inactive to show the company's positions
+  }
 })
 </script>
 
@@ -1039,5 +2627,74 @@ onMounted(async () => {
   .step-content {
     min-height: 300px;
   }
+}
+
+.shareholder-type-select-wrapper {
+  width: 100%;
+}
+
+.shareholder-type-select-wrapper :deep(.ant-select-selector) {
+  min-height: 40px;
+  /* padding: 2px 4px; */
+  /* background: orange !important; */
+  height: auto !important;
+}
+
+.shareholder-type-select-wrapper :deep(.ant-select-selection-item) {
+  /* margin: 2px 4px; */
+  height: auto;
+  line-height: 28px !important;
+  padding: 0 8px;
+  background: #f0f0f0;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+}
+
+.shareholder-type-select-wrapper :deep(.ant-select-selection-item-content) {
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.shareholder-type-select-wrapper :deep(.ant-select-selection-placeholder) {
+  line-height: 36px;
+}
+
+.shareholder-type-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #1890ff;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+}
+
+.shareholder-type-hint span {
+  flex: 1;
+}
+
+.director-position-select-wrapper {
+  width: 100%;
+}
+
+.director-position-select-wrapper :deep(.ant-select-selector) {
+  min-height: 40px;
+  height: auto !important;
+}
+
+.director-position-select-wrapper :deep(.ant-select-selection-item) {
+  height: auto;
+  line-height: 28px !important;
+  padding: 0 8px;
+  background: #f0f0f0;
+  border: 1px solid #d9d9d9;
+}
+
+.director-position-select-wrapper :deep(.ant-select-selection-item-content) {
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.director-position-select-wrapper :deep(.ant-select-selection-placeholder) {
+  line-height: 36px;
 }
 </style>

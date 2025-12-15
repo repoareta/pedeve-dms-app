@@ -103,10 +103,15 @@ func InitDB() {
 		&domain.BusinessFieldModel{},
 		&domain.DirectorModel{},
 		&domain.UserCompanyAssignmentModel{},
-		&domain.ReportModel{}, // Report Management
+		&domain.ReportModel{},          // Report Management
+		&domain.FinancialReportModel{}, // Financial Report (RKAP & Realisasi)
 		&domain.DocumentFolderModel{},
 		&domain.DocumentModel{},
 		&domain.DocumentTypeModel{}, // Document Types Management
+		&domain.ShareholderTypeModel{},
+		&domain.DirectorPositionModel{},     // Shareholder Types Management
+		&domain.NotificationModel{},         // Notifications
+		&domain.NotificationSettingsModel{}, // Notification Settings
 	)
 	if err != nil {
 		zapLog.Fatal("Failed to migrate database", zap.Error(err))
@@ -117,6 +122,103 @@ func InitDB() {
 	// don't accidentally get a default like 'user' or 'superadmin'.
 	if err := DB.Exec("ALTER TABLE users ALTER COLUMN role DROP DEFAULT").Error; err != nil {
 		zapLog.Warn("Failed to drop default for users.role (this may be expected on SQLite or if already dropped)", zap.Error(err))
+	}
+
+	// Migration: Add shareholder_company_id field to shareholders table if not exists
+	if dbURL != "" {
+		// PostgreSQL
+		if err := DB.Exec(`
+			DO $$
+			BEGIN
+				IF NOT EXISTS (
+					SELECT 1 
+					FROM information_schema.columns 
+					WHERE table_name = 'shareholders' 
+					AND column_name = 'shareholder_company_id'
+				) THEN
+					ALTER TABLE shareholders 
+					ADD COLUMN shareholder_company_id VARCHAR(255);
+					CREATE INDEX IF NOT EXISTS idx_shareholders_shareholder_company_id ON shareholders(shareholder_company_id);
+				END IF;
+			END $$;
+		`).Error; err != nil {
+			zapLog.Warn("Failed to add shareholder_company_id column with PostgreSQL syntax (may already exist)", zap.Error(err))
+		} else {
+			zapLog.Info("Shareholder company_id column migration completed (PostgreSQL)")
+		}
+	} else {
+		// SQLite - check if column exists first
+		var count int64
+		if err := DB.Raw(`
+			SELECT COUNT(*) FROM pragma_table_info('shareholders') WHERE name = 'shareholder_company_id'
+		`).Scan(&count).Error; err == nil && count == 0 {
+			if err := DB.Exec("ALTER TABLE shareholders ADD COLUMN shareholder_company_id VARCHAR(255)").Error; err != nil {
+				zapLog.Warn("Failed to add shareholder_company_id column to SQLite (may already exist)", zap.Error(err))
+			} else {
+				zapLog.Info("Shareholder company_id column migration completed (SQLite)")
+			}
+		} else {
+			zapLog.Info("Shareholder company_id column already exists or check failed")
+		}
+	}
+
+	// Migration: Update ownership_percent column to support 10 decimal places
+	if dbURL != "" {
+		// PostgreSQL - change to numeric(20,10) for 10 decimal places
+		if err := DB.Exec(`
+			DO $$
+			BEGIN
+				ALTER TABLE shareholders 
+				ALTER COLUMN ownership_percent TYPE NUMERIC(20,10);
+			EXCEPTION
+				WHEN OTHERS THEN
+					-- Ignore if column doesn't exist or type is already correct
+					NULL;
+			END $$;
+		`).Error; err != nil {
+			zapLog.Warn("Failed to update ownership_percent column type (may already be correct)", zap.Error(err))
+		} else {
+			zapLog.Info("Ownership percent column type migration completed (PostgreSQL)")
+		}
+	}
+
+	// Migration: Add currency field to companies table if not exists
+	// This ensures backward compatibility with existing databases
+	// Try PostgreSQL syntax first (DO block)
+	if dbURL != "" {
+		// PostgreSQL
+		if err := DB.Exec(`
+			DO $$
+			BEGIN
+				IF NOT EXISTS (
+					SELECT 1 
+					FROM information_schema.columns 
+					WHERE table_name = 'companies' 
+					AND column_name = 'currency'
+				) THEN
+					ALTER TABLE companies 
+					ADD COLUMN currency VARCHAR(3) NOT NULL DEFAULT 'IDR';
+				END IF;
+			END $$;
+		`).Error; err != nil {
+			zapLog.Warn("Failed to add currency column with PostgreSQL syntax (may already exist)", zap.Error(err))
+		} else {
+			zapLog.Info("Currency column migration completed (PostgreSQL)")
+		}
+	} else {
+		// SQLite - check if column exists first
+		var count int64
+		if err := DB.Raw(`
+			SELECT COUNT(*) FROM pragma_table_info('companies') WHERE name = 'currency'
+		`).Scan(&count).Error; err == nil && count == 0 {
+			if err := DB.Exec("ALTER TABLE companies ADD COLUMN currency VARCHAR(3) NOT NULL DEFAULT 'IDR'").Error; err != nil {
+				zapLog.Warn("Failed to add currency column to SQLite (may already exist)", zap.Error(err))
+			} else {
+				zapLog.Info("Currency column migration completed (SQLite)")
+			}
+		} else {
+			zapLog.Info("Currency column already exists or check failed")
+		}
 	}
 
 	// Create indexes untuk performance
@@ -134,6 +236,30 @@ func InitDB() {
 	}
 	if err := DB.Exec("CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id)").Error; err != nil {
 		zapLog.Warn("Failed to create index idx_users_role_id", zap.Error(err))
+	}
+
+	// Notification indexes untuk optimasi query unread count
+	// Composite index untuk query: WHERE user_id = ? AND is_read = ?
+	// Index ini sangat penting untuk optimasi GetUnreadCount yang dipanggil setiap 30 detik
+	if err := DB.Exec("CREATE INDEX IF NOT EXISTS idx_notifications_user_id_is_read ON notifications(user_id, is_read)").Error; err != nil {
+		zapLog.Warn("Failed to create composite index idx_notifications_user_id_is_read", zap.Error(err))
+	} else {
+		zapLog.Info("Composite index created for notifications", zap.String("index", "idx_notifications_user_id_is_read"))
+	}
+
+	// Index untuk query superadmin: WHERE is_read = ? (untuk count semua unread)
+	// Coba partial index dulu (PostgreSQL), jika gagal fallback ke regular index (SQLite/PostgreSQL)
+	// Partial index lebih efisien karena hanya index row dengan is_read = false
+	if err := DB.Exec("CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read) WHERE is_read = false").Error; err != nil {
+		// Partial index tidak didukung (SQLite) atau gagal, gunakan regular index
+		zapLog.Debug("Partial index not supported or failed, using regular index", zap.Error(err))
+		if err := DB.Exec("CREATE INDEX IF NOT EXISTS idx_notifications_is_read_fallback ON notifications(is_read)").Error; err != nil {
+			zapLog.Warn("Failed to create index idx_notifications_is_read_fallback", zap.Error(err))
+		} else {
+			zapLog.Info("Regular index created for notifications is_read", zap.String("index", "idx_notifications_is_read_fallback"))
+		}
+	} else {
+		zapLog.Info("Partial index created for notifications is_read (PostgreSQL)", zap.String("index", "idx_notifications_is_read"))
 	}
 
 	zapLog.Info("Database connected and migrated successfully")

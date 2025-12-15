@@ -4,7 +4,9 @@ import axios from 'axios'
 export interface DocumentFolder {
   id: string
   name: string
+  company_id?: string | null
   parent_id?: string | null
+  created_by: string
   created_at?: string
   updated_at?: string
 }
@@ -12,6 +14,7 @@ export interface DocumentFolder {
 export interface DocumentItem {
   id: string
   folder_id?: string | null
+  director_id?: string | null
   name: string
   file_name: string
   file_path: string
@@ -84,6 +87,7 @@ const documentsApi = {
     sort_dir?: string
     type?: string
     folder_id?: string
+    director_id?: string
   } = {}): Promise<DocumentListResponse> {
     const res = await apiClient.get<DocumentListResponse>('/documents', { params })
     return res.data
@@ -102,6 +106,7 @@ const documentsApi = {
   async uploadDocument(payload: {
     file: File
     folder_id?: string
+    director_id?: string
     title?: string
     status?: string
     metadata?: Record<string, unknown>
@@ -109,6 +114,7 @@ const documentsApi = {
     const formData = new FormData()
     formData.append('file', payload.file)
     if (payload.folder_id) formData.append('folder_id', payload.folder_id)
+    if (payload.director_id) formData.append('director_id', payload.director_id)
     if (payload.title) formData.append('title', payload.title)
     if (payload.status) formData.append('status', payload.status)
     if (payload.metadata) formData.append('metadata', JSON.stringify(payload.metadata))
@@ -131,6 +137,7 @@ const documentsApi = {
     payload:
       | {
           folder_id?: string
+          director_id?: string
           title?: string
           status?: string
           metadata?: Record<string, unknown>
@@ -138,6 +145,7 @@ const documentsApi = {
       | {
           file: File
           folder_id?: string
+          director_id?: string
           title?: string
           status?: string
           metadata?: Record<string, unknown>
@@ -148,6 +156,7 @@ const documentsApi = {
       const formData = new FormData()
       formData.append('file', payload.file)
       if (payload.folder_id) formData.append('folder_id', payload.folder_id)
+      if (payload.director_id) formData.append('director_id', payload.director_id)
       if (payload.title) formData.append('title', payload.title)
       if (payload.status) formData.append('status', payload.status)
       if (payload.metadata) formData.append('metadata', JSON.stringify(payload.metadata))
@@ -157,7 +166,7 @@ const documentsApi = {
       return res.data
     }
 
-    // JSON update (metadata saja)
+    // JSON update (metadata saja, bisa termasuk director_id)
     const res = await apiClient.put<DocumentItem>(`/documents/${id}`, payload)
     return res.data
   },

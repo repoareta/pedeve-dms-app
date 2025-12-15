@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import axios from 'axios'
+import { Icon as IconifyIcon } from '@iconify/vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import DocumentSidebarActivityCard from '../components/DocumentSidebarActivityCard.vue'
 import documentsApi, { type DocumentFolder, type DocumentItem } from '../api/documents'
@@ -19,6 +20,24 @@ const files = ref<DocumentItem[]>([])
 const loading = ref(false)
 const pageLoading = ref(true)
 const userMap = ref<Record<string, string>>({})
+
+// Subfolder state
+const subfolders = ref<DocumentFolder[]>([])
+const subfolderModalVisible = ref(false)
+const subfolderName = ref('')
+const creatingSubfolder = ref(false)
+
+// Rename folder state
+const renameFolderModalVisible = ref(false)
+const renameFolderName = ref('')
+const folderBeingEdited = ref<DocumentFolder | null>(null)
+
+// Auth state for permission check
+const userRole = ref<string>('')
+const isSuperAdminOrAdministratorSync = computed(() => {
+  const role = userRole.value
+  return role === 'superadmin' || role === 'administrator'
+})
 
 // Upload state
 type UploadItem = {
@@ -47,6 +66,35 @@ const activityLoading = ref(false)
 
 const currentFolder = computed(() => {
   return folders.value.find(f => f.id === folderId.value)
+})
+
+// Build breadcrumb path from current folder to root
+const breadcrumbPath = computed(() => {
+  const path: Array<{ id: string; name: string }> = []
+  if (!folderId.value || folders.value.length === 0) {
+    return path
+  }
+
+  // Start from current folder and traverse up to root
+  const findFolderById = (id: string): DocumentFolder | undefined => {
+    return folders.value.find(f => f.id === id)
+  }
+
+  let currentFolderId: string | null = folderId.value
+  const visited = new Set<string>() // Prevent infinite loops
+
+  while (currentFolderId && !visited.has(currentFolderId)) {
+    visited.add(currentFolderId)
+    const folder = findFolderById(currentFolderId)
+    if (folder) {
+      path.unshift({ id: folder.id, name: folder.name })
+      currentFolderId = folder.parent_id || null
+    } else {
+      break
+    }
+  }
+
+  return path
 })
 
 const formatBytes = (bytes: number): string => {
@@ -126,20 +174,63 @@ const getUploaderName = (record: DocumentItem): string => {
 const loadFolders = async () => {
   try {
     folders.value = await documentsApi.listFolders()
+    // Load subfolders after folders are loaded
+    await loadSubfolders()
   } catch (error: unknown) {
     const err = error as { message?: string }
     message.error(err.message || 'Gagal memuat folder')
   }
 }
 
+const loadSubfolders = async () => {
+  if (!folderId.value) {
+    subfolders.value = []
+    return
+  }
+  try {
+    // Filter folders where parent_id matches current folderId
+    subfolders.value = folders.value.filter(f => f.parent_id === folderId.value)
+    // Load files for all subfolders to calculate stats
+    // Note: This loads all files, which might be inefficient for many subfolders
+    // Consider optimizing by loading summary stats per folder if available
+  } catch (error: unknown) {
+    console.error('Failed to load subfolders:', error)
+    subfolders.value = []
+  }
+}
+
+// Load files for all subfolders to get accurate file counts and sizes
+const allFiles = ref<DocumentItem[]>([])
+const loadAllFilesForStats = async () => {
+  try {
+    // Load all files without folder filter to get stats for subfolders
+    allFiles.value = await documentsApi.listDocuments()
+  } catch (error: unknown) {
+    console.error('Failed to load all files for stats:', error)
+    allFiles.value = []
+  }
+}
+
 const loadDocuments = async () => {
+  if (!folderId.value) {
+    files.value = []
+    tablePagination.value.total = 0
+    return
+  }
+
   loading.value = true
   try {
+    // Ensure we only load documents for the current folder_id
+    console.log('Loading documents for folder_id:', folderId.value)
     files.value = await documentsApi.listDocuments({ folder_id: folderId.value })
+    console.log('Loaded documents:', files.value.length, 'files for folder', folderId.value)
     tablePagination.value.total = files.value.length
   } catch (error: unknown) {
     const err = error as { message?: string }
+    console.error('Error loading documents:', error)
     message.error(err.message || 'Gagal memuat dokumen')
+    files.value = []
+    tablePagination.value.total = 0
   } finally {
     loading.value = false
   }
@@ -274,8 +365,137 @@ const getUserAvatarColor = (username: string): string => {
 
 const handleRefresh = async () => {
   pageLoading.value = true
-  await Promise.all([loadFolders(), loadDocuments(), loadActivities()])
+  await Promise.all([loadFolders(), loadDocuments(), loadActivities(), loadAllFilesForStats()])
   pageLoading.value = false
+}
+
+const handleAddSubfolder = () => {
+  subfolderModalVisible.value = true
+  subfolderName.value = ''
+}
+
+const handleCreateSubfolder = async () => {
+  if (!subfolderName.value.trim()) {
+    message.warning('Nama subfolder tidak boleh kosong')
+    return
+  }
+
+  if (!folderId.value) {
+    message.error('Folder ID tidak ditemukan')
+    return
+  }
+
+  creatingSubfolder.value = true
+  try {
+    await documentsApi.createFolder(subfolderName.value.trim(), folderId.value)
+    message.success('Subfolder berhasil dibuat')
+    subfolderModalVisible.value = false
+    subfolderName.value = ''
+    // Reload folders to get the new subfolder and reload files for stats
+    await loadFolders()
+    await loadAllFilesForStats()
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    message.error(err.message || 'Gagal membuat subfolder')
+  } finally {
+    creatingSubfolder.value = false
+  }
+}
+
+// Removed handleSubfolderClick - using handleSubfolderDoubleClick instead
+
+const handleSubfolderDoubleClick = (subfolder: DocumentFolder) => {
+  // Add transition effect
+  pageLoading.value = true
+  setTimeout(() => {
+    router.push(`/documents/folders/${subfolder.id}`)
+  }, 150) // Short delay for transition effect
+}
+
+const handleBreadcrumbClick = (folderId: string) => {
+  pageLoading.value = true
+  setTimeout(() => {
+    router.push(`/documents/folders/${folderId}`)
+  }, 150)
+}
+
+// Helper functions for folder stats
+const getSubfolderFileCount = (subfolderId: string): number => {
+  // Use allFiles for more accurate count (includes files from all folders)
+  return allFiles.value.filter(f => f.folder_id === subfolderId).length
+}
+
+const getSubfolderSize = (subfolderId: string): string => {
+  // Use allFiles for more accurate size (includes files from all folders)
+  const subfolderFiles = allFiles.value.filter(f => f.folder_id === subfolderId)
+  const totalSize = subfolderFiles.reduce((sum, f) => sum + (f.size || 0), 0)
+  return formatBytes(totalSize)
+}
+
+// Rename folder functions
+const openRenameModal = (folder: DocumentFolder) => {
+  folderBeingEdited.value = folder
+  renameFolderName.value = folder.name
+  renameFolderModalVisible.value = true
+}
+
+const handleRenameFolder = async () => {
+  if (!folderBeingEdited.value) return
+  if (!renameFolderName.value.trim()) {
+    message.warning('Nama folder wajib diisi')
+    return
+  }
+  try {
+    const updated = await documentsApi.renameFolder(folderBeingEdited.value.id, renameFolderName.value.trim())
+    // Update in folders array
+    folders.value = folders.value.map(f => f.id === updated.id ? updated : f)
+    // Update in subfolders if it's a subfolder
+    subfolders.value = subfolders.value.map(f => f.id === updated.id ? updated : f)
+    message.success('Folder berhasil diubah')
+    renameFolderModalVisible.value = false
+    folderBeingEdited.value = null
+    await loadFolders() // Reload to refresh breadcrumb
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    message.error(err.message || 'Gagal mengganti nama folder')
+  }
+}
+
+// Delete folder functions
+const handleDeleteFolder = (folder: DocumentFolder) => {
+  Modal.confirm({
+    title: 'Hapus folder?',
+    content: `Menghapus folder "${folder.name}" akan menghapus seluruh file di dalamnya. Tindakan ini tidak dapat dibatalkan. Lanjutkan?`,
+    okText: 'Hapus',
+    okType: 'danger',
+    cancelText: 'Batal',
+    onOk: async () => {
+      try {
+        await documentsApi.deleteFolder(folder.id)
+        // Remove from subfolders
+        subfolders.value = subfolders.value.filter(f => f.id !== folder.id)
+        // Reload folders to update list
+        await loadFolders()
+        // If deleted folder is current folder, navigate to parent or root
+        if (folder.id === folderId.value) {
+          const parentFolder = folders.value.find(f => f.id === (currentFolder.value?.parent_id || ''))
+          if (parentFolder) {
+            router.push(`/documents/folders/${parentFolder.id}`)
+          } else {
+            router.push('/documents')
+          }
+        } else {
+          // Reload documents and stats to refresh the list
+          await loadDocuments()
+          await loadAllFilesForStats()
+        }
+        message.success('Folder dan file di dalamnya telah dihapus')
+      } catch (error: unknown) {
+        const err = error as { message?: string }
+        message.error(err.message || 'Gagal menghapus folder')
+      }
+    },
+  })
 }
 
 const handleTableChange = (pag: { current?: number; pageSize?: number }) => {
@@ -305,10 +525,50 @@ const handleLogout = async () => {
   }
 }
 
+// Watch for route changes to reload data when navigating between folders
+watch(
+  () => folderId.value,
+  async (newFolderId, oldFolderId) => {
+    if (newFolderId !== oldFolderId) {
+      // Reload data when folder ID changes (including when going to subfolder)
+      console.log('Folder ID changed from', oldFolderId, 'to', newFolderId)
+      pageLoading.value = true
+      try {
+        // Load folders first, then load documents for the new folder_id
+        await loadFolders()
+        await loadDocuments()
+        await loadActivities()
+        await loadAllFilesForStats() // Reload stats when folder changes
+      } catch (error) {
+        console.error('Failed to reload folder detail page data:', error)
+        message.error('Gagal memuat data. Silakan coba lagi.')
+      } finally {
+        pageLoading.value = false
+      }
+    }
+  },
+  { immediate: false }
+)
+
 onMounted(async () => {
+  // Load user role for permission check
+  try {
+    const { useAuthStore } = await import('../stores/auth')
+    const authStore = useAuthStore()
+    userRole.value = authStore.user?.role?.toLowerCase() || ''
+  } catch (error) {
+    console.error('Failed to load auth store:', error)
+  }
+
   pageLoading.value = true
   try {
-    await Promise.all([loadUsers(), loadFolders(), loadDocuments(), loadActivities()])
+    await Promise.all([
+      loadUsers(),
+      loadFolders(),
+      loadDocuments(),
+      loadActivities(),
+      loadAllFilesForStats() // Load all files for subfolder stats
+    ])
   } catch (error) {
     console.error('Failed to load folder detail page data:', error)
     message.error('Gagal memuat data. Silakan coba lagi.')
@@ -348,9 +608,25 @@ onMounted(async () => {
           <a-card class="upload-card" :bordered="false">
             <div class="card-header">
               <div>
-                <h3>Folders / {{ currentFolder?.name || 'Folder' }}</h3>
+                <div class="breadcrumb-container">
+                  <span class="breadcrumb-item" @click="router.push('/documents')">Folders</span>
+                  <template v-for="(item, index) in breadcrumbPath" :key="item.id">
+                    <span class="breadcrumb-separator">/</span>
+                    <span
+                      class="breadcrumb-item"
+                      :class="{ 'breadcrumb-active': index === breadcrumbPath.length - 1 }"
+                      @click="index < breadcrumbPath.length - 1 ? handleBreadcrumbClick(item.id) : null"
+                    >
+                      {{ item.name }}
+                    </span>
+                  </template>
+                </div>
                 <p>Upload files</p>
               </div>
+              <a-button type="primary" @click="handleAddSubfolder">
+                <IconifyIcon icon="mdi:folder-plus" width="16" style="margin-right: 8px;" />
+                Add Subfolder
+              </a-button>
             </div>
             <a-upload-dragger
               multiple
@@ -377,7 +653,78 @@ onMounted(async () => {
                 <div class="upload-item-size">{{ formatBytes(item.size || item.originFileObj?.size || 0) }}</div>
               </div>
             </div>
+
+            <!-- Subfolders List -->
+            <div v-if="subfolders.length > 0" class="subfolders-section">
+              <a-divider style="margin: 16px 0;" />
+              <div class="subfolders-header">
+                <h4 style="margin: 0;">Subfolders ({{ subfolders.length }})</h4>
+              </div>
+              <div class="subfolders-grid">
+                <div
+                  v-for="subfolder in subfolders"
+                  :key="subfolder.id"
+                  class="folder-card"
+                  @dblclick.stop="handleSubfolderDoubleClick(subfolder)"
+                  title="Double click to open"
+                >
+                  <div class="folder-card-header">
+                    <div class="folder-icon">
+                      <IconifyIcon icon="mdi:folder" width="50" color="#E7EAE9" />
+                    </div>
+                    <a-dropdown :trigger="['click']">
+                      <IconifyIcon icon="mdi:dots-vertical" width="20" class="folder-menu-icon" @click.stop />
+                      <template #overlay>
+                        <a-menu>
+                          <a-menu-item key="rename" @click="openRenameModal(subfolder)">Rename</a-menu-item>
+                          <a-menu-item v-if="isSuperAdminOrAdministratorSync" key="delete" @click="handleDeleteFolder(subfolder)">Delete</a-menu-item>
+                        </a-menu>
+                      </template>
+                    </a-dropdown>
+                  </div>
+                  <div class="folder-name">{{ subfolder.name }}</div>
+                  <div class="folder-meta">
+                    <span>{{ getSubfolderFileCount(subfolder.id) }} Files</span>
+                    <span>{{ getSubfolderSize(subfolder.id) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </a-card>
+
+          <!-- Create Subfolder Modal -->
+          <a-modal
+            v-model:open="subfolderModalVisible"
+            title="Create Subfolder"
+            :confirm-loading="creatingSubfolder"
+            @ok="handleCreateSubfolder"
+            @cancel="() => { subfolderModalVisible = false; subfolderName = '' }"
+          >
+            <a-form-item label="Subfolder Name" required>
+              <a-input
+                v-model:value="subfolderName"
+                placeholder="Enter subfolder name"
+                :maxlength="100"
+                @pressEnter="handleCreateSubfolder"
+              />
+            </a-form-item>
+          </a-modal>
+
+          <!-- Rename Folder Modal -->
+          <a-modal
+            v-model:open="renameFolderModalVisible"
+            title="Rename Folder"
+            ok-text="Simpan"
+            cancel-text="Batal"
+            @ok="handleRenameFolder"
+            @cancel="() => { renameFolderModalVisible = false; folderBeingEdited = null; renameFolderName = '' }"
+          >
+            <a-input
+              v-model:value="renameFolderName"
+              placeholder="Nama folder baru"
+              @pressEnter="handleRenameFolder"
+            />
+          </a-modal>
 
           <a-card class="table-card" :bordered="false">
             <div class="table-header">
@@ -525,8 +872,48 @@ onMounted(async () => {
   overflow: hidden;
 }
 
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .card-header h3 {
   margin: 0;
+}
+
+.breadcrumb-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.breadcrumb-item {
+  color: #1890ff;
+  cursor: pointer;
+  transition: color 0.2s;
+  user-select: none;
+}
+
+.breadcrumb-item:hover {
+  color: #40a9ff;
+  text-decoration: underline;
+}
+
+.breadcrumb-item.breadcrumb-active {
+  color: #333;
+  cursor: default;
+}
+
+.breadcrumb-item.breadcrumb-active:hover {
+  color: #333;
+  text-decoration: none;
+}
+
+.breadcrumb-separator {
+  color: #999;
+  margin: 0 2px;
 }
 
 .upload-dragger {
@@ -570,13 +957,9 @@ onMounted(async () => {
   align-items: center;
 }
 
-.detail-card {
-  /* // margin-bottom: 16px; */
-}
 
 .detail-icon {
   text-align: center;
-  /* // margin-bottom: 16px; */
 }
 
 .detail-title {
@@ -620,6 +1003,74 @@ onMounted(async () => {
   gap: 16px;
 }
 
+.subfolders-section {
+  margin-top: 16px;
+}
+
+.subfolders-header {
+  margin-bottom: 12px;
+}
+
+.subfolders-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+/* Folder card styles (same as DocumentManagementView) */
+.folder-card {
+  border: 1px solid #e8e8e8;
+  padding: 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: #fff;
+}
+
+.folder-card:hover {
+  border-color: #035cab;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.folder-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0px;
+}
+
+.folder-icon {
+  flex: 1;
+}
+
+.folder-menu-icon {
+  opacity: 0;
+  transition: opacity 0.2s;
+  cursor: pointer;
+  color: #666;
+}
+
+.folder-card:hover .folder-menu-icon {
+  opacity: 1;
+}
+
+.folder-name {
+  font-weight: 500;
+  line-height: 19px;
+  font-size: 13px;
+  color: #333;
+  margin-top: 12px;
+  margin-bottom: 8px;
+}
+
+.folder-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #666;
+  gap: 8px;
+}
+
 @media (max-width: 1100px) {
   .folder-detail-content {
     padding: 12px 12px 24px;
@@ -631,6 +1082,10 @@ onMounted(async () => {
   }
   .right-column {
     margin-top: 8px;
+  }
+  .subfolders-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 12px;
   }
 }
 </style>

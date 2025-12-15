@@ -12,10 +12,12 @@ import (
 
 // Permanent resources - data ini disimpan permanent (tidak ada retention/deletion)
 var PermanentResources = []string{
-	"report",   // Report Management
-	"document", // Document Management
-	"company",  // Subsidiary
-	"user",     // User Management
+	"report",           // Report Management
+	"financial_report", // Financial Report (RKAP & Realisasi)
+	"document",         // Document Management
+	"company",          // Subsidiary
+	"user",             // User Management
+	"notification",     // Notification Management
 }
 
 // IsPermanentResource mengecek apakah resource termasuk permanent (tidak akan dihapus)
@@ -142,7 +144,7 @@ func (al *AuditLogger) Log(userID, username, action, resource, resourceID, ipAdd
 }
 
 // GetUserActivityLogs mengambil user activity logs (permanent) dengan filter dan pagination
-func GetUserActivityLogs(userID, action, resource, status string, limit, offset int) ([]domain.UserActivityLog, int64, error) {
+func GetUserActivityLogs(userID, action, resource, resourceID, status string, limit, offset int) ([]domain.UserActivityLog, int64, error) {
 	var logs []domain.UserActivityLog
 	var total int64
 
@@ -163,6 +165,11 @@ func GetUserActivityLogs(userID, action, resource, status string, limit, offset 
 		query = query.Where("resource = ?", resource)
 	}
 
+	// Filter berdasarkan resource ID (jika diberikan)
+	if resourceID != "" {
+		query = query.Where("resource_id = ?", resourceID)
+	}
+
 	// Filter berdasarkan status
 	if status != "" {
 		query = query.Where("status = ?", status)
@@ -175,4 +182,3 @@ func GetUserActivityLogs(userID, action, resource, status string, limit, offset 
 	err := query.Order("created_at DESC").Limit(limit).Offset(offset).Find(&logs).Error
 	return logs, total, err
 }
-

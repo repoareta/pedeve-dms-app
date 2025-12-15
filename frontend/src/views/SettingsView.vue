@@ -9,7 +9,7 @@ import { auditApi, type AuditLog, type AuditLogsParams, type AuditLogStats, type
 import developmentApi from '../api/development'
 import { sonarqubeApi, type SonarQubeIssue, type SonarQubeIssuesParams } from '../api/sonarqube'
 import documentsApi, { type DocumentType } from '../api/documents'
-import { userApi, type User } from '../api/userManagement'
+import { userApi, shareholderTypesApi, directorPositionsApi, type User, type ShareholderType, type DirectorPosition } from '../api/userManagement'
 import type { TableColumnsType } from 'ant-design-vue'
 
 const router = useRouter()
@@ -103,6 +103,24 @@ const documentTypeModalMode = ref<'create' | 'edit'>('create')
 const editingDocumentType = ref<DocumentType | null>(null)
 const newDocumentTypeName = ref('')
 const userNamesMap = ref<Map<string, string>>(new Map()) // Map user ID -> username
+
+// Shareholder Types state
+const shareholderTypes = ref<ShareholderType[]>([])
+const shareholderTypesLoading = ref(false)
+const updatingShareholderTypeIds = ref<Set<string>>(new Set())
+const shareholderTypeModalVisible = ref(false)
+const shareholderTypeModalMode = ref<'create' | 'edit'>('create')
+const editingShareholderType = ref<ShareholderType | null>(null)
+const newShareholderTypeName = ref('')
+
+// Director Positions state
+const directorPositions = ref<DirectorPosition[]>([])
+const directorPositionsLoading = ref(false)
+const updatingDirectorPositionIds = ref<Set<string>>(new Set())
+const directorPositionModalVisible = ref(false)
+const directorPositionModalMode = ref<'create' | 'edit'>('create')
+const editingDirectorPosition = ref<DirectorPosition | null>(null)
+const newDirectorPositionName = ref('')
 
 // Navigation state
 const selectedMenuKey = ref<string>('2fa') // Default: 2FA Setting
@@ -926,6 +944,208 @@ const handleToggleDocumentTypeStatus = async (id: string, name: string, isActive
 // Removed unused function: handleDeleteDocumentType
 // Note: Document type deletion is handled via soft delete through the status toggle switch
 
+// Shareholder Types functions
+const loadShareholderTypes = async () => {
+  shareholderTypesLoading.value = true
+  try {
+    const data = await shareholderTypesApi.getShareholderTypes(true) // Include inactive
+    shareholderTypes.value = data || []
+    
+    // Collect unique user IDs from created_by
+    const uniqueUserIds = new Set<string>()
+    data.forEach((shareholderType: ShareholderType) => {
+      if (shareholderType.created_by) {
+        uniqueUserIds.add(shareholderType.created_by)
+      }
+    })
+    
+    // Fetch user data for all unique IDs (reuse existing userNamesMap)
+    if (uniqueUserIds.size > 0) {
+      try {
+        const users = await userApi.getAll()
+        users.forEach((user: User) => {
+          if (!userNamesMap.value.has(user.id)) {
+            userNamesMap.value.set(user.id, user.username)
+          }
+        })
+      } catch (err) {
+        console.error('Failed to load user names:', err)
+        // If fetch fails, try to get individual users
+        for (const userId of uniqueUserIds) {
+          if (!userNamesMap.value.has(userId)) {
+            try {
+              const user = await userApi.getById(userId)
+              userNamesMap.value.set(user.id, user.username)
+            } catch {
+              // If individual fetch fails, use ID as fallback
+              userNamesMap.value.set(userId, userId)
+            }
+          }
+        }
+      }
+    }
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    message.error(err.message || 'Gagal memuat jenis pemegang saham')
+  } finally {
+    shareholderTypesLoading.value = false
+  }
+}
+
+const handleCreateShareholderType = () => {
+  shareholderTypeModalMode.value = 'create'
+  editingShareholderType.value = null
+  newShareholderTypeName.value = ''
+  shareholderTypeModalVisible.value = true
+}
+
+const handleEditShareholderType = (shareholderType: ShareholderType) => {
+  shareholderTypeModalMode.value = 'edit'
+  editingShareholderType.value = shareholderType
+  newShareholderTypeName.value = shareholderType.name
+  shareholderTypeModalVisible.value = true
+}
+
+const handleSaveShareholderType = async () => {
+  if (!newShareholderTypeName.value.trim()) {
+    message.warning('Nama jenis pemegang saham tidak boleh kosong')
+    return
+  }
+
+  try {
+    if (shareholderTypeModalMode.value === 'create') {
+      await shareholderTypesApi.createShareholderType(newShareholderTypeName.value.trim())
+      message.success('Jenis pemegang saham berhasil dibuat')
+    } else if (editingShareholderType.value) {
+      await shareholderTypesApi.updateShareholderType(editingShareholderType.value.id, {
+        name: newShareholderTypeName.value.trim(),
+      })
+      message.success('Jenis pemegang saham berhasil diupdate')
+    }
+    shareholderTypeModalVisible.value = false
+    await loadShareholderTypes()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || 'Gagal menyimpan jenis pemegang saham')
+  }
+}
+
+const handleToggleShareholderTypeStatus = async (id: string, name: string, isActive: boolean) => {
+  updatingShareholderTypeIds.value.add(id)
+  try {
+    await shareholderTypesApi.updateShareholderType(id, { is_active: isActive })
+    message.success(`Jenis pemegang saham "${name}" berhasil ${isActive ? 'diaktifkan' : 'dinonaktifkan'}`)
+    await loadShareholderTypes()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || 'Gagal mengupdate status jenis pemegang saham')
+    await loadShareholderTypes()
+  } finally {
+    updatingShareholderTypeIds.value.delete(id)
+  }
+}
+
+// Director Positions functions
+const loadDirectorPositions = async () => {
+  directorPositionsLoading.value = true
+  try {
+    const data = await directorPositionsApi.getDirectorPositions(true) // Include inactive
+    directorPositions.value = data || []
+    
+    // Collect unique user IDs from created_by
+    const uniqueUserIds = new Set<string>()
+    data.forEach((directorPosition: DirectorPosition) => {
+      if (directorPosition.created_by) {
+        uniqueUserIds.add(directorPosition.created_by)
+      }
+    })
+    
+    // Fetch user data for all unique IDs (reuse existing userNamesMap)
+    if (uniqueUserIds.size > 0) {
+      try {
+        const users = await userApi.getAll()
+        users.forEach((user: User) => {
+          if (!userNamesMap.value.has(user.id)) {
+            userNamesMap.value.set(user.id, user.username)
+          }
+        })
+      } catch (err) {
+        console.error('Failed to load user names:', err)
+        // If fetch fails, try to get individual users
+        for (const userId of uniqueUserIds) {
+          if (!userNamesMap.value.has(userId)) {
+            try {
+              const user = await userApi.getById(userId)
+              userNamesMap.value.set(user.id, user.username)
+            } catch {
+              // If individual fetch fails, use ID as fallback
+              userNamesMap.value.set(userId, userId)
+            }
+          }
+        }
+      }
+    }
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    message.error(err.message || 'Gagal memuat jabatan pengurus')
+  } finally {
+    directorPositionsLoading.value = false
+  }
+}
+
+const handleCreateDirectorPosition = () => {
+  directorPositionModalMode.value = 'create'
+  editingDirectorPosition.value = null
+  newDirectorPositionName.value = ''
+  directorPositionModalVisible.value = true
+}
+
+const handleEditDirectorPosition = (directorPosition: DirectorPosition) => {
+  directorPositionModalMode.value = 'edit'
+  editingDirectorPosition.value = directorPosition
+  newDirectorPositionName.value = directorPosition.name
+  directorPositionModalVisible.value = true
+}
+
+const handleSaveDirectorPosition = async () => {
+  if (!newDirectorPositionName.value.trim()) {
+    message.warning('Nama jabatan pengurus tidak boleh kosong')
+    return
+  }
+
+  try {
+    if (directorPositionModalMode.value === 'create') {
+      await directorPositionsApi.createDirectorPosition(newDirectorPositionName.value.trim())
+      message.success('Jabatan pengurus berhasil dibuat')
+    } else if (editingDirectorPosition.value) {
+      await directorPositionsApi.updateDirectorPosition(editingDirectorPosition.value.id, {
+        name: newDirectorPositionName.value.trim(),
+      })
+      message.success('Jabatan pengurus berhasil diupdate')
+    }
+    directorPositionModalVisible.value = false
+    await loadDirectorPositions()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || 'Gagal menyimpan jabatan pengurus')
+  }
+}
+
+const handleToggleDirectorPositionStatus = async (id: string, name: string, isActive: boolean) => {
+  updatingDirectorPositionIds.value.add(id)
+  try {
+    await directorPositionsApi.updateDirectorPosition(id, { is_active: isActive })
+    message.success(`Jabatan pengurus "${name}" berhasil ${isActive ? 'diaktifkan' : 'dinonaktifkan'}`)
+    await loadDirectorPositions()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || 'Gagal mengupdate status jabatan pengurus')
+    await loadDirectorPositions()
+  } finally {
+    updatingDirectorPositionIds.value.delete(id)
+  }
+}
+
 // Sinkronkan data sesuai tab yang dipilih
 watch(
   () => auditLogActiveTab.value,
@@ -965,6 +1185,8 @@ onMounted(() => {
   // Load Master Data if user has access
   if (isSuperadminLike.value) {
     loadDocumentTypes()
+    loadShareholderTypes()
+    loadDirectorPositions()
   }
 })
 
@@ -1895,6 +2117,106 @@ onUnmounted(() => {
                     </template>
                   </a-table>
                 </a-tab-pane>
+
+                <a-tab-pane key="shareholder-types" tab="Jenis Pemegang Saham">
+                  <div style="margin-bottom: 16px;">
+                    <a-button type="primary" @click="handleCreateShareholderType">
+                      <IconifyIcon icon="mdi:plus" width="18" style="margin-right: 8px;" />
+                      Tambah Jenis Pemegang Saham
+                    </a-button>
+                  </div>
+
+                  <a-table
+                    :columns="[
+                      { title: 'Nama', dataIndex: 'name', key: 'name', sorter: (a: ShareholderType, b: ShareholderType) => a.name.localeCompare(b.name) },
+                      { title: 'Status', key: 'is_active', width: 120, align: 'center' },
+                      { title: 'Dibuat Oleh', key: 'created_by', width: 200 },
+                      { title: 'Aksi', key: 'action', width: 180, align: 'center', fixed: 'right' },
+                    ]"
+                    :data-source="shareholderTypes"
+                    :loading="shareholderTypesLoading"
+                    :pagination="{ pageSize: 20, showSizeChanger: true, showTotal: (total: number) => `Total ${total} jenis pemegang saham` }"
+                    row-key="id"
+                    :scroll="{ x: 800 }"
+                  >
+                    <template #bodyCell="{ column, record }">
+                      <template v-if="column.key === 'is_active'">
+                        <a-tag :color="record.is_active ? 'success' : 'default'">
+                          {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
+                        </a-tag>
+                      </template>
+                      <template v-if="column.key === 'created_by'">
+                        {{ userNamesMap.get(record.created_by) || record.created_by || '-' }}
+                      </template>
+                      <template v-if="column.key === 'action'">
+                        <a-space>
+                          <a-button type="link" size="small" @click="handleEditShareholderType(record)" title="Edit">
+                            <IconifyIcon icon="mdi:pencil" width="16" />
+                          </a-button>
+                          <a-switch
+                            :checked="record.is_active"
+                            :loading="updatingShareholderTypeIds.has(record.id)"
+                            :disabled="updatingShareholderTypeIds.has(record.id)"
+                            @change="(checked: boolean) => handleToggleShareholderTypeStatus(record.id, record.name, checked)"
+                            checked-children="Aktif"
+                            un-checked-children="Non Aktif"
+                            title="Toggle Status"
+                          />
+                        </a-space>
+                      </template>
+                    </template>
+                  </a-table>
+                </a-tab-pane>
+
+                <a-tab-pane key="director-positions" tab="Jabatan Pengurus">
+                  <div style="margin-bottom: 16px;">
+                    <a-button type="primary" @click="handleCreateDirectorPosition">
+                      <IconifyIcon icon="mdi:plus" width="18" style="margin-right: 8px;" />
+                      Tambah Jabatan Pengurus
+                    </a-button>
+                  </div>
+
+                  <a-table
+                    :columns="[
+                      { title: 'Nama', dataIndex: 'name', key: 'name', sorter: (a: DirectorPosition, b: DirectorPosition) => a.name.localeCompare(b.name) },
+                      { title: 'Status', key: 'is_active', width: 120, align: 'center' },
+                      { title: 'Dibuat Oleh', key: 'created_by', width: 200 },
+                      { title: 'Aksi', key: 'action', width: 180, align: 'center', fixed: 'right' },
+                    ]"
+                    :data-source="directorPositions"
+                    :loading="directorPositionsLoading"
+                    :pagination="{ pageSize: 20, showSizeChanger: true, showTotal: (total: number) => `Total ${total} jabatan pengurus` }"
+                    row-key="id"
+                    :scroll="{ x: 800 }"
+                  >
+                    <template #bodyCell="{ column, record }">
+                      <template v-if="column.key === 'is_active'">
+                        <a-tag :color="record.is_active ? 'success' : 'default'">
+                          {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
+                        </a-tag>
+                      </template>
+                      <template v-if="column.key === 'created_by'">
+                        {{ userNamesMap.get(record.created_by) || record.created_by || '-' }}
+                      </template>
+                      <template v-if="column.key === 'action'">
+                        <a-space>
+                          <a-button type="link" size="small" @click="handleEditDirectorPosition(record)" title="Edit">
+                            <IconifyIcon icon="mdi:pencil" width="16" />
+                          </a-button>
+                          <a-switch
+                            :checked="record.is_active"
+                            :loading="updatingDirectorPositionIds.has(record.id)"
+                            :disabled="updatingDirectorPositionIds.has(record.id)"
+                            @change="(checked: boolean) => handleToggleDirectorPositionStatus(record.id, record.name, checked)"
+                            checked-children="Aktif"
+                            un-checked-children="Non Aktif"
+                            title="Toggle Status"
+                          />
+                        </a-space>
+                      </template>
+                    </template>
+                  </a-table>
+                </a-tab-pane>
               </a-tabs>
             </a-card>
           </div>
@@ -2033,6 +2355,56 @@ onUnmounted(() => {
         <a-alert
           message="Info"
           description="Fitur edit nama jenis dokumen akan segera tersedia. Untuk saat ini, Anda dapat menghapus dan membuat ulang jenis dokumen baru."
+          type="info"
+          show-icon
+          style="margin-top: 16px;"
+        />
+      </template>
+    </a-modal>
+
+    <!-- Shareholder Type Modal -->
+    <a-modal
+      v-model:open="shareholderTypeModalVisible"
+      :title="shareholderTypeModalMode === 'create' ? 'Tambah Jenis Pemegang Saham' : 'Edit Jenis Pemegang Saham'"
+      @ok="handleSaveShareholderType"
+      @cancel="shareholderTypeModalVisible = false"
+    >
+      <a-form-item label="Nama Jenis Pemegang Saham" :required="true">
+        <a-input
+          v-model:value="newShareholderTypeName"
+          placeholder="Masukkan nama jenis pemegang saham"
+          @pressEnter="handleSaveShareholderType"
+        />
+      </a-form-item>
+      <template v-if="shareholderTypeModalMode === 'edit' && editingShareholderType">
+        <a-alert
+          message="Info"
+          description="Fitur edit nama jenis pemegang saham akan segera tersedia. Untuk saat ini, Anda dapat menghapus dan membuat ulang jenis pemegang saham baru."
+          type="info"
+          show-icon
+          style="margin-top: 16px;"
+        />
+      </template>
+    </a-modal>
+
+    <!-- Director Position Modal -->
+    <a-modal
+      v-model:open="directorPositionModalVisible"
+      :title="directorPositionModalMode === 'create' ? 'Tambah Jabatan Pengurus' : 'Edit Jabatan Pengurus'"
+      @ok="handleSaveDirectorPosition"
+      @cancel="directorPositionModalVisible = false"
+    >
+      <a-form-item label="Nama Jabatan Pengurus" :required="true">
+        <a-input
+          v-model:value="newDirectorPositionName"
+          placeholder="Masukkan nama jabatan pengurus"
+          @pressEnter="handleSaveDirectorPosition"
+        />
+      </a-form-item>
+      <template v-if="directorPositionModalMode === 'edit' && editingDirectorPosition">
+        <a-alert
+          message="Info"
+          description="Fitur edit nama jabatan pengurus akan segera tersedia. Untuk saat ini, Anda dapat menghapus dan membuat ulang jabatan pengurus baru."
           type="info"
           show-icon
           style="margin-top: 16px;"

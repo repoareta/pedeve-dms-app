@@ -35,7 +35,7 @@ func (r *shareholderRepository) Create(shareholder *domain.ShareholderModel) err
 
 func (r *shareholderRepository) GetByCompanyID(companyID string) ([]domain.ShareholderModel, error) {
 	var shareholders []domain.ShareholderModel
-	err := r.db.Where("company_id = ?", companyID).Find(&shareholders).Error
+	err := r.db.Preload("ShareholderCompany").Where("company_id = ?", companyID).Find(&shareholders).Error
 	return shareholders, err
 }
 
@@ -46,4 +46,3 @@ func (r *shareholderRepository) DeleteByCompanyID(companyID string) error {
 func (r *shareholderRepository) Delete(id string) error {
 	return r.db.Delete(&domain.ShareholderModel{}, "id = ?", id).Error
 }
-

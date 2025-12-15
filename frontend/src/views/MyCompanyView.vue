@@ -490,7 +490,7 @@
       <div v-else class="not-found">
         <IconifyIcon icon="mdi:alert-circle-outline" width="64" style="color: #ccc; margin-bottom: 16px;" />
         <p>Perusahaan tidak ditemukan atau Anda belum di-assign ke perusahaan</p>
-        <a-button type="primary" @click="router.push('/dashboard')">Kembali ke Dashboard</a-button>
+        <a-button type="primary" @click="router.push('/subsidiaries')">Kembali ke Subsidiaries</a-button>
       </div>
 
       <!-- Assign Role Modal -->

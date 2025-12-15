@@ -76,8 +76,8 @@
                 v-else
                 v-model:value="formData[item.field]"
                 style="width: 100%;"
-                :formatter="(value) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
-                :parser="(value) => value.replace(/\$\s?|(,*)/g, '')"
+                :formatter="(value: number | string | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
+                :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
               />
             </a-form-item>
           </a-col>
@@ -239,8 +239,8 @@ const handleSubmit = async () => {
       await financialReportsApi.update(editingRecord.value.id, requestData)
       message.success(`${categoryLabel.value} berhasil diupdate`)
     } else {
-      // Create new
-      await financialReportsApi.create(requestData as CreateFinancialReportRequest)
+      // Create new - use double cast to satisfy TypeScript
+      await financialReportsApi.create(requestData as unknown as CreateFinancialReportRequest)
       message.success(`${categoryLabel.value} berhasil ditambahkan`)
     }
 

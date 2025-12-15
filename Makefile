@@ -133,7 +133,7 @@ test: ## Run all tests (backend + frontend)
 	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
 	echo "🟢 Frontend Tests"; \
 	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
-	cd ../frontend && npm run test || FRONTEND_FAILED=1; \
+	cd ../frontend && npm run test:unit || FRONTEND_FAILED=1; \
 	echo ""; \
 	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
 	echo "📊 Test Summary"; \
@@ -150,7 +150,7 @@ test: ## Run all tests (backend + frontend)
 # Run frontend tests only
 test-frontend: ## Run frontend unit tests only
 	@echo "🧪 Running frontend tests..."
-	@cd frontend && npm run test
+	@cd frontend && npm run test:unit
 
 # Lint backend
 lint-backend: ## Run backend linter

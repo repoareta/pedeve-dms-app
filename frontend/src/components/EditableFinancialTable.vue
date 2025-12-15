@@ -8,7 +8,7 @@
         :loading="loading"
         :bordered="true"
         :scroll="{ x: 'max-content' }"
-        :row-class-name="(record, index) => index !== undefined && index % 2 === 1 ? 'editable-row table-row-striped' : 'editable-row'"
+        :row-class-name="(record: any, index?: number) => index !== undefined && index % 2 === 1 ? 'editable-row table-row-striped' : 'editable-row'"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'period'">
@@ -60,7 +60,7 @@
                 {
                   required: true,
                   message: `Harap isi ${column.title}!`,
-                  validator: (_rule, value) => {
+                  validator: (_rule: any, value: any) => {
                     // Use Promise reference from component scope to avoid context issues
                     // This ensures Promise is always available even in different execution contexts
                     const P = PromiseRef
@@ -182,9 +182,11 @@ const defaultFormInstance: FormInstance = {
 } as unknown as FormInstance
 
 // Try to get form from Form.useForm(), with fallback to default
+// In Ant Design Vue 4.x, useForm() can be called without arguments
 let formResultRaw: unknown
 try {
-  formResultRaw = Form.useForm()
+  // TypeScript may require arguments, but runtime doesn't - use type assertion
+  formResultRaw = (Form.useForm as () => unknown)()
 } catch (error) {
   console.warn('Form.useForm() failed, using fallback:', error)
   formResultRaw = null

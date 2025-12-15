@@ -400,41 +400,41 @@
                   <div class="info-grid">
                     <div class="info-item">
                       <span class="info-label">Nama Lengkap</span>
-                      <span class="info-value">{{ company.name }}</span>
+                      <span class="info-value">{{ company!.name }}</span>
                     </div>
                     <div class="info-item">
                       <span class="info-label">Nama Singkat</span>
-                      <span class="info-value">{{ company.short_name || '-' }}</span>
+                      <span class="info-value">{{ company!.short_name || '-' }}</span>
                     </div>
                     <div class="info-item">
                       <span class="info-label">Kode Perusahaan</span>
-                      <span class="info-value">{{ company.code || '-' }}</span>
+                      <span class="info-value">{{ company!.code || '-' }}</span>
                     </div>
                     <div class="info-item">
                       <span class="info-label">Status</span>
                       <span class="info-value">
-                        <a-tag :color="company.status === 'Aktif' ? 'green' : 'red'">{{ company.status || '-' }}</a-tag>
+                        <a-tag :color="company!.status === 'Aktif' ? 'green' : 'red'">{{ company!.status || '-' }}</a-tag>
                       </span>
                     </div>
                     <div class="info-item">
                       <span class="info-label">NPWP</span>
-                      <span class="info-value">{{ company.npwp || '-' }}</span>
+                      <span class="info-value">{{ company!.npwp || '-' }}</span>
                     </div>
                     <div class="info-item">
                       <span class="info-label">NIB</span>
-                      <span class="info-value">{{ company.nib || '-' }}</span>
+                      <span class="info-value">{{ company!.nib || '-' }}</span>
                     </div>
-                    <div v-if="company.authorized_capital" class="info-item">
+                    <div v-if="company!.authorized_capital" class="info-item">
                       <span class="info-label">Modal Dasar</span>
-                      <span class="info-value">{{ formatCurrency(company.authorized_capital) }} {{ company.currency || 'IDR' }}</span>
+                      <span class="info-value">{{ formatCurrency(company!.authorized_capital) }} {{ company!.currency || 'IDR' }}</span>
                     </div>
-                    <div v-if="company.paid_up_capital" class="info-item">
+                    <div v-if="company!.paid_up_capital" class="info-item">
                       <span class="info-label">Modal Disetor</span>
-                      <span class="info-value">{{ formatCurrency(company.paid_up_capital) }} {{ company.currency || 'IDR' }}</span>
+                      <span class="info-value">{{ formatCurrency(company!.paid_up_capital) }} {{ company!.currency || 'IDR' }}</span>
                     </div>
-                    <div v-if="company.description" class="info-item full-width">
+                    <div v-if="company!.description" class="info-item full-width">
                       <span class="info-label">Deskripsi</span>
-                      <span class="info-value">{{ company.description }}</span>
+                      <span class="info-value">{{ company!.description }}</span>
                     </div>
                   </div>
                 </div>
@@ -448,45 +448,45 @@
                   <div class="info-grid">
                     <div class="info-item">
                       <span class="info-label">Telepon</span>
-                      <span class="info-value">{{ company.phone || '-' }}</span>
+                      <span class="info-value">{{ company!.phone || '-' }}</span>
                     </div>
                     <div class="info-item">
                       <span class="info-label">Fax</span>
-                      <span class="info-value">{{ company.fax || '-' }}</span>
+                      <span class="info-value">{{ company!.fax || '-' }}</span>
                     </div>
                     <div class="info-item">
                       <span class="info-label">Email</span>
                       <span class="info-value">
-                        <a v-if="company.email" :href="`mailto:${company.email}`">{{ company.email }}</a>
+                        <a v-if="company!.email" :href="`mailto:${company!.email}`">{{ company!.email }}</a>
                         <span v-else>-</span>
                       </span>
                     </div>
                     <div class="info-item">
                       <span class="info-label">Website</span>
                       <span class="info-value">
-                        <a v-if="company.website" :href="company.website" target="_blank" rel="noopener noreferrer">{{ company.website }}</a>
+                        <a v-if="company!.website" :href="company!.website" target="_blank" rel="noopener noreferrer">{{ company!.website }}</a>
                         <span v-else>-</span>
                       </span>
                     </div>
-                    <div v-if="company.address" class="info-item full-width">
+                    <div v-if="company!.address" class="info-item full-width">
                       <span class="info-label">Alamat Perusahaan</span>
-                      <span class="info-value">{{ company.address }}</span>
+                      <span class="info-value">{{ company!.address }}</span>
                     </div>
-                    <div v-if="company.operational_address" class="info-item full-width">
+                    <div v-if="company!.operational_address" class="info-item full-width">
                       <span class="info-label">Alamat Operasional</span>
-                      <span class="info-value">{{ company.operational_address }}</span>
+                      <span class="info-value">{{ company!.operational_address }}</span>
                     </div>
                   </div>
                 </div>
 
                 <!-- Struktur Kepemilikan -->
-                <div v-if="company.shareholders && company.shareholders.length > 0" class="detail-section">
+                <div v-if="company!.shareholders && company!.shareholders.length > 0" class="detail-section">
                   <h2 class="section-title">
                     <IconifyIcon icon="mdi:account-group" width="20" style="margin-right: 8px;" />
-                    Struktur Kepemilikan ({{ company.shareholders.length }})
+                    Struktur Kepemilikan ({{ company!.shareholders.length }})
                   </h2>
                   <div class="shareholders-list">
-                    <div v-for="(shareholder, index) in company.shareholders" :key="shareholder.id || index" class="shareholder-card">
+                    <div v-for="(shareholder, index) in company!.shareholders" :key="shareholder.id || index" class="shareholder-card">
                       <div class="shareholder-header">
                         <h3 class="shareholder-name">
                           {{ shareholder.name }}
@@ -530,7 +530,7 @@
                 </div>
 
                 <!-- Bidang Usaha -->
-                <div v-if="company.main_business || (company.business_fields && company.business_fields.length > 0)" class="detail-section">
+                <div v-if="company!.main_business || (company!.business_fields && company!.business_fields.length > 0)" class="detail-section">
                   <h2 class="section-title">
                     <IconifyIcon icon="mdi:briefcase" width="20" style="margin-right: 8px;" />
                     Bidang Usaha
@@ -538,35 +538,35 @@
                   <div class="info-grid">
                     <div class="info-item">
                       <span class="info-label">Sektor Industri</span>
-                      <span class="info-value">{{ getMainBusiness(company)?.industry_sector || '-' }}</span>
+                      <span class="info-value">{{ getMainBusiness(company!)?.industry_sector || '-' }}</span>
                     </div>
                     <div class="info-item">
                       <span class="info-label">KBLI</span>
-                      <span class="info-value">{{ getMainBusiness(company)?.kbli || '-' }}</span>
+                      <span class="info-value">{{ getMainBusiness(company!)?.kbli || '-' }}</span>
                     </div>
-                    <div v-if="getMainBusiness(company)?.main_business_activity" class="info-item full-width">
+                    <div v-if="getMainBusiness(company!)?.main_business_activity" class="info-item full-width">
                       <span class="info-label">Uraian Kegiatan Usaha Utama</span>
-                      <span class="info-value">{{ getMainBusiness(company)?.main_business_activity }}</span>
+                      <span class="info-value">{{ getMainBusiness(company!)?.main_business_activity }}</span>
                     </div>
-                    <div v-if="getMainBusiness(company)?.additional_activities" class="info-item full-width">
+                    <div v-if="getMainBusiness(company!)?.additional_activities" class="info-item full-width">
                       <span class="info-label">Kegiatan Usaha Tambahan</span>
-                      <span class="info-value">{{ getMainBusiness(company)?.additional_activities }}</span>
+                      <span class="info-value">{{ getMainBusiness(company!)?.additional_activities }}</span>
                     </div>
-                    <div v-if="getMainBusiness(company)?.start_operation_date" class="info-item">
+                    <div v-if="getMainBusiness(company!)?.start_operation_date" class="info-item">
                       <span class="info-label">Tanggal Mulai Beroperasi</span>
-                      <span class="info-value">{{ formatDate(getMainBusiness(company)?.start_operation_date) }}</span>
+                      <span class="info-value">{{ formatDate(getMainBusiness(company!)?.start_operation_date) }}</span>
                     </div>
                   </div>
                 </div>
 
                 <!-- Pengurus/Dewan Direksi -->
-                <div v-if="company.directors && company.directors.length > 0" class="detail-section">
+                <div v-if="company!.directors && company!.directors.length > 0" class="detail-section">
                   <h2 class="section-title">
                     <IconifyIcon icon="mdi:account-tie" width="20" style="margin-right: 8px;" />
-                    Pengurus/Dewan Direksi ({{ company.directors.length }})
+                    Pengurus/Dewan Direksi ({{ company!.directors.length }})
                   </h2>
                   <div class="directors-list-compact">
-                    <div v-for="(director, index) in company.directors" :key="director.id || index" class="director-item-compact">
+                    <div v-for="(director, index) in company!.directors" :key="director.id || index" class="director-item-compact">
                       <div class="director-main-info">
                         <div class="director-name-compact">
                           <strong>{{ director.full_name }}</strong>

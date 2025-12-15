@@ -313,42 +313,151 @@ func (uc *developmentUseCase) RunSubsidiarySeeder() (bool, error) {
 	var backendDir string
 	var found bool
 
-	// Strategy 1: Try current working directory
-	wd, err := os.Getwd()
-	if err == nil {
-		// Check if we're in backend directory
-		if _, err := os.Stat(filepath.Join(wd, "cmd", "seed-companies")); err == nil {
-			backendDir = wd
+	// Helper function to check if a directory contains cmd/seed-companies
+	checkBackendDir := func(dir string) bool {
+		if dir == "" {
+			return false
+		}
+		seedPath := filepath.Join(dir, "cmd", "seed-companies")
+		if info, err := os.Stat(seedPath); err == nil && info.IsDir() {
+			return true
+		}
+		return false
+	}
+
+	// Strategy 1: Try environment variable BACKEND_DIR (for production/Docker)
+	if backendDirEnv := os.Getenv("BACKEND_DIR"); backendDirEnv != "" {
+		if checkBackendDir(backendDirEnv) {
+			backendDir = backendDirEnv
 			found = true
-		} else if _, err := os.Stat(filepath.Join(wd, "backend", "cmd", "seed-companies")); err == nil {
-			backendDir = filepath.Join(wd, "backend")
-			found = true
+			zapLog.Info("Found backend directory from BACKEND_DIR env", zap.String("dir", backendDir))
 		}
 	}
 
-	// Strategy 2: Try from executable path
+	// Strategy 2: Try current working directory
+	if !found {
+		wd, err := os.Getwd()
+		if err == nil {
+			// Check if we're in backend directory
+			if checkBackendDir(wd) {
+				backendDir = wd
+				found = true
+				zapLog.Info("Found backend directory from current working directory", zap.String("dir", backendDir))
+			} else if checkBackendDir(filepath.Join(wd, "backend")) {
+				backendDir = filepath.Join(wd, "backend")
+				found = true
+				zapLog.Info("Found backend directory from current working directory/backend", zap.String("dir", backendDir))
+			}
+		}
+	}
+
+	// Strategy 3: Try from executable path (multiple levels up)
 	if !found {
 		execPath, err := os.Executable()
 		if err == nil {
-			// Get backend directory (assuming executable is in backend/cmd/api/)
-			candidateDir := filepath.Dir(filepath.Dir(filepath.Dir(execPath)))
-			if _, err := os.Stat(filepath.Join(candidateDir, "cmd", "seed-companies")); err == nil {
-				backendDir = candidateDir
+			// Try different levels up from executable
+			// Common locations: /app, /app/backend, /root, /root/backend, etc.
+			baseDir := filepath.Dir(execPath)
+			for i := 0; i < 5; i++ {
+				// Check current level
+				if checkBackendDir(baseDir) {
+					backendDir = baseDir
+					found = true
+					zapLog.Info("Found backend directory from executable path", zap.String("dir", backendDir), zap.Int("levels_up", i))
+					break
+				}
+				// Check backend subdirectory
+				if checkBackendDir(filepath.Join(baseDir, "backend")) {
+					backendDir = filepath.Join(baseDir, "backend")
+					found = true
+					zapLog.Info("Found backend directory from executable path/backend", zap.String("dir", backendDir), zap.Int("levels_up", i))
+					break
+				}
+				// Go up one level
+				parentDir := filepath.Dir(baseDir)
+				if parentDir == baseDir {
+					break // Reached root
+				}
+				baseDir = parentDir
+			}
+		}
+	}
+
+	// Strategy 4: Try common production paths
+	if !found {
+		commonPaths := []string{
+			"/app/backend",
+			"/app",
+			"/root/backend",
+			"/root",
+			"/usr/local/backend",
+			"/opt/backend",
+		}
+		for _, path := range commonPaths {
+			if checkBackendDir(path) {
+				backendDir = path
 				found = true
+				zapLog.Info("Found backend directory from common path", zap.String("dir", backendDir))
+				break
 			}
 		}
 	}
 
 	if !found {
-		return false, fmt.Errorf("failed to find backend directory with cmd/seed-companies")
+		// Log diagnostic information
+		wd, _ := os.Getwd()
+		execPath, _ := os.Executable()
+		zapLog.Error("Failed to find backend directory",
+			zap.String("working_dir", wd),
+			zap.String("executable_path", execPath),
+			zap.String("backend_dir_env", os.Getenv("BACKEND_DIR")),
+		)
+		return false, fmt.Errorf("failed to find backend directory with cmd/seed-companies. Working dir: %s, Executable: %s", wd, execPath)
 	}
 
 	seedPath := filepath.Join(backendDir, "cmd", "seed-companies")
 	zapLog.Info("Running company seeder", zap.String("backend_dir", backendDir), zap.String("seed_path", seedPath))
 
-	// Run the seeder command
-	cmd := exec.Command("go", "run", "./cmd/seed-companies")
-	cmd.Dir = backendDir
+	// Determine how to run the seeder
+	// Strategy 1: Try to use pre-built binary (for production)
+	// Strategy 2: Fallback to go run (for development)
+	var cmd *exec.Cmd
+	var useBinary bool
+
+	// Check for binary in common locations
+	binaryLocations := []string{
+		"/root/seed-companies",
+		"/app/seed-companies",
+		filepath.Join(backendDir, "seed-companies"),
+		filepath.Join(filepath.Dir(backendDir), "seed-companies"),
+		os.Getenv("SEED_COMPANIES_BINARY"), // Allow override via env var
+	}
+
+	for _, binPath := range binaryLocations {
+		if binPath == "" {
+			continue
+		}
+		if info, err := os.Stat(binPath); err == nil && !info.IsDir() {
+			// Check if it's executable
+			if info.Mode().Perm()&0111 != 0 {
+				cmd = exec.Command(binPath)
+				useBinary = true
+				zapLog.Info("Using pre-built seeder binary", zap.String("binary_path", binPath))
+				break
+			}
+		}
+	}
+
+	// Fallback to go run if binary not found
+	if !useBinary {
+		// Check if go is available
+		if _, err := exec.LookPath("go"); err != nil {
+			return false, fmt.Errorf("go compiler not found and seeder binary not found. Please build seeder binary or install Go")
+		}
+		cmd = exec.Command("go", "run", "./cmd/seed-companies")
+		cmd.Dir = backendDir
+		zapLog.Info("Using go run to execute seeder", zap.String("backend_dir", backendDir))
+	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

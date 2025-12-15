@@ -76,6 +76,7 @@ sudo docker run -d \
   -e ENV=production \
   -e DISABLE_RATE_LIMIT=true \
   -e CORS_ORIGIN=https://pedeve-dev.aretaamany.com,http://34.128.123.1,http://pedeve-dev.aretaamany.com \
+  -e BACKEND_DIR=/app/backend \
   ${BACKEND_IMAGE}
 
 # Wait a moment for container to start

@@ -59,7 +59,7 @@ const menuItems = computed(() => {
     // { label: 'Dashboard', key: 'dashboard', path: '/dashboard', icon: 'mdi:view-dashboard' },
     { label: 'Daftar Perusahaan', key: 'subsidiaries', path: '/subsidiaries', icon: 'mdi:office-building' },
     { label: 'Documents', key: 'documents', path: '/documents', icon: 'mdi:file-document' },
-    { label: 'Laporan', key: 'reports', path: '/reports', icon: 'mdi:chart-box' },
+    // { label: 'Laporan', key: 'reports', path: '/reports', icon: 'mdi:chart-box' },
     { label: 'Manajemen Pengguna', key: 'users', path: '/users', icon: 'mdi:account-group' },
   ]
 })

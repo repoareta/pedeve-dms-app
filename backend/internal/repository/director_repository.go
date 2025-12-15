@@ -8,6 +8,7 @@ import (
 
 type DirectorRepository interface {
 	Create(director *domain.DirectorModel) error
+	Update(director *domain.DirectorModel) error
 	GetByCompanyID(companyID string) ([]domain.DirectorModel, error)
 	DeleteByCompanyID(companyID string) error
 	Delete(id string) error
@@ -33,6 +34,10 @@ func (r *directorRepository) Create(director *domain.DirectorModel) error {
 	return r.db.Create(director).Error
 }
 
+func (r *directorRepository) Update(director *domain.DirectorModel) error {
+	return r.db.Save(director).Error
+}
+
 func (r *directorRepository) GetByCompanyID(companyID string) ([]domain.DirectorModel, error) {
 	var directors []domain.DirectorModel
 	err := r.db.Where("company_id = ?", companyID).Find(&directors).Error
@@ -46,4 +51,3 @@ func (r *directorRepository) DeleteByCompanyID(companyID string) error {
 func (r *directorRepository) Delete(id string) error {
 	return r.db.Delete(&domain.DirectorModel{}, "id = ?", id).Error
 }
-

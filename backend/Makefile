@@ -8,7 +8,8 @@ test:
 	@echo "🧪 Running all tests..."
 	@echo "📋 Testing all features: Company, User Management, Reports, Roles, Permissions, etc."
 	@echo ""
-	@go test ./... -v 2>&1 | tee /tmp/test-output.txt; \
+	@set -o pipefail; \
+	go test ./... -v 2>&1 | tee /tmp/test-output.txt; \
 	TEST_EXIT=$$?; \
 	echo ""; \
 	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \
@@ -46,7 +47,8 @@ test:
 # Run unit tests only (fast)
 test-unit:
 	@echo "⚡ Running unit tests (fast)..."
-	@(go test ./internal/usecase/... -v && go test ./internal/repository/... -v) 2>&1 | tee /tmp/test-output.txt; \
+	@set -o pipefail; \
+	(go test ./internal/usecase/... -v && go test ./internal/repository/... -v) 2>&1 | tee /tmp/test-output.txt; \
 	TEST_EXIT=$$?; \
 	echo ""; \
 	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"; \

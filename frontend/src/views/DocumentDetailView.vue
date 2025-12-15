@@ -439,6 +439,15 @@ const handleUploadClick = () => {
   router.push('/documents/upload')
 }
 
+const handleBack = () => {
+  // Navigate back to folder if document has folder_id, otherwise go to documents list
+  if (document.value?.folder_id) {
+    router.push(`/documents/folders/${document.value.folder_id}`)
+  } else {
+    router.push('/documents')
+  }
+}
+
 const handleLogout = async () => {
   const { useAuthStore } = await import('../stores/auth')
   const authStore = useAuthStore()
@@ -487,8 +496,8 @@ const getDocType = () =>
 const getReference = () =>
   getMetaValue(['document_number', 'reference', 'document_reference', 'number'])
 
-const getUnit = () =>
-  getMetaValue(['unit', 'division'])
+// const getUnit = () =>
+//   getMetaValue(['unit', 'division'])
 
 const getUploadedBy = () =>
   getMetaValue(
@@ -599,10 +608,17 @@ onBeforeUnmount(() => {
             <!-- Document Header -->
             <div class="document-header">
               <div class="document-header-left">
-                <IconifyIcon :icon="getFileTypeIcon" width="24" style="color: #035cab; margin-right: 12px;" />
-                <div>
+                <a-button 
+                  type="text" 
+                  class="back-button"
+                  @click="handleBack"
+                >
+                  <IconifyIcon icon="mdi:arrow-left" width="20" style="margin-right: 8px;" />
+                  Kembali
+                </a-button>
+                <div class="document-title-section">
                   <div class="document-title">{{ document.name || document.file_name }}</div>
-                  <div class="document-subtitle">Reports</div>
+                  <!-- <div class="document-subtitle">Reports</div> -->
                 </div>
               </div>
               <div class="document-header-right">
@@ -730,10 +746,10 @@ onBeforeUnmount(() => {
                 <label>Nomor Dokumen / Referensi</label>
                 <div class="metadata-value">{{ getReference() }}</div>
               </div>
-              <div class="metadata-field">
+              <!-- <div class="metadata-field">
                 <label>Unit / Divisi</label>
                 <div class="metadata-value">{{ getUnit() }}</div>
-              </div>
+              </div> -->
               <div class="metadata-field">
                 <label>Uploaded By / PIC</label>
                 <div class="metadata-value">{{ getUploadedBy() }}</div>
@@ -833,12 +849,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.search-card {
-  // background: #fff;
-  // border-radius: 12px;
-  // box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
 .search-header {
@@ -1009,22 +1019,44 @@ onBeforeUnmount(() => {
 .document-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
+  align-items: flex-start;
+  padding: 20px 24px;
   border-bottom: 1px solid #e8e8e8;
+  background: #fff;
 }
 
 .document-header-left {
   display: flex;
+  align-items: flex-start;
+  flex: 1;
+  gap: 16px;
+}
+
+.back-button {
+  display: flex;
   align-items: center;
+  padding: 4px 8px;
+  color: #666;
+  font-size: 14px;
+  transition: all 0.2s;
+  margin-top: 2px;
+}
+
+.back-button:hover {
+  color: #1890ff;
+  background: #f0f6ff;
+}
+
+.document-title-section {
   flex: 1;
 }
 
 .document-title {
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 600;
   color: #333;
-  margin-bottom: 4px;
+  margin: 0;
+  line-height: 1.4;
 }
 
 .document-subtitle {

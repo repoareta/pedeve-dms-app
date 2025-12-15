@@ -16,6 +16,6 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['mammoth', 'xlsx'],
+    include: ['mammoth', 'xlsx', 'jspdf', 'jspdf-autotable'],
   },
 })

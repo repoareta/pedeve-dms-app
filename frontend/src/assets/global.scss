@@ -1487,6 +1487,23 @@ textarea.ant-input {
   }
 }
 
+.ant-notification-notice{
+
+}
+
+.notification-notice-content{
+
+}
+
+.ant-notification-notice-message{
+font-size: 14px !important;
+font-weight: bold !important;
+}
+.ant-notification-notice-description{
+  font-size: 12px !important;
+}
+
+
 .ant-select-lg {
   .ant-select-selector {
     height: var(--input-height-large) !important;

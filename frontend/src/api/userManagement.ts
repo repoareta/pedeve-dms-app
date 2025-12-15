@@ -19,6 +19,9 @@ export interface Company {
   website?: string
   address?: string
   operational_address?: string
+  authorized_capital?: number
+  paid_up_capital?: number
+  currency?: string // IDR (Rupiah) atau USD (Dollar), default: IDR
   parent_id?: string
   level: number
   is_active: boolean
@@ -40,12 +43,35 @@ export interface UserCompanyResponse {
 
 export interface Shareholder {
   id?: string
-  type: string
+  shareholder_company_id?: string | null // ID perusahaan pemegang saham (nullable: jika null berarti individu/eksternal)
+  type: string // Backend stores as string (comma-separated), frontend uses array
   name: string
   identity_number: string
-  ownership_percent: number
-  share_count: number
+  ownership_percent: number // 10 digit desimal
+  share_sheet_count?: number
+  share_value_per_sheet?: number
   is_main_parent?: boolean
+  shareholder_company?: Company // Perusahaan pemegang saham (jika shareholder_company_id tidak null)
+}
+
+export interface ShareholderType {
+  id: string
+  name: string
+  is_active: boolean
+  usage_count: number
+  created_by: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface DirectorPosition {
+  id: string
+  name: string
+  is_active: boolean
+  usage_count: number
+  created_by: string
+  created_at?: string
+  updated_at?: string
 }
 
 export interface BusinessField {
@@ -59,7 +85,7 @@ export interface BusinessField {
 
 export interface Director {
   id?: string
-  position: string
+  position: string // Comma-separated string from backend, array in frontend
   full_name: string
   ktp: string
   npwp: string
@@ -115,6 +141,9 @@ export interface CompanyCreateRequest {
   website?: string
   address?: string
   operational_address?: string
+  authorized_capital?: number
+  paid_up_capital?: number
+  currency?: string // IDR (Rupiah) atau USD (Dollar), default: IDR
   parent_id?: string
   main_parent_company?: string
   shareholders?: Shareholder[]
@@ -136,6 +165,9 @@ export interface CompanyUpdateRequest {
   website?: string
   address?: string
   operational_address?: string
+  authorized_capital?: number
+  paid_up_capital?: number
+  currency?: string // IDR (Rupiah) atau USD (Dollar), default: IDR
   parent_id?: string
   main_parent_company?: string
   shareholders?: Shareholder[]
@@ -184,6 +216,58 @@ export const companyApi = {
     return response.data
   },
 }
+
+// Shareholder Types API
+const shareholderTypesApi = {
+  async getShareholderTypes(includeInactive = false): Promise<ShareholderType[]> {
+    const res = await apiClient.get<ShareholderType[]>('/shareholder-types', {
+      params: { include_inactive: includeInactive },
+    })
+    return res.data
+  },
+
+  async createShareholderType(name: string): Promise<ShareholderType> {
+    const res = await apiClient.post<ShareholderType>('/shareholder-types', { name })
+    return res.data
+  },
+
+  async updateShareholderType(id: string, payload: { name?: string; is_active?: boolean }): Promise<ShareholderType> {
+    const res = await apiClient.put<ShareholderType>(`/shareholder-types/${id}`, payload)
+    return res.data
+  },
+
+  async deleteShareholderType(id: string): Promise<void> {
+    await apiClient.delete(`/shareholder-types/${id}`)
+  },
+}
+
+export { shareholderTypesApi }
+
+const directorPositionsApi = {
+  async getDirectorPositions(includeInactive = false): Promise<DirectorPosition[]> {
+    const res = await apiClient.get<DirectorPosition[]>('/director-positions', {
+      params: { include_inactive: includeInactive },
+    })
+    return res.data
+  },
+
+  async createDirectorPosition(name: string): Promise<DirectorPosition> {
+    const res = await apiClient.post<DirectorPosition>('/director-positions', { name })
+    return res.data
+  },
+
+  async updateDirectorPosition(id: string, payload: { name?: string; is_active?: boolean }): Promise<DirectorPosition> {
+    const res = await apiClient.put<DirectorPosition>(`/director-positions/${id}`, payload)
+    return res.data
+  },
+
+  async deleteDirectorPosition(id: string): Promise<void> {
+    await apiClient.delete(`/director-positions/${id}`)
+  },
+}
+
+export { directorPositionsApi }
+export default companyApi
 
 // User API
 export const userApi = {

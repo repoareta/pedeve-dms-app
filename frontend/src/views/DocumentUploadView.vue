@@ -45,6 +45,7 @@ const loadingFolders = ref(false)
 const document = ref<DocumentItem | null>(null)
 // Fiber default body limit ~4MB, naikkan guard ke 5MB (sesuaikan backend/proxy)
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+const isGeneratingReference = ref(false) // Flag to prevent multiple simultaneous generations
 
 const formState = ref({
   title: '',
@@ -82,6 +83,155 @@ const toIsoString = (value: Dayjs | null) => {
 
 const handleUploadChange = ({ fileList: newList }: { fileList: UploadItem[] }) => {
   fileList.value = newList
+}
+
+// Normalize document type for reference number format
+const normalizeDocType = (docType: string | undefined): string => {
+  if (!docType || typeof docType !== 'string') return 'DOC'
+  
+  return docType
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '-')      // Multiple spaces → single dash
+    .replace(/[\/\\]/g, '-')   // Slashes → dash
+    .replace(/[^A-Z0-9\-]/g, '') // Remove invalid chars (keep only A-Z, 0-9, dash)
+    .replace(/-+/g, '-')        // Multiple dashes → single dash
+    .replace(/^-|-$/g, '')      // Remove leading/trailing dash
+    .substring(0, 20) || 'DOC'  // Max 20 chars, fallback to DOC
+}
+
+// Generate reference number automatically
+const generateReferenceNumber = async (): Promise<string> => {
+  // Get first doc type or use default
+  const docType = formState.value.docType && formState.value.docType.length > 0 
+    ? formState.value.docType[0] 
+    : 'DOC'
+  
+  const normalizedType = normalizeDocType(docType)
+  const year = dayjs().format('YYYY')
+  const month = dayjs().format('MM')
+  const prefix = `${normalizedType}/${year}/${month}/`
+  
+  try {
+    // Fetch all documents to check existing reference numbers
+    const allDocuments = await documentsApi.listDocuments()
+    
+    // Extract reference numbers from metadata and filter by prefix
+    const existingReferences: string[] = []
+    
+    for (const doc of allDocuments) {
+      if (doc.metadata) {
+        let meta: Record<string, unknown> = {}
+        if (typeof doc.metadata === 'string') {
+          try {
+            meta = JSON.parse(doc.metadata) as Record<string, unknown>
+          } catch {
+            continue
+          }
+        } else {
+          meta = doc.metadata as Record<string, unknown>
+        }
+        
+        const ref = meta.reference as string
+        if (ref && typeof ref === 'string') {
+          // Normalize reference untuk comparison
+          const normalizedRef = normalizeReferenceForComparison(ref)
+          const normalizedPrefix = normalizeReferenceForComparison(prefix)
+          
+          // Check if reference starts with our prefix (case-insensitive, normalized)
+          if (normalizedRef.startsWith(normalizedPrefix)) {
+            existingReferences.push(ref)
+          }
+        }
+      }
+    }
+    
+    // Find the highest sequence number
+    let maxSequence = 0
+    for (const ref of existingReferences) {
+      // Extract sequence number (last 3 digits after last slash)
+      const parts = ref.split('/')
+      if (parts.length > 0) {
+        const lastPart = parts[parts.length - 1]
+        if (lastPart && typeof lastPart === 'string') {
+          const sequence = parseInt(lastPart, 10)
+          if (!isNaN(sequence) && sequence > maxSequence) {
+            maxSequence = sequence
+          }
+        }
+      }
+    }
+    
+    // Generate next sequence number (3 digits, padded with zeros)
+    const nextSequence = String(maxSequence + 1).padStart(3, '0')
+    return `${prefix}${nextSequence}`
+    
+  } catch (error) {
+    console.error('Error generating reference number:', error)
+    // Fallback: return with sequence 001 if query fails
+    return `${prefix}001`
+  }
+}
+
+// Normalize reference for comparison (case-insensitive, trim spaces)
+const normalizeReferenceForComparison = (ref: string): string => {
+  return ref
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '') // Remove all spaces for comparison
+}
+
+// Check if reference number already exists in other documents
+const checkReferenceExists = async (reference: string, excludeDocumentId?: string): Promise<boolean> => {
+  if (!reference || !reference.trim()) {
+    return false // Empty reference is considered not existing
+  }
+  
+  try {
+    // Fetch all documents to check existing reference numbers
+    const allDocuments = await documentsApi.listDocuments()
+    
+    // Normalize input reference for comparison
+    const normalizedInput = normalizeReferenceForComparison(reference)
+    
+    // Check if any document has the same reference (excluding current document if in edit mode)
+    for (const doc of allDocuments) {
+      // Skip current document if in edit mode
+      if (excludeDocumentId && doc.id === excludeDocumentId) {
+        continue
+      }
+      
+      if (doc.metadata) {
+        let meta: Record<string, unknown> = {}
+        if (typeof doc.metadata === 'string') {
+          try {
+            meta = JSON.parse(doc.metadata) as Record<string, unknown>
+          } catch {
+            continue
+          }
+        } else {
+          meta = doc.metadata as Record<string, unknown>
+        }
+        
+        const existingRef = meta.reference as string
+        if (existingRef && typeof existingRef === 'string') {
+          // Normalize existing reference for comparison
+          const normalizedExisting = normalizeReferenceForComparison(existingRef)
+          
+          // Check if they match (case-insensitive, space-insensitive)
+          if (normalizedInput === normalizedExisting) {
+            return true // Reference already exists
+          }
+        }
+      }
+    }
+    
+    return false // Reference is unique
+  } catch (error) {
+    console.error('Error checking reference uniqueness:', error)
+    // If check fails, we'll let backend handle it, but return false for now
+    return false
+  }
 }
 
 const handleSubmit = async () => {
@@ -146,6 +296,32 @@ const handleSubmit = async () => {
   if (invalidDocTypes.length > 0) {
     message.error(`Jenis dokumen berikut tidak ditemukan di database: ${invalidDocTypes.join(', ')}. Silakan hapus atau buat jenis dokumen tersebut terlebih dahulu.`)
     return
+  }
+
+  // Auto-generate reference number if empty (fallback if not generated yet)
+  if (!formState.value.reference?.trim()) {
+    try {
+      const generatedReference = await generateReferenceNumber()
+      formState.value.reference = generatedReference
+      console.log('Auto-generated reference number:', generatedReference)
+    } catch (error) {
+      console.error('Failed to generate reference number:', error)
+      message.warning('Gagal generate nomor referensi otomatis, mohon isi manual')
+      return
+    }
+  }
+
+  // Validate reference number uniqueness
+  if (formState.value.reference?.trim()) {
+    const referenceExists = await checkReferenceExists(
+      formState.value.reference.trim(),
+      isEditMode.value ? documentId.value : undefined
+    )
+    
+    if (referenceExists) {
+      message.error(`Nomor referensi "${formState.value.reference}" sudah digunakan di dokumen lain. Silakan gunakan nomor referensi yang berbeda.`)
+      return
+    }
   }
 
   if (isEditMode.value) {
@@ -422,6 +598,27 @@ const handleDocumentTypeChange = async (values: string[]) => {
   
   // Log final state for debugging
   console.log(`[DocumentUploadView] handleDocumentTypeChange completed. Final docTypes:`, formState.value.docType)
+  
+  // Auto-generate reference number if:
+  // - Reference is empty or only whitespace
+  // - At least one docType is selected
+  // - Not currently generating (to avoid multiple simultaneous calls)
+  if ((!formState.value.reference || !formState.value.reference.trim()) &&
+      finalValues.length > 0 &&
+      !isGeneratingReference.value) {
+    // Trigger auto-generation in next tick to ensure docType is fully updated
+    isGeneratingReference.value = true
+    try {
+      const generatedReference = await generateReferenceNumber()
+      formState.value.reference = generatedReference
+      console.log('Auto-generated reference number:', generatedReference)
+    } catch (error) {
+      console.error('Failed to auto-generate reference number:', error)
+      // Don't show error message here, as it's auto-generation and user can still fill manually
+    } finally {
+      isGeneratingReference.value = false
+    }
+  }
 }
 
 const handleDocumentTypeSelect = async (value: string) => {
@@ -447,6 +644,26 @@ const handleDocumentTypeSelect = async (value: string) => {
   // Add to array if not already exists
   if (!formState.value.docType.includes(value)) {
     formState.value.docType.push(value)
+    
+    // Auto-generate reference number if reference is empty (similar to handleDocumentTypeChange)
+    // Note: handleDocumentTypeChange will also be triggered by the @change event,
+    // but we call it here for immediate feedback
+    if ((!formState.value.reference || !formState.value.reference.trim()) &&
+        !isGeneratingReference.value) {
+      isGeneratingReference.value = true
+      // Use nextTick to ensure the docType array is updated first
+      setTimeout(async () => {
+        try {
+          const generatedReference = await generateReferenceNumber()
+          formState.value.reference = generatedReference
+          console.log('Auto-generated reference number (from select):', generatedReference)
+        } catch (error) {
+          console.error('Failed to auto-generate reference number:', error)
+        } finally {
+          isGeneratingReference.value = false
+        }
+      }, 50) // Reduced delay for better UX
+    }
   }
   documentTypeSearchValue.value = ''
 }
@@ -642,12 +859,19 @@ onMounted(async () => {
             <a-row :gutter="[16, 8]">
               <a-col :xs="24" :md="12">
                 <a-form-item label="Folder">
-                  <a-select v-model:value="formState.folder_id" placeholder="Pilih folder (opsional)"
-                    :loading="loadingFolders" allow-clear>
+                  <a-select 
+                    v-model:value="formState.folder_id" 
+                    placeholder="Pilih folder (opsional)"
+                    :loading="loadingFolders" 
+                    :disabled="isEditMode"
+                    allow-clear>
                     <a-select-option v-for="folder in folders" :key="folder.id" :value="folder.id">
                       {{ folder.name }}
                     </a-select-option>
                   </a-select>
+                  <div v-if="isEditMode" style="margin-top: 4px; font-size: 12px; color: #999;">
+                    Folder tidak dapat diubah saat edit
+                  </div>
                 </a-form-item>
               </a-col>
               <a-col :xs="24" :md="12">
@@ -657,7 +881,14 @@ onMounted(async () => {
               </a-col>
               <a-col :xs="24" :md="12">
                 <a-form-item label="Nomor Dokumen / Referensi">
-                  <a-input v-model:value="formState.reference" placeholder="No. referensi" />
+                  <a-input 
+                    v-model:value="formState.reference" 
+                    placeholder="No. referensi (otomatis generate jika kosong)" 
+                  />
+                  <div v-if="!isEditMode" style="margin-top: 4px; font-size: 12px; color: #666;">
+                    <IconifyIcon icon="mdi:information-outline" style="margin-right: 4px;" />
+                    Jika dikosongkan, nomor referensi akan otomatis di-generate berdasarkan jenis dokumen
+                  </div>
                 </a-form-item>
               </a-col>
               <a-col v-if="isEditMode" :xs="24" :md="12">
@@ -720,11 +951,11 @@ onMounted(async () => {
                   </div>
                 </a-form-item>
               </a-col>
-              <a-col :xs="24" :md="12">
+              <!-- <a-col :xs="24" :md="12">
                 <a-form-item label="Unit / Divisi">
                   <a-input v-model:value="formState.unit" />
                 </a-form-item>
-              </a-col>
+              </a-col> -->
               <a-col v-if="!isEditMode" :xs="24" :md="12">
                 <a-form-item label="Uploaded By / PIC">
                   <a-input v-model:value="formState.uploader" disabled />

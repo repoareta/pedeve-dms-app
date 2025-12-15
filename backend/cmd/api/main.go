@@ -83,6 +83,9 @@ func main() {
 	// Mulai cleanup audit logs (retention policy)
 	usecase.StartAuditLogCleanup()
 
+	// Mulai cleanup notifikasi lama (retention policy: 90 hari default)
+	usecase.StartNotificationCleanup()
+
 	// Seed roles, superadmin, and default administrator user
 	seed.SeedAll()
 
@@ -218,6 +221,30 @@ func main() {
 	protected.Put("/document-types/:id", documentTypeHandler.UpdateDocumentType)
 	protected.Delete("/document-types/:id", documentTypeHandler.DeleteDocumentType)
 
+	// Shareholder Types routes
+	shareholderTypeHandler := http.NewShareholderTypeHandler(usecase.NewShareholderTypeUseCase())
+	protected.Get("/shareholder-types", shareholderTypeHandler.GetAllShareholderTypes)
+	protected.Post("/shareholder-types", shareholderTypeHandler.CreateShareholderType)
+	protected.Put("/shareholder-types/:id", shareholderTypeHandler.UpdateShareholderType)
+	protected.Delete("/shareholder-types/:id", shareholderTypeHandler.DeleteShareholderType)
+
+	// Director Positions routes
+	directorPositionHandler := http.NewDirectorPositionHandler(usecase.NewDirectorPositionUseCase())
+	protected.Get("/director-positions", directorPositionHandler.GetAllDirectorPositions)
+	protected.Post("/director-positions", directorPositionHandler.CreateDirectorPosition)
+	protected.Put("/director-positions/:id", directorPositionHandler.UpdateDirectorPosition)
+	protected.Delete("/director-positions/:id", directorPositionHandler.DeleteDirectorPosition)
+
+	// Route Notifications (dilindungi)
+	notificationHandler := http.NewNotificationHandler(usecase.NewNotificationUseCase())
+	protected.Get("/notifications", notificationHandler.GetNotifications)
+	protected.Get("/notifications/inbox", notificationHandler.GetNotificationsWithFilters)
+	protected.Get("/notifications/stream", notificationHandler.StreamNotifications)
+	protected.Get("/notifications/unread-count", notificationHandler.GetUnreadCount)
+	protected.Put("/notifications/:id/read", notificationHandler.MarkAsRead)
+	protected.Put("/notifications/read-all", notificationHandler.MarkAllAsRead)
+	protected.Delete("/notifications/delete-all", notificationHandler.DeleteAllNotifications)
+
 	// Route Upload (dilindungi)
 	protected.Post("/upload/logo", http.UploadLogo)
 
@@ -261,24 +288,38 @@ func main() {
 	protected.Get("/roles/:id", roleManagementHandler.GetRole)
 	protected.Put("/roles/:id", roleManagementHandler.UpdateRole)
 	protected.Delete("/roles/:id", roleManagementHandler.DeleteRole)
+	// Route Role Permissions (dilindungi)
+	protected.Get("/roles/:id/permissions", roleManagementHandler.GetRolePermissions)
+	protected.Post("/roles/:id/permissions", roleManagementHandler.AssignPermissionToRole)
+	protected.Delete("/roles/:id/permissions", roleManagementHandler.RevokePermissionFromRole)
 
 	// Route Report Management (dilindungi)
 	// Catatan: Route yang lebih spesifik harus didefinisikan sebelum route dengan parameter
 	reportHandler := http.NewReportHandler(usecase.NewReportUseCase())
-	protected.Post("/reports", reportHandler.CreateReport)
-	protected.Get("/reports", reportHandler.GetAllReports)
+	// Route spesifik harus didefinisikan sebelum route generic
 	protected.Get("/reports/template", reportHandler.DownloadTemplate)
 	protected.Post("/reports/validate", reportHandler.ValidateExcelFile)
 	protected.Post("/reports/upload", reportHandler.UploadReports)
 	protected.Get("/reports/export/excel", reportHandler.ExportReportsExcel)
 	protected.Get("/reports/export/pdf", reportHandler.ExportReportsPDF)
 	protected.Get("/reports/company/:company_id", reportHandler.GetReportsByCompany)
+	// Route generic setelah route spesifik
+	protected.Post("/reports", reportHandler.CreateReport)
+	protected.Get("/reports", reportHandler.GetAllReports)
 	protected.Get("/reports/:id", reportHandler.GetReport)
 	protected.Put("/reports/:id", reportHandler.UpdateReport)
 	protected.Delete("/reports/:id", reportHandler.DeleteReport)
-	protected.Get("/roles/:id/permissions", roleManagementHandler.GetRolePermissions)
-	protected.Post("/roles/:id/permissions", roleManagementHandler.AssignPermissionToRole)
-	protected.Delete("/roles/:id/permissions", roleManagementHandler.RevokePermissionFromRole)
+
+	// Financial Report routes (RKAP & Realisasi)
+	financialReportHandler := http.NewFinancialReportHandler(usecase.NewFinancialReportUseCase())
+	protected.Post("/financial-reports", financialReportHandler.CreateFinancialReport)
+	protected.Get("/financial-reports/company/:company_id", financialReportHandler.GetFinancialReportsByCompanyID)
+	protected.Get("/financial-reports/rkap-years/:company_id", financialReportHandler.GetRKAPYearsByCompanyID)
+	protected.Get("/financial-reports/compare", financialReportHandler.GetComparison)
+	protected.Get("/financial-reports/:id", financialReportHandler.GetFinancialReportByID)
+	protected.Put("/financial-reports/:id", financialReportHandler.UpdateFinancialReport)
+	protected.Delete("/financial-reports/:id", financialReportHandler.DeleteFinancialReport)
+	protected.Get("/companies/:company_id/performance/export/excel", financialReportHandler.ExportPerformanceExcel)
 
 	// Route Permission Management (dilindungi)
 	permissionManagementHandler := http.NewPermissionManagementHandler(usecase.NewPermissionManagementUseCase())
@@ -301,6 +342,10 @@ func main() {
 	protected.Post("/development/run-all-seeders", developmentHandler.RunAllSeeders)
 	protected.Post("/development/reset-all-seeded-data", developmentHandler.ResetAllSeededData)
 	protected.Get("/development/check-all-seeder-status", developmentHandler.CheckAllSeederStatus)
+	protected.Post("/development/create-test-notification", developmentHandler.CreateTestNotification)
+	protected.Post("/development/create-test-notifications", developmentHandler.CreateTestNotifications)
+	protected.Post("/development/check-expiring-documents", developmentHandler.CheckExpiringDocuments)
+	protected.Post("/development/create-notification-for-document", developmentHandler.CreateNotificationForDocument)
 
 	// Route SonarQube (hanya superadmin/admin)
 	// Feature flag: ENABLE_SONARQUBE_MONITOR (default: true untuk local, false untuk production/development server)

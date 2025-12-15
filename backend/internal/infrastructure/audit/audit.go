@@ -19,17 +19,18 @@ var auditLogger *repository.AuditLogger
 // Permanent resources - data ini disimpan permanent (tidak ada retention/deletion)
 // Note: Actual check dilakukan di repository untuk avoid import cycle
 var PermanentResources = []string{
-	ResourceReport,   // Report Management
-	ResourceDocument, // Document Management
-	ResourceCompany,  // Subsidiary
-	ResourceUser,     // User Management
+	ResourceReport,          // Report Management
+	ResourceFinancialReport, // Financial Report (RKAP & Realisasi)
+	ResourceDocument,        // Document Management
+	ResourceCompany,         // Subsidiary
+	ResourceUser,            // User Management
 }
 
 // InitAuditLogger menginisialisasi audit logger
 func InitAuditLogger() {
 	zapLog := logger.GetLogger()
 	auditLogger = repository.NewAuditLogger(database.GetDB())
-	
+
 	// Auto migrate tabel audit log (regular, dengan retention)
 	if err := database.GetDB().AutoMigrate(&domain.AuditLog{}); err != nil {
 		zapLog.Error("Error migrating audit log table", zap.Error(err))
@@ -84,34 +85,34 @@ func LogAction(userID, username, action, resource, resourceID, ipAddress, userAg
 // Constants untuk action types
 const (
 	// Authentication actions
-	ActionLogin        = "login"
-	ActionLogout       = "logout"
-	ActionRegister     = "register"
-	ActionFailedLogin  = "failed_login"
+	ActionLogin         = "login"
+	ActionLogout        = "logout"
+	ActionRegister      = "register"
+	ActionFailedLogin   = "failed_login"
 	ActionPasswordReset = "password_reset"
-	
+
 	// Generic CRUD actions (bisa digunakan untuk semua resource)
-	ActionCreate       = "create"
-	ActionUpdate       = "update"
-	ActionDelete       = "delete"
-	ActionView         = "view"
-	
+	ActionCreate = "create"
+	ActionUpdate = "update"
+	ActionDelete = "delete"
+	ActionView   = "view"
+
 	// User Management actions
-	ActionCreateUser   = "create_user"
-	ActionUpdateUser   = "update_user"
-	ActionDeleteUser   = "delete_user"
-	
+	ActionCreateUser = "create_user"
+	ActionUpdateUser = "update_user"
+	ActionDeleteUser = "delete_user"
+
 	// Company/Subsidiary actions
 	ActionCreateCompany = "create_company"
 	ActionUpdateCompany = "update_company"
 	ActionDeleteCompany = "delete_company"
-	
+
 	// Document actions
-	ActionCreateDoc    = "create_document"
-	ActionUpdateDoc    = "update_document"
-	ActionDeleteDoc    = "delete_document"
-	ActionViewDoc      = "view_document"
-	
+	ActionCreateDoc = "create_document"
+	ActionUpdateDoc = "update_document"
+	ActionDeleteDoc = "delete_document"
+	ActionViewDoc   = "view_document"
+
 	// File Management actions (untuk modul File Management)
 	ActionCreateFile   = "create_file"
 	ActionUpdateFile   = "update_file"
@@ -119,28 +120,34 @@ const (
 	ActionDownloadFile = "download_file"
 	ActionViewFile     = "view_file"
 	ActionUploadFile   = "upload_file"
-	
+
 	// Report Management actions (untuk modul Report Management)
 	ActionGenerateReport = "generate_report"
 	ActionViewReport     = "view_report"
 	ActionExportReport   = "export_report"
 	ActionDeleteReport   = "delete_report"
-	
+
 	// 2FA actions
-	ActionEnable2FA    = "enable_2fa"
-	ActionDisable2FA   = "disable_2fa"
+	ActionEnable2FA  = "enable_2fa"
+	ActionDisable2FA = "disable_2fa"
+
+	// Notification actions
+	ActionMarkNotificationRead     = "mark_notification_read"
+	ActionMarkAllNotificationsRead = "mark_all_notifications_read"
 )
 
 // Constants untuk resource types
 const (
-	ResourceUser       = "user"
-	ResourceDocument   = "document"
-	ResourceAuth       = "auth"
-	ResourceCompany    = "company"
-	ResourceRole       = "role"
-	ResourcePermission = "permission"
-	ResourceFile       = "file"       // Untuk modul File Management
-	ResourceReport     = "report"     // Untuk modul Report Management
+	ResourceUser            = "user"
+	ResourceDocument        = "document"
+	ResourceAuth            = "auth"
+	ResourceCompany         = "company"
+	ResourceRole            = "role"
+	ResourcePermission      = "permission"
+	ResourceFile            = "file"             // Untuk modul File Management
+	ResourceReport          = "report"           // Untuk modul Report Management
+	ResourceFinancialReport = "financial_report" // Untuk modul Financial Report (RKAP & Realisasi)
+	ResourceNotification    = "notification"     // Untuk modul Notification
 )
 
 // Constants untuk status
@@ -149,4 +156,3 @@ const (
 	StatusFailure = "failure"
 	StatusError   = "error"
 )
-

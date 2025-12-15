@@ -8,12 +8,23 @@ import DocumentSidebarActivityCard from '../components/DocumentSidebarActivityCa
 import documentsApi, { type DocumentFolder, type DocumentItem, type DocumentFolderStat } from '../api/documents'
 import { auditApi, type UserActivityLog } from '../api/audit'
 import { userApi, type User } from '../api/userManagement'
+import { useAuthStore } from '../stores/auth'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 
 dayjs.extend(relativeTime)
 
 const router = useRouter()
+const authStore = useAuthStore()
+
+// Check user role
+const userRole = computed(() => {
+  return authStore.user?.role?.toLowerCase() || ''
+})
+
+const isSuperAdminOrAdministrator = computed(() => {
+  return userRole.value === 'superadmin' || userRole.value === 'administrator'
+})
 
 const folders = ref<DocumentFolder[]>([])
 const pagedFiles = ref<DocumentItem[]>([])
@@ -35,8 +46,8 @@ const tableLoading = ref(false)
 const pageLoading = ref(true) // Initial page load
 const tablePage = ref(1)
 const tablePageSize = ref(5)
-const currentSortBy = ref<string>('created_at')
-const currentSortDir = ref<string>('desc')
+const currentSortBy = ref<string>('updated_at') // Sort by updated_at for recently files
+const currentSortDir = ref<string>('desc') // Descending: newest first
 const currentTypeFilter = ref<string>('')
 const folderStatsMap = ref<Record<string, { count: number; size: number }>>({})
 const totalStorageSize = ref(0)
@@ -50,6 +61,7 @@ const activityLoading = ref(false)
 // View and filter
 const viewMode = ref('grid')
 const timeFilter = ref('last-month')
+const foldersExpanded = ref(false)
 
 // Computed
 const selectedFolder = computed(() => {
@@ -170,7 +182,15 @@ const loadDocuments = async (opts: { page?: number; pageSize?: number; search?: 
       sort_dir: sortDir,
       type,
     })
-    pagedFiles.value = res.data
+    
+    // Sort by updated_at DESC (newest first) as fallback to ensure correct order
+    const sortedData = [...res.data].sort((a, b) => {
+      const dateA = new Date(a.updated_at || a.created_at || 0).getTime()
+      const dateB = new Date(b.updated_at || b.created_at || 0).getTime()
+      return dateB - dateA // Descending: newest first
+    })
+    
+    pagedFiles.value = sortedData
     totalDocuments.value = res.total
     tablePage.value = res.page
     tablePageSize.value = res.page_size
@@ -418,12 +438,12 @@ const formatTime = (timestamp: string): string => {
 
 // Get user avatar color (dummy - untuk styling)
 const getUserAvatarColor = (username: string): string => {
-  const colors: string[] = ['#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#eb2f96']
-  if (!username || username.length === 0) return colors[0] || '#1890ff'
+  const colors: string[] = ['#82a2bf', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#eb2f96']
+  if (!username || username.length === 0) return colors[0] || '#82a2bf'
   const firstChar = username.charAt(0)
-  if (!firstChar) return colors[0] || '#1890ff'
+  if (!firstChar) return colors[0] || '#82a2bf'
   const index = firstChar.charCodeAt(0) % colors.length
-  return colors[index] || colors[0] || '#1890ff'
+  return colors[index] || colors[0] || '#82a2bf'
 }
 
 const legendColorClass = (type: string, idx: number) => {
@@ -436,9 +456,30 @@ const legendColorClass = (type: string, idx: number) => {
 }
 
 // Folder helpers
+// Check if folder has subfolders
+const hasSubfolders = (folderId: string): boolean => {
+  return folders.value.some(f => f.parent_id === folderId)
+}
+
+// Recursively get all child folder IDs including the folder itself
+const getAllChildFolderIds = (folderId: string): string[] => {
+  const result: string[] = [folderId]
+  const children = folders.value.filter(f => f.parent_id === folderId)
+  for (const child of children) {
+    result.push(...getAllChildFolderIds(child.id))
+  }
+  return result
+}
+
+// Recursive count: includes files from all subfolders
 const getFolderFileCount = (folderId: string): number => {
-  const key = folderId || 'unassigned'
-  return folderStatsMap.value[key]?.count || 0
+  const allFolderIds = getAllChildFolderIds(folderId)
+  let totalCount = 0
+  for (const id of allFolderIds) {
+    const key = id || 'unassigned'
+    totalCount += folderStatsMap.value[key]?.count || 0
+  }
+  return totalCount
 }
 
 const formatBytes = (bytes: number): string => {
@@ -452,9 +493,14 @@ const formatBytes = (bytes: number): string => {
   return `${gb.toFixed(1)}GB`
 }
 
+// Recursive size: includes files from all subfolders
 const getFolderSize = (folderId: string): string => {
-  const key = folderId || 'unassigned'
-  const totalSize = folderStatsMap.value[key]?.size || 0
+  const allFolderIds = getAllChildFolderIds(folderId)
+  let totalSize = 0
+  for (const id of allFolderIds) {
+    const key = id || 'unassigned'
+    totalSize += folderStatsMap.value[key]?.size || 0
+  }
   return formatBytes(totalSize)
 }
 
@@ -521,7 +567,11 @@ const storageBreakdown = computed(() => {
 const filteredFolders = computed(() => {
   const keyword = folderSearch.value.trim().toLowerCase()
   const now = dayjs()
+  // Filter: hanya tampilkan root folders (yang tidak punya parent_id)
   return folders.value.filter(folder => {
+    // Only show root folders (no parent_id)
+    if (folder.parent_id) return false
+    
     const matchSearch =
       !keyword ||
       folder.name?.toLowerCase().includes(keyword) ||
@@ -583,12 +633,16 @@ const formatDateTime = (dateString: string | undefined): string => {
   return `${year}-${month}-${day} : ${hours}:${minutes}`
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// Helper function to get metadata from document
+const getMeta = (record: DocumentItem): Record<string, unknown> => {
+  return (record.metadata as Record<string, unknown> | undefined) || {}
+}
+
+// Check if document has complete metadata (same validation as DocumentFolderDetailView)
 const hasCompleteMetadata = (file: DocumentItem): boolean => {
-  // Dummy - check if file has complete metadata
-  // For now, return false for all files to show "Lengkapi Meta Data" button
-  // TODO: Implement actual metadata check using file parameter
-  return false
+  const meta = getMeta(file)
+  const required = ['doc_type', 'reference', 'issued_date', 'effective_date', 'expired_date', 'is_active']
+  return required.every((key) => Boolean(meta[key]))
 }
 
 const tableColumns = [
@@ -747,33 +801,46 @@ onMounted(async () => {
         </a-col>
 
         <a-col :xs="24" :lg="15" :xl="15" class="center-column1">
-          <a-card class="folders-card all-folders" :bordered="false">
-            <div class="folders-header">
-              <div class="title">Folders</div>
-              <div class="folders-actions">
-                <a-input
-                  v-model:value="folderSearch"
-                  placeholder="Search"
-                  allow-clear
-                  class="search-input"
-                  size="small"
-                  style="width: 150px; margin-right: 8px;"
-                >
-                  <template #prefix>
-                    <IconifyIcon icon="mdi:magnify" width="16" />
-                  </template>
-                </a-input>
-                <a-select v-model:value="viewMode" style="width: 120px; margin-right: 8px;" size="small">
-                  <a-select-option value="grid">View</a-select-option>
-                  <a-select-option value="list">List</a-select-option>
-                </a-select>
-                <a-select v-model:value="timeFilter" style="width: 120px;" size="small">
-                  <a-select-option value="all">All Time</a-select-option>
-                  <a-select-option value="last-month">Last Month</a-select-option>
-                  <a-select-option value="last-week">Last Week</a-select-option>
-                </a-select>
-            </div>
-            </div>
+          <a-card class="folders-card all-folders" :class="{ 'folders-expanded': foldersExpanded }" :bordered="false">
+            <div class="folders-scroll-container">
+              <div class="folders-header">
+                <div class="title">Folders</div>
+                <div class="folders-actions">
+                  <a-input
+                    v-model:value="folderSearch"
+                    placeholder="Search"
+                    allow-clear
+                    class="search-input"
+                    size="small"
+                    style="width: 150px; margin-right: 8px;"
+                  >
+                    <template #prefix>
+                      <IconifyIcon icon="mdi:magnify" width="16" />
+                    </template>
+                  </a-input>
+                  <a-select v-model:value="viewMode" style="width: 120px; margin-right: 8px;" size="small">
+                    <a-select-option value="grid">View</a-select-option>
+                    <a-select-option value="list">List</a-select-option>
+                  </a-select>
+                  <a-select v-model:value="timeFilter" style="width: 120px; margin-right: 8px;" size="small">
+                    <a-select-option value="all">All Time</a-select-option>
+                    <a-select-option value="last-month">Last Month</a-select-option>
+                    <a-select-option value="last-week">Last Week</a-select-option>
+                  </a-select>
+                  <a-button 
+                    type="text" 
+                    size="small" 
+                    @click="foldersExpanded = !foldersExpanded"
+                    style="padding: 4px 8px; display: inline-flex; align-items: center; justify-content: center; min-width: 32px;"
+                    :title="foldersExpanded ? 'Collapse' : 'Expand'"
+                  >
+                    <template #icon>
+                      <IconifyIcon icon="material-symbols:expand-content-rounded" width="20" />
+                    </template>
+                  </a-button>
+                </div>
+              </div>
+              <div class="folders-content" :class="{ 'expanded': foldersExpanded }">
             <div v-if="pageLoading || loading" class="folders-skeleton">
               <a-skeleton active :paragraph="{ rows: 0 }" :title="{ width: '100%' }" />
               <div class="folders-row-skeleton">
@@ -811,14 +878,18 @@ onMounted(async () => {
                     >
                       <div class="folder-card-header">
                         <div class="folder-icon">
-                          <IconifyIcon icon="mdi:folder" width="50" color="#E7EAE9" />
+                          <IconifyIcon 
+                            :icon="hasSubfolders(folder.id) ? 'ph:folders-fill' : 'mdi:folder'" 
+                            width="50" 
+                            :color="hasSubfolders(folder.id) ? '#82a2bf' : '#E7EAE9'" 
+                          />
                         </div>
                         <a-dropdown :trigger="['click']">
                           <IconifyIcon icon="mdi:dots-vertical" width="20" class="folder-menu-icon" @click.stop />
                           <template #overlay>
                             <a-menu>
                               <a-menu-item key="rename" @click="openRenameModal(folder)">Rename</a-menu-item>
-                              <a-menu-item key="delete" @click="handleDeleteFolder(folder)">Delete</a-menu-item>
+                              <a-menu-item v-if="isSuperAdminOrAdministrator" key="delete" @click="handleDeleteFolder(folder)">Delete</a-menu-item>
                             </a-menu>
                           </template>
                         </a-dropdown>
@@ -846,7 +917,14 @@ onMounted(async () => {
                 >
                   <a-table-column title="Name" key="name">
                     <template #default="{ record }">
-                      <a @click.prevent="selectFolder(record.id)">{{ record.name }}</a>
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <IconifyIcon 
+                          :icon="hasSubfolders(record.id) ? 'ph:folders-fill' : 'mdi:folder'" 
+                          width="20" 
+                          :color="hasSubfolders(record.id) ? '#82a2bf' : '#E7EAE9'" 
+                        />
+                        <a @click.prevent="selectFolder(record.id)">{{ record.name }}</a>
+                      </div>
                     </template>
                   </a-table-column>
                   <a-table-column title="Files" key="files">
@@ -867,13 +945,17 @@ onMounted(async () => {
                   <a-table-column title="Actions" key="actions">
                     <template #default="{ record }">
                       <a @click.stop="openRenameModal(record)">Rename</a>
-                      <a-divider type="vertical" />
-                      <a @click.stop="handleDeleteFolder(record)">Delete</a>
+                      <template v-if="isSuperAdminOrAdministrator">
+                        <a-divider type="vertical" />
+                        <a @click.stop="handleDeleteFolder(record)">Delete</a>
+                      </template>
                     </template>
                   </a-table-column>
                 </a-table>
               </div>
             </transition>
+              </div>
+            </div>
           </a-card>
 
           <a-card class="table-card" :bordered="false">
@@ -1132,13 +1214,6 @@ onMounted(async () => {
   border-color: #d8342c;
 }
 
-.search-card {
-  // background: #fff;
-  // border-radius: 12px;
-  // padding: 16px;
-  // box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-
 .search-header {
   display: flex;
   justify-content: space-between;
@@ -1212,9 +1287,52 @@ onMounted(async () => {
 .all-folders{
   // background-color: orange;
   max-height: 425px;
-  overflow: auto;
-  &::-webkit-scrollbar {
-    display: none;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  
+  &.folders-expanded {
+    max-height: 100vh;
+    height: 100vh;
+  }
+  
+  :deep(.ant-card-body) {
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+  }
+  
+  .folders-scroll-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+    
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+  
+  .folders-content {
+    flex: 1;
+    min-height: 0;
+    padding-top: 0;
+  }
+  
+  // Untuk collapsed state
+  &:not(.folders-expanded) .folders-scroll-container {
+    max-height: 425px;
+  }
+  
+  // Untuk expanded state
+  &.folders-expanded .folders-scroll-container {
+    max-height: 100vh;
   }
 }
 
@@ -1530,6 +1648,13 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 10;
+  padding: 0 0 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
 }
 
 .folders-actions {
@@ -1670,10 +1795,6 @@ onMounted(async () => {
   }
 }
 
-.detail-card {
-  // margin-bottom: 16px;
-}
-
 .detail-icon {
   text-align: center;
   // margin-bottom: 16px;
@@ -1803,7 +1924,7 @@ onMounted(async () => {
 }
 
 .dot.red { background: #ff4d4f; }
-.dot.blue { background: #1890ff; }
+.dot.blue { background: #82a2bf; }
 .dot.orange { background: #faad14; }
 
 

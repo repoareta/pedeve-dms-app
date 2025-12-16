@@ -2487,7 +2487,7 @@ onMounted(async () => {
   border-bottom: 1px solid #e8e8e8; */
   /* padding: 24px; */
   /* margin-bottom: 0; */
-  max-width: 1200px;
+  /* max-width: 1200px; */
 }
 
 .page-header {
@@ -2519,7 +2519,7 @@ onMounted(async () => {
 } */
 
 .form-content {
-  max-width: 1200px;
+  width: 80vw;
   margin: 0 auto;
   padding: 24px;
 }
@@ -2650,6 +2650,7 @@ onMounted(async () => {
 
 @media (max-width: 768px) {
   .form-content {
+    width: 100%;
     padding: 16px;
   }
   

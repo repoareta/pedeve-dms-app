@@ -734,18 +734,19 @@ onBeforeUnmount(() => {
                 <label>Judul Dokumen</label>
                 <div class="metadata-value">{{ metadata.document_title || document.name || '-' }}</div>
               </div> -->
-              <div class="metadata-field">
+              <!-- <div class="metadata-field">
                 <label>Document ID</label>
                 <div class="metadata-value">{{ metadata.document_id || document.id || '-' }}</div>
+              </div> -->
+              <div class="metadata-field">
+                <label>Nomor Dokumen / Referensi</label>
+                <div class="metadata-value">{{ getReference() }}</div>
               </div>
               <div class="metadata-field">
                 <label>Jenis Dokumen</label>
                 <div class="metadata-value">{{ getDocType() }}</div>
               </div>
-              <div class="metadata-field">
-                <label>Nomor Dokumen / Referensi</label>
-                <div class="metadata-value">{{ getReference() }}</div>
-              </div>
+              
               <!-- <div class="metadata-field">
                 <label>Unit / Divisi</label>
                 <div class="metadata-value">{{ getUnit() }}</div>
@@ -760,6 +761,7 @@ onBeforeUnmount(() => {
                   <a-select
                     v-model:value="documentStatus"
                     :loading="updatingStatus"
+                    size="small"
                     style="width: 100%;"
                     @change="handleStatusChange"
                   >

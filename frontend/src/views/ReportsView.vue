@@ -12,7 +12,7 @@
               Manage all reports and financial data.
             </p>
           </div>
-          <div class="header-right">
+          <!-- <div class="header-right">
             <a-button type="default" class="upload-btn" @click="handleUploadReport">
               <IconifyIcon icon="mdi:file-excel" width="16" style="margin-right: 8px;" />
               Upload Report
@@ -21,7 +21,7 @@
               <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
               Add report
             </a-button>
-          </div>
+          </div> -->
         </div>
       </div>
 
@@ -41,9 +41,15 @@
                 <IconifyIcon icon="mdi:magnify" width="16" />
               </template>
             </a-input>
-            <a-space>
-              <span style="color: #666;">Tahun: {{ currentYear }}</span>
-            </a-space>
+            <a-select
+              v-model:value="currentYear"
+              style="width: 120px;"
+              @change="handleYearChange"
+            >
+              <a-select-option v-for="year in availableYears" :key="year" :value="year">
+                {{ year }}
+              </a-select-option>
+            </a-select>
           </div>
 
           <a-table :columns="columns" :data-source="filteredSubsidiaries" :pagination="{
@@ -251,7 +257,17 @@ interface SubsidiaryReportStatus {
 }
 
 const subsidiariesWithStatus = ref<SubsidiaryReportStatus[]>([])
-const currentYear = new Date().getFullYear().toString()
+const currentYear = ref<string>(new Date().getFullYear().toString())
+
+// Available years (current year and 5 years before)
+const availableYears = computed(() => {
+  const current = new Date().getFullYear()
+  const years: string[] = []
+  for (let i = 0; i <= 5; i++) {
+    years.push((current - i).toString())
+  }
+  return years
+})
 
 // Filters
 const filterCompanyIds = ref<string[]>([])
@@ -413,6 +429,8 @@ const loadCompanies = async () => {
 // Load subsidiaries with monthly report status
 const loadSubsidiariesWithStatus = async () => {
   loading.value = true
+  // Clear existing data first to ensure fresh data
+  subsidiariesWithStatus.value = []
   try {
     // Get all active companies
     const allCompanies = await companyApi.getAll()
@@ -426,17 +444,19 @@ const loadSubsidiariesWithStatus = async () => {
           const reports = await financialReportsApi.getByCompanyId(company.id)
           
           // Filter only realisasi reports (not RKAP) for current year
+          // Use currentYear.value to ensure reactive value is used
+          const selectedYear = currentYear.value
           const yearReports = reports.filter(r => 
             !r.is_rkap && 
-            r.year === currentYear &&
+            r.year === selectedYear &&
             r.period && 
-            r.period.startsWith(currentYear)
+            r.period.startsWith(selectedYear)
           )
           
-          // Build monthly status map (1-12)
+          // Build monthly status map (1-12) using selectedYear
           const monthlyStatus: Record<number, boolean> = {}
           for (let month = 1; month <= 12; month++) {
-            const period = `${currentYear}-${month.toString().padStart(2, '0')}`
+            const period = `${selectedYear}-${month.toString().padStart(2, '0')}`
             monthlyStatus[month] = yearReports.some(r => r.period === period)
           }
           
@@ -609,6 +629,16 @@ const filteredSubsidiaries = computed(() => {
   return filtered
 })
 
+// Handle year change
+const handleYearChange = (value: string) => {
+  // Update currentYear value
+  currentYear.value = value
+  // Reset page to 1 when year changes
+  currentPage.value = 1
+  // Reload data with new year (no need to await, let it run in background)
+  loadSubsidiariesWithStatus()
+}
+
 // Table columns with filters and sorters
 // Month names for column headers
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -709,10 +739,7 @@ const previewColumns = [
   { title: 'Status', key: 'status', width: 80 },
 ]
 
-const handleUploadReport = () => {
-  uploadModalVisible.value = true
-  clearFile()
-}
+// handleUploadReport removed - not used (replaced by FinancialReportBulkUpload component)
 
 const triggerFileSelect = () => {
   fileInputRef.value?.click()
@@ -821,9 +848,7 @@ const closeUploadModal = () => {
   uploading.value = false
 }
 
-const handleAddReport = () => {
-  router.push('/reports/new')
-}
+// handleAddReport removed - not used in new table structure
 
 const handleBulkUploadSuccess = () => {
   message.success('Bulk upload berhasil! Data akan diperbarui.')

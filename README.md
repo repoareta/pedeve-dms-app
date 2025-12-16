@@ -1,21 +1,24 @@
-# Pedeve DMS App - Document Management System
+# Pedeve DMS App
 
-Aplikasi Document Management System untuk manajemen dokumen dan perusahaan dengan hierarki multi-level.
+Document Management System untuk manajemen dokumen dan perusahaan dengan hierarki multi-level.
 
-## Quick Start
+## Deskripsi
+
+Pedeve DMS App adalah aplikasi manajemen dokumen yang dirancang untuk mengelola dokumen dan data perusahaan dalam struktur hierarki multi-level. Aplikasi ini menyediakan fitur lengkap untuk manajemen perusahaan, dokumen, laporan keuangan, pengguna, dan sistem notifikasi.
+
+## Persyaratan Sistem
 
 ### Prerequisites
 - Docker & Docker Compose
 - Node.js 20+ (untuk development frontend)
 - Go 1.25+ (untuk development backend)
 
-### Development Setup
+## Pengaturan Development
 
-#### Satu Perintah untuk Semua
+### Menggunakan Docker Compose (Recommended)
 
 **Dengan SQLite (Default):**
 ```bash
-# Cara termudah - run semua service dengan hot reload
 make dev
 
 # Atau menggunakan script
@@ -27,26 +30,24 @@ docker-compose -f docker-compose.dev.yml up --build
 
 **Dengan PostgreSQL:**
 ```bash
-# Gunakan file docker-compose khusus PostgreSQL
 docker-compose -f docker-compose.postgres.yml up --build
 
 # Atau set DATABASE_URL di docker-compose.dev.yml
-# PostgreSQL sudah dikonfigurasi di docker-compose.dev.yml
 ```
 
 **Hot Reload:**
 - Backend: Auto-reload saat file `.go` berubah (menggunakan Air)
 - Frontend: Auto-reload saat file Vue/TS berubah (Vite HMR)
-- Tidak perlu down/up manual - cukup save file dan refresh browser!
+- Tidak perlu down/up manual - cukup save file dan refresh browser
 
 **Akses:**
-- Frontend: http://localhost:5173 (dev) atau http://localhost:3000 (prod)
+- Frontend: http://localhost:5173 (development) atau http://localhost:3000 (production)
 - Backend API: http://localhost:8080
-- **Swagger UI**: http://localhost:8080/swagger/index.html
+- Swagger UI: http://localhost:8080/swagger/index.html
 - Health Check: http://localhost:8080/health
 - API Base: http://localhost:8080/api/v1
 
-#### Option 2: Local Development (Lebih cepat untuk development)
+### Development Lokal (tanpa Docker)
 
 **Backend:**
 ```bash
@@ -62,7 +63,7 @@ npm install
 npm run dev
 ```
 
-## Project Structure
+## Struktur Projek
 
 ```
 pedeve-dms-app/
@@ -96,9 +97,9 @@ pedeve-dms-app/
 └── docker-compose.dev.yml     # Local development setup
 ```
 
-## Development Commands
+## Perintah Development
 
-### Quick Commands (Makefile)
+### Perintah Cepat (Makefile)
 
 ```bash
 make dev           # Start all services dengan hot reload
@@ -114,7 +115,7 @@ make rebuild       # Rebuild and restart
 make help          # Show all commands
 ```
 
-### Manual Commands
+### Perintah Manual
 
 **Backend:**
 ```bash
@@ -136,49 +137,22 @@ npm run lint            # Lint code
 npm run test:unit       # Run unit tests dengan Vitest
 ```
 
-## Docker Commands
-
-```bash
-# Development (dengan hot reload)
-make dev                    # Start dengan hot reload
-docker-compose -f docker-compose.dev.yml up --build
-
-# Production
-docker-compose up --build
-
-# Background
-make up                     # Start in background
-docker-compose -f docker-compose.dev.yml up -d
-
-# Stop
-make down                   # Stop services
-docker-compose -f docker-compose.dev.yml down
-
-# Logs
-make logs                   # View all logs
-make logs-backend           # Backend only
-make logs-frontend          # Frontend only
-docker-compose -f docker-compose.dev.yml logs -f
-
-# Status
-make status                 # Check status
-docker-compose -f docker-compose.dev.yml ps
-```
-
 ## Testing
 
-**Frontend (Vitest):**
+### Frontend (Vitest)
+
 ```bash
 cd frontend
 npm run test:unit        # Run unit tests
 ```
 
-- Framework: Vitest (Vite-native test runner)
-- Environment: jsdom (browser-like environment)
-- Test Utils: Vue Test Utils
-- Coverage: Integrated dengan Vitest
+Framework: Vitest (Vite-native test runner)
+Environment: jsdom (browser-like environment)
+Test Utils: Vue Test Utils
+Coverage: Integrated dengan Vitest
 
-**Backend (Go Test):**
+### Backend (Go Test)
+
 ```bash
 cd backend
 go test ./...            # Run all tests
@@ -186,9 +160,9 @@ go test ./... -v         # Verbose output
 go test ./... -cover      # With coverage report
 ```
 
-- Framework: Go built-in testing
-- Coverage: Integrated dengan `go tool cover`
-- CI/CD: Otomatis dijalankan di GitHub Actions
+Framework: Go built-in testing
+Coverage: Integrated dengan `go tool cover`
+CI/CD: Otomatis dijalankan di GitHub Actions
 
 ## CI/CD & Deployment
 
@@ -231,19 +205,16 @@ Setelah deployment selesai, server langsung bisa diakses tanpa perlu menjalankan
 - Health check otomatis setelah deployment
 - Retry mechanism jika service belum ready
 
-**Script Features:**
-- Idempotent: Semua scripts aman dipanggil berkali-kali
-- Smart Detection: Otomatis detect kondisi existing (certificate, config, services)
-- Error Handling: Graceful error handling dengan informative messages
-- Config Preservation: SSL certificates dan config yang sudah benar tidak di-overwrite
-
 **Deployment Flow:**
-```
-1. Build & Test → 2. Deploy Files/Images → 3. Setup SSL (if needed) 
-→ 4. Setup Nginx → 5. Ensure Services Running → 6. Health Check → Ready!
-```
+1. Build & Test
+2. Deploy Files/Images
+3. Setup SSL (if needed)
+4. Setup Nginx
+5. Ensure Services Running
+6. Health Check
+7. Ready
 
-## Release Process
+### Release Process
 
 ```bash
 # 1. Buat tag versi
@@ -257,10 +228,11 @@ git push origin v1.0.0
 #    - Push images ke registry
 ```
 
-## API Documentation
+## Dokumentasi API
 
 ### Swagger UI
-Akses dokumentasi API lengkap di: **http://localhost:8080/swagger/index.html**
+
+Akses dokumentasi API lengkap di: http://localhost:8080/swagger/index.html
 
 Swagger UI menyediakan:
 - Dokumentasi semua endpoint
@@ -293,15 +265,18 @@ Swagger UI menyediakan:
 - `POST /api/v1/users/{id}/assign-company` - Assign user to company
 - `POST /api/v1/users/{id}/unassign-company` - Unassign user from company
 
-**Development (Superadmin Only):**
-- `POST /api/v1/development/reset-subsidiary` - Reset subsidiary data
-- `POST /api/v1/development/run-subsidiary-seeder` - Run company seeder
-- `GET /api/v1/development/check-seeder-status` - Check seeder status
-
-**Audit Logs:**
-- `GET /api/v1/audit-logs` - Get audit logs (dengan retention policy: 90 hari user actions, 30 hari technical errors)
-- `GET /api/v1/audit-logs/stats` - Get audit log statistics
-- `GET /api/v1/user-activity-logs` - Get user activity logs (permanent storage untuk data penting: report, document, company, user)
+**Financial Reports:**
+- `GET /api/v1/financial-reports` - Get all financial reports
+- `GET /api/v1/financial-reports/{id}` - Get financial report by ID
+- `POST /api/v1/financial-reports` - Create financial report
+- `PUT /api/v1/financial-reports/{id}` - Update financial report
+- `DELETE /api/v1/financial-reports/{id}` - Delete financial report
+- `GET /api/v1/financial-reports/company/{company_id}` - Get all financial reports for a company
+- `GET /api/v1/financial-reports/bulk-upload/template` - Download bulk upload template Excel
+- `POST /api/v1/financial-reports/bulk-upload/validate` - Validate bulk upload Excel file
+- `POST /api/v1/financial-reports/bulk-upload` - Upload bulk financial reports (upsert)
+- `GET /api/v1/financial-reports/compare` - Get comparison RKAP vs Realisasi YTD
+- `GET /api/v1/financial-reports/rkap-years/{company_id}` - Get RKAP years for a company
 
 **Documents:**
 - `GET /api/v1/documents` - Get all documents
@@ -314,7 +289,25 @@ Swagger UI menyediakan:
 - `POST /api/v1/upload/logo` - Upload company logo
 - `GET /api/v1/files/*` - Serve files (proxy dari GCP Storage atau local)
 
+**Audit Logs:**
+- `GET /api/v1/audit-logs` - Get audit logs (dengan retention policy: 90 hari user actions, 30 hari technical errors)
+- `GET /api/v1/audit-logs/stats` - Get audit log statistics
+- `GET /api/v1/user-activity-logs` - Get user activity logs (permanent storage untuk data penting: report, document, company, user)
 
+**Notifications:**
+- `GET /api/v1/notifications` - Get all notifications
+- `GET /api/v1/notifications/unread-count` - Get unread notification count
+- `PUT /api/v1/notifications/{id}/read` - Mark notification as read
+- `PUT /api/v1/notifications/read-all` - Mark all notifications as read
+
+**Development (Superadmin Only):**
+- `POST /api/v1/development/reset-subsidiary` - Reset subsidiary data
+- `POST /api/v1/development/reset-all-financial-reports` - Reset all financial reports
+- `POST /api/v1/development/run-subsidiary-seeder` - Run company seeder
+- `GET /api/v1/development/check-seeder-status` - Check seeder status
+- `POST /api/v1/development/check-expiring-documents` - Manual trigger check expiring documents
+- `POST /api/v1/development/check-expiring-director-terms` - Manual trigger check expiring director terms
+- `POST /api/v1/development/check-all-expiring-notifications` - Manual trigger check all expiring notifications
 
 ## Troubleshooting
 
@@ -358,56 +351,63 @@ docker-compose -f docker-compose.dev.yml up --build
 ## Tech Stack
 
 ### Frontend
-- **Framework**: Vue 3 (Composition API)
-- **Language**: TypeScript
-- **Build Tool**: Vite 7
-- **State Management**: Pinia
-- **Routing**: Vue Router 4
-- **UI Library**: Ant Design Vue 4
-- **HTTP Client**: Axios
-- **Charts**: Chart.js + Vue-ChartJS
-- **Icons**: Iconify Vue
-- **Date**: Day.js
-- **Testing**: Vitest + Vue Test Utils
+- Framework: Vue 3 (Composition API)
+- Language: TypeScript
+- Build Tool: Vite 7
+- State Management: Pinia
+- Routing: Vue Router 4
+- UI Library: Ant Design Vue 4
+- HTTP Client: Axios
+- Charts: Chart.js + Vue-ChartJS
+- Icons: Iconify Vue
+- Date: Day.js
+- Testing: Vitest + Vue Test Utils
+- Logging: Custom logger utility (production-safe, hanya debug/info muncul di development)
 
 ### Backend
-- **Language**: Go 1.25
-- **Web Framework**: Fiber v2 (fasthttp-based, high performance)
-- **Architecture**: Clean Architecture (Domain, Infrastructure, Delivery, Usecase, Repository)
-- **ORM**: GORM
-- **Database**: PostgreSQL (production) / SQLite (development)
-- **Authentication**: JWT (golang-jwt/jwt/v5) dengan httpOnly cookies
-- **2FA**: TOTP (pquerna/otp)
-- **Password**: bcrypt (golang.org/x/crypto)
-- **Logging**: Zap (go.uber.org/zap)
-- **Validation**: go-playground/validator
-- **Storage**: Google Cloud Storage / Local filesystem
-- **Secrets**: GCP Secret Manager / HashiCorp Vault
-- **API Docs**: Swagger/OpenAPI (swaggo/swag)
+- Language: Go 1.25
+- Web Framework: Fiber v2 (fasthttp-based, high performance)
+- Architecture: Clean Architecture (Domain, Infrastructure, Delivery, Usecase, Repository)
+- ORM: GORM
+- Database: PostgreSQL (production) / SQLite (development)
+- Authentication: JWT (golang-jwt/jwt/v5) dengan httpOnly cookies
+- 2FA: TOTP (pquerna/otp)
+- Password: bcrypt (golang.org/x/crypto)
+- Logging: Zap (go.uber.org/zap)
+- Validation: go-playground/validator
+- Storage: Google Cloud Storage / Local filesystem
+- Secrets: GCP Secret Manager / HashiCorp Vault
+- API Docs: Swagger/OpenAPI (swaggo/swag)
+- Excel Processing: Excelize
 
 ### Security Features
 - CSRF Protection: Double-submit cookie pattern
 - Rate Limiting: 100 req/s (general), 5 req/min (auth endpoints)
 - Security Headers: X-Content-Type-Options, X-XSS-Protection, CSP, HSTS
 - 2FA Support: TOTP-based dengan backup codes
-- Audit Logging: 
+- Transparent Data Encryption (TDE):
+  - SQLite: SQLCipher untuk encryption at rest (development)
+  - PostgreSQL: Automatic encryption at rest (GCP Cloud SQL) atau filesystem encryption (self-hosted)
+  - Key management via GCP Secret Manager / HashiCorp Vault / Environment variables
+- Audit Logging:
   - Comprehensive audit logging untuk semua aksi user dan error teknis
   - Retention policy: 90 hari untuk user actions, 30 hari untuk technical errors
   - Permanent Audit Log: Data penting (Report, Document, Company, User Management) disimpan permanen tanpa retention policy untuk compliance
 - JWT Security: httpOnly cookies untuk mencegah XSS
 - Input Validation: Comprehensive validation dengan sanitization
 - Password Security: bcrypt hashing
+- Production-Safe Logging: Frontend menggunakan logger utility yang hanya menampilkan debug/info di development, error/warn tetap muncul di production
 
 ### Infrastructure
-- **Container**: Docker, Docker Compose
-- **CI/CD**: GitHub Actions dengan automated testing
-- **Deployment**: Google Cloud Platform (GCP) dengan automated SSL & Nginx setup
-- **Web Server**: Nginx dengan automatic HTTPS/HTTP configuration
-- **SSL**: Let's Encrypt dengan automatic certificate management
-- **Storage**: Google Cloud Storage
-- **Secrets**: GCP Secret Manager
-- **Security Scan**: Trivy Scanner
-- **API Docs**: Swagger UI dengan auto-reload
+- Container: Docker, Docker Compose
+- CI/CD: GitHub Actions dengan automated testing
+- Deployment: Google Cloud Platform (GCP) dengan automated SSL & Nginx setup
+- Web Server: Nginx dengan automatic HTTPS/HTTP configuration
+- SSL: Let's Encrypt dengan automatic certificate management
+- Storage: Google Cloud Storage
+- Secrets: GCP Secret Manager
+- Security Scan: Trivy Scanner
+- API Docs: Swagger UI dengan auto-reload
 
 ## Fitur Utama
 
@@ -433,10 +433,40 @@ docker-compose -f docker-compose.dev.yml up --build
 - Password reset functionality
 - Standby users (tanpa company/role assignment)
 
+### Document Management
+- Document CRUD operations
+- Document categorization dengan folder structure
+- File upload dan storage (GCP Storage / Local)
+- Document expiry tracking
+- Document status management
+
+### Financial Reports Management
+- Financial report CRUD operations
+- Support untuk RKAP (Rencana Kerja dan Anggaran Perusahaan) dan Realisasi
+- Bulk upload financial reports via Excel
+- Template Excel generation untuk bulk upload
+- Excel validation sebelum upload
+- Upsert mechanism (update if exists, insert if new)
+- Comparison RKAP vs Realisasi YTD
+- Monthly report status tracking per subsidiary
+- Financial ratios calculation dan validation
+
+### Notification System
+- In-app notifications untuk berbagai events
+- Document expiry notifications (grouped by folder)
+- Director term expiry notifications
+- Dynamic notification messages berdasarkan waktu real-time
+- Unread notification count
+- Mark as read functionality
+- Automated scheduler untuk check expiring items (every 24 hours)
+- Configurable threshold days via environment variable
+
 ### Development Tools
 - Reset subsidiary data (superadmin only)
+- Reset all financial reports (superadmin only)
 - Run company seeder via UI (superadmin only)
 - Seeder status check
+- Manual notification trigger untuk testing (superadmin/administrator only)
 
 ### Security & Monitoring
 - Comprehensive audit logging dengan retention policy
@@ -451,8 +481,8 @@ docker-compose -f docker-compose.dev.yml up --build
 
 1. Buat branch dari `development` (untuk fitur baru) atau `main` (untuk hotfix)
 2. Develop fitur dengan mengikuti Clean Architecture pattern
-3. **Write tests**: Frontend (Vitest) dan Backend (Go test)
-4. **Test & lint**: 
+3. Write tests: Frontend (Vitest) dan Backend (Go test)
+4. Test & lint:
    - Frontend: `npm run lint && npm run test:unit`
    - Backend: `golangci-lint run && go test ./...`
 5. Push dan buat PR ke branch `development`
@@ -464,26 +494,14 @@ docker-compose -f docker-compose.dev.yml up --build
 
 ## Dokumentasi Tambahan
 
-- **API Documentation**: http://localhost:8080/swagger/index.html
-- **Seeder Documentation**: `backend/cmd/seed-companies/README.md`
-- **Manual Fixes**: `documentations/MANUAL_FIXES_DOCUMENTATION.md`
-- **Backend Architecture**: Clean Architecture dengan struktur `cmd/`, `internal/`
-- **Testing Guide**: `backend/doc/TESTING_USER_MANAGEMENT.md` (untuk manual testing)
-- **Deployment Scripts**: `scripts/` folder berisi semua deployment automation scripts
-
-## Recent Updates
-
-**Deployment Automation (Latest):**
-- Otomatisasi SSL dan Nginx setup setelah deployment
-- Zero manual intervention: server langsung bisa diakses setelah deployment selesai
-- Lihat detail di section "CI/CD & Deployment"
-
-**Testing Infrastructure:**
-- Automated testing dengan Vitest (frontend) dan Go test (backend)
-- Lihat detail di section "Testing"
-
-**Audit Logging:**
-- Implementasi permanent audit log untuk data penting (Report, Document, Company, User Management)
-- Tab "User Activity" di halaman Settings untuk melihat permanent logs
-- Differentiated retention policy: permanent storage untuk data penting, retention 90/30 hari untuk data biasa
-
+- API Documentation: http://localhost:8080/swagger/index.html
+- Seeder Documentation: `backend/cmd/seed-companies/README.md`
+- Manual Fixes: `documentations/MANUAL_FIXES_DOCUMENTATION.md`
+- Backend Architecture: Clean Architecture dengan struktur `cmd/`, `internal/`
+- Testing Guide: `backend/doc/TESTING_USER_MANAGEMENT.md` (untuk manual testing)
+- Deployment Scripts: `scripts/` folder berisi semua deployment automation scripts
+- **TDE (Transparent Data Encryption)**: 
+  - `documentations/TDE_IMPLEMENTATION_GUIDE.md` - Panduan lengkap implementasi TDE untuk PostgreSQL dan SQLite
+- **PDP Compliance**: 
+  - `documentations/PDP_DATA_CLASSIFICATION.md` - Klasifikasi data pribadi berdasarkan UU No. 27 Tahun 2022
+  - `documentations/PDP_ENCRYPTION_BEST_PRACTICES.md` - Best practices enkripsi untuk compliance

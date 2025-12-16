@@ -12,6 +12,7 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import mammoth from 'mammoth'
 import * as XLSX from 'xlsx'
+import { logger } from '../utils/logger'
 
 dayjs.extend(relativeTime)
 
@@ -47,7 +48,7 @@ const loadDocument = async () => {
     metadata.value = data.metadata || {}
     
     // Debug: log document data
-    console.log('Document loaded:', {
+    logger.debug('Document loaded:', {
       id: data.id,
       name: data.name,
       file_path: data.file_path,
@@ -59,7 +60,7 @@ const loadDocument = async () => {
     await loadDocumentFile()
   } catch (error: unknown) {
     const err = error as { message?: string }
-    console.error('Error loading document:', error)
+    logger.error('Error loading document:', error)
     message.error(err.message || 'Gagal memuat dokumen')
     router.push('/documents')
   } finally {
@@ -83,7 +84,7 @@ const loadActivities = async () => {
       .slice(0, 5)
     activities.value = filtered
   } catch (error: unknown) {
-    console.error('Failed to load activities:', error)
+    logger.error('Failed to load activities:', error)
     activities.value = []
   } finally {
     activityLoading.value = false
@@ -222,7 +223,7 @@ const renameInput = ref('')
 // Download file with authentication and create blob URL
 const loadDocumentFile = async () => {
   if (!document.value || !document.value.file_path) {
-    console.warn('Document or file_path is missing')
+    logger.warn('Document or file_path is missing')
     return
   }
 
@@ -240,7 +241,7 @@ const loadDocumentFile = async () => {
       baseOrigin = u.origin
       basePath = u.pathname.replace(/\/$/, '') // e.g. /api/v1 or ''
     } catch (e) {
-      console.warn('Invalid VITE_API_BASE_URL, using raw value:', rawBase, e)
+      logger.warn('Invalid VITE_API_BASE_URL, using raw value:', rawBase, e)
     }
 
     let filePath = document.value.file_path.trim()
@@ -266,7 +267,7 @@ const loadDocumentFile = async () => {
       fileUrl = `${baseOrigin}${filePath}`
     }
 
-    console.log('Downloading file with authentication:', fileUrl)
+    logger.debug('Downloading file with authentication:', fileUrl)
     
     // Download file with authentication (cookies will be sent automatically)
     const response = await fetch(fileUrl, {
@@ -289,14 +290,14 @@ const loadDocumentFile = async () => {
       URL.revokeObjectURL(documentBlobUrl.value)
     }
     documentBlobUrl.value = URL.createObjectURL(blob)
-    console.log('File downloaded and blob URL created:', documentBlobUrl.value)
+    logger.debug('File downloaded and blob URL created:', documentBlobUrl.value)
 
     // For Office documents, convert to HTML for preview
     if (isOfficeDoc.value) {
       await convertOfficeToHtml(blob)
     }
   } catch (error) {
-    console.error('Error loading document file:', error)
+    logger.error('Error loading document file:', error)
     message.error('Gagal memuat file dokumen')
   }
 }
@@ -318,7 +319,7 @@ const convertOfficeToHtml = async (blob: Blob) => {
       const result = await mammoth.convertToHtml({ arrayBuffer })
       officeHtmlContent.value = result.value
       if (result.messages.length > 0) {
-        console.warn('Mammoth conversion warnings:', result.messages)
+        logger.warn('Mammoth conversion warnings:', result.messages)
       }
     }
     // Excel documents (.xlsx, .xls)
@@ -354,7 +355,7 @@ const convertOfficeToHtml = async (blob: Blob) => {
       message.info('File .doc (legacy) tidak dapat di-preview. Silakan download file untuk membuka dengan aplikasi Office.')
     }
   } catch (error) {
-    console.error('Error converting Office document to HTML:', error)
+    logger.error('Error converting Office document to HTML:', error)
     officeHtmlContent.value = null
     message.warning('Gagal mengkonversi file Office ke preview. Silakan download file untuk membuka dengan aplikasi Office.')
   } finally {
@@ -455,7 +456,7 @@ const handleLogout = async () => {
     await authStore.logout()
     router.push('/login')
   } catch (error) {
-    console.error('Logout error:', error)
+    logger.error('Logout error:', error)
     router.push('/login')
   }
 }
@@ -475,7 +476,7 @@ const loadUsers = async () => {
     })
     userMap.value = map
   } catch (error) {
-    console.warn('Gagal memuat data pengguna untuk uploader name:', error)
+    logger.warn('Gagal memuat data pengguna untuk uploader name:', error)
   }
 }
 
@@ -648,8 +649,8 @@ onBeforeUnmount(() => {
                   :src="getDocumentUrl"
                   class="pdf-iframe"
                   frameborder="0"
-                  @error="(e) => console.error('PDF iframe error:', e)"
-                  @load="() => console.log('PDF iframe loaded:', getDocumentUrl)"
+                  @error="(e) => logger.error('PDF iframe error:', e)"
+                  @load="() => logger.debug('PDF iframe loaded:', getDocumentUrl)"
                 ></iframe>
               </div>
               <div v-else-if="isPDF" class="unsupported-viewer">

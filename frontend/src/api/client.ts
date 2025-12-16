@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
+import { logger } from '../utils/logger'
 
 // Pastikan baseURL selalu diakhiri dengan /api/v1
 const getBaseURL = () => {
@@ -12,10 +13,8 @@ const getBaseURL = () => {
 
 const API_BASE_URL = getBaseURL()
 
-// Debug log (hapus di production)
-if (import.meta.env.DEV) {
-  console.log('[API Client] Base URL:', API_BASE_URL)
-}
+// Debug log (hanya muncul di development)
+logger.api('Base URL:', API_BASE_URL)
 
 // Penyimpanan token CSRF
 let csrfToken: string | null = null
@@ -36,7 +35,7 @@ export const getCSRFToken = async (): Promise<string | null> => {
       return null
     }
     // Error lainnya - log untuk debugging
-    console.error('Failed to get CSRF token:', error)
+    logger.error('Failed to get CSRF token:', error)
     csrfToken = null
     return null
   }

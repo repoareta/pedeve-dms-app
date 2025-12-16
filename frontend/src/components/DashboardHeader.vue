@@ -8,6 +8,7 @@ import { notificationApi, type Notification } from '../api/notifications'
 import { notification } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
+import { logger } from '../utils/logger'
 
 dayjs.extend(relativeTime)
 
@@ -178,10 +179,6 @@ const updateScrollState = () => {
   
   if (isScrolled.value !== newValue) {
     isScrolled.value = newValue
-    // console.log('📜 Scroll state changed:', scrollTop, '-> isScrolled:', newValue)
-    // console.log('🔍 DOM element classes:', document.querySelector('.header-container')?.className)
-  } else {
-    // console.log('📊 Current scroll:', scrollTop, 'isScrolled:', newValue)
   }
 }
 
@@ -195,7 +192,7 @@ const loadUserCompaniesCount = async () => {
     userCompaniesCount.value = companies.length
   } catch (error) {
     // Silently fail - badge is not critical
-    console.warn('Failed to load user companies count:', error)
+    logger.warn('Failed to load user companies count:', error)
     userCompaniesCount.value = 0
   } finally {
     loadingCompaniesCount.value = false
@@ -233,7 +230,7 @@ const openNotificationBox = (notif: Notification) => {
       },
     })
   } catch (error) {
-    console.error('❌ [PushNotification] Failed to show notification:', error)
+    logger.error('❌ [PushNotification] Failed to show notification:', error)
   }
 }
 
@@ -243,7 +240,7 @@ const showPushNotification = (notif: Notification) => {
     // Gunakan openNotificationBox untuk menampilkan notification
     openNotificationBox(notif)
   } catch (error) {
-    console.error('❌ [PushNotification] Failed to show notification:', error)
+    logger.error('❌ [PushNotification] Failed to show notification:', error)
   }
 }
 
@@ -323,7 +320,7 @@ const loadNotifications = async () => {
       })
     }
   } catch (error) {
-    console.error('❌ [Notifications] Failed to load notifications:', error)
+    logger.error('❌ [Notifications] Failed to load notifications:', error)
   } finally {
     loadingNotifications.value = false
   }
@@ -453,7 +450,6 @@ onMounted(() => {
   
   loadUserCompaniesCount()
   startNotificationPolling()
-//   console.log('🚀 DashboardHeader mounted')
   
   // Listen untuk refresh notifications setelah navigate
   const handleNotificationRead = () => {
@@ -475,7 +471,6 @@ onMounted(() => {
   
   // Create scroll handler function
   const scrollHandler = () => {
-    // console.log('📜 Scroll event fired!')
     updateScrollState()
   }
   
@@ -494,7 +489,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-//   console.log('🛑 DashboardHeader unmounting, removing listeners')
   interface WindowWithScrollHandler extends Window {
     __dashboardHeaderScrollHandler?: () => void
     __fullscreenHandler?: () => void

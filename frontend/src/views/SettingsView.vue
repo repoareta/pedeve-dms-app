@@ -40,6 +40,10 @@ const allSeederStatusLoading = ref(false)
 const allSeederStatus = ref<{ status: Record<string, boolean>; message: string } | null>(null)
 const resetAllLoading = ref(false)
 const runAllSeedersLoading = ref(false)
+const resetFinancialReportsLoading = ref(false)
+const checkExpiringDocumentsLoading = ref(false)
+const checkExpiringDirectorTermsLoading = ref(false)
+const checkAllExpiringNotificationsLoading = ref(false)
 
 // Audit logs
 const auditLogs = ref<AuditLog[]>([])
@@ -794,6 +798,78 @@ const handleResetAllSeededData = () => {
   })
 }
 
+const handleResetAllFinancialReports = () => {
+  Modal.confirm({
+    title: 'Reset Data Laporan',
+    content: 'Apakah Anda yakin ingin menghapus semua data laporan keuangan dari semua perusahaan? Tindakan ini tidak dapat dibatalkan dan akan menghapus semua data laporan (Neraca, Laba Rugi, Cashflow, dan Rasio Keuangan) dari seluruh perusahaan.',
+    okText: 'Ya, Reset Data Laporan',
+    okType: 'danger',
+    cancelText: 'Batal',
+    onOk: async () => {
+      try {
+        resetFinancialReportsLoading.value = true
+        const result = await developmentApi.resetAllFinancialReports()
+        message.success(result.message || 'Semua data laporan keuangan berhasil di-reset')
+      } catch (error: unknown) {
+        console.error('Failed to reset all financial reports:', error)
+        const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+        const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal reset data laporan keuangan'
+        message.error(errorMessage)
+      } finally {
+        resetFinancialReportsLoading.value = false
+      }
+    },
+  })
+}
+
+const handleCheckExpiringDocuments = async () => {
+  try {
+    checkExpiringDocumentsLoading.value = true
+    const result = await developmentApi.checkExpiringDocuments(30)
+    const msg = `${result.message || 'Check expiring documents completed'}. Ditemukan: ${result.documents_found || 0} dokumen, Notifikasi dibuat: ${result.notifications_created || 0}`
+    message.success(msg)
+  } catch (error: unknown) {
+    console.error('Failed to check expiring documents:', error)
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal check expiring documents'
+    message.error(errorMessage)
+  } finally {
+    checkExpiringDocumentsLoading.value = false
+  }
+}
+
+const handleCheckExpiringDirectorTerms = async () => {
+  try {
+    checkExpiringDirectorTermsLoading.value = true
+    const result = await developmentApi.checkExpiringDirectorTerms(30)
+    const msg = `${result.message || 'Check expiring director terms completed'}. Ditemukan: ${result.directors_found || 0} director, Notifikasi dibuat: ${result.notifications_created || 0}`
+    message.success(msg)
+  } catch (error: unknown) {
+    console.error('Failed to check expiring director terms:', error)
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal check expiring director terms'
+    message.error(errorMessage)
+  } finally {
+    checkExpiringDirectorTermsLoading.value = false
+  }
+}
+
+const handleCheckAllExpiringNotifications = async () => {
+  try {
+    checkAllExpiringNotificationsLoading.value = true
+    const result = await developmentApi.checkAllExpiringNotifications(30)
+    const msg = `${result.message || 'Check all expiring notifications completed'}. Dokumen: ditemukan ${result.documents?.found || 0}, notifikasi ${result.documents?.notifications_created || 0}. Directors: ditemukan ${result.directors?.found || 0}, notifikasi ${result.directors?.notifications_created || 0}. Total: ${result.total_notifications_created || 0} notifikasi`
+    message.success(msg)
+  } catch (error: unknown) {
+    console.error('Failed to check all expiring notifications:', error)
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal check all expiring notifications'
+    message.error(errorMessage)
+  } finally {
+    checkAllExpiringNotificationsLoading.value = false
+  }
+}
+
 const handleRunAllSeeders = async () => {
   Modal.confirm({
     title: 'Jalankan Semua Seeder Data',
@@ -1486,6 +1562,62 @@ onUnmounted(() => {
                     >
                       <IconifyIcon icon="mdi:database-plus" width="18" style="margin-right: 8px;" />
                       Seeder Data
+                    </a-button>
+                    <a-button
+                      type="primary"
+                      danger
+                      size="large"
+                      block
+                      @click="handleResetAllFinancialReports"
+                      :loading="resetFinancialReportsLoading"
+                    >
+                      <IconifyIcon icon="mdi:file-document-remove" width="18" style="margin-right: 8px;" />
+                      Reset Data Laporan
+                    </a-button>
+                  </a-space>
+                </div>
+
+                <!-- Test Notifikasi Section -->
+                <div class="section-header" style="margin-top: 32px;">
+                  <div>
+                    <h3 class="section-title">Test Notifikasi</h3>
+                    <p class="section-description">
+                      Trigger manual check untuk notifikasi expiring documents dan director terms (untuk testing).
+                    </p>
+                  </div>
+                </div>
+
+                <div class="development-actions" style="margin-top: 16px;">
+                  <a-space direction="vertical" size="middle" style="width: 100%;">
+                    <a-button
+                      type="default"
+                      size="large"
+                      block
+                      @click="handleCheckExpiringDocuments"
+                      :loading="checkExpiringDocumentsLoading"
+                    >
+                      <IconifyIcon icon="mdi:file-document-alert" width="18" style="margin-right: 8px;" />
+                      Test Documents Expired
+                    </a-button>
+                    <a-button
+                      type="default"
+                      size="large"
+                      block
+                      @click="handleCheckExpiringDirectorTerms"
+                      :loading="checkExpiringDirectorTermsLoading"
+                    >
+                      <IconifyIcon icon="mdi:account-clock" width="18" style="margin-right: 8px;" />
+                      Test Director Terms Expired
+                    </a-button>
+                    <a-button
+                      type="primary"
+                      size="large"
+                      block
+                      @click="handleCheckAllExpiringNotifications"
+                      :loading="checkAllExpiringNotificationsLoading"
+                    >
+                      <IconifyIcon icon="mdi:bell-alert" width="18" style="margin-right: 8px;" />
+                      Test Semua Notifikasi Sekaligus
                     </a-button>
                   </a-space>
                 </div>

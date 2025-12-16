@@ -97,6 +97,9 @@
                 {{ getTypeLabel(record.type) }}
               </a-tag>
             </template>
+            <template v-else-if="column.key === 'message'">
+              <span>{{ formatDynamicMessage(record) }}</span>
+            </template>
             <template v-else-if="column.key === 'status'">
               <div v-if="!record.is_read" @click.stop>
                 <a-button 
@@ -423,6 +426,49 @@ const handleDeleteAll = async () => {
       }
     },
   })
+}
+
+// Format dynamic message berdasarkan waktu real-time untuk document expiry notifications
+const formatDynamicMessage = (notif: Notification): string => {
+  // Hanya untuk document_expiry notification yang memiliki document dengan expiry_date
+  if (notif.type === 'document_expiry' && notif.document?.expiry_date) {
+    const expiryDate = dayjs(notif.document.expiry_date)
+    const now = dayjs()
+    const diffDays = expiryDate.diff(now, 'day')
+    
+    // Extract document name dari original message atau dari document.name
+    const docName = notif.document.name || notif.title.replace("Dokumen '", '').replace("' Akan Expired", '')
+    
+    if (diffDays < 0) {
+      // Sudah expired
+      const daysAgo = Math.abs(diffDays)
+      if (daysAgo === 0) {
+        return `Dokumen '${docName}' sudah expired hari ini. Silakan perbarui atau perpanjang dokumen tersebut.`
+      } else if (daysAgo === 1) {
+        return `Dokumen '${docName}' sudah expired 1 hari yang lalu. Silakan perbarui atau perpanjang dokumen tersebut.`
+      } else if (daysAgo < 7) {
+        return `Dokumen '${docName}' sudah expired ${daysAgo} hari yang lalu. Silakan perbarui atau perpanjang dokumen tersebut.`
+      } else if (daysAgo < 30) {
+        const weeksAgo = Math.floor(daysAgo / 7)
+        return `Dokumen '${docName}' sudah expired ${weeksAgo} minggu yang lalu. Silakan perbarui atau perpanjang dokumen tersebut.`
+      } else {
+        const monthsAgo = Math.floor(daysAgo / 30)
+        return `Dokumen '${docName}' sudah expired lebih dari ${monthsAgo} bulan yang lalu. Silakan perbarui atau perpanjang dokumen tersebut.`
+      }
+    } else if (diffDays === 0) {
+      // Expired hari ini
+      return `Dokumen '${docName}' akan expired hari ini. Silakan perbarui atau perpanjang dokumen tersebut.`
+    } else if (diffDays === 1) {
+      // Expired besok
+      return `Dokumen '${docName}' akan expired dalam 1 hari. Silakan perbarui atau perpanjang dokumen tersebut.`
+    } else {
+      // Masih beberapa hari lagi
+      return `Dokumen '${docName}' akan expired dalam ${diffDays} hari. Silakan perbarui atau perpanjang dokumen tersebut.`
+    }
+  }
+  
+  // Untuk notification type lain, gunakan message as-is
+  return notif.message
 }
 
 const formatTime = (date: string) => {

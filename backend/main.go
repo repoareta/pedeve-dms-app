@@ -162,6 +162,28 @@ func main() {
 	protected.Put("/documents/:id", documentHandler.UpdateDocument)      // Update metadata dokumen
 	protected.Delete("/documents/:id", documentHandler.DeleteDocument)   // Delete document (memerlukan CSRF)
 
+	// Route financial reports (dilindungi)
+	// NOTE: Routes yang lebih spesifik harus diletakkan SEBELUM routes yang lebih umum (dengan :param)
+	financialReportHandler := http.NewFinancialReportHandler(usecase.NewFinancialReportUseCase())
+	
+	// Bulk upload endpoints (harus sebelum /financial-reports/:id karena lebih spesifik)
+	protected.Get("/financial-reports/bulk-upload/template", financialReportHandler.GenerateBulkUploadTemplate)    // Download bulk upload template
+	protected.Post("/financial-reports/bulk-upload/validate", financialReportHandler.ValidateBulkExcelFile)        // Validate bulk upload Excel file
+	protected.Post("/financial-reports/bulk-upload", financialReportHandler.UploadBulkFinancialReports)             // Upload bulk financial reports
+	
+	// Other specific routes (harus sebelum /financial-reports/:id)
+	protected.Get("/financial-reports/company/:company_id", financialReportHandler.GetFinancialReportsByCompanyID) // Get all financial reports for a company
+	protected.Get("/financial-reports/compare", financialReportHandler.GetComparison)                            // Get comparison RKAP vs Realisasi YTD
+	protected.Get("/financial-reports/rkap-years/:company_id", financialReportHandler.GetRKAPYearsByCompanyID) // Get RKAP years for a company
+	
+	// General CRUD routes (dengan :id parameter - harus di akhir)
+	protected.Post("/financial-reports", financialReportHandler.CreateFinancialReport)                           // Create financial report
+	protected.Get("/financial-reports/:id", financialReportHandler.GetFinancialReportByID)                      // Get financial report by ID
+	protected.Put("/financial-reports/:id", financialReportHandler.UpdateFinancialReport)                       // Update financial report
+	protected.Delete("/financial-reports/:id", financialReportHandler.DeleteFinancialReport)                    // Delete financial report
+	
+	protected.Get("/companies/:company_id/performance/export/excel", financialReportHandler.ExportPerformanceExcel) // Export performance Excel
+
 	// Swagger
 	app.Get("/swagger/*", swagger.HandlerDefault)
 

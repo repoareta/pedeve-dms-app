@@ -59,7 +59,7 @@ const menuItems = computed(() => {
     // { label: 'Dashboard', key: 'dashboard', path: '/dashboard', icon: 'mdi:view-dashboard' },
     { label: 'Daftar Perusahaan', key: 'subsidiaries', path: '/subsidiaries', icon: 'mdi:office-building' },
     { label: 'Documents', key: 'documents', path: '/documents', icon: 'mdi:file-document' },
-    // { label: 'Laporan', key: 'reports', path: '/reports', icon: 'mdi:chart-box' },
+    { label: 'Laporan', key: 'reports', path: '/reports', icon: 'mdi:chart-box' },
     { label: 'Manajemen Pengguna', key: 'users', path: '/users', icon: 'mdi:account-group' },
   ]
 })
@@ -225,7 +225,7 @@ const openNotificationBox = (notif: Notification) => {
     // Note: showProgress dan pauseOnHover tidak didukung di Ant Design Vue
     notification[type]({
       message: notif.title,
-      description: notif.message,
+      description: formatDynamicMessage(notif),
       duration: 4.5, // Auto hide setelah 4.5 detik
       placement: 'topRight',
       onClick: () => {
@@ -371,6 +371,49 @@ const handleNotificationClick = async (notification: Notification) => {
 // Format time
 const formatTime = (date: string) => {
   return dayjs(date).fromNow()
+}
+
+// Format dynamic message berdasarkan waktu real-time untuk document expiry notifications
+const formatDynamicMessage = (notif: Notification): string => {
+  // Hanya untuk document_expiry notification yang memiliki document dengan expiry_date
+  if (notif.type === 'document_expiry' && notif.document?.expiry_date) {
+    const expiryDate = dayjs(notif.document.expiry_date)
+    const now = dayjs()
+    const diffDays = expiryDate.diff(now, 'day')
+    
+    // Extract document name dari original message atau dari document.name
+    const docName = notif.document.name || notif.title.replace("Dokumen '", '').replace("' Akan Expired", '')
+    
+    if (diffDays < 0) {
+      // Sudah expired
+      const daysAgo = Math.abs(diffDays)
+      if (daysAgo === 0) {
+        return `Dokumen '${docName}' sudah expired hari ini. Silakan perbarui atau perpanjang dokumen tersebut.`
+      } else if (daysAgo === 1) {
+        return `Dokumen '${docName}' sudah expired 1 hari yang lalu. Silakan perbarui atau perpanjang dokumen tersebut.`
+      } else if (daysAgo < 7) {
+        return `Dokumen '${docName}' sudah expired ${daysAgo} hari yang lalu. Silakan perbarui atau perpanjang dokumen tersebut.`
+      } else if (daysAgo < 30) {
+        const weeksAgo = Math.floor(daysAgo / 7)
+        return `Dokumen '${docName}' sudah expired ${weeksAgo} minggu yang lalu. Silakan perbarui atau perpanjang dokumen tersebut.`
+      } else {
+        const monthsAgo = Math.floor(daysAgo / 30)
+        return `Dokumen '${docName}' sudah expired lebih dari ${monthsAgo} bulan yang lalu. Silakan perbarui atau perpanjang dokumen tersebut.`
+      }
+    } else if (diffDays === 0) {
+      // Expired hari ini
+      return `Dokumen '${docName}' akan expired hari ini. Silakan perbarui atau perpanjang dokumen tersebut.`
+    } else if (diffDays === 1) {
+      // Expired besok
+      return `Dokumen '${docName}' akan expired dalam 1 hari. Silakan perbarui atau perpanjang dokumen tersebut.`
+    } else {
+      // Masih beberapa hari lagi
+      return `Dokumen '${docName}' akan expired dalam ${diffDays} hari. Silakan perbarui atau perpanjang dokumen tersebut.`
+    }
+  }
+  
+  // Untuk notification type lain, gunakan message as-is
+  return notif.message
 }
 
 // Watch untuk detect login (session baru)
@@ -577,7 +620,7 @@ onUnmounted(() => {
                   >
                     <div class="notification-content">
                       <div class="notification-title-text">{{ notif.title }}</div>
-                      <div class="notification-message">{{ notif.message }}</div>
+                      <div class="notification-message">{{ formatDynamicMessage(notif) }}</div>
                       <div class="notification-time">{{ formatTime(notif.created_at) }}</div>
                     </div>
                   </div>

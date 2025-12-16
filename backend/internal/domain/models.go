@@ -383,6 +383,7 @@ type DirectorModel struct {
 	KTP             string     `json:"ktp"`                               // Nomor KTP
 	NPWP            string     `json:"npwp"`                              // Nomor NPWP
 	StartDate       *time.Time `json:"start_date"`                        // Tanggal awal jabatan (nullable)
+	EndDate         *time.Time `gorm:"index" json:"end_date"`             // Tanggal akhir jabatan (nullable, jika null tidak akan trigger notifikasi)
 	DomicileAddress string     `gorm:"type:text" json:"domicile_address"` // Alamat domisili
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
@@ -692,6 +693,7 @@ type DirectorRequest struct {
 	KTP             string    `json:"ktp"`
 	NPWP            string    `json:"npwp"`
 	StartDate       *DateOnly `json:"start_date"`
+	EndDate         *DateOnly `json:"end_date"` // Tanggal akhir jabatan (nullable)
 	DomicileAddress string    `json:"domicile_address"`
 }
 

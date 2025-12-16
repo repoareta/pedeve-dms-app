@@ -90,6 +90,7 @@ export interface Director {
   ktp: string
   npwp: string
   start_date?: string
+  end_date?: string
   domicile_address: string
 }
 

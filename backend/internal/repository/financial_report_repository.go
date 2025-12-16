@@ -17,6 +17,7 @@ type FinancialReportRepository interface {
 	GetRealisasiYTD(companyID, year, month string) (*domain.FinancialReportModel, error)
 	Update(report *domain.FinancialReportModel) error
 	Delete(id string) error
+	DeleteAll() error // For reset functionality
 	CountRKAPByCompanyIDAndYear(companyID, year string) (int64, error)
 	GetRKAPYearsByCompanyID(companyID string) ([]string, error)
 }
@@ -196,6 +197,11 @@ func (r *financialReportRepository) Update(report *domain.FinancialReportModel) 
 
 func (r *financialReportRepository) Delete(id string) error {
 	return r.db.Delete(&domain.FinancialReportModel{}, "id = ?", id).Error
+}
+
+// DeleteAll menghapus semua financial reports (untuk reset functionality)
+func (r *financialReportRepository) DeleteAll() error {
+	return r.db.Exec("DELETE FROM financial_reports").Error
 }
 
 // CountRKAPByCompanyIDAndYear menghitung jumlah RKAP untuk validasi (harus hanya 1 per tahun)

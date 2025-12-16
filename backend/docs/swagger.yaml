@@ -78,6 +78,9 @@ definitions:
       address:
         description: Alamat perusahaan
         type: string
+      authorized_capital:
+        description: Modal Dasar
+        type: integer
       business_fields:
         items:
           $ref: '#/definitions/domain.BusinessFieldModel'
@@ -86,6 +89,9 @@ definitions:
         description: Unique company code
         type: string
       created_at:
+        type: string
+      currency:
+        description: 'Mata uang: IDR (Rupiah) atau USD (Dollar)'
         type: string
       description:
         type: string
@@ -123,6 +129,9 @@ definitions:
       operational_address:
         description: Alamat operasional
         type: string
+      paid_up_capital:
+        description: Modal Disetor
+        type: integer
       parent_id:
         description: NULL untuk root/holding company
         type: string
@@ -145,6 +154,90 @@ definitions:
       website:
         description: Website
         type: string
+    type: object
+  domain.ComparisonItem:
+    properties:
+      difference:
+        description: Selisih (Realisasi YTD - RKAP)
+      percentage:
+        description: Persentase (Realisasi YTD / RKAP * 100)
+        type: number
+      realisasi_ytd:
+        description: Nilai Realisasi YTD
+      rkap:
+        description: Nilai RKAP
+    type: object
+  domain.CreateFinancialReportRequest:
+    properties:
+      cash_ratio:
+        type: number
+      company_id:
+        type: string
+      current_assets:
+        description: Neraca
+        type: integer
+      current_ratio:
+        type: number
+      debt_to_equity:
+        type: number
+      ebitda:
+        type: integer
+      ebitda_margin:
+        type: number
+      ending_balance:
+        type: integer
+      equity:
+        type: integer
+      financing_cashflow:
+        type: integer
+      investing_cashflow:
+        type: integer
+      is_rkap:
+        description: true = RKAP, false = Realisasi
+        type: boolean
+      long_term_liabilities:
+        type: integer
+      net_profit:
+        type: integer
+      net_profit_margin:
+        type: number
+      non_current_assets:
+        type: integer
+      operating_cashflow:
+        description: Cashflow
+        type: integer
+      operating_expenses:
+        type: integer
+      operating_profit:
+        type: integer
+      operating_profit_margin:
+        type: number
+      other_income:
+        type: integer
+      period:
+        description: 'Format: "2024" untuk RKAP, "2024-01" untuk Realisasi'
+        type: string
+      remark:
+        type: string
+      revenue:
+        description: Laba Rugi
+        type: integer
+      roe:
+        description: Rasio
+        type: number
+      roi:
+        type: number
+      short_term_liabilities:
+        type: integer
+      tax:
+        type: integer
+      year:
+        description: 'Format: "2024"'
+        type: string
+    required:
+    - company_id
+    - period
+    - year
     type: object
   domain.CreateReportRequest:
     properties:
@@ -190,6 +283,10 @@ definitions:
       domicile_address:
         description: Alamat domisili
         type: string
+      end_date:
+        description: Tanggal akhir jabatan (nullable, jika null tidak akan trigger
+          notifikasi)
+        type: string
       full_name:
         description: Nama lengkap
         type: string
@@ -210,12 +307,36 @@ definitions:
       updated_at:
         type: string
     type: object
+  domain.DirectorPositionModel:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        description: User yang membuat
+        type: string
+      id:
+        type: string
+      is_active:
+        description: 'Soft delete: false jika dihapus'
+        type: boolean
+      name:
+        description: Nama jabatan (unique)
+        type: string
+      updated_at:
+        type: string
+      usage_count:
+        description: Jumlah pengurus yang menggunakan jabatan ini
+        type: integer
+    type: object
   domain.DocumentFolderModel:
     properties:
       children:
         items:
           $ref: '#/definitions/domain.DocumentFolderModel'
         type: array
+      company_id:
+        description: ID perusahaan pemilik folder (nil untuk folder lama/tidak terasosiasi)
+        type: string
       created_at:
         type: string
       created_by:
@@ -234,6 +355,15 @@ definitions:
     properties:
       created_at:
         type: string
+      director_id:
+        description: Relasi dengan DirectorModel (untuk dokumen individu)
+        type: string
+      expiry_date:
+        description: Tanggal kadaluarsa dokumen
+        type: string
+      expiry_notified:
+        description: Apakah sudah di-notify
+        type: boolean
       file_name:
         description: Nama file asli
         type: string
@@ -264,11 +394,160 @@ definitions:
       uploader_id:
         type: string
     type: object
+  domain.DocumentTypeModel:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        description: User yang membuat
+        type: string
+      id:
+        type: string
+      is_active:
+        description: 'Soft delete: false jika dihapus'
+        type: boolean
+      name:
+        description: Nama jenis dokumen (unique)
+        type: string
+      updated_at:
+        type: string
+      usage_count:
+        description: Jumlah dokumen yang menggunakan jenis ini
+        type: integer
+    type: object
   domain.ErrorResponse:
     properties:
       error:
         type: string
       message:
+        type: string
+    type: object
+  domain.FinancialReportComparisonResponse:
+    properties:
+      company_id:
+        type: string
+      comparison:
+        additionalProperties:
+          $ref: '#/definitions/domain.ComparisonItem'
+        description: Perbandingan (dalam persentase)
+        type: object
+      month:
+        description: 'Bulan terakhir realisasi (format: "01", "02", dst)'
+        type: string
+      realisasi_ytd:
+        allOf:
+        - $ref: '#/definitions/domain.FinancialReportModel'
+        description: Realisasi YTD (Year-To-Date) - akumulasi dari Januari sampai
+          bulan yang dipilih
+      rkap:
+        allOf:
+        - $ref: '#/definitions/domain.FinancialReportModel'
+        description: Data RKAP tahunan
+      year:
+        type: string
+    type: object
+  domain.FinancialReportModel:
+    properties:
+      cash_ratio:
+        description: Rasio Kas
+        type: number
+      company:
+        allOf:
+        - $ref: '#/definitions/domain.CompanyModel'
+        description: Relationships
+      company_id:
+        type: string
+      created_at:
+        type: string
+      current_assets:
+        description: A. NERACA (Balance Sheet)
+        type: integer
+      current_ratio:
+        description: Rasio Lancar
+        type: number
+      debt_to_equity:
+        description: Debt to Equity
+        type: number
+      ebitda:
+        description: EBITDA
+        type: integer
+      ebitda_margin:
+        description: EBITDA Margin
+        type: number
+      ending_balance:
+        description: Saldo Akhir
+        type: integer
+      equity:
+        description: Ekuitas
+        type: integer
+      financing_cashflow:
+        description: Arus kas bersih dari pendanaan
+        type: integer
+      id:
+        type: string
+      inputter:
+        $ref: '#/definitions/domain.UserModel'
+      inputter_id:
+        description: User yang menginput
+        type: string
+      investing_cashflow:
+        description: Arus kas bersih dari investasi
+        type: integer
+      is_rkap:
+        description: true = RKAP (tahunan), false = Realisasi (bulanan)
+        type: boolean
+      long_term_liabilities:
+        description: Liabilitas Jangka Panjang
+        type: integer
+      net_profit:
+        description: Laba Bersih
+        type: integer
+      net_profit_margin:
+        description: Net Profit Margin
+        type: number
+      non_current_assets:
+        description: Aset Tidak Lancar
+        type: integer
+      operating_cashflow:
+        description: C. CASHFLOW (Arus Kas)
+        type: integer
+      operating_expenses:
+        description: Beban Usaha
+        type: integer
+      operating_profit:
+        description: Laba Usaha
+        type: integer
+      operating_profit_margin:
+        description: Operating Profit Margin
+        type: number
+      other_income:
+        description: Pendapatan Lain-Lain
+        type: integer
+      period:
+        description: 'Format: "2024" untuk RKAP, "2024-01" untuk Realisasi bulanan'
+        type: string
+      remark:
+        description: Metadata
+        type: string
+      revenue:
+        description: B. LABA RUGI (Profit & Loss)
+        type: integer
+      roe:
+        description: D. RASIO KEUANGAN (%)
+        type: number
+      roi:
+        description: Return on Investment
+        type: number
+      short_term_liabilities:
+        description: Liabilitas Jangka Pendek
+        type: integer
+      tax:
+        description: Tax
+        type: integer
+      updated_at:
+        type: string
+      year:
+        description: 'Format: "2024" untuk RKAP, "2024" untuk Realisasi (untuk grouping)'
         type: string
     type: object
   domain.LoginRequest:
@@ -445,13 +724,14 @@ definitions:
   domain.ShareholderModel:
     properties:
       company_id:
+        description: ID perusahaan yang dimiliki (perusahaan ini)
         type: string
       created_at:
         type: string
       id:
         type: string
       identity_number:
-        description: KTP/NPWP
+        description: KTP/NPWP (auto-fill dari NPWP/NIB perusahaan jika ada)
         type: string
       is_main_parent:
         description: Apakah perusahaan induk utama
@@ -460,15 +740,113 @@ definitions:
         description: Nama pemegang saham
         type: string
       ownership_percent:
-        description: Persentase kepemilikan
+        description: Persentase kepemilikan (10 digit desimal)
         type: number
       share_count:
         description: Jumlah saham
         type: integer
+      share_sheet_count:
+        description: Jumlah lembar saham
+        type: integer
+      share_value_per_sheet:
+        description: Nilai Rupiah per lembar
+        type: integer
+      shareholder_company:
+        allOf:
+        - $ref: '#/definitions/domain.CompanyModel'
+        description: 'Relationship: Company pemegang saham (jika shareholder_company_id
+          tidak null)'
+      shareholder_company_id:
+        description: 'ID perusahaan pemegang saham (nullable: jika null berarti individu/eksternal)'
+        type: string
       type:
         description: 'Jenis: Badan Hukum, Individu, dll'
         type: string
       updated_at:
+        type: string
+    type: object
+  domain.ShareholderTypeModel:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        description: User yang membuat
+        type: string
+      id:
+        type: string
+      is_active:
+        description: 'Soft delete: false jika dihapus'
+        type: boolean
+      name:
+        description: Nama jenis pemegang saham (unique)
+        type: string
+      updated_at:
+        type: string
+      usage_count:
+        description: Jumlah pemegang saham yang menggunakan jenis ini
+        type: integer
+    type: object
+  domain.UpdateFinancialReportRequest:
+    properties:
+      cash_ratio:
+        type: number
+      current_assets:
+        description: Neraca
+        type: integer
+      current_ratio:
+        type: number
+      debt_to_equity:
+        type: number
+      ebitda:
+        type: integer
+      ebitda_margin:
+        type: number
+      ending_balance:
+        type: integer
+      equity:
+        type: integer
+      financing_cashflow:
+        type: integer
+      investing_cashflow:
+        type: integer
+      is_rkap:
+        type: boolean
+      long_term_liabilities:
+        type: integer
+      net_profit:
+        type: integer
+      net_profit_margin:
+        type: number
+      non_current_assets:
+        type: integer
+      operating_cashflow:
+        description: Cashflow
+        type: integer
+      operating_expenses:
+        type: integer
+      operating_profit:
+        type: integer
+      operating_profit_margin:
+        type: number
+      other_income:
+        type: integer
+      period:
+        type: string
+      remark:
+        type: string
+      revenue:
+        description: Laba Rugi
+        type: integer
+      roe:
+        description: Rasio
+        type: number
+      roi:
+        type: number
+      short_term_liabilities:
+        type: integer
+      tax:
+        type: integer
+      year:
         type: string
     type: object
   domain.UpdateReportRequest:
@@ -1204,6 +1582,52 @@ paths:
       summary: Buat Company Baru
       tags:
       - Company Management
+  /api/v1/companies/{company_id}/performance/export/excel:
+    get:
+      consumes:
+      - application/json
+      description: Export performance data (Balance Sheet, Profit & Loss, Cashflow,
+        Ratio) dengan chart untuk periode tertentu
+      parameters:
+      - description: Company ID
+        in: path
+        name: company_id
+        required: true
+        type: string
+      - description: Start period (YYYY-MM)
+        in: query
+        name: start_period
+        required: true
+        type: string
+      - description: End period (YYYY-MM)
+        in: query
+        name: end_period
+        required: true
+        type: string
+      produces:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Export Performance Data to Excel
+      tags:
+      - Financial Reports
   /api/v1/companies/{id}:
     delete:
       consumes:
@@ -1304,6 +1728,43 @@ paths:
       security:
       - BearerAuth: []
       summary: Update Company
+      tags:
+      - Company Management
+  /api/v1/companies/{id}/ancestors:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil daftar ancestors (parent companies) dari company tertentu.
+      parameters:
+      - description: Company ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.CompanyModel'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Ancestors Company
       tags:
       - Company Management
   /api/v1/companies/{id}/children:
@@ -1477,6 +1938,317 @@ paths:
       summary: Ambil Token CSRF
       tags:
       - Security
+  /api/v1/director-positions:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil daftar semua jabatan pengurus yang aktif. User reguler
+        hanya melihat jabatan aktif, superadmin/administrator bisa melihat semua termasuk
+        yang tidak aktif.
+      parameters:
+      - description: Include inactive director positions (hanya superadmin/administrator)
+        in: query
+        name: include_inactive
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Daftar jabatan pengurus berhasil diambil
+          schema:
+            items:
+              $ref: '#/definitions/domain.DirectorPositionModel'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Semua Director Positions
+      tags:
+      - Company Management
+    post:
+      consumes:
+      - application/json
+      description: Membuat jabatan pengurus baru. Hanya superadmin dan administrator
+        yang dapat membuat jabatan baru. Jika jabatan dengan nama yang sama sudah
+        ada (tidak aktif), akan diaktifkan kembali.
+      parameters:
+      - description: Director position data
+        in: body
+        name: payload
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Jabatan pengurus berhasil dibuat
+          schema:
+            $ref: '#/definitions/domain.DirectorPositionModel'
+        "400":
+          description: Invalid request atau jabatan sudah ada
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden (hanya superadmin/administrator)
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Buat Director Position Baru
+      tags:
+      - Company Management
+  /api/v1/director-positions/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Menghapus jabatan pengurus. Hanya superadmin yang dapat menghapus
+        secara permanen. Administrator hanya dapat soft delete (menonaktifkan). Jika
+        jabatan masih digunakan, akan dilakukan soft delete.
+      parameters:
+      - description: Director Position ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Jabatan pengurus berhasil dihapus
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Invalid request atau jabatan masih digunakan
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden (hanya superadmin/administrator)
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Hapus Director Position
+      tags:
+      - Company Management
+    put:
+      consumes:
+      - application/json
+      description: Mengupdate jabatan pengurus. Hanya superadmin dan administrator
+        yang dapat mengupdate jabatan.
+      parameters:
+      - description: Director Position ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Director position data
+        in: body
+        name: payload
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Jabatan pengurus berhasil diupdate
+          schema:
+            $ref: '#/definitions/domain.DirectorPositionModel'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden (hanya superadmin/administrator)
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update Director Position
+      tags:
+      - Company Management
+  /api/v1/document-types:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil daftar semua jenis dokumen yang aktif. User reguler hanya
+        melihat jenis dokumen aktif, superadmin/administrator bisa melihat semua termasuk
+        yang tidak aktif.
+      parameters:
+      - description: Include inactive document types (hanya superadmin/administrator)
+        in: query
+        name: include_inactive
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Daftar jenis dokumen berhasil diambil
+          schema:
+            items:
+              $ref: '#/definitions/domain.DocumentTypeModel'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Semua Document Types
+      tags:
+      - Documents
+    post:
+      consumes:
+      - application/json
+      description: Membuat jenis dokumen baru. Hanya superadmin dan administrator
+        yang dapat membuat jenis dokumen baru. Jika jenis dokumen dengan nama yang
+        sama sudah ada (tidak aktif), akan diaktifkan kembali.
+      parameters:
+      - description: Document type data
+        in: body
+        name: payload
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Jenis dokumen berhasil dibuat
+          schema:
+            $ref: '#/definitions/domain.DocumentTypeModel'
+        "400":
+          description: Invalid request atau jenis dokumen sudah ada
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden (hanya superadmin/administrator)
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Buat Document Type Baru
+      tags:
+      - Documents
+  /api/v1/document-types/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: 'Menghapus jenis dokumen (soft delete: set is_active = false).
+        Hanya superadmin dan administrator yang dapat menghapus. Jika jenis dokumen
+        sudah digunakan oleh dokumen, akan di-soft delete (tidak aktif) agar dokumen
+        yang sudah ada tidak error.'
+      parameters:
+      - description: Document Type ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Jenis dokumen berhasil dihapus
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden (hanya superadmin/administrator)
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Document type tidak ditemukan
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Hapus Document Type
+      tags:
+      - Documents
+    put:
+      consumes:
+      - application/json
+      description: Mengupdate jenis dokumen (nama atau status aktif/tidak aktif).
+        Hanya superadmin dan administrator yang dapat mengupdate jenis dokumen.
+      parameters:
+      - description: Document Type ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Document type data
+        in: body
+        name: payload
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Jenis dokumen berhasil diupdate
+          schema:
+            $ref: '#/definitions/domain.DocumentTypeModel'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden (hanya superadmin/administrator)
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Document type tidak ditemukan
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update Document Type
+      tags:
+      - Documents
   /api/v1/documents:
     get:
       consumes:
@@ -1488,6 +2260,10 @@ paths:
       - description: Filter by folder ID
         in: query
         name: folder_id
+        type: string
+      - description: Filter by director ID (untuk dokumen individu)
+        in: query
+        name: director_id
         type: string
       - description: 'Page number (default: 0, no pagination)'
         in: query
@@ -1645,6 +2421,11 @@ paths:
       - description: 'ID folder (opsional, hanya jika Content-Type: multipart/form-data)'
         in: formData
         name: folder_id
+        type: string
+      - description: 'ID direktur/individu yang terkait (opsional, hanya jika Content-Type:
+          multipart/form-data)'
+        in: formData
+        name: director_id
         type: string
       - description: 'Judul dokumen (opsional, hanya jika Content-Type: multipart/form-data)'
         in: formData
@@ -1870,6 +2651,10 @@ paths:
         in: formData
         name: folder_id
         type: string
+      - description: ID direktur/individu yang terkait (opsional)
+        in: formData
+        name: director_id
+        type: string
       - description: Judul dokumen (opsional)
         in: formData
         name: title
@@ -1950,6 +2735,364 @@ paths:
       summary: Serve File
       tags:
       - Files
+  /api/v1/financial-reports:
+    post:
+      consumes:
+      - application/json
+      description: Membuat financial report baru (RKAP tahunan atau Realisasi bulanan).
+        RKAP hanya boleh 1x per tahun per perusahaan.
+      parameters:
+      - description: Financial Report data
+        in: body
+        name: report
+        required: true
+        schema:
+          $ref: '#/definitions/domain.CreateFinancialReportRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.FinancialReportModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Buat Financial Report Baru (RKAP atau Realisasi)
+      tags:
+      - Financial Reports
+  /api/v1/financial-reports/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Menghapus financial report. Hanya bisa dihapus oleh user yang memiliki
+        akses ke company tersebut.
+      parameters:
+      - description: Financial Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Hapus Financial Report
+      tags:
+      - Financial Reports
+    get:
+      consumes:
+      - application/json
+      description: Mengambil financial report berdasarkan ID
+      parameters:
+      - description: Financial Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.FinancialReportModel'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Financial Report by ID
+      tags:
+      - Financial Reports
+    put:
+      consumes:
+      - application/json
+      description: Mengupdate financial report yang sudah ada. Validasi RKAP 1x per
+        tahun tetap berlaku.
+      parameters:
+      - description: Financial Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Financial Report data
+        in: body
+        name: report
+        required: true
+        schema:
+          $ref: '#/definitions/domain.UpdateFinancialReportRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.FinancialReportModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update Financial Report
+      tags:
+      - Financial Reports
+  /api/v1/financial-reports/bulk-upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload Excel file, validate rows, and create financial reports
+        in database. Supports both RKAP and Realisasi.
+      parameters:
+      - description: Excel file (.xlsx, .xls)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response dengan success, failed, dan errors
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upload Financial Reports from Excel (Bulk)
+      tags:
+      - Financial Reports
+  /api/v1/financial-reports/bulk-upload/template:
+    get:
+      consumes:
+      - application/json
+      description: Download template Excel file untuk upload financial reports dalam
+        jumlah banyak. Template berisi semua perusahaan yang dapat diakses user dengan
+        kolom-kolom yang diperlukan.
+      parameters:
+      - description: 'Period untuk template (YYYY-MM), default: current month'
+        in: query
+        name: period
+        type: string
+      - description: 'Apakah template untuk RKAP (true) atau Realisasi (false), default:
+          false'
+        in: query
+        name: is_rkap
+        type: boolean
+      produces:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Download Financial Report Bulk Upload Template
+      tags:
+      - Financial Reports
+  /api/v1/financial-reports/bulk-upload/validate:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Validates Excel file format and data before bulk upload. Returns
+        validation errors and parsed data.
+      parameters:
+      - description: Excel file (.xlsx, .xls)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Response dengan valid, errors, dan data
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Validate Financial Report Bulk Upload Excel File
+      tags:
+      - Financial Reports
+  /api/v1/financial-reports/company/{company_id}:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil semua financial reports (RKAP dan Realisasi) untuk perusahaan
+        tertentu
+      parameters:
+      - description: Company ID
+        in: path
+        name: company_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.FinancialReportModel'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Semua Financial Reports untuk Company
+      tags:
+      - Financial Reports
+  /api/v1/financial-reports/compare:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil perbandingan antara RKAP tahunan dan Realisasi YTD sampai
+        bulan tertentu
+      parameters:
+      - description: Company ID
+        in: query
+        name: company_id
+        required: true
+        type: string
+      - description: 'Year (format: YYYY)'
+        in: query
+        name: year
+        required: true
+        type: string
+      - description: 'Month (format: MM, 01-12)'
+        in: query
+        name: month
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.FinancialReportComparisonResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Perbandingan RKAP vs Realisasi YTD
+      tags:
+      - Financial Reports
+  /api/v1/financial-reports/rkap-years/{company_id}:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil daftar tahun yang sudah ada RKAP untuk perusahaan tertentu
+      parameters:
+      - description: Company ID
+        in: path
+        name: company_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: string
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Daftar Tahun yang Sudah Ada RKAP
+      tags:
+      - Financial Reports
   /api/v1/permissions:
     get:
       consumes:
@@ -2727,6 +3870,157 @@ paths:
       summary: Assign Permission ke Role
       tags:
       - Role Management
+  /api/v1/shareholder-types:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil daftar semua jenis pemegang saham yang aktif. User reguler
+        hanya melihat jenis pemegang saham aktif, superadmin/administrator bisa melihat
+        semua termasuk yang tidak aktif.
+      parameters:
+      - description: Include inactive shareholder types (hanya superadmin/administrator)
+        in: query
+        name: include_inactive
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Daftar jenis pemegang saham berhasil diambil
+          schema:
+            items:
+              $ref: '#/definitions/domain.ShareholderTypeModel'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ambil Semua Shareholder Types
+      tags:
+      - Company Management
+    post:
+      consumes:
+      - application/json
+      description: Membuat jenis pemegang saham baru. Hanya superadmin dan administrator
+        yang dapat membuat jenis pemegang saham baru. Jika jenis pemegang saham dengan
+        nama yang sama sudah ada (tidak aktif), akan diaktifkan kembali.
+      parameters:
+      - description: Shareholder type data
+        in: body
+        name: payload
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Jenis pemegang saham berhasil dibuat
+          schema:
+            $ref: '#/definitions/domain.ShareholderTypeModel'
+        "400":
+          description: Invalid request atau jenis pemegang saham sudah ada
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden (hanya superadmin/administrator)
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Buat Shareholder Type Baru
+      tags:
+      - Company Management
+  /api/v1/shareholder-types/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Menghapus jenis pemegang saham. Hanya superadmin yang dapat menghapus
+        secara permanen. Administrator hanya dapat soft delete (menonaktifkan). Jika
+        jenis pemegang saham masih digunakan, akan dilakukan soft delete.
+      parameters:
+      - description: Shareholder Type ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Jenis pemegang saham berhasil dihapus
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Invalid request atau jenis pemegang saham masih digunakan
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden (hanya superadmin/administrator)
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Hapus Shareholder Type
+      tags:
+      - Company Management
+    put:
+      consumes:
+      - application/json
+      description: Mengupdate jenis pemegang saham. Hanya superadmin dan administrator
+        yang dapat mengupdate jenis pemegang saham.
+      parameters:
+      - description: Shareholder Type ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Shareholder type data
+        in: body
+        name: payload
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Jenis pemegang saham berhasil diupdate
+          schema:
+            $ref: '#/definitions/domain.ShareholderTypeModel'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden (hanya superadmin/administrator)
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update Shareholder Type
+      tags:
+      - Company Management
   /api/v1/swagger/regenerate:
     post:
       consumes:
@@ -3190,6 +4484,39 @@ paths:
       summary: Ambil Companies User Saat Ini
       tags:
       - User Management
+  /development/check-all-expiring-notifications:
+    post:
+      consumes:
+      - application/json
+      description: Trigger manual check untuk semua expiring notifications (documents
+        dan director terms) sekaligus (untuk testing, superadmin dan administrator)
+      parameters:
+      - description: 'Threshold days untuk check (default: 30)'
+        in: body
+        name: threshold_days
+        schema:
+          type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Check All Expiring Notifications
+      tags:
+      - Development
   /development/check-all-seeder-status:
     get:
       consumes:
@@ -3214,6 +4541,72 @@ paths:
       security:
       - BearerAuth: []
       summary: Cek Status Semua Seeder
+      tags:
+      - Development
+  /development/check-expiring-director-terms:
+    post:
+      consumes:
+      - application/json
+      description: Trigger manual check untuk masa jabatan pengurus yang akan berakhir
+        dan create notifications (untuk testing, superadmin dan administrator)
+      parameters:
+      - description: 'Threshold days untuk check (default: 30)'
+        in: body
+        name: threshold_days
+        schema:
+          type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Check Expiring Director Terms
+      tags:
+      - Development
+  /development/check-expiring-documents:
+    post:
+      consumes:
+      - application/json
+      description: Trigger manual check untuk dokumen yang akan expired dan create
+        notifications (untuk testing, superadmin dan administrator)
+      parameters:
+      - description: 'Threshold days untuk check (default: 30)'
+        in: body
+        name: threshold_days
+        schema:
+          type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Check Expiring Documents
       tags:
       - Development
   /development/check-report-status:
@@ -3266,6 +4659,132 @@ paths:
       security:
       - BearerAuth: []
       summary: Cek Status Seeder Data
+      tags:
+      - Development
+  /development/create-notification-for-document:
+    post:
+      consumes:
+      - application/json
+      description: Create notification langsung untuk dokumen tertentu berdasarkan
+        document ID (untuk testing, superadmin dan administrator)
+      parameters:
+      - description: Document ID
+        in: body
+        name: document_id
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create Notification for Document
+      tags:
+      - Development
+  /development/create-test-notification:
+    post:
+      consumes:
+      - application/json
+      description: Membuat notifikasi test untuk user yang sedang login (untuk testing
+        fitur notifikasi)
+      parameters:
+      - description: Notification data
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create Test Notification
+      tags:
+      - Development
+  /development/create-test-notifications:
+    post:
+      consumes:
+      - application/json
+      description: Membuat beberapa notifikasi test untuk user yang sedang login (untuk
+        testing fitur notifikasi)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create Test Notifications
+      tags:
+      - Development
+  /development/reset-all-financial-reports:
+    post:
+      consumes:
+      - application/json
+      description: Menghapus semua data laporan keuangan (Financial Reports) dari
+        semua perusahaan (hanya superadmin)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Reset Semua Data Laporan Keuangan
       tags:
       - Development
   /development/reset-all-seeded-data:
@@ -3452,6 +4971,201 @@ paths:
       summary: Health check
       tags:
       - General
+  /notifications:
+    get:
+      consumes:
+      - application/json
+      description: Get list of notifications for the authenticated user
+      parameters:
+      - description: Filter unread only
+        in: query
+        name: unread_only
+        type: boolean
+      - description: 'Limit results (default: 5)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user notifications
+      tags:
+      - notifications
+  /notifications/:id/read:
+    put:
+      consumes:
+      - application/json
+      description: Mark a specific notification as read
+      parameters:
+      - description: Notification ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Mark notification as read
+      tags:
+      - notifications
+  /notifications/delete-all:
+    delete:
+      consumes:
+      - application/json
+      description: 'Hapus semua notifikasi sesuai RBAC: superadmin hapus semua, admin
+        hapus company+descendants, user hapus sendiri'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete all notifications
+      tags:
+      - notifications
+  /notifications/inbox:
+    get:
+      consumes:
+      - application/json
+      description: Get paginated list of notifications with filters (for inbox page)
+      parameters:
+      - description: Filter unread only
+        in: query
+        name: unread_only
+        type: boolean
+      - description: Filter by days until expiry (3, 7, 30)
+        in: query
+        name: days_until_expiry
+        type: integer
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Page size (default: 10)'
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user notifications with filters
+      tags:
+      - notifications
+  /notifications/read-all:
+    put:
+      consumes:
+      - application/json
+      description: Mark all notifications for the authenticated user as read
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Mark all notifications as read
+      tags:
+      - notifications
+  /notifications/stream:
+    get:
+      consumes:
+      - application/json
+      description: Server-Sent Events stream for real-time notifications (currently
+        returns empty, use polling instead)
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Stream notifications (SSE) - Placeholder
+      tags:
+      - notifications
+  /notifications/unread-count:
+    get:
+      consumes:
+      - application/json
+      description: Get count of unread notifications for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get unread notification count
+      tags:
+      - notifications
   /sonarqube/issues:
     get:
       consumes:

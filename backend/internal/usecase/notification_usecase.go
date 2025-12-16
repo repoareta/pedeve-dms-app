@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/utils"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // Cache entry untuk unread count
@@ -39,7 +41,8 @@ type NotificationUseCase interface {
 	GetUnreadCountWithRBAC(userID, roleName string, companyID *string) (int64, error)
 	DeleteAll(userID string) error
 	DeleteAllWithRBAC(userID, roleName string, companyID *string) error
-	CheckExpiringDocuments(thresholdDays int) error
+	CheckExpiringDocuments(thresholdDays int) (notificationsCreated int, documentsFound int, err error)
+	CheckExpiringDirectorTerms(thresholdDays int) (notificationsCreated int, directorsFound int, err error)
 }
 
 type notificationUseCase struct {
@@ -47,15 +50,24 @@ type notificationUseCase struct {
 	docRepo     repository.DocumentRepository
 	userRepo    repository.UserRepository
 	companyRepo repository.CompanyRepository
+	directorRepo repository.DirectorRepository
+	db          *gorm.DB // For direct queries in CheckExpiringDocuments and CheckExpiringDirectorTerms
 }
 
 // NewNotificationUseCase creates a new notification use case
 func NewNotificationUseCase() NotificationUseCase {
+	return NewNotificationUseCaseWithDB(database.GetDB())
+}
+
+// NewNotificationUseCaseWithDB creates a new notification use case with injected DB (for testing)
+func NewNotificationUseCaseWithDB(db *gorm.DB) NotificationUseCase {
 	return &notificationUseCase{
-		notifRepo:   repository.NewNotificationRepository(),
-		docRepo:     repository.NewDocumentRepository(),
-		userRepo:    repository.NewUserRepository(),
-		companyRepo: repository.NewCompanyRepository(),
+		notifRepo:    repository.NewNotificationRepositoryWithDB(db),
+		docRepo:      repository.NewDocumentRepositoryWithDB(db),
+		userRepo:     repository.NewUserRepositoryWithDB(db),
+		companyRepo:  repository.NewCompanyRepositoryWithDB(db),
+		directorRepo: repository.NewDirectorRepositoryWithDB(db),
+		db:           db,
 	}
 }
 
@@ -178,10 +190,11 @@ func (uc *notificationUseCase) GetUnreadCountWithRBAC(userID, roleName string, c
 	if utils.IsSuperAdminLike(roleName) {
 		// Count total unread dengan optimasi query
 		var total int64
+		var err error
 		// Gunakan index is_read untuk query yang lebih cepat
-		err := database.GetDB().Model(&domain.NotificationModel{}).
-			Where("is_read = ?", false).
-			Count(&total).Error
+		// Use repository for consistency, but if we need direct DB access, we can add it
+		// For now, use the repository method
+		total, err = uc.notifRepo.GetUnreadCount(userID)
 
 		// Cache hasil
 		if err == nil {
@@ -376,49 +389,226 @@ func (uc *notificationUseCase) DeleteAllWithRBAC(userID, roleName string, compan
 }
 
 // CheckExpiringDocuments adalah helper function untuk check dan create notifications untuk expiring documents
+// Breakdown per folder: dokumen akan di-group berdasarkan folder untuk notifikasi yang lebih terorganisir
 // Ini akan dipanggil oleh scheduler/cron job
-func (uc *notificationUseCase) CheckExpiringDocuments(thresholdDays int) error {
+func (uc *notificationUseCase) CheckExpiringDocuments(thresholdDays int) (notificationsCreated int, documentsFound int, err error) {
 	zapLog := logger.GetLogger()
 
 	thresholdDate := time.Now().AddDate(0, 0, thresholdDays)
 
-	// Query documents yang akan expired dalam threshold
-	// Note: Ini perlu diimplementasikan di document_repository.go
-	// Untuk sekarang, kita akan query langsung menggunakan database.GetDB()
+	// Query documents yang akan expired dalam threshold atau sudah expired, dengan join folder untuk breakdown per folder
+	// Include documents yang sudah expired (untuk reminder) dan yang akan expired dalam threshold
 	var documents []domain.DocumentModel
-	err := database.GetDB().Where("expiry_date IS NOT NULL AND expiry_date <= ? AND expiry_date > ? AND expiry_notified = ?",
-		thresholdDate, time.Now(), false).Find(&documents).Error
+	db := uc.db
+	if db == nil {
+		db = database.GetDB() // Fallback to default DB if not injected
+	}
+	err = db.
+		Preload("Folder").
+		Where("expiry_date IS NOT NULL AND expiry_date <= ? AND expiry_notified = ?",
+			thresholdDate, false).
+		Find(&documents).Error
 	if err != nil {
 		zapLog.Error("Failed to query expiring documents", zap.Error(err))
-		return err
+		return 0, 0, err
 	}
 
+	documentsFound = len(documents)
+	notificationsCreated = 0
+
+	// Group documents by folder and uploader for better organization
+	folderGroups := make(map[string]map[string][]domain.DocumentModel) // [folderID][uploaderID][]documents
+
 	for _, doc := range documents {
-		daysUntilExpiry := int(time.Until(*doc.ExpiryDate).Hours() / 24)
+		folderKey := "No Folder"
+		if doc.FolderID != nil && doc.Folder != nil {
+			folderKey = doc.Folder.Name
+		} else if doc.FolderID != nil {
+			// Load folder if not loaded
+			folder, err := uc.docRepo.GetFolderByID(*doc.FolderID)
+			if err == nil && folder != nil {
+				folderKey = folder.Name
+			}
+		}
 
-		// Create notification untuk uploader
-		title := fmt.Sprintf("Dokumen '%s' Akan Expired", doc.Name)
-		message := fmt.Sprintf("Dokumen '%s' akan expired dalam %d hari. Silakan perbarui atau perpanjang dokumen tersebut.", doc.Name, daysUntilExpiry)
+		if folderGroups[folderKey] == nil {
+			folderGroups[folderKey] = make(map[string][]domain.DocumentModel)
+		}
+		folderGroups[folderKey][doc.UploaderID] = append(folderGroups[folderKey][doc.UploaderID], doc)
+	}
 
-		_, err := uc.CreateNotification(
-			doc.UploaderID,
-			"document_expiry",
-			title,
-			message,
-			"document",
-			&doc.ID,
-		)
+	// Create notifications per folder and uploader
+	for folderName, uploaderGroups := range folderGroups {
+		for uploaderID, docs := range uploaderGroups {
+			// Jika ada multiple dokumen di folder yang sama, buat satu notifikasi dengan list
+			if len(docs) > 1 {
+				docNames := make([]string, len(docs))
+				for i, doc := range docs {
+					docNames[i] = doc.Name
+				}
+				title := fmt.Sprintf("%d Dokumen di Folder '%s' Akan Expired", len(docs), folderName)
+				message := fmt.Sprintf("Ada %d dokumen di folder '%s' yang akan expired dalam %d hari: %s. Silakan perbarui atau perpanjang dokumen-dokumen tersebut.",
+					len(docs), folderName, thresholdDays, strings.Join(docNames, ", "))
+
+				// Buat notifikasi untuk dokumen pertama (resource_id = ID dokumen pertama)
+				_, err := uc.CreateNotification(
+					uploaderID,
+					"document_expiry",
+					title,
+					message,
+					"document",
+					&docs[0].ID,
+				)
+				if err != nil {
+					zapLog.Error("Failed to create notification for folder group", zap.Error(err), zap.String("folder", folderName))
+				} else {
+					notificationsCreated++
+				}
+
+				// Mark all documents as notified
+				for _, doc := range docs {
+					err = db.Model(&doc).Update("expiry_notified", true).Error
+					if err != nil {
+						zapLog.Error("Failed to mark document as notified", zap.Error(err), zap.String("document_id", doc.ID))
+					}
+				}
+			} else {
+				// Single document notification
+				doc := docs[0]
+				daysUntilExpiry := int(time.Until(*doc.ExpiryDate).Hours() / 24)
+
+				title := fmt.Sprintf("Dokumen '%s' Akan Expired", doc.Name)
+				var message string
+				if daysUntilExpiry < 0 {
+					// Sudah expired
+					daysAgo := -daysUntilExpiry
+					if daysAgo == 0 {
+						message = fmt.Sprintf("Dokumen '%s' di folder '%s' sudah expired hari ini. Silakan perbarui atau perpanjang dokumen tersebut.",
+							doc.Name, folderName)
+					} else {
+						message = fmt.Sprintf("Dokumen '%s' di folder '%s' sudah expired %d hari yang lalu. Silakan perbarui atau perpanjang dokumen tersebut.",
+							doc.Name, folderName, daysAgo)
+					}
+				} else if daysUntilExpiry == 0 {
+					message = fmt.Sprintf("Dokumen '%s' di folder '%s' akan expired hari ini. Silakan perbarui atau perpanjang dokumen tersebut.",
+						doc.Name, folderName)
+				} else {
+					message = fmt.Sprintf("Dokumen '%s' di folder '%s' akan expired dalam %d hari. Silakan perbarui atau perpanjang dokumen tersebut.",
+						doc.Name, folderName, daysUntilExpiry)
+				}
+
+				_, err := uc.CreateNotification(
+					uploaderID,
+					"document_expiry",
+					title,
+					message,
+					"document",
+					&doc.ID,
+				)
+				if err != nil {
+					zapLog.Error("Failed to create notification", zap.Error(err), zap.String("document_id", doc.ID))
+					continue
+				} else {
+					notificationsCreated++
+				}
+
+				// Mark document as notified
+				err = db.Model(&doc).Update("expiry_notified", true).Error
+				if err != nil {
+					zapLog.Error("Failed to mark document as notified", zap.Error(err), zap.String("document_id", doc.ID))
+				}
+			}
+		}
+	}
+
+	return notificationsCreated, documentsFound, nil
+}
+
+// CheckExpiringDirectorTerms adalah helper function untuk check dan create notifications untuk masa jabatan pengurus yang akan berakhir
+// Hanya akan check directors yang memiliki EndDate (tidak null)
+// Ini akan dipanggil oleh scheduler/cron job
+func (uc *notificationUseCase) CheckExpiringDirectorTerms(thresholdDays int) (notificationsCreated int, directorsFound int, err error) {
+	zapLog := logger.GetLogger()
+
+	thresholdDate := time.Now().AddDate(0, 0, thresholdDays)
+
+	// Query directors yang akan expired dalam threshold atau sudah expired (hanya yang memiliki EndDate)
+	var directors []domain.DirectorModel
+	db := uc.db
+	if db == nil {
+		db = database.GetDB() // Fallback to default DB if not injected
+	}
+	err = db.
+		Where("end_date IS NOT NULL AND end_date <= ?", thresholdDate).
+		Find(&directors).Error
+	if err != nil {
+		zapLog.Error("Failed to query expiring directors", zap.Error(err))
+		return 0, 0, err
+	}
+
+	directorsFound = len(directors)
+	notificationsCreated = 0
+
+	// Get company admins and superadmins who should be notified
+	for _, director := range directors {
+		daysUntilExpiry := int(time.Until(*director.EndDate).Hours() / 24)
+
+		// Get company name
+		company, err := uc.companyRepo.GetByID(director.CompanyID)
+		companyName := director.CompanyID // fallback to ID
+		if err == nil && company != nil {
+			companyName = company.Name
+		}
+
+		// Get users who have access to this company (admins and superadmins)
+		// For simplicity, we'll notify all users associated with the company
+		users, err := uc.userRepo.GetByCompanyID(director.CompanyID)
 		if err != nil {
-			zapLog.Error("Failed to create notification", zap.Error(err), zap.String("document_id", doc.ID))
+			zapLog.Warn("Failed to get users for company", zap.Error(err), zap.String("company_id", director.CompanyID))
 			continue
 		}
 
-		// Mark document as notified
-		err = database.GetDB().Model(&doc).Update("expiry_notified", true).Error
-		if err != nil {
-			zapLog.Error("Failed to mark document as notified", zap.Error(err), zap.String("document_id", doc.ID))
+		// Create notification for each user in the company
+		for _, user := range users {
+			title := fmt.Sprintf("Masa Jabatan '%s' Akan Berakhir", director.FullName)
+			var message string
+			if daysUntilExpiry < 0 {
+				// Sudah expired
+				daysAgo := -daysUntilExpiry
+				if daysAgo == 0 {
+					message = fmt.Sprintf("Masa jabatan %s sebagai %s di %s sudah berakhir hari ini. Silakan perpanjang atau ganti pengurus tersebut.",
+						director.FullName, director.Position, companyName)
+				} else {
+					message = fmt.Sprintf("Masa jabatan %s sebagai %s di %s sudah berakhir %d hari yang lalu. Silakan perpanjang atau ganti pengurus tersebut.",
+						director.FullName, director.Position, companyName, daysAgo)
+				}
+			} else if daysUntilExpiry == 0 {
+				message = fmt.Sprintf("Masa jabatan %s sebagai %s di %s akan berakhir hari ini. Silakan perpanjang atau ganti pengurus tersebut.",
+					director.FullName, director.Position, companyName)
+			} else {
+				message = fmt.Sprintf("Masa jabatan %s sebagai %s di %s akan berakhir dalam %d hari. Silakan perpanjang atau ganti pengurus tersebut.",
+					director.FullName, director.Position, companyName, daysUntilExpiry)
+			}
+
+			// Use director ID as resource ID (no resource_type for now, or use "director" if we add it)
+			directorID := director.ID
+			_, err := uc.CreateNotification(
+				user.ID,
+				"director_term_expiry",
+				title,
+				message,
+				"director",
+				&directorID,
+			)
+			if err != nil {
+				zapLog.Error("Failed to create notification for director term expiry", zap.Error(err),
+					zap.String("director_id", director.ID),
+					zap.String("user_id", user.ID))
+			} else {
+				notificationsCreated++
+			}
 		}
 	}
 
-	return nil
+	return notificationsCreated, directorsFound, nil
 }

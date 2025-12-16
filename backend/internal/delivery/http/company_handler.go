@@ -488,23 +488,49 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 			// Directors were added
 			for i := len(oldDirectors); i < len(newDirectors); i++ {
 				newDir := newDirectors[i]
-				changes[fmt.Sprintf("director_added_%d", i-len(oldDirectors))] = map[string]interface{}{
+				directorInfo := map[string]interface{}{
 					"action":    "added",
 					"position":  newDir.Position,
 					"full_name": newDir.FullName,
 					"ktp":       newDir.KTP,
 				}
+				if newDir.NPWP != "" {
+					directorInfo["npwp"] = newDir.NPWP
+				}
+				if newDir.StartDate != nil {
+					directorInfo["start_date"] = newDir.StartDate.Format("2006-01-02")
+				}
+				if newDir.EndDate != nil {
+					directorInfo["end_date"] = newDir.EndDate.Format("2006-01-02")
+				}
+				if newDir.DomicileAddress != "" {
+					directorInfo["domicile_address"] = newDir.DomicileAddress
+				}
+				changes[fmt.Sprintf("director_added_%d", i-len(oldDirectors))] = directorInfo
 			}
 		} else if len(oldDirectors) > len(newDirectors) {
 			// Directors were removed
 			for i := len(newDirectors); i < len(oldDirectors); i++ {
 				oldDir := oldDirectors[i]
-				changes[fmt.Sprintf("director_removed_%d", i-len(newDirectors))] = map[string]interface{}{
+				directorInfo := map[string]interface{}{
 					"action":    "removed",
 					"position":  oldDir.Position,
 					"full_name": oldDir.FullName,
 					"ktp":       oldDir.KTP,
 				}
+				if oldDir.NPWP != "" {
+					directorInfo["npwp"] = oldDir.NPWP
+				}
+				if oldDir.StartDate != nil {
+					directorInfo["start_date"] = oldDir.StartDate.Format("2006-01-02")
+				}
+				if oldDir.EndDate != nil {
+					directorInfo["end_date"] = oldDir.EndDate.Format("2006-01-02")
+				}
+				if oldDir.DomicileAddress != "" {
+					directorInfo["domicile_address"] = oldDir.DomicileAddress
+				}
+				changes[fmt.Sprintf("director_removed_%d", i-len(newDirectors))] = directorInfo
 			}
 		}
 
@@ -530,6 +556,30 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 			}
 			if oldDir.DomicileAddress != newDir.DomicileAddress {
 				changes[fmt.Sprintf("director_%d_domicile_address", i)] = map[string]interface{}{"old": oldDir.DomicileAddress, "new": newDir.DomicileAddress}
+			}
+			// Handle StartDate comparison (handle nil pointers)
+			oldStartDate := ""
+			if oldDir.StartDate != nil {
+				oldStartDate = oldDir.StartDate.Format("2006-01-02")
+			}
+			newStartDate := ""
+			if newDir.StartDate != nil {
+				newStartDate = newDir.StartDate.Format("2006-01-02")
+			}
+			if oldStartDate != newStartDate {
+				changes[fmt.Sprintf("director_%d_start_date", i)] = map[string]interface{}{"old": oldStartDate, "new": newStartDate}
+			}
+			// Handle EndDate comparison (handle nil pointers)
+			oldEndDate := ""
+			if oldDir.EndDate != nil {
+				oldEndDate = oldDir.EndDate.Format("2006-01-02")
+			}
+			newEndDate := ""
+			if newDir.EndDate != nil {
+				newEndDate = newDir.EndDate.Format("2006-01-02")
+			}
+			if oldEndDate != newEndDate {
+				changes[fmt.Sprintf("director_%d_end_date", i)] = map[string]interface{}{"old": oldEndDate, "new": newEndDate}
 			}
 		}
 
@@ -572,6 +622,18 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 			}
 			if oldMainBusiness.AdditionalActivities != newMainBusiness.AdditionalActivities {
 				changes["business_additional_activities"] = map[string]interface{}{"old": oldMainBusiness.AdditionalActivities, "new": newMainBusiness.AdditionalActivities}
+			}
+			// Handle StartOperationDate comparison (handle nil pointers)
+			oldStartOpDate := ""
+			if oldMainBusiness.StartOperationDate != nil {
+				oldStartOpDate = oldMainBusiness.StartOperationDate.Format("2006-01-02")
+			}
+			newStartOpDate := ""
+			if newMainBusiness.StartOperationDate != nil {
+				newStartOpDate = newMainBusiness.StartOperationDate.Format("2006-01-02")
+			}
+			if oldStartOpDate != newStartOpDate {
+				changes["business_start_operation_date"] = map[string]interface{}{"old": oldStartOpDate, "new": newStartOpDate}
 			}
 		}
 	}

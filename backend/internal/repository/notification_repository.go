@@ -32,8 +32,13 @@ type notificationRepository struct {
 
 // NewNotificationRepository creates a new notification repository
 func NewNotificationRepository() NotificationRepository {
+	return NewNotificationRepositoryWithDB(database.GetDB())
+}
+
+// NewNotificationRepositoryWithDB creates a new notification repository with injected DB (for testing)
+func NewNotificationRepositoryWithDB(db *gorm.DB) NotificationRepository {
 	return &notificationRepository{
-		db: database.GetDB(),
+		db: db,
 	}
 }
 

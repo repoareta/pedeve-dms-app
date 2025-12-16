@@ -28,6 +28,7 @@ type DevelopmentUseCase interface {
 	ResetReportData() error
 	RunReportSeeder() error
 	CheckReportDataExists() (bool, error)
+	ResetAllFinancialReports() error // Reset all financial reports (all companies)
 	// Combined operations
 	RunAllSeeders() error                           // Run all seeders in order: company -> reports
 	ResetAllSeededData() error                      // Reset all seeded data: reports -> company
@@ -41,6 +42,7 @@ type developmentUseCase struct {
 	roleRepo                  repository.RoleRepository
 	userCompanyAssignmentRepo repository.UserCompanyAssignmentRepository
 	reportRepo                repository.ReportRepository
+	financialReportRepo       repository.FinancialReportRepository
 }
 
 // NewDevelopmentUseCaseWithDB creates a new development use case with injected DB (for testing)
@@ -52,6 +54,7 @@ func NewDevelopmentUseCaseWithDB(db *gorm.DB) DevelopmentUseCase {
 		roleRepo:                  repository.NewRoleRepositoryWithDB(db),
 		userCompanyAssignmentRepo: repository.NewUserCompanyAssignmentRepositoryWithDB(db),
 		reportRepo:                repository.NewReportRepositoryWithDB(db),
+		financialReportRepo:       repository.NewFinancialReportRepositoryWithDB(db),
 	}
 }
 
@@ -675,6 +678,32 @@ func (uc *developmentUseCase) ResetReportData() error {
 	}
 
 	zapLog.Info("Successfully reset report data", zap.Int64("reports_deleted", count))
+	return nil
+}
+
+// ResetAllFinancialReports deletes all financial reports from all companies
+func (uc *developmentUseCase) ResetAllFinancialReports() error {
+	zapLog := logger.GetLogger()
+
+	// Count financial reports before deletion
+	var count int64
+	err := uc.db.Model(&domain.FinancialReportModel{}).Count(&count).Error
+	if err != nil {
+		return fmt.Errorf("failed to count financial reports: %w", err)
+	}
+
+	if count == 0 {
+		zapLog.Info("No financial reports found to reset")
+		return nil
+	}
+
+	// Delete all financial reports
+	err = uc.financialReportRepo.DeleteAll()
+	if err != nil {
+		return fmt.Errorf("failed to delete financial reports: %w", err)
+	}
+
+	zapLog.Info("Successfully reset all financial reports", zap.Int64("financial_reports_deleted", count))
 	return nil
 }
 

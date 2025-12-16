@@ -86,6 +86,9 @@ func main() {
 	// Mulai cleanup notifikasi lama (retention policy: 90 hari default)
 	usecase.StartNotificationCleanup()
 
+	// Mulai scheduler untuk check expiring documents dan director terms (sekali sehari)
+	usecase.StartNotificationScheduler()
+
 	// Seed roles, superadmin, and default administrator user
 	seed.SeedAll()
 
@@ -311,15 +314,26 @@ func main() {
 	protected.Delete("/reports/:id", reportHandler.DeleteReport)
 
 	// Financial Report routes (RKAP & Realisasi)
+	// NOTE: Routes yang lebih spesifik harus diletakkan SEBELUM routes yang lebih umum (dengan :param)
 	financialReportHandler := http.NewFinancialReportHandler(usecase.NewFinancialReportUseCase())
-	protected.Post("/financial-reports", financialReportHandler.CreateFinancialReport)
-	protected.Get("/financial-reports/company/:company_id", financialReportHandler.GetFinancialReportsByCompanyID)
-	protected.Get("/financial-reports/rkap-years/:company_id", financialReportHandler.GetRKAPYearsByCompanyID)
-	protected.Get("/financial-reports/compare", financialReportHandler.GetComparison)
-	protected.Get("/financial-reports/:id", financialReportHandler.GetFinancialReportByID)
-	protected.Put("/financial-reports/:id", financialReportHandler.UpdateFinancialReport)
-	protected.Delete("/financial-reports/:id", financialReportHandler.DeleteFinancialReport)
-	protected.Get("/companies/:company_id/performance/export/excel", financialReportHandler.ExportPerformanceExcel)
+	
+	// Bulk upload endpoints (harus sebelum /financial-reports/:id karena lebih spesifik)
+	protected.Get("/financial-reports/bulk-upload/template", financialReportHandler.GenerateBulkUploadTemplate)    // Download bulk upload template
+	protected.Post("/financial-reports/bulk-upload/validate", financialReportHandler.ValidateBulkExcelFile)        // Validate bulk upload Excel file
+	protected.Post("/financial-reports/bulk-upload", financialReportHandler.UploadBulkFinancialReports)             // Upload bulk financial reports
+	
+	// Other specific routes (harus sebelum /financial-reports/:id)
+	protected.Get("/financial-reports/company/:company_id", financialReportHandler.GetFinancialReportsByCompanyID) // Get all financial reports for a company
+	protected.Get("/financial-reports/compare", financialReportHandler.GetComparison)                            // Get comparison RKAP vs Realisasi YTD
+	protected.Get("/financial-reports/rkap-years/:company_id", financialReportHandler.GetRKAPYearsByCompanyID) // Get RKAP years for a company
+	
+	// General CRUD routes (dengan :id parameter - harus di akhir)
+	protected.Post("/financial-reports", financialReportHandler.CreateFinancialReport)                           // Create financial report
+	protected.Get("/financial-reports/:id", financialReportHandler.GetFinancialReportByID)                      // Get financial report by ID
+	protected.Put("/financial-reports/:id", financialReportHandler.UpdateFinancialReport)                       // Update financial report
+	protected.Delete("/financial-reports/:id", financialReportHandler.DeleteFinancialReport)                    // Delete financial report
+	
+	protected.Get("/companies/:company_id/performance/export/excel", financialReportHandler.ExportPerformanceExcel) // Export performance Excel
 
 	// Route Permission Management (dilindungi)
 	permissionManagementHandler := http.NewPermissionManagementHandler(usecase.NewPermissionManagementUseCase())
@@ -342,9 +356,12 @@ func main() {
 	protected.Post("/development/run-all-seeders", developmentHandler.RunAllSeeders)
 	protected.Post("/development/reset-all-seeded-data", developmentHandler.ResetAllSeededData)
 	protected.Get("/development/check-all-seeder-status", developmentHandler.CheckAllSeederStatus)
+	protected.Post("/development/reset-all-financial-reports", developmentHandler.ResetAllFinancialReports)
 	protected.Post("/development/create-test-notification", developmentHandler.CreateTestNotification)
 	protected.Post("/development/create-test-notifications", developmentHandler.CreateTestNotifications)
 	protected.Post("/development/check-expiring-documents", developmentHandler.CheckExpiringDocuments)
+	protected.Post("/development/check-expiring-director-terms", developmentHandler.CheckExpiringDirectorTerms)
+	protected.Post("/development/check-all-expiring-notifications", developmentHandler.CheckAllExpiringNotifications)
 	protected.Post("/development/create-notification-for-document", developmentHandler.CreateNotificationForDocument)
 
 	// Route SonarQube (hanya superadmin/admin)

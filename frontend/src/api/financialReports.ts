@@ -241,4 +241,103 @@ export const financialReportsApi = {
     )
     return response.data
   },
+
+  // Download bulk upload template Excel
+  async downloadBulkUploadTemplate(params?: {
+    period?: string
+    is_rkap?: boolean
+  }): Promise<Blob> {
+    try {
+      const response = await apiClient.get('/financial-reports/bulk-upload/template', {
+        params,
+        responseType: 'blob',
+      })
+      
+      // Check if response is actually a blob (Excel file)
+      if (!(response.data instanceof Blob)) {
+        throw new Error('Response is not a valid file')
+      }
+      
+      // Check content type - if it's JSON, it means there's an error
+      const contentType = response.headers['content-type'] || ''
+      if (contentType.includes('application/json')) {
+        // Response is JSON error, parse it
+        const text = await (response.data as Blob).text()
+        const json = JSON.parse(text)
+        throw new Error(json.message || json.error || 'Failed to download template')
+      }
+      
+      return response.data
+    } catch (error: unknown) {
+      // If it's already an Error with message, re-throw it
+      if (error instanceof Error) {
+        throw error
+      }
+      
+      // Otherwise, wrap it
+      const axiosError = error as {
+        response?: {
+          status?: number
+          data?: unknown
+          headers?: { 'content-type'?: string }
+        }
+        message?: string
+      }
+      
+      if (axiosError.response?.status === 404) {
+        throw new Error('Template endpoint not found. Pastikan server sudah di-restart setelah perubahan route.')
+      }
+      
+      throw new Error(axiosError.message || 'Failed to download template')
+    }
+  },
+
+  // Validate bulk upload Excel file before upload
+  async validateBulkExcelFile(file: File): Promise<{
+    valid: boolean
+    errors: Array<{ row: number; column: string; message: string }>
+    data: Array<Record<string, unknown>>
+  }> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await apiClient.post('/financial-reports/bulk-upload/validate', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+
+  // Upload bulk financial reports from Excel file
+  async uploadBulkFinancialReports(
+    file: File,
+    onProgress?: (progress: number) => void
+  ): Promise<{
+    success: number
+    failed: number
+    created: number
+    updated: number
+    errors: Array<{ row: number; column?: string; message: string }>
+    message?: string
+  }> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await apiClient.post('/financial-reports/bulk-upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          onProgress(progress)
+        } else if (onProgress && progressEvent.loaded) {
+          // Fallback jika total tidak tersedia
+          onProgress(Math.min(99, Math.round(progressEvent.loaded / 1024))) // Estimate based on KB
+        }
+      },
+    })
+    return response.data
+  },
 }

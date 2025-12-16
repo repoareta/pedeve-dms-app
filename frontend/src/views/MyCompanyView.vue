@@ -477,6 +477,9 @@
                       <template v-if="column.key === 'start_date'">
                         {{ record.start_date ? formatDate(record.start_date) : '-' }}
                       </template>
+                      <template v-else-if="column.key === 'end_date'">
+                        {{ record.end_date ? formatDate(record.end_date) : '-' }}
+                      </template>
                     </template>
                   </a-table>
                 </div>
@@ -741,6 +744,7 @@ const directorColumns = [
   { title: 'KTP', dataIndex: 'ktp', key: 'ktp' },
   { title: 'NPWP', dataIndex: 'npwp', key: 'npwp' },
   { title: 'Tanggal Mulai', key: 'start_date' },
+  { title: 'Tanggal Akhir', key: 'end_date' },
   { title: 'Alamat Domisili', dataIndex: 'domicile_address', key: 'domicile_address' },
 ]
 

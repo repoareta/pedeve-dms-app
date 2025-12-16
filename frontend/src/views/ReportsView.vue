@@ -27,51 +27,36 @@
 
       <!-- Main Content -->
       <div class="mainContentPage">
+        <!-- Bulk Upload Section -->
+        <a-card class="bulk-upload-card" :bordered="false" style="margin-bottom: 24px;">
+          <FinancialReportBulkUpload @upload-success="handleBulkUploadSuccess" />
+        </a-card>
+
         <a-card class="reports-table-card" :bordered="false">
           <!-- Table Filters and Actions -->
           <div class="table-filters-container">
-            <a-input v-model:value="searchText" placeholder="Search report" class="search-input"
+            <a-input v-model:value="searchText" placeholder="Search subsidiary" class="search-input"
               allow-clear>
               <template #prefix>
                 <IconifyIcon icon="mdi:magnify" width="16" />
               </template>
             </a-input>
-            <a-select v-model:value="filterCompanyIds" placeholder="Filter Subsidiary" allow-clear mode="multiple"
-              :max-tag-count="1" class="filter-select" @change="handleCompanyFilterChange">
-              <a-select-option v-for="company in companies" :key="company.id" :value="company.id">
-                {{ company.name }}
-              </a-select-option>
-            </a-select>
-            <a-select v-model:value="filterPeriod" placeholder="Filter Periode" allow-clear class="filter-select"
-              @change="handlePeriodFilterChange">
-              <a-select-option v-for="period in availablePeriods" :key="period" :value="period">
-                {{ formatPeriod(period) }}
-              </a-select-option>
-            </a-select>
-            <div class="export-buttons">
-              <a-button type="text" class="export-btn" @click="handleDownloadTemplate" :loading="templateLoading">
-                <IconifyIcon icon="mdi:file-download" width="20" />
-              </a-button>
-              <a-button type="text" class="export-btn" @click="handleExportPDF" :loading="exportLoading">
-                <IconifyIcon icon="mdi:file-pdf-box" width="20" />
-              </a-button>
-              <a-button type="text" class="export-btn" @click="handleExportExcel" :loading="exportLoading">
-                <IconifyIcon icon="mdi:file-excel-box" width="20" />
-              </a-button>
-            </div>
+            <a-space>
+              <span style="color: #666;">Tahun: {{ currentYear }}</span>
+            </a-space>
           </div>
 
-          <a-table :columns="columns" :data-source="paginatedReports" :pagination="{
+          <a-table :columns="columns" :data-source="filteredSubsidiaries" :pagination="{
             current: currentPage,
             pageSize: pageSize,
-            total: filteredReportsTotal,
+            total: filteredSubsidiaries.length,
             showSizeChanger: true,
-            showTotal: (total: number) => `Total ${total} reports`,
+            showTotal: (total: number) => `Total ${total} subsidiaries`,
             pageSizeOptions: ['10', '20', '50', '100'],
-          }" :loading="loading" row-key="id" :scroll="{ x: 'max-content' }" class="striped-table"
-            @change="handleTableChange" :locale="{ emptyText: 'Tidak ada data reports' }">
+          }" :loading="loading" row-key="company.id" :scroll="{ x: 'max-content' }" class="striped-table"
+            @change="handleTableChange" :locale="{ emptyText: 'Tidak ada data subsidiaries' }">
             <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'name'">
+              <template v-if="column.key === 'company_name'">
                 <div class="name-cell">
                   <div class="table-logo-cell">
                     <img v-if="getCompanyLogo(record.company)" :src="getCompanyLogo(record.company)"
@@ -82,58 +67,20 @@
                     </div>
                   </div>
                   <div class="company-name-wrapper">
-                    <span class="company-name">{{ record.company?.name || 'Unknown Company' }}</span> <br>
-                    <span class="report-period">Laporan Bulan {{ formatPeriod(record.period) }}</span>
+                    <span class="company-name">{{ record.company?.name || 'Unknown Company' }}</span>
                   </div>
                 </div>
               </template>
-              <template v-if="column.key === 'rkap_percent'">
-                <span>{{ calculateRKAPPercent(record) }}%</span>
-              </template>
-              <template v-if="column.key === 'revenue'">
-                <span>{{ formatNumber(record.revenue) }}</span>
-              </template>
-              <template v-if="column.key === 'npat'">
-                <span>{{ formatNumber(record.npat) }}</span>
-              </template>
-              <template v-if="column.key === 'opex'">
-                <span>{{ formatNumber(record.opex) }}</span>
-              </template>
-              <template v-if="column.key === 'dividend'">
-                <span>{{ formatNumber(record.dividend) }}</span>
-              </template>
-              <template v-if="column.key === 'financial_score'">
-                <div class="financial-score-badge"
-                  :class="getScoreClass(calculateFinancialScore(record.financial_ratio))">
-                  {{ calculateFinancialScore(record.financial_ratio) }}
-                </div>
-              </template>
-              <template v-if="column.key === 'periode'">
-                <span>{{ formatPeriod(record.period) }}</span>
+              <template v-else-if="column.key && column.key.startsWith('month_')">
+                <a-tag :color="record.monthlyStatus[parseInt(column.key.split('_')[1]!)] ? 'success' : 'default'">
+                  {{ record.monthlyStatus[parseInt(column.key.split('_')[1]!)] ? 'Ada' : 'Belum' }}
+                </a-tag>
               </template>
               <template v-if="column.key === 'actions'">
-                <a-dropdown>
-                  <a-button type="text" size="small" class="action-dropdown-btn">
-                    <IconifyIcon icon="mdi:dots-vertical" width="18" />
-                  </a-button>
-                  <template #overlay>
-                    <a-menu>
-                      <a-menu-item key="view" @click="handleView(record)">
-                        <IconifyIcon icon="mdi:eye" width="16" style="margin-right: 8px;" />
-                        View
-                      </a-menu-item>
-                      <a-menu-item key="edit" @click="handleEdit(record)">
-                        <IconifyIcon icon="mdi:pencil" width="16" style="margin-right: 8px;" />
-                        Edit
-                      </a-menu-item>
-                      <a-menu-divider />
-                      <a-menu-item key="delete" danger @click="handleDelete(record)">
-                        <IconifyIcon icon="mdi:delete" width="16" style="margin-right: 8px;" />
-                        Hapus
-                      </a-menu-item>
-                    </a-menu>
-                  </template>
-                </a-dropdown>
+                <a-button type="link" size="small" @click="handleViewSubsidiary(record)">
+                  <IconifyIcon icon="mdi:eye" width="16" style="margin-right: 4px;" />
+                  View
+                </a-button>
               </template>
             </template>
           </a-table>
@@ -274,42 +221,44 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
+import FinancialReportBulkUpload from '../components/FinancialReportBulkUpload.vue'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import type { TableColumnsType } from 'ant-design-vue'
 import reportsApi, { type Report, type ValidationRow } from '../api/reports'
 import { companyApi, type Company } from '../api/userManagement'
+import { financialReportsApi, type FinancialReport } from '../api/financialReports'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 const loading = ref(false)
-const exportLoading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const totalReports = ref(0)
 const totalPages = ref(0)
 
-// Reports data from backend
+// Reports data from backend (keeping for compatibility)
 const reportsData = ref<Report[]>([])
 const companies = ref<Company[]>([])
+
+// Subsidiaries data with monthly report status
+interface SubsidiaryReportStatus {
+  company: Company
+  monthlyStatus: Record<number, boolean> // month (1-12) -> has report
+  reports: FinancialReport[] // cached reports for this company
+}
+
+const subsidiariesWithStatus = ref<SubsidiaryReportStatus[]>([])
+const currentYear = new Date().getFullYear().toString()
 
 // Filters
 const filterCompanyIds = ref<string[]>([])
 const filterPeriod = ref<string | undefined>(undefined)
 const searchText = ref<string>('')
 
-// Available periods for filter - generate from 2025 months
-const availablePeriods = computed(() => {
-  const periods: string[] = []
-  const year = 2025
-  for (let month = 1; month <= 12; month++) {
-    const monthStr = month.toString().padStart(2, '0')
-    periods.push(`${year}-${monthStr}`)
-  }
-  return periods.reverse() // Sort descending (newest first)
-})
+// Available periods removed - no longer used with new table structure
 
 // Icon colors for companies
 const iconColors = [
@@ -372,14 +321,7 @@ const calculateRKAPPercent = (_report: Report): number => {
   return Math.floor(Math.random() * 100)
 }
 
-// Calculate Financial Score based on financial ratio
-const calculateFinancialScore = (financialRatio: number): string => {
-  if (financialRatio >= 2.0) return 'A'
-  if (financialRatio >= 1.5) return 'B'
-  if (financialRatio >= 1.0) return 'C'
-  if (financialRatio >= 0.5) return 'D+'
-  return 'D'
-}
+// calculateFinancialScore removed - not used in new table structure
 
 // Load reports from backend
 const loadReports = async () => {
@@ -468,16 +410,74 @@ const loadCompanies = async () => {
   }
 }
 
+// Load subsidiaries with monthly report status
+const loadSubsidiariesWithStatus = async () => {
+  loading.value = true
+  try {
+    // Get all active companies
+    const allCompanies = await companyApi.getAll()
+    const activeCompanies = allCompanies.filter(c => c.is_active)
+    
+    // For each company, get financial reports for current year
+    const subsidiariesData: SubsidiaryReportStatus[] = await Promise.all(
+      activeCompanies.map(async (company) => {
+        try {
+          // Get all financial reports for this company
+          const reports = await financialReportsApi.getByCompanyId(company.id)
+          
+          // Filter only realisasi reports (not RKAP) for current year
+          const yearReports = reports.filter(r => 
+            !r.is_rkap && 
+            r.year === currentYear &&
+            r.period && 
+            r.period.startsWith(currentYear)
+          )
+          
+          // Build monthly status map (1-12)
+          const monthlyStatus: Record<number, boolean> = {}
+          for (let month = 1; month <= 12; month++) {
+            const period = `${currentYear}-${month.toString().padStart(2, '0')}`
+            monthlyStatus[month] = yearReports.some(r => r.period === period)
+          }
+          
+          return {
+            company,
+            monthlyStatus,
+            reports: yearReports,
+          }
+        } catch (error) {
+          console.error(`Failed to load reports for company ${company.id}:`, error)
+          // Return with all months as false if error
+          const monthlyStatus: Record<number, boolean> = {}
+          for (let month = 1; month <= 12; month++) {
+            monthlyStatus[month] = false
+          }
+          return {
+            company,
+            monthlyStatus,
+            reports: [],
+          }
+        }
+      })
+    )
+    
+    subsidiariesWithStatus.value = subsidiariesData
+  } catch (error: unknown) {
+    const axiosError = error as { message?: string }
+    message.error('Gagal memuat data subsidiaries: ' + (axiosError.message || 'Unknown error'))
+    subsidiariesWithStatus.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
 // Watch for filter changes
 watch([filterCompanyIds, filterPeriod], () => {
   currentPage.value = 1
   loadReports()
 })
 
-// Watch searchText untuk trigger handleSearch
-watch(searchText, () => {
-  handleSearch()
-})
+// Watch searchText is handled by computed filteredSubsidiaries (no need for async handler)
 
 // Note: Pagination changes are handled by handleTableChange
 // Watch is removed to prevent double loading
@@ -591,132 +591,62 @@ const _oldDummyData = [
   },
 ] // Old dummy data - not used anymore
 
-// Store for all reports when search is active (to enable client-side search across all pages)
-const allReportsForSearch = ref<Report[]>([])
+// allReportsForSearch and filteredReports removed - using filteredSubsidiaries instead
 
-// Computed for filtered reports (with search)
-const filteredReports = computed(() => {
-  // If search is active, use allReportsForSearch, otherwise use current page data
-  const sourceData = (searchText.value && searchText.value.trim()) ? allReportsForSearch.value : reportsData.value
-  let filtered = sourceData
+// Computed for filtered subsidiaries (with search)
+const filteredSubsidiaries = computed(() => {
+  let filtered = subsidiariesWithStatus.value
 
   // Apply search filter
   if (searchText.value && searchText.value.trim()) {
     const search = searchText.value.toLowerCase().trim()
-    filtered = filtered.filter(report => {
-      const companyName = report.company?.name || ''
-      const period = formatPeriod(report.period).toLowerCase()
-      return companyName.toLowerCase().includes(search) || period.includes(search)
+    filtered = filtered.filter(item => {
+      const companyName = item.company.name || ''
+      return companyName.toLowerCase().includes(search)
     })
   }
 
   return filtered
 })
 
-// Computed for paginated reports
-const paginatedReports = computed(() => {
-  const filtered = filteredReports.value
-
-  // If search is active, apply client-side pagination
-  if (searchText.value && searchText.value.trim()) {
-    const start = (currentPage.value - 1) * pageSize.value
-    const end = start + pageSize.value
-    return filtered.slice(start, end)
-  }
-
-  // Otherwise, return backend paginated data
-  return reportsData.value
-})
-
-// Computed for total filtered reports (for pagination)
-const filteredReportsTotal = computed(() => {
-  // If search is active, use filtered count
-  if (searchText.value && searchText.value.trim()) {
-    return filteredReports.value.length
-  }
-  // Otherwise, use backend total
-  return totalReports.value
-})
-
 // Table columns with filters and sorters
+// Month names for column headers
+const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+// Table columns with monthly status
 const columns: TableColumnsType = [
   {
-    title: 'Name',
-    key: 'name',
-    dataIndex: 'name',
-    width: 300,
+    title: 'Company Name',
+    key: 'company_name',
+    dataIndex: 'company',
+    width: 250,
     fixed: 'left',
-    sorter: (a: Report, b: Report) => {
-      const nameA = a.company?.name || ''
-      const nameB = b.company?.name || ''
+    sorter: (a: SubsidiaryReportStatus, b: SubsidiaryReportStatus) => {
+      const nameA = a.company.name || ''
+      const nameB = b.company.name || ''
       return nameA.localeCompare(nameB)
     },
   },
-  {
-    title: 'RKAP (%)',
-    key: 'rkap_percent',
-    dataIndex: 'rkap_percent',
-    width: 120,
-    align: 'center',
-    sorter: (a: Report, b: Report) => calculateRKAPPercent(a) - calculateRKAPPercent(b),
-  },
-  {
-    title: 'Revenue',
-    key: 'revenue',
-    dataIndex: 'revenue',
-    width: 120,
-    align: 'right',
-    sorter: (a: Report, b: Report) => a.revenue - b.revenue,
-  },
-  {
-    title: 'NPAT',
-    key: 'npat',
-    dataIndex: 'npat',
-    width: 120,
-    align: 'right',
-    sorter: (a: Report, b: Report) => a.npat - b.npat,
-  },
-  {
-    title: 'Opex',
-    key: 'opex',
-    dataIndex: 'opex',
-    width: 140,
-    align: 'right',
-    sorter: (a: Report, b: Report) => a.opex - b.opex,
-  },
-  {
-    title: 'Dividend',
-    key: 'dividend',
-    dataIndex: 'dividend',
-    width: 120,
-    align: 'right',
-    sorter: (a: Report, b: Report) => a.dividend - b.dividend,
-  },
-  {
-    title: 'Financial Score',
-    key: 'financial_score',
-    dataIndex: 'financial_score',
-    width: 150,
-    align: 'center',
-    sorter: (a: Report, b: Report) => {
-      const scoreA = calculateFinancialScore(a.financial_ratio)
-      const scoreB = calculateFinancialScore(b.financial_ratio)
-      return scoreA.localeCompare(scoreB)
-    },
-  },
-  {
-    title: 'Periode',
-    key: 'periode',
-    dataIndex: 'periode',
-    width: 120,
-    align: 'center',
-    sorter: (a: Report, b: Report) => a.period.localeCompare(b.period),
-  },
+  // Add columns for each month (1-12)
+  ...monthNames.map((monthName, index) => {
+    const month = index + 1
+    return {
+      title: monthName,
+      key: `month_${month}`,
+      dataIndex: `month_${month}`,
+      width: 80,
+      align: 'center' as const,
+      sorter: (a: SubsidiaryReportStatus, b: SubsidiaryReportStatus) => {
+        const statusA = a.monthlyStatus[month] ? 1 : 0
+        const statusB = b.monthlyStatus[month] ? 1 : 0
+        return statusA - statusB
+      },
+    }
+  }),
   {
     title: 'Actions',
     key: 'actions',
     width: 100,
-    align: 'right',
     fixed: 'right',
   },
 ]
@@ -742,15 +672,7 @@ const _visiblePages = computed(() => {
   return pages
 })
 
-// Format number dengan thousand separator
-const formatNumber = (num: number): string => {
-  return new Intl.NumberFormat('id-ID').format(num)
-}
-
-// Get score class untuk styling
-const getScoreClass = (score: string): string => {
-  return 'score-' + score.toLowerCase().replace('+', 'plus')
-}
+// formatNumber and getScoreClass removed - not used in new table structure
 
 // Handlers
 const handleLogout = async () => {
@@ -758,87 +680,7 @@ const handleLogout = async () => {
   router.push('/login')
 }
 
-const handleExportPDF = async () => {
-  try {
-    exportLoading.value = true
-    const params: { company_id?: string; period?: string } = {}
-    // Export semua data yang sesuai filter (tanpa pagination)
-    if (filterCompanyIds.value && filterCompanyIds.value.length > 0) {
-      params.company_id = filterCompanyIds.value.join(',')
-    }
-    if (filterPeriod.value) {
-      params.period = filterPeriod.value
-    }
-
-    const blob = await reportsApi.exportPDF(params)
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-
-    // Generate filename dengan filter info
-    let filename = 'reports'
-    if (filterPeriod.value) {
-      filename += `_${filterPeriod.value}`
-    }
-    if (filterCompanyIds.value && filterCompanyIds.value.length > 0) {
-      filename += `_${filterCompanyIds.value.length}companies`
-    }
-    filename += `_${new Date().toISOString().split('T')[0]}.pdf`
-
-    link.href = url
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-    message.success('Export PDF berhasil')
-  } catch (error: unknown) {
-    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
-    message.error('Gagal export PDF: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
-  } finally {
-    exportLoading.value = false
-  }
-}
-
-const handleExportExcel = async () => {
-  try {
-    exportLoading.value = true
-    const params: { company_id?: string; period?: string } = {}
-    // Export semua data yang sesuai filter (tanpa pagination)
-    if (filterCompanyIds.value && filterCompanyIds.value.length > 0) {
-      params.company_id = filterCompanyIds.value.join(',')
-    }
-    if (filterPeriod.value) {
-      params.period = filterPeriod.value
-    }
-
-    const blob = await reportsApi.exportExcel(params)
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-
-    // Generate filename dengan filter info
-    let filename = 'reports'
-    if (filterPeriod.value) {
-      filename += `_${filterPeriod.value}`
-    }
-    if (filterCompanyIds.value && filterCompanyIds.value.length > 0) {
-      filename += `_${filterCompanyIds.value.length}companies`
-    }
-    filename += `_${new Date().toISOString().split('T')[0]}.xlsx`
-
-    link.href = url
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-    message.success('Export Excel berhasil')
-  } catch (error: unknown) {
-    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
-    message.error('Gagal export Excel: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
-  } finally {
-    exportLoading.value = false
-  }
-}
+// handleExportPDF and handleExportExcel removed - not used in new table structure
 
 // Upload states
 const uploadModalVisible = ref(false)
@@ -847,7 +689,7 @@ const selectedFile = ref<File | null>(null)
 const validating = ref(false)
 const uploading = ref(false)
 const uploadProgress = ref(0)
-const templateLoading = ref(false)
+// templateLoading removed - now handled by FinancialReportBulkUpload component
 const validationResult = ref<{
   valid: boolean
   errors: Array<{ row: number; column: string; message: string }>
@@ -962,49 +804,7 @@ const handleUpload = async () => {
   }
 }
 
-const handleDownloadTemplate = async () => {
-  templateLoading.value = true
-  try {
-    const blob = await reportsApi.downloadTemplate()
-    
-    // Check if response is actually a blob
-    if (!(blob instanceof Blob)) {
-      throw new Error('Response is not a valid file')
-    }
-    
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'report_template.xlsx'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-    message.success('Template berhasil didownload')
-  } catch (error: unknown) {
-    const axiosError = error as { 
-      response?: { 
-        status?: number
-        data?: { message?: string; error?: string } 
-      }
-      message?: string 
-      code?: string
-    }
-    
-    // Handle 404 or endpoint not found
-    if (axiosError.response?.status === 404 || axiosError.code === 'ERR_BAD_REQUEST') {
-      message.warning('Endpoint template belum tersedia. Silakan hubungi administrator.')
-    } else {
-      const errorMessage = axiosError.response?.data?.message || 
-                          axiosError.response?.data?.error || 
-                          axiosError.message || 
-                          'Unknown error'
-      message.error('Gagal download template: ' + errorMessage)
-    }
-  } finally {
-    templateLoading.value = false
-  }
-}
+// handleDownloadTemplate removed - now handled by FinancialReportBulkUpload component
 
 const clearFile = () => {
   selectedFile.value = null
@@ -1025,37 +825,17 @@ const handleAddReport = () => {
   router.push('/reports/new')
 }
 
-const handleView = (record: Report) => {
-  // Redirect ke halaman detail subsidiary (company detail)
-  if (record.company_id) {
-    router.push(`/subsidiaries/${record.company_id}`)
-  } else {
-    message.warning('Company ID tidak tersedia')
-  }
+const handleBulkUploadSuccess = () => {
+  message.success('Bulk upload berhasil! Data akan diperbarui.')
+  // Reload subsidiaries with status
+  loadSubsidiariesWithStatus()
 }
 
-const handleEdit = (record: Report) => {
-  router.push(`/reports/${record.id}/edit`)
-}
+// handleView, handleEdit, handleDelete removed - not used in new table structure
 
-const handleDelete = (record: Report) => {
-  Modal.confirm({
-    title: 'Hapus Report',
-    content: `Apakah Anda yakin ingin menghapus report untuk ${record.company?.name || 'perusahaan ini'} periode ${formatPeriod(record.period)}?`,
-    okText: 'Hapus',
-    okType: 'danger',
-    cancelText: 'Batal',
-    onOk: async () => {
-      try {
-        await reportsApi.delete(record.id)
-        message.success('Report berhasil dihapus')
-        await loadReports()
-      } catch (error: unknown) {
-        const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
-        message.error('Gagal menghapus report: ' + (axiosError.response?.data?.message || axiosError.message))
-      }
-    },
-  })
+const handleViewSubsidiary = (record: SubsidiaryReportStatus) => {
+  // Redirect ke halaman detail subsidiary
+  router.push(`/subsidiaries/${record.company.id}`)
 }
 
 // Navigation functions (kept for potential future use)
@@ -1076,78 +856,21 @@ const _goToPage = (page: number) => {
 
 // Handle table change (pagination, sorting, filtering)
 const handleTableChange = (pag: { current?: number; pageSize?: number }) => {
-  let shouldReload = false
-
   if (pag.current !== undefined && pag.current !== currentPage.value) {
     currentPage.value = pag.current
-    shouldReload = true
   }
 
   if (pag.pageSize !== undefined && pag.pageSize !== pageSize.value) {
     pageSize.value = pag.pageSize
     currentPage.value = 1 // Reset to first page when page size changes
-    shouldReload = true
   }
-
-  // Only reload from backend if pagination changed and search is not active
-  // If search is active, pagination is handled client-side only (no reload needed)
-  if (shouldReload && (!searchText.value || !searchText.value.trim())) {
-    loadReports()
-  }
-}
-
-// Handle period filter change
-const handlePeriodFilterChange = () => {
-  currentPage.value = 1
-  loadReports()
-}
-
-// Handle company filter change
-const handleCompanyFilterChange = () => {
-  currentPage.value = 1
-  loadReports()
-}
-
-// Handle search input
-const handleSearch = async () => {
-  currentPage.value = 1
-
-  // If search is active, load all reports (without pagination) for client-side search
-  if (searchText.value && searchText.value.trim()) {
-    try {
-      loading.value = true
-      const params: { page: number; page_size: number; company_id?: string; period?: string } = {
-        page: 1,
-        page_size: 999999, // Load all data for search
-      }
-      if (filterCompanyIds.value && filterCompanyIds.value.length > 0) {
-        params.company_id = filterCompanyIds.value.join(',')
-      }
-      if (filterPeriod.value) {
-        params.period = filterPeriod.value
-      }
-
-      const response = await reportsApi.getAll(params)
-      allReportsForSearch.value = response.data
-    } catch (error: unknown) {
-      console.error('Failed to load all reports for search:', error)
-      // Fallback to current page data
-      allReportsForSearch.value = reportsData.value
-    } finally {
-      loading.value = false
-    }
-  } else {
-    // Clear allReportsForSearch when search is cleared
-    allReportsForSearch.value = []
-    // Reload with normal pagination
-    loadReports()
-  }
+  // Pagination is handled client-side by filteredSubsidiaries computed
 }
 
 // Load data on mount
 onMounted(async () => {
   await Promise.all([
-    loadReports(),
+    loadSubsidiariesWithStatus(),
     loadCompanies(),
   ])
 })

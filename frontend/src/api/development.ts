@@ -93,6 +93,42 @@ const developmentApi = {
     )
     return response.data
   },
+
+  // Reset all financial reports
+  async resetAllFinancialReports(): Promise<ResetSubsidiaryResponse> {
+    const response = await apiClient.post<ResetSubsidiaryResponse>(
+      '/development/reset-all-financial-reports',
+      {}
+    )
+    return response.data
+  },
+
+  // Check expiring documents
+  async checkExpiringDocuments(thresholdDays: number = 30): Promise<{ message: string; threshold_days: number; documents_found: number; notifications_created: number }> {
+    const response = await apiClient.post<{ message: string; threshold_days: number; documents_found: number; notifications_created: number }>(
+      '/development/check-expiring-documents',
+      { threshold_days: thresholdDays }
+    )
+    return response.data
+  },
+
+  // Check expiring director terms
+  async checkExpiringDirectorTerms(thresholdDays: number = 30): Promise<{ message: string; threshold_days: number; directors_found: number; notifications_created: number }> {
+    const response = await apiClient.post<{ message: string; threshold_days: number; directors_found: number; notifications_created: number }>(
+      '/development/check-expiring-director-terms',
+      { threshold_days: thresholdDays }
+    )
+    return response.data
+  },
+
+  // Check all expiring notifications
+  async checkAllExpiringNotifications(thresholdDays: number = 30): Promise<{ message: string; threshold_days: number; documents: { found: number; notifications_created: number }; directors: { found: number; notifications_created: number }; total_notifications_created: number }> {
+    const response = await apiClient.post<{ message: string; threshold_days: number; documents: { found: number; notifications_created: number }; directors: { found: number; notifications_created: number }; total_notifications_created: number }>(
+      '/development/check-all-expiring-notifications',
+      { threshold_days: thresholdDays }
+    )
+    return response.data
+  },
 }
 
 export default developmentApi

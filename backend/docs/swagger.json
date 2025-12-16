@@ -786,6 +786,75 @@
                 }
             }
         },
+        "/api/v1/companies/{company_id}/performance/export/excel": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Export performance data (Balance Sheet, Profit \u0026 Loss, Cashflow, Ratio) dengan chart untuk periode tertentu",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                ],
+                "tags": [
+                    "Financial Reports"
+                ],
+                "summary": "Export Performance Data to Excel",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Company ID",
+                        "name": "company_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start period (YYYY-MM)",
+                        "name": "start_period",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End period (YYYY-MM)",
+                        "name": "end_period",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/companies/{id}": {
             "get": {
                 "security": [
@@ -934,6 +1003,64 @@
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/companies/{id}/ancestors": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil daftar ancestors (parent companies) dari company tertentu.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Company Management"
+                ],
+                "summary": "Ambil Ancestors Company",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Company ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.CompanyModel"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
@@ -1141,6 +1268,470 @@
                 }
             }
         },
+        "/api/v1/director-positions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil daftar semua jabatan pengurus yang aktif. User reguler hanya melihat jabatan aktif, superadmin/administrator bisa melihat semua termasuk yang tidak aktif.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Company Management"
+                ],
+                "summary": "Ambil Semua Director Positions",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Include inactive director positions (hanya superadmin/administrator)",
+                        "name": "include_inactive",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Daftar jabatan pengurus berhasil diambil",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.DirectorPositionModel"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Membuat jabatan pengurus baru. Hanya superadmin dan administrator yang dapat membuat jabatan baru. Jika jabatan dengan nama yang sama sudah ada (tidak aktif), akan diaktifkan kembali.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Company Management"
+                ],
+                "summary": "Buat Director Position Baru",
+                "parameters": [
+                    {
+                        "description": "Director position data",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Jabatan pengurus berhasil dibuat",
+                        "schema": {
+                            "$ref": "#/definitions/domain.DirectorPositionModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request atau jabatan sudah ada",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden (hanya superadmin/administrator)",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/director-positions/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengupdate jabatan pengurus. Hanya superadmin dan administrator yang dapat mengupdate jabatan.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Company Management"
+                ],
+                "summary": "Update Director Position",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Director Position ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Director position data",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Jabatan pengurus berhasil diupdate",
+                        "schema": {
+                            "$ref": "#/definitions/domain.DirectorPositionModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden (hanya superadmin/administrator)",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menghapus jabatan pengurus. Hanya superadmin yang dapat menghapus secara permanen. Administrator hanya dapat soft delete (menonaktifkan). Jika jabatan masih digunakan, akan dilakukan soft delete.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Company Management"
+                ],
+                "summary": "Hapus Director Position",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Director Position ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Jabatan pengurus berhasil dihapus",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request atau jabatan masih digunakan",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden (hanya superadmin/administrator)",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/document-types": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil daftar semua jenis dokumen yang aktif. User reguler hanya melihat jenis dokumen aktif, superadmin/administrator bisa melihat semua termasuk yang tidak aktif.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Ambil Semua Document Types",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Include inactive document types (hanya superadmin/administrator)",
+                        "name": "include_inactive",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Daftar jenis dokumen berhasil diambil",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.DocumentTypeModel"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Membuat jenis dokumen baru. Hanya superadmin dan administrator yang dapat membuat jenis dokumen baru. Jika jenis dokumen dengan nama yang sama sudah ada (tidak aktif), akan diaktifkan kembali.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Buat Document Type Baru",
+                "parameters": [
+                    {
+                        "description": "Document type data",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Jenis dokumen berhasil dibuat",
+                        "schema": {
+                            "$ref": "#/definitions/domain.DocumentTypeModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request atau jenis dokumen sudah ada",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden (hanya superadmin/administrator)",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/document-types/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengupdate jenis dokumen (nama atau status aktif/tidak aktif). Hanya superadmin dan administrator yang dapat mengupdate jenis dokumen.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Update Document Type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Document Type ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Document type data",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Jenis dokumen berhasil diupdate",
+                        "schema": {
+                            "$ref": "#/definitions/domain.DocumentTypeModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden (hanya superadmin/administrator)",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Document type tidak ditemukan",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menghapus jenis dokumen (soft delete: set is_active = false). Hanya superadmin dan administrator yang dapat menghapus. Jika jenis dokumen sudah digunakan oleh dokumen, akan di-soft delete (tidak aktif) agar dokumen yang sudah ada tidak error.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Hapus Document Type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Document Type ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Jenis dokumen berhasil dihapus",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden (hanya superadmin/administrator)",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Document type tidak ditemukan",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/documents": {
             "get": {
                 "security": [
@@ -1164,6 +1755,12 @@
                         "type": "string",
                         "description": "Filter by folder ID",
                         "name": "folder_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by director ID (untuk dokumen individu)",
+                        "name": "director_id",
                         "in": "query"
                     },
                     {
@@ -1521,6 +2118,12 @@
                     },
                     {
                         "type": "string",
+                        "description": "ID direktur/individu yang terkait (opsional)",
+                        "name": "director_id",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
                         "description": "Judul dokumen (opsional)",
                         "name": "title",
                         "in": "formData"
@@ -1670,6 +2273,12 @@
                         "type": "string",
                         "description": "ID folder (opsional, hanya jika Content-Type: multipart/form-data)",
                         "name": "folder_id",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID direktur/individu yang terkait (opsional, hanya jika Content-Type: multipart/form-data)",
+                        "name": "director_id",
                         "in": "formData"
                     },
                     {
@@ -1833,6 +2442,551 @@
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/financial-reports": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Membuat financial report baru (RKAP tahunan atau Realisasi bulanan). RKAP hanya boleh 1x per tahun per perusahaan.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Financial Reports"
+                ],
+                "summary": "Buat Financial Report Baru (RKAP atau Realisasi)",
+                "parameters": [
+                    {
+                        "description": "Financial Report data",
+                        "name": "report",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/domain.CreateFinancialReportRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/domain.FinancialReportModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/financial-reports/bulk-upload": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upload Excel file, validate rows, and create financial reports in database. Supports both RKAP and Realisasi.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Financial Reports"
+                ],
+                "summary": "Upload Financial Reports from Excel (Bulk)",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Excel file (.xlsx, .xls)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Response dengan success, failed, dan errors",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/financial-reports/bulk-upload/template": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Download template Excel file untuk upload financial reports dalam jumlah banyak. Template berisi semua perusahaan yang dapat diakses user dengan kolom-kolom yang diperlukan.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                ],
+                "tags": [
+                    "Financial Reports"
+                ],
+                "summary": "Download Financial Report Bulk Upload Template",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Period untuk template (YYYY-MM), default: current month",
+                        "name": "period",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Apakah template untuk RKAP (true) atau Realisasi (false), default: false",
+                        "name": "is_rkap",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/financial-reports/bulk-upload/validate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Validates Excel file format and data before bulk upload. Returns validation errors and parsed data.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Financial Reports"
+                ],
+                "summary": "Validate Financial Report Bulk Upload Excel File",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Excel file (.xlsx, .xls)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Response dengan valid, errors, dan data",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/financial-reports/company/{company_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil semua financial reports (RKAP dan Realisasi) untuk perusahaan tertentu",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Financial Reports"
+                ],
+                "summary": "Ambil Semua Financial Reports untuk Company",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Company ID",
+                        "name": "company_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.FinancialReportModel"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/financial-reports/compare": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil perbandingan antara RKAP tahunan dan Realisasi YTD sampai bulan tertentu",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Financial Reports"
+                ],
+                "summary": "Ambil Perbandingan RKAP vs Realisasi YTD",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Company ID",
+                        "name": "company_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Year (format: YYYY)",
+                        "name": "year",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Month (format: MM, 01-12)",
+                        "name": "month",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.FinancialReportComparisonResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/financial-reports/rkap-years/{company_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil daftar tahun yang sudah ada RKAP untuk perusahaan tertentu",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Financial Reports"
+                ],
+                "summary": "Ambil Daftar Tahun yang Sudah Ada RKAP",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Company ID",
+                        "name": "company_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/financial-reports/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil financial report berdasarkan ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Financial Reports"
+                ],
+                "summary": "Ambil Financial Report by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Financial Report ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.FinancialReportModel"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengupdate financial report yang sudah ada. Validasi RKAP 1x per tahun tetap berlaku.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Financial Reports"
+                ],
+                "summary": "Update Financial Report",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Financial Report ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Financial Report data",
+                        "name": "report",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/domain.UpdateFinancialReportRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.FinancialReportModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menghapus financial report. Hanya bisa dihapus oleh user yang memiliki akses ke company tersebut.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Financial Reports"
+                ],
+                "summary": "Hapus Financial Report",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Financial Report ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/domain.ErrorResponse"
                         }
@@ -3053,6 +4207,232 @@
                 }
             }
         },
+        "/api/v1/shareholder-types": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengambil daftar semua jenis pemegang saham yang aktif. User reguler hanya melihat jenis pemegang saham aktif, superadmin/administrator bisa melihat semua termasuk yang tidak aktif.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Company Management"
+                ],
+                "summary": "Ambil Semua Shareholder Types",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Include inactive shareholder types (hanya superadmin/administrator)",
+                        "name": "include_inactive",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Daftar jenis pemegang saham berhasil diambil",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.ShareholderTypeModel"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Membuat jenis pemegang saham baru. Hanya superadmin dan administrator yang dapat membuat jenis pemegang saham baru. Jika jenis pemegang saham dengan nama yang sama sudah ada (tidak aktif), akan diaktifkan kembali.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Company Management"
+                ],
+                "summary": "Buat Shareholder Type Baru",
+                "parameters": [
+                    {
+                        "description": "Shareholder type data",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Jenis pemegang saham berhasil dibuat",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ShareholderTypeModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request atau jenis pemegang saham sudah ada",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden (hanya superadmin/administrator)",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/shareholder-types/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mengupdate jenis pemegang saham. Hanya superadmin dan administrator yang dapat mengupdate jenis pemegang saham.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Company Management"
+                ],
+                "summary": "Update Shareholder Type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Shareholder Type ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Shareholder type data",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Jenis pemegang saham berhasil diupdate",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ShareholderTypeModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden (hanya superadmin/administrator)",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menghapus jenis pemegang saham. Hanya superadmin yang dapat menghapus secara permanen. Administrator hanya dapat soft delete (menonaktifkan). Jika jenis pemegang saham masih digunakan, akan dilakukan soft delete.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Company Management"
+                ],
+                "summary": "Hapus Shareholder Type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Shareholder Type ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Jenis pemegang saham berhasil dihapus",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request atau jenis pemegang saham masih digunakan",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden (hanya superadmin/administrator)",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/swagger/regenerate": {
             "post": {
                 "security": [
@@ -3749,6 +5129,57 @@
                 }
             }
         },
+        "/development/check-all-expiring-notifications": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Trigger manual check untuk semua expiring notifications (documents dan director terms) sekaligus (untuk testing, superadmin dan administrator)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Check All Expiring Notifications",
+                "parameters": [
+                    {
+                        "description": "Threshold days untuk check (default: 30)",
+                        "name": "threshold_days",
+                        "in": "body",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/development/check-all-seeder-status": {
             "get": {
                 "security": [
@@ -3767,6 +5198,108 @@
                     "Development"
                 ],
                 "summary": "Cek Status Semua Seeder",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/development/check-expiring-director-terms": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Trigger manual check untuk masa jabatan pengurus yang akan berakhir dan create notifications (untuk testing, superadmin dan administrator)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Check Expiring Director Terms",
+                "parameters": [
+                    {
+                        "description": "Threshold days untuk check (default: 30)",
+                        "name": "threshold_days",
+                        "in": "body",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/development/check-expiring-documents": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Trigger manual check untuk dokumen yang akan expired dan create notifications (untuk testing, superadmin dan administrator)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Check Expiring Documents",
+                "parameters": [
+                    {
+                        "description": "Threshold days untuk check (default: 30)",
+                        "name": "threshold_days",
+                        "in": "body",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -3849,6 +5382,198 @@
                     "Development"
                 ],
                 "summary": "Cek Status Seeder Data",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/development/create-notification-for-document": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create notification langsung untuk dokumen tertentu berdasarkan document ID (untuk testing, superadmin dan administrator)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Create Notification for Document",
+                "parameters": [
+                    {
+                        "description": "Document ID",
+                        "name": "document_id",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/development/create-test-notification": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Membuat notifikasi test untuk user yang sedang login (untuk testing fitur notifikasi)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Create Test Notification",
+                "parameters": [
+                    {
+                        "description": "Notification data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/development/create-test-notifications": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Membuat beberapa notifikasi test untuk user yang sedang login (untuk testing fitur notifikasi)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Create Test Notifications",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/development/reset-all-financial-reports": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Menghapus semua data laporan keuangan (Financial Reports) dari semua perusahaan (hanya superadmin)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Development"
+                ],
+                "summary": "Reset Semua Data Laporan Keuangan",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -4151,6 +5876,311 @@
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get list of notifications for the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Get user notifications",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Filter unread only",
+                        "name": "unread_only",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Limit results (default: 5)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/:id/read": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mark a specific notification as read",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Mark notification as read",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Notification ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/delete-all": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Hapus semua notifikasi sesuai RBAC: superadmin hapus semua, admin hapus company+descendants, user hapus sendiri",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Delete all notifications",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/inbox": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get paginated list of notifications with filters (for inbox page)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Get user notifications with filters",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Filter unread only",
+                        "name": "unread_only",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by days until expiry (3, 7, 30)",
+                        "name": "days_until_expiry",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default: 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default: 10)",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/read-all": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Mark all notifications for the authenticated user as read",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Mark all notifications as read",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/stream": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Server-Sent Events stream for real-time notifications (currently returns empty, use polling instead)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Stream notifications (SSE) - Placeholder",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/unread-count": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get count of unread notifications for the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Get unread notification count",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ErrorResponse"
                         }
                     }
                 }
@@ -4483,6 +6513,10 @@
                     "description": "Alamat perusahaan",
                     "type": "string"
                 },
+                "authorized_capital": {
+                    "description": "Modal Dasar",
+                    "type": "integer"
+                },
                 "business_fields": {
                     "type": "array",
                     "items": {
@@ -4494,6 +6528,10 @@
                     "type": "string"
                 },
                 "created_at": {
+                    "type": "string"
+                },
+                "currency": {
+                    "description": "Mata uang: IDR (Rupiah) atau USD (Dollar)",
                     "type": "string"
                 },
                 "description": {
@@ -4546,6 +6584,10 @@
                     "description": "Alamat operasional",
                     "type": "string"
                 },
+                "paid_up_capital": {
+                    "description": "Modal Disetor",
+                    "type": "integer"
+                },
                 "parent_id": {
                     "description": "NULL untuk root/holding company",
                     "type": "string"
@@ -4574,6 +6616,128 @@
                 },
                 "website": {
                     "description": "Website",
+                    "type": "string"
+                }
+            }
+        },
+        "domain.ComparisonItem": {
+            "type": "object",
+            "properties": {
+                "difference": {
+                    "description": "Selisih (Realisasi YTD - RKAP)"
+                },
+                "percentage": {
+                    "description": "Persentase (Realisasi YTD / RKAP * 100)",
+                    "type": "number"
+                },
+                "realisasi_ytd": {
+                    "description": "Nilai Realisasi YTD"
+                },
+                "rkap": {
+                    "description": "Nilai RKAP"
+                }
+            }
+        },
+        "domain.CreateFinancialReportRequest": {
+            "type": "object",
+            "required": [
+                "company_id",
+                "period",
+                "year"
+            ],
+            "properties": {
+                "cash_ratio": {
+                    "type": "number"
+                },
+                "company_id": {
+                    "type": "string"
+                },
+                "current_assets": {
+                    "description": "Neraca",
+                    "type": "integer"
+                },
+                "current_ratio": {
+                    "type": "number"
+                },
+                "debt_to_equity": {
+                    "type": "number"
+                },
+                "ebitda": {
+                    "type": "integer"
+                },
+                "ebitda_margin": {
+                    "type": "number"
+                },
+                "ending_balance": {
+                    "type": "integer"
+                },
+                "equity": {
+                    "type": "integer"
+                },
+                "financing_cashflow": {
+                    "type": "integer"
+                },
+                "investing_cashflow": {
+                    "type": "integer"
+                },
+                "is_rkap": {
+                    "description": "true = RKAP, false = Realisasi",
+                    "type": "boolean"
+                },
+                "long_term_liabilities": {
+                    "type": "integer"
+                },
+                "net_profit": {
+                    "type": "integer"
+                },
+                "net_profit_margin": {
+                    "type": "number"
+                },
+                "non_current_assets": {
+                    "type": "integer"
+                },
+                "operating_cashflow": {
+                    "description": "Cashflow",
+                    "type": "integer"
+                },
+                "operating_expenses": {
+                    "type": "integer"
+                },
+                "operating_profit": {
+                    "type": "integer"
+                },
+                "operating_profit_margin": {
+                    "type": "number"
+                },
+                "other_income": {
+                    "type": "integer"
+                },
+                "period": {
+                    "description": "Format: \"2024\" untuk RKAP, \"2024-01\" untuk Realisasi",
+                    "type": "string"
+                },
+                "remark": {
+                    "type": "string"
+                },
+                "revenue": {
+                    "description": "Laba Rugi",
+                    "type": "integer"
+                },
+                "roe": {
+                    "description": "Rasio",
+                    "type": "number"
+                },
+                "roi": {
+                    "type": "number"
+                },
+                "short_term_liabilities": {
+                    "type": "integer"
+                },
+                "tax": {
+                    "type": "integer"
+                },
+                "year": {
+                    "description": "Format: \"2024\"",
                     "type": "string"
                 }
             }
@@ -4639,6 +6803,10 @@
                     "description": "Alamat domisili",
                     "type": "string"
                 },
+                "end_date": {
+                    "description": "Tanggal akhir jabatan (nullable, jika null tidak akan trigger notifikasi)",
+                    "type": "string"
+                },
                 "full_name": {
                     "description": "Nama lengkap",
                     "type": "string"
@@ -4667,6 +6835,36 @@
                 }
             }
         },
+        "domain.DirectorPositionModel": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "description": "User yang membuat",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "description": "Soft delete: false jika dihapus",
+                    "type": "boolean"
+                },
+                "name": {
+                    "description": "Nama jabatan (unique)",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "usage_count": {
+                    "description": "Jumlah pengurus yang menggunakan jabatan ini",
+                    "type": "integer"
+                }
+            }
+        },
         "domain.DocumentFolderModel": {
             "type": "object",
             "properties": {
@@ -4675,6 +6873,10 @@
                     "items": {
                         "$ref": "#/definitions/domain.DocumentFolderModel"
                     }
+                },
+                "company_id": {
+                    "description": "ID perusahaan pemilik folder (nil untuk folder lama/tidak terasosiasi)",
+                    "type": "string"
                 },
                 "created_at": {
                     "type": "string"
@@ -4702,6 +6904,18 @@
             "properties": {
                 "created_at": {
                     "type": "string"
+                },
+                "director_id": {
+                    "description": "Relasi dengan DirectorModel (untuk dokumen individu)",
+                    "type": "string"
+                },
+                "expiry_date": {
+                    "description": "Tanggal kadaluarsa dokumen",
+                    "type": "string"
+                },
+                "expiry_notified": {
+                    "description": "Apakah sudah di-notify",
+                    "type": "boolean"
                 },
                 "file_name": {
                     "description": "Nama file asli",
@@ -4746,6 +6960,36 @@
                 }
             }
         },
+        "domain.DocumentTypeModel": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "description": "User yang membuat",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "description": "Soft delete: false jika dihapus",
+                    "type": "boolean"
+                },
+                "name": {
+                    "description": "Nama jenis dokumen (unique)",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "usage_count": {
+                    "description": "Jumlah dokumen yang menggunakan jenis ini",
+                    "type": "integer"
+                }
+            }
+        },
         "domain.ErrorResponse": {
             "type": "object",
             "properties": {
@@ -4753,6 +6997,188 @@
                     "type": "string"
                 },
                 "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.FinancialReportComparisonResponse": {
+            "type": "object",
+            "properties": {
+                "company_id": {
+                    "type": "string"
+                },
+                "comparison": {
+                    "description": "Perbandingan (dalam persentase)",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/domain.ComparisonItem"
+                    }
+                },
+                "month": {
+                    "description": "Bulan terakhir realisasi (format: \"01\", \"02\", dst)",
+                    "type": "string"
+                },
+                "realisasi_ytd": {
+                    "description": "Realisasi YTD (Year-To-Date) - akumulasi dari Januari sampai bulan yang dipilih",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/domain.FinancialReportModel"
+                        }
+                    ]
+                },
+                "rkap": {
+                    "description": "Data RKAP tahunan",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/domain.FinancialReportModel"
+                        }
+                    ]
+                },
+                "year": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.FinancialReportModel": {
+            "type": "object",
+            "properties": {
+                "cash_ratio": {
+                    "description": "Rasio Kas",
+                    "type": "number"
+                },
+                "company": {
+                    "description": "Relationships",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/domain.CompanyModel"
+                        }
+                    ]
+                },
+                "company_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "current_assets": {
+                    "description": "A. NERACA (Balance Sheet)",
+                    "type": "integer"
+                },
+                "current_ratio": {
+                    "description": "Rasio Lancar",
+                    "type": "number"
+                },
+                "debt_to_equity": {
+                    "description": "Debt to Equity",
+                    "type": "number"
+                },
+                "ebitda": {
+                    "description": "EBITDA",
+                    "type": "integer"
+                },
+                "ebitda_margin": {
+                    "description": "EBITDA Margin",
+                    "type": "number"
+                },
+                "ending_balance": {
+                    "description": "Saldo Akhir",
+                    "type": "integer"
+                },
+                "equity": {
+                    "description": "Ekuitas",
+                    "type": "integer"
+                },
+                "financing_cashflow": {
+                    "description": "Arus kas bersih dari pendanaan",
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "inputter": {
+                    "$ref": "#/definitions/domain.UserModel"
+                },
+                "inputter_id": {
+                    "description": "User yang menginput",
+                    "type": "string"
+                },
+                "investing_cashflow": {
+                    "description": "Arus kas bersih dari investasi",
+                    "type": "integer"
+                },
+                "is_rkap": {
+                    "description": "true = RKAP (tahunan), false = Realisasi (bulanan)",
+                    "type": "boolean"
+                },
+                "long_term_liabilities": {
+                    "description": "Liabilitas Jangka Panjang",
+                    "type": "integer"
+                },
+                "net_profit": {
+                    "description": "Laba Bersih",
+                    "type": "integer"
+                },
+                "net_profit_margin": {
+                    "description": "Net Profit Margin",
+                    "type": "number"
+                },
+                "non_current_assets": {
+                    "description": "Aset Tidak Lancar",
+                    "type": "integer"
+                },
+                "operating_cashflow": {
+                    "description": "C. CASHFLOW (Arus Kas)",
+                    "type": "integer"
+                },
+                "operating_expenses": {
+                    "description": "Beban Usaha",
+                    "type": "integer"
+                },
+                "operating_profit": {
+                    "description": "Laba Usaha",
+                    "type": "integer"
+                },
+                "operating_profit_margin": {
+                    "description": "Operating Profit Margin",
+                    "type": "number"
+                },
+                "other_income": {
+                    "description": "Pendapatan Lain-Lain",
+                    "type": "integer"
+                },
+                "period": {
+                    "description": "Format: \"2024\" untuk RKAP, \"2024-01\" untuk Realisasi bulanan",
+                    "type": "string"
+                },
+                "remark": {
+                    "description": "Metadata",
+                    "type": "string"
+                },
+                "revenue": {
+                    "description": "B. LABA RUGI (Profit \u0026 Loss)",
+                    "type": "integer"
+                },
+                "roe": {
+                    "description": "D. RASIO KEUANGAN (%)",
+                    "type": "number"
+                },
+                "roi": {
+                    "description": "Return on Investment",
+                    "type": "number"
+                },
+                "short_term_liabilities": {
+                    "description": "Liabilitas Jangka Pendek",
+                    "type": "integer"
+                },
+                "tax": {
+                    "description": "Tax",
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "year": {
+                    "description": "Format: \"2024\" untuk RKAP, \"2024\" untuk Realisasi (untuk grouping)",
                     "type": "string"
                 }
             }
@@ -5008,6 +7434,7 @@
             "type": "object",
             "properties": {
                 "company_id": {
+                    "description": "ID perusahaan yang dimiliki (perusahaan ini)",
                     "type": "string"
                 },
                 "created_at": {
@@ -5017,7 +7444,7 @@
                     "type": "string"
                 },
                 "identity_number": {
-                    "description": "KTP/NPWP",
+                    "description": "KTP/NPWP (auto-fill dari NPWP/NIB perusahaan jika ada)",
                     "type": "string"
                 },
                 "is_main_parent": {
@@ -5029,18 +7456,161 @@
                     "type": "string"
                 },
                 "ownership_percent": {
-                    "description": "Persentase kepemilikan",
+                    "description": "Persentase kepemilikan (10 digit desimal)",
                     "type": "number"
                 },
                 "share_count": {
                     "description": "Jumlah saham",
                     "type": "integer"
                 },
+                "share_sheet_count": {
+                    "description": "Jumlah lembar saham",
+                    "type": "integer"
+                },
+                "share_value_per_sheet": {
+                    "description": "Nilai Rupiah per lembar",
+                    "type": "integer"
+                },
+                "shareholder_company": {
+                    "description": "Relationship: Company pemegang saham (jika shareholder_company_id tidak null)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/domain.CompanyModel"
+                        }
+                    ]
+                },
+                "shareholder_company_id": {
+                    "description": "ID perusahaan pemegang saham (nullable: jika null berarti individu/eksternal)",
+                    "type": "string"
+                },
                 "type": {
                     "description": "Jenis: Badan Hukum, Individu, dll",
                     "type": "string"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.ShareholderTypeModel": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "description": "User yang membuat",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "description": "Soft delete: false jika dihapus",
+                    "type": "boolean"
+                },
+                "name": {
+                    "description": "Nama jenis pemegang saham (unique)",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "usage_count": {
+                    "description": "Jumlah pemegang saham yang menggunakan jenis ini",
+                    "type": "integer"
+                }
+            }
+        },
+        "domain.UpdateFinancialReportRequest": {
+            "type": "object",
+            "properties": {
+                "cash_ratio": {
+                    "type": "number"
+                },
+                "current_assets": {
+                    "description": "Neraca",
+                    "type": "integer"
+                },
+                "current_ratio": {
+                    "type": "number"
+                },
+                "debt_to_equity": {
+                    "type": "number"
+                },
+                "ebitda": {
+                    "type": "integer"
+                },
+                "ebitda_margin": {
+                    "type": "number"
+                },
+                "ending_balance": {
+                    "type": "integer"
+                },
+                "equity": {
+                    "type": "integer"
+                },
+                "financing_cashflow": {
+                    "type": "integer"
+                },
+                "investing_cashflow": {
+                    "type": "integer"
+                },
+                "is_rkap": {
+                    "type": "boolean"
+                },
+                "long_term_liabilities": {
+                    "type": "integer"
+                },
+                "net_profit": {
+                    "type": "integer"
+                },
+                "net_profit_margin": {
+                    "type": "number"
+                },
+                "non_current_assets": {
+                    "type": "integer"
+                },
+                "operating_cashflow": {
+                    "description": "Cashflow",
+                    "type": "integer"
+                },
+                "operating_expenses": {
+                    "type": "integer"
+                },
+                "operating_profit": {
+                    "type": "integer"
+                },
+                "operating_profit_margin": {
+                    "type": "number"
+                },
+                "other_income": {
+                    "type": "integer"
+                },
+                "period": {
+                    "type": "string"
+                },
+                "remark": {
+                    "type": "string"
+                },
+                "revenue": {
+                    "description": "Laba Rugi",
+                    "type": "integer"
+                },
+                "roe": {
+                    "description": "Rasio",
+                    "type": "number"
+                },
+                "roi": {
+                    "type": "number"
+                },
+                "short_term_liabilities": {
+                    "type": "integer"
+                },
+                "tax": {
+                    "type": "integer"
+                },
+                "year": {
                     "type": "string"
                 }
             }

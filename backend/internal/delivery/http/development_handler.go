@@ -556,6 +556,68 @@ func (h *DevelopmentHandler) ResetAllSeededData(c *fiber.Ctx) error {
 	})
 }
 
+// ResetAllFinancialReports handles resetting all financial reports from all companies
+// @Summary      Reset Semua Data Laporan Keuangan
+// @Description  Menghapus semua data laporan keuangan (Financial Reports) dari semua perusahaan (hanya superadmin)
+// @Tags         Development
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  domain.ErrorResponse
+// @Failure      500  {object}  domain.ErrorResponse
+// @Router       /development/reset-all-financial-reports [post]
+func (h *DevelopmentHandler) ResetAllFinancialReports(c *fiber.Ctx) error {
+	// Check if user is superadmin
+	roleNameVal := c.Locals("roleName")
+	if roleNameVal == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+	}
+
+	roleName, ok := roleNameVal.(string)
+	if !ok {
+		h.logger.Warn("Invalid roleName type in context", zap.String("path", c.Path()), zap.Any("roleName", roleNameVal))
+		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
+			Error:   "unauthorized",
+			Message: "Invalid user context",
+		})
+	}
+
+	if roleName != "superadmin" {
+		h.logger.Warn("Non-superadmin attempted to reset all financial reports",
+			zap.String("roleName", roleName),
+			zap.String("username", c.Locals("username").(string)),
+		)
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Hanya superadmin yang dapat mengakses fitur ini",
+		})
+	}
+
+	// Reset all financial reports
+	err := h.devUseCase.ResetAllFinancialReports()
+	if err != nil {
+		h.logger.Error("Failed to reset all financial reports", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "reset_failed",
+			Message: err.Error(),
+		})
+	}
+
+	// Audit log
+	userID := c.Locals("userID").(string)
+	username := c.Locals("username").(string)
+	audit.LogAction(userID, username, "reset_all_financial_reports", "development", "", getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Semua data laporan keuangan berhasil di-reset",
+		"success": true,
+	})
+}
+
 // CheckAllSeederStatus checks the status of all seeders
 // @Summary      Cek Status Semua Seeder
 // @Description  Mengecek status semua seeder data (company, reports, dll)
@@ -836,7 +898,7 @@ func (h *DevelopmentHandler) CheckExpiringDocuments(c *fiber.Ctx) error {
 	}
 
 	// Check expiring documents
-	err := h.notificationUC.CheckExpiringDocuments(req.ThresholdDays)
+	notificationsCreated, documentsFound, err := h.notificationUC.CheckExpiringDocuments(req.ThresholdDays)
 	if err != nil {
 		h.logger.Error("Failed to check expiring documents", zap.Error(err))
 		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -846,8 +908,175 @@ func (h *DevelopmentHandler) CheckExpiringDocuments(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message":        "Expiring documents check completed",
+		"message":             "Expiring documents check completed",
+		"threshold_days":      req.ThresholdDays,
+		"documents_found":     documentsFound,
+		"notifications_created": notificationsCreated,
+	})
+}
+
+// CheckExpiringDirectorTerms godoc
+// @Summary      Check Expiring Director Terms
+// @Description  Trigger manual check untuk masa jabatan pengurus yang akan berakhir dan create notifications (untuk testing, superadmin dan administrator)
+// @Tags         Development
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        threshold_days  body      int     false  "Threshold days untuk check (default: 30)"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  domain.ErrorResponse
+// @Failure      500  {object}  domain.ErrorResponse
+// @Router       /development/check-expiring-director-terms [post]
+func (h *DevelopmentHandler) CheckExpiringDirectorTerms(c *fiber.Ctx) error {
+	// Check if user is superadmin
+	roleNameVal := c.Locals("roleName")
+	if roleNameVal == nil {
+		h.logger.Warn("RoleName not found in context", zap.String("path", c.Path()))
+		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+	}
+
+	roleName, ok := roleNameVal.(string)
+	if !ok {
+		h.logger.Warn("Invalid roleName type in context", zap.String("path", c.Path()), zap.Any("roleName", roleNameVal))
+		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
+			Error:   "unauthorized",
+			Message: "Invalid user context",
+		})
+	}
+
+	if !utils.IsSuperAdminLike(roleName) {
+		h.logger.Warn("Non-superadmin/administrator attempted to check expiring director terms",
+			zap.String("roleName", roleName),
+			zap.String("username", c.Locals("username").(string)),
+		)
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Anda harus login sebagai superadmin atau administrator!",
+		})
+	}
+
+	var req struct {
+		ThresholdDays int `json:"threshold_days"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		// Default threshold jika tidak ada request body
+		req.ThresholdDays = 30
+	}
+
+	if req.ThresholdDays <= 0 {
+		req.ThresholdDays = 30
+	}
+
+	// Check expiring director terms
+	notificationsCreated, directorsFound, err := h.notificationUC.CheckExpiringDirectorTerms(req.ThresholdDays)
+	if err != nil {
+		h.logger.Error("Failed to check expiring director terms", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "check_failed",
+			Message: fmt.Sprintf("Failed to check expiring director terms: %v", err),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message":             "Expiring director terms check completed",
+		"threshold_days":      req.ThresholdDays,
+		"directors_found":     directorsFound,
+		"notifications_created": notificationsCreated,
+	})
+}
+
+// CheckAllExpiringNotifications godoc
+// @Summary      Check All Expiring Notifications
+// @Description  Trigger manual check untuk semua expiring notifications (documents dan director terms) sekaligus (untuk testing, superadmin dan administrator)
+// @Tags         Development
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        threshold_days  body      int     false  "Threshold days untuk check (default: 30)"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      403  {object}  domain.ErrorResponse
+// @Failure      500  {object}  domain.ErrorResponse
+// @Router       /development/check-all-expiring-notifications [post]
+func (h *DevelopmentHandler) CheckAllExpiringNotifications(c *fiber.Ctx) error {
+	// Check if user is superadmin
+	roleNameVal := c.Locals("roleName")
+	if roleNameVal == nil {
+		h.logger.Warn("RoleName not found in context", zap.String("path", c.Path()))
+		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+	}
+
+	roleName, ok := roleNameVal.(string)
+	if !ok {
+		h.logger.Warn("Invalid roleName type in context", zap.String("path", c.Path()), zap.Any("roleName", roleNameVal))
+		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
+			Error:   "unauthorized",
+			Message: "Invalid user context",
+		})
+	}
+
+	if !utils.IsSuperAdminLike(roleName) {
+		h.logger.Warn("Non-superadmin/administrator attempted to check all expiring notifications",
+			zap.String("roleName", roleName),
+			zap.String("username", c.Locals("username").(string)),
+		)
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Anda harus login sebagai superadmin atau administrator!",
+		})
+	}
+
+	var req struct {
+		ThresholdDays int `json:"threshold_days"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		// Default threshold jika tidak ada request body
+		req.ThresholdDays = 30
+	}
+
+	if req.ThresholdDays <= 0 {
+		req.ThresholdDays = 30
+	}
+
+	// Check expiring documents
+	docNotifications, documentsFound, docErr := h.notificationUC.CheckExpiringDocuments(req.ThresholdDays)
+	if docErr != nil {
+		h.logger.Error("Failed to check expiring documents", zap.Error(docErr))
+	}
+
+	// Check expiring director terms
+	dirNotifications, directorsFound, dirErr := h.notificationUC.CheckExpiringDirectorTerms(req.ThresholdDays)
+	if dirErr != nil {
+		h.logger.Error("Failed to check expiring director terms", zap.Error(dirErr))
+	}
+
+	// Return error jika salah satu atau keduanya gagal
+	if docErr != nil || dirErr != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "check_failed",
+			Message: fmt.Sprintf("Some checks failed. Documents: %v, Director Terms: %v", docErr, dirErr),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message":        "All expiring notifications check completed",
 		"threshold_days": req.ThresholdDays,
+		"documents": fiber.Map{
+			"found":     documentsFound,
+			"notifications_created": docNotifications,
+		},
+		"directors": fiber.Map{
+			"found":     directorsFound,
+			"notifications_created": dirNotifications,
+		},
+		"total_notifications_created": docNotifications + dirNotifications,
 	})
 }
 

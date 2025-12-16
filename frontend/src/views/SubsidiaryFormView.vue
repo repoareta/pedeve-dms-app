@@ -300,12 +300,13 @@
               <IconifyIcon icon="mdi:information" width="20" style="margin-right: 8px;" />
               Pemegang Saham
             </h3>
-            <a-table
-              :columns="shareholderColumns"
-              :data-source="formData.shareholders"
-              :pagination="false"
-              row-key="id"
-            >
+            <div class="shareholder-table-wrapper">
+              <a-table
+                :columns="shareholderColumns"
+                :data-source="formData.shareholders"
+                :pagination="false"
+                row-key="id"
+              >
               <template #bodyCell="{ column, record, index }">
                 <template v-if="column.key === 'type'">
                   <div class="shareholder-type-select-wrapper">
@@ -320,7 +321,7 @@
                       :search-value="shareholderTypeSearchValue"
                       :max-tag-count="1"
                       :max-tag-placeholder="(omittedValues: string[]) => `+${omittedValues.length} lainnya`"
-                      style="width: 100%"
+                      style="width: 100%; min-width: 200px;"
                       @search="handleShareholderTypeSearch"
                       @change="handleShareholderTypeChange(record, $event)"
                       @select="handleShareholderTypeSelect(record, $event)"
@@ -383,18 +384,38 @@
                     v-if="!record.isCompany"
                     v-model:value="record.name" 
                     placeholder="Nama pemegang saham (Individu/Eksternal)"
-                    style="margin-top: 8px;"
+                    style="margin-top: 8px; width: 100%; min-width: 180px;"
                   />
                 </template>
                 <template v-if="column.key === 'identity_number'">
+                  <a-popover
+                    v-if="record.isCompany && !record.identity_number"
+                    :title="null"
+                    trigger="hover"
+                    placement="top"
+                  >
+                    <template #content>
+                      <div style="font-size: 12px;">
+                        NPWP/NIB perusahaan belum tersedia. Isi manual jika diperlukan.
+                      </div>
+                    </template>
+                    <template #default>
+                      <a-input 
+                        v-model:value="record.identity_number" 
+                        :placeholder="record.isCompany ? 'Nomor Identitas (Otomatis dari NPWP/NIB)' : 'Nomor Identitas (KTP/NPWP)'"
+                        :disabled="record.isCompany && (record.shareholder_company_id ? true : false)"
+                        :status="record.isCompany && !record.identity_number ? 'error' : undefined"
+                        style="width: 100%; min-width: 180px;"
+                      />
+                    </template>
+                  </a-popover>
                   <a-input 
+                    v-else
                     v-model:value="record.identity_number" 
                     :placeholder="record.isCompany ? 'Nomor Identitas (Otomatis dari NPWP/NIB)' : 'Nomor Identitas (KTP/NPWP)'"
                     :disabled="record.isCompany && (record.shareholder_company_id ? true : false)"
+                    style="width: 100%; min-width: 180px;"
                   />
-                  <div v-if="record.isCompany && !record.identity_number" style="margin-top: 4px; font-size: 11px; color: #8c8c8c;">
-                    NPWP/NIB perusahaan belum tersedia. Isi manual jika diperlukan.
-                  </div>
                 </template>
                 <template v-if="column.key === 'ownership_percent'">
                   <a-popover
@@ -425,18 +446,19 @@
                           Total modal = Modal perusahaan sendiri + Total modal semua pemegang saham<br/>
                           Persentase = (Modal Disetor perusahaan pemegang saham ÷ Total modal) × 100%
                         </div>
+                        <div v-if="record.ownership_percent === 0" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #ffccc7; color: #ff4d4f;">
+                          <IconifyIcon icon="mdi:alert-circle" width="14" style="margin-right: 4px;" />
+                          <strong>Perusahaan belum memiliki Modal Disetor</strong>
+                        </div>
                       </div>
                     </template>
                     <template #default>
-                      <a-input-number
-                        v-model:value="record.ownership_percent"
-                        :min="0"
-                        :max="100"
-                        :precision="10"
-                        :disabled="record.isCompany"
-                        style="width: 100%"
-                        placeholder="%"
-                      />
+                      <a-tag
+                        :color="record.ownership_percent === 0 ? 'error' : 'default'"
+                        style="font-size: 14px; padding: 4px 12px; min-width: 80px; text-align: center;"
+                      >
+                        {{ (record.ownership_percent || 0).toFixed(10).replace(/\.?0+$/, '') || '0' }}%
+                      </a-tag>
                     </template>
                   </a-popover>
                   <a-input-number
@@ -445,21 +467,16 @@
                     :min="0"
                     :max="100"
                     :precision="10"
-                    :disabled="record.isCompany"
-                    style="width: 100%"
+                    style="width: 100%; min-width: 160px;"
                     placeholder="%"
                   />
-                  <div v-if="record.isCompany && record.ownership_percent === 0" style="margin-top: 4px; font-size: 11px; color: #ff4d4f;">
-                    <IconifyIcon icon="mdi:alert-circle" width="12" />
-                    Perusahaan belum memiliki Modal Disetor
-                  </div>
                 </template>
                 <template v-if="column.key === 'share_sheet_count'">
                   <a-input-number
                     v-model:value="record.share_sheet_count"
                     :min="0"
                     :precision="0"
-                    style="width: 100%"
+                    style="width: 100%; min-width: 160px;"
                     placeholder="Jumlah lembar saham"
                     :formatter="(value: number | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
                     :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
@@ -470,7 +487,7 @@
                     v-model:value="record.share_value_per_sheet"
                     :min="0"
                     :precision="0"
-                    style="width: 100%"
+                    style="width: 100%; min-width: 180px;"
                     placeholder="Nilai Rupiah per lembar"
                     :formatter="(value: number | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
                     :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
@@ -482,7 +499,8 @@
                   </a-button>
                 </template>
               </template>
-            </a-table>
+              </a-table>
+            </div>
             <a-button type="dashed" style="width: 100%; margin-top: 16px;" @click="addShareholder">
               <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
               Tambah Pemegang Saham
@@ -562,12 +580,13 @@
               <IconifyIcon icon="mdi:information" width="20" style="margin-right: 8px;" />
               Data Individu
             </h3>
-            <a-table
-              :columns="directorColumns"
-              :data-source="formData.directors"
-              :pagination="false"
-              row-key="id"
-            >
+            <div class="director-table-wrapper">
+              <a-table
+                :columns="directorColumns"
+                :data-source="formData.directors"
+                :pagination="false"
+                row-key="id"
+              >
               <template #bodyCell="{ column, record, index }">
                 <template v-if="column.key === 'position'">
                   <div class="director-position-select-wrapper">
@@ -582,7 +601,7 @@
                       :search-value="directorPositionSearchValue"
                       :max-tag-count="1"
                       :max-tag-placeholder="(omittedValues: string[]) => `+${omittedValues.length} lainnya`"
-                      style="width: 100%"
+                      style="width: 100%; min-width: 160px;"
                       @search="handleDirectorPositionSearch"
                       @change="handleDirectorPositionChange(record, $event)"
                       @select="handleDirectorPositionSelect(record, $event)"
@@ -612,24 +631,32 @@
                   </div>
                 </template>
                 <template v-if="column.key === 'full_name'">
-                  <a-input v-model:value="record.full_name" placeholder="Nama lengkap" />
+                  <a-input v-model:value="record.full_name" placeholder="Nama lengkap" style="width: 100%; min-width: 180px;" />
                 </template>
                 <template v-if="column.key === 'ktp'">
-                  <a-input v-model:value="record.ktp" placeholder="Nomor KTP" />
+                  <a-input v-model:value="record.ktp" placeholder="Nomor KTP" style="width: 100%; min-width: 140px;" />
                 </template>
                 <template v-if="column.key === 'npwp'">
-                  <a-input v-model:value="record.npwp" placeholder="Nomor NPWP" />
+                  <a-input v-model:value="record.npwp" placeholder="Nomor NPWP" style="width: 100%; min-width: 140px;" />
                 </template>
                 <template v-if="column.key === 'start_date'">
                   <a-date-picker
                     v-model:value="record.start_date"
-                    style="width: 100%"
+                    style="width: 100%; min-width: 160px;"
                     format="DD MMMM YYYY"
                     placeholder="Tanggal awal jabatan"
                   />
                 </template>
+                <template v-if="column.key === 'end_date'">
+                  <a-date-picker
+                    v-model:value="record.end_date"
+                    style="width: 100%; min-width: 160px;"
+                    format="DD MMMM YYYY"
+                    placeholder="Tanggal akhir jabatan (opsional)"
+                  />
+                </template>
                 <template v-if="column.key === 'domicile_address'">
-                  <a-input v-model:value="record.domicile_address" placeholder="Alamat domisili" />
+                  <a-input v-model:value="record.domicile_address" placeholder="Alamat domisili" style="width: 100%; min-width: 220px;" />
                 </template>
                 <template v-if="column.key === 'actions'">
                   <a-space>
@@ -644,7 +671,8 @@
                   </a-space>
                 </template>
               </template>
-            </a-table>
+              </a-table>
+            </div>
             <a-button type="dashed" style="width: 100%; margin-top: 16px;" @click="addDirector">
               <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
               Tambah +
@@ -954,28 +982,30 @@ const formData = ref({
     ktp: string
     npwp: string
     start_date: dayjs.Dayjs | null
+    end_date: dayjs.Dayjs | null
     domicile_address: string
   }>,
 })
 
 const shareholderColumns = [
-  { title: 'Jenis Pemegang Saham', key: 'type', width: 250 },
+  { title: 'Jenis Pemegang Saham', key: 'type', width: 220 },
   { title: 'Nama Pemegang Saham', key: 'name', width: 200 },
-  { title: 'Nomor Identitas', key: 'identity_number', width: 180 },
-  { title: 'Persentase Kepemilikan', key: 'ownership_percent', width: 150 },
+  { title: 'Nomor Identitas', key: 'identity_number', width: 200 },
+  { title: 'Persentase Kepemilikan', key: 'ownership_percent', width: 180 },
   { title: 'Jumlah Lembar Saham', key: 'share_sheet_count', width: 180 },
   { title: 'Nilai Rupiah per Lembar', key: 'share_value_per_sheet', width: 200 },
-  { title: 'Aksi', key: 'actions', width: 80 },
+  { title: 'Aksi', key: 'actions', width: 100, fixed: 'right' },
 ]
 
 const directorColumns = [
-  { title: 'Jabatan', key: 'position', width: 150 },
+  { title: 'Jabatan', key: 'position', width: 180 },
   { title: 'Nama Lengkap', key: 'full_name', width: 200 },
-  { title: 'Nomor Identitas (KTP)', key: 'ktp', width: 150 },
-  { title: 'NPWP', key: 'npwp', width: 150 },
-  { title: 'Tanggal Awal Jabatan', key: 'start_date', width: 150 },
-  { title: 'Alamat Domisili', key: 'domicile_address', width: 200 },
-  { title: 'Aksi', key: 'actions', width: 80 },
+  { title: 'Nomor Identitas (KTP)', key: 'ktp', width: 160 },
+  { title: 'NPWP', key: 'npwp', width: 160 },
+  { title: 'Tanggal Awal Jabatan', key: 'start_date', width: 180 },
+  { title: 'Tanggal Akhir Jabatan', key: 'end_date', width: 180 },
+  { title: 'Alamat Domisili', key: 'domicile_address', width: 250 },
+  { title: 'Aksi', key: 'actions', width: 120, fixed: 'right' },
 ]
 
 const addShareholder = () => {
@@ -1218,6 +1248,7 @@ const addDirector = () => {
     ktp: '',
     npwp: '',
     start_date: null,
+    end_date: null,
     domicile_address: '',
   })
 }
@@ -1631,6 +1662,7 @@ const handleSubmit = async () => {
         ktp: d.ktp,
         npwp: d.npwp,
         start_date: d.start_date?.format('YYYY-MM-DD') || null,
+        end_date: d.end_date?.format('YYYY-MM-DD') || null,
         domicile_address: d.domicile_address,
       })),
     }
@@ -1981,6 +2013,7 @@ const loadCompanyData = async () => {
         ...d,
         position: d.position ? (typeof d.position === 'string' ? d.position.split(',').map(t => t.trim()).filter(t => t) : []) : [], // Convert comma-separated string to array
         start_date: d.start_date ? dayjs(d.start_date) : null,
+        end_date: d.end_date ? dayjs(d.end_date) : null,
       }))
       
       // Pre-load documents for all directors after directors are loaded
@@ -2696,5 +2729,83 @@ onMounted(async () => {
 
 .director-position-select-wrapper :deep(.ant-select-selection-placeholder) {
   line-height: 36px;
+}
+
+.director-table-wrapper {
+  width: 100%;
+  position: relative;
+}
+
+.director-table-wrapper :deep(.ant-table-wrapper) {
+  overflow-x: auto;
+}
+
+.director-table-wrapper :deep(.ant-table) {
+  min-width: 1400px;
+}
+
+.director-table-wrapper :deep(.ant-table-thead > tr > th:last-child),
+.director-table-wrapper :deep(.ant-table-tbody > tr > td:last-child) {
+  position: sticky;
+  right: 0;
+  z-index: 10;
+  background: #fff;
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.08);
+}
+
+.director-table-wrapper :deep(.ant-table-thead > tr > th:last-child) {
+  background: #fafafa;
+  z-index: 11;
+}
+
+.director-table-wrapper :deep(.ant-table-tbody > tr:hover > td:last-child) {
+  background: #f5f5f5;
+}
+
+.director-table-wrapper :deep(.ant-table-tbody > tr.ant-table-row-selected > td:last-child) {
+  background: #e6f7ff;
+}
+
+.director-table-wrapper :deep(.ant-table-tbody > tr.ant-table-row-selected:hover > td:last-child) {
+  background: #bae7ff;
+}
+
+.shareholder-table-wrapper {
+  width: 100%;
+  position: relative;
+}
+
+.shareholder-table-wrapper :deep(.ant-table-wrapper) {
+  overflow-x: auto;
+}
+
+.shareholder-table-wrapper :deep(.ant-table) {
+  min-width: 1240px;
+}
+
+.shareholder-table-wrapper :deep(.ant-table-thead > tr > th:last-child),
+.shareholder-table-wrapper :deep(.ant-table-tbody > tr > td:last-child) {
+  position: sticky;
+  right: 0;
+  z-index: 10;
+  background: #fff;
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.08);
+}
+
+.shareholder-table-wrapper :deep(.ant-table-thead > tr > th:last-child) {
+  background: #fafafa;
+  z-index: 11;
+}
+
+.shareholder-table-wrapper :deep(.ant-table-tbody > tr:hover > td:last-child) {
+  background: #f5f5f5;
+}
+
+.shareholder-table-wrapper :deep(.ant-table-tbody > tr.ant-table-row-selected > td:last-child) {
+  background: #e6f7ff;
+}
+
+.shareholder-table-wrapper :deep(.ant-table-tbody > tr.ant-table-row-selected:hover > td:last-child) {
+  background: #bae7ff;
 }
 </style>

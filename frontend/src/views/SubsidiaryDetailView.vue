@@ -583,6 +583,9 @@
                           <span v-if="director.start_date" class="info-compact">
                             <strong>Tanggal Mulai:</strong> {{ formatDate(director.start_date) }}
                           </span>
+                          <span v-if="director.end_date" class="info-compact">
+                            <strong>Tanggal Akhir:</strong> {{ formatDate(director.end_date) }}
+                          </span>
                           <span v-if="director.domicile_address" class="info-compact full-width-compact">
                             <strong>Alamat:</strong> {{ director.domicile_address }}
                           </span>

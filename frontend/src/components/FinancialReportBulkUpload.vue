@@ -164,6 +164,7 @@ import { message } from 'ant-design-vue'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import type { UploadFile } from 'ant-design-vue'
 import { financialReportsApi } from '../api/financialReports'
+import { logger } from '../utils/logger'
 
 // Props
 const props = defineProps<{
@@ -328,8 +329,8 @@ const handleUpload = async () => {
 
     if (result.errors && result.errors.length > 0) {
       // Log errors untuk debugging
-      console.error('Upload errors:', result.errors)
-      console.error('Upload result:', result)
+      logger.error('Upload errors:', result.errors)
+      logger.error('Upload result:', result)
       
       // Simpan error untuk ditampilkan di modal
       uploadErrors.value = result.errors

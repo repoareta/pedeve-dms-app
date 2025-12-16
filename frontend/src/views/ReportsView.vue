@@ -235,6 +235,7 @@ import type { TableColumnsType } from 'ant-design-vue'
 import reportsApi, { type Report, type ValidationRow } from '../api/reports'
 import { companyApi, type Company } from '../api/userManagement'
 import { financialReportsApi, type FinancialReport } from '../api/financialReports'
+import { logger } from '../utils/logger'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -422,7 +423,7 @@ const loadCompanies = async () => {
   try {
     companies.value = await companyApi.getAll()
   } catch (error: unknown) {
-    console.error('Failed to load companies:', error)
+    logger.error('Failed to load companies:', error)
   }
 }
 
@@ -466,7 +467,7 @@ const loadSubsidiariesWithStatus = async () => {
             reports: yearReports,
           }
         } catch (error) {
-          console.error(`Failed to load reports for company ${company.id}:`, error)
+          logger.error(`Failed to load reports for company ${company.id}:`, error)
           // Return with all months as false if error
           const monthlyStatus: Record<number, boolean> = {}
           for (let month = 1; month <= 12; month++) {

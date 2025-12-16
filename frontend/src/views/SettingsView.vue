@@ -11,6 +11,7 @@ import { sonarqubeApi, type SonarQubeIssue, type SonarQubeIssuesParams } from '.
 import documentsApi, { type DocumentType } from '../api/documents'
 import { userApi, shareholderTypesApi, directorPositionsApi, type User, type ShareholderType, type DirectorPosition } from '../api/userManagement'
 import type { TableColumnsType } from 'ant-design-vue'
+import { logger } from '../utils/logger'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -150,7 +151,7 @@ const check2FAStatus = async () => {
       setupStep.value = 'idle'
     }
   } catch (error: unknown) {
-    console.error('Failed to get 2FA status:', error)
+    logger.error('Failed to get 2FA status:', error)
   } finally {
     loading.value = false
   }
@@ -165,7 +166,7 @@ const handleEnable2FA = async () => {
     setupStep.value = 'generate'
     message.success('QR Code berhasil di-generate. Silakan scan dengan authenticator app Anda.')
   } catch (error: unknown) {
-    console.error('Error generating 2FA:', error)
+    logger.error('Error generating 2FA:', error)
     const axiosError = error as { response?: { data?: { message?: string; Message?: string } }; message?: string }
     const errorMessage = 
       axiosError.response?.data?.message || 
@@ -271,7 +272,7 @@ const fetchAuditStats = async () => {
     const stats = await auditApi.getAuditLogStats()
     auditStats.value = stats
   } catch (error: unknown) {
-    console.error('Failed to fetch audit stats:', error)
+    logger.error('Failed to fetch audit stats:', error)
     // Set default values jika error
     if (!auditStats.value) {
       auditStats.value = {
@@ -308,7 +309,7 @@ const fetchAuditLogs = async (page: number = 1, pageSize: number = 10) => {
     }
     // Tidak refresh stats otomatis saat fetch logs, hanya saat user klik refresh atau auto-refresh interval
   } catch (error: unknown) {
-    console.error('Failed to fetch audit logs:', error)
+    logger.error('Failed to fetch audit logs:', error)
     message.error('Gagal mengambil audit logs')
   } finally {
     auditLoading.value = false
@@ -539,7 +540,7 @@ const fetchUserActivityLogs = async (page: number = 1, pageSize: number = 10) =>
       total: adjustedTotal,
     }
   } catch (error: unknown) {
-    console.error('Failed to fetch user activity logs:', error)
+    logger.error('Failed to fetch user activity logs:', error)
     message.error('Gagal mengambil user activity logs')
   } finally {
     userActivityLoading.value = false
@@ -588,7 +589,7 @@ const checkSonarQubeStatus = async () => {
   } catch (error) {
     // If check fails, assume feature is disabled
     sonarqubeEnabled.value = false
-    console.warn('SonarQube Monitor status check failed:', error)
+    logger.warn('SonarQube Monitor status check failed:', error)
   }
 }
 
@@ -598,7 +599,7 @@ const fetchSonarQubeIssues = async () => {
     const response = await sonarqubeApi.getIssues(sonarqubeFilters.value)
     
     // Debug logging
-    console.log('SonarQube API Response:', {
+    logger.debug('SonarQube API Response:', {
       total: response.total,
       issuesCount: response.issues?.length || 0,
       componentsCount: response.components?.length || 0,
@@ -624,7 +625,7 @@ const fetchSonarQubeIssues = async () => {
       message.warning('Tidak ada issues yang ditemukan dengan filter yang dipilih')
     }
   } catch (error: unknown) {
-    console.error('Failed to fetch SonarQube issues:', error)
+    logger.error('Failed to fetch SonarQube issues:', error)
     const errorMessage = error instanceof Error ? error.message : 'Gagal mengambil issues dari SonarCloud'
     message.error({
       content: errorMessage,
@@ -658,7 +659,7 @@ const exportSonarQubeIssues = async () => {
     
     message.success('Berhasil export issues ke JSON')
   } catch (error: unknown) {
-    console.error('Failed to export SonarQube issues:', error)
+    logger.error('Failed to export SonarQube issues:', error)
     const errorMessage = error instanceof Error ? error.message : 'Gagal export issues'
     message.error({
       content: errorMessage,
@@ -763,7 +764,7 @@ const checkAllSeederStatus = async () => {
     const status = await developmentApi.checkAllSeederStatus()
     allSeederStatus.value = status
   } catch (error: unknown) {
-    console.error('Failed to check all seeder status:', error)
+    logger.error('Failed to check all seeder status:', error)
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal memeriksa status seeder'
     message.error(errorMessage)
@@ -787,7 +788,7 @@ const handleResetAllSeededData = () => {
         // Refresh status
         await checkAllSeederStatus()
       } catch (error: unknown) {
-        console.error('Failed to reset all seeded data:', error)
+        logger.error('Failed to reset all seeded data:', error)
         const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
         const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal reset semua data seeder'
         message.error(errorMessage)
@@ -811,7 +812,7 @@ const handleResetAllFinancialReports = () => {
         const result = await developmentApi.resetAllFinancialReports()
         message.success(result.message || 'Semua data laporan keuangan berhasil di-reset')
       } catch (error: unknown) {
-        console.error('Failed to reset all financial reports:', error)
+        logger.error('Failed to reset all financial reports:', error)
         const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
         const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal reset data laporan keuangan'
         message.error(errorMessage)
@@ -829,7 +830,7 @@ const handleCheckExpiringDocuments = async () => {
     const msg = `${result.message || 'Check expiring documents completed'}. Ditemukan: ${result.documents_found || 0} dokumen, Notifikasi dibuat: ${result.notifications_created || 0}`
     message.success(msg)
   } catch (error: unknown) {
-    console.error('Failed to check expiring documents:', error)
+    logger.error('Failed to check expiring documents:', error)
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal check expiring documents'
     message.error(errorMessage)
@@ -845,7 +846,7 @@ const handleCheckExpiringDirectorTerms = async () => {
     const msg = `${result.message || 'Check expiring director terms completed'}. Ditemukan: ${result.directors_found || 0} director, Notifikasi dibuat: ${result.notifications_created || 0}`
     message.success(msg)
   } catch (error: unknown) {
-    console.error('Failed to check expiring director terms:', error)
+    logger.error('Failed to check expiring director terms:', error)
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal check expiring director terms'
     message.error(errorMessage)
@@ -861,7 +862,7 @@ const handleCheckAllExpiringNotifications = async () => {
     const msg = `${result.message || 'Check all expiring notifications completed'}. Dokumen: ditemukan ${result.documents?.found || 0}, notifikasi ${result.documents?.notifications_created || 0}. Directors: ditemukan ${result.directors?.found || 0}, notifikasi ${result.directors?.notifications_created || 0}. Total: ${result.total_notifications_created || 0} notifikasi`
     message.success(msg)
   } catch (error: unknown) {
-    console.error('Failed to check all expiring notifications:', error)
+    logger.error('Failed to check all expiring notifications:', error)
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal check all expiring notifications'
     message.error(errorMessage)
@@ -893,7 +894,7 @@ const handleRunAllSeeders = async () => {
         // Refresh status
         await checkAllSeederStatus()
       } catch (error: unknown) {
-        console.error('Failed to run all seeders:', error)
+        logger.error('Failed to run all seeders:', error)
         const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
         const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal menjalankan semua seeder'
         message.error(errorMessage)
@@ -937,7 +938,7 @@ const loadDocumentTypes = async () => {
           userNames.set(user.id, user.username)
         })
       } catch (err) {
-        console.error('Failed to load user names:', err)
+        logger.error('Failed to load user names:', err)
         // If fetch fails, try to get individual users
         for (const userId of uniqueUserIds) {
           try {
@@ -1045,7 +1046,7 @@ const loadShareholderTypes = async () => {
           }
         })
       } catch (err) {
-        console.error('Failed to load user names:', err)
+        logger.error('Failed to load user names:', err)
         // If fetch fails, try to get individual users
         for (const userId of uniqueUserIds) {
           if (!userNamesMap.value.has(userId)) {
@@ -1146,7 +1147,7 @@ const loadDirectorPositions = async () => {
           }
         })
       } catch (err) {
-        console.error('Failed to load user names:', err)
+        logger.error('Failed to load user names:', err)
         // If fetch fails, try to get individual users
         for (const userId of uniqueUserIds) {
           if (!userNamesMap.value.has(userId)) {

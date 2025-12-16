@@ -149,6 +149,7 @@ import { useAuthStore } from '../stores/auth'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
+import { logger } from '../utils/logger'
 
 dayjs.extend(relativeTime)
 
@@ -305,7 +306,7 @@ const loadNotifications = async () => {
     notifications.value = filteredData
     total.value = searchText.value.trim() ? filteredData.length : response.total
   } catch (error) {
-    console.error('Failed to load notifications:', error)
+    logger.error('Failed to load notifications:', error)
   } finally {
     loading.value = false
   }
@@ -355,7 +356,7 @@ const handleMarkAsResolved = async (notification: Notification) => {
       detail: { notificationId: notification.id } 
     }))
   } catch (error) {
-    console.error('❌ [NotificationsView] Failed to mark notification as resolved:', error)
+    logger.error('❌ [NotificationsView] Failed to mark notification as resolved:', error)
     message.error('Gagal menandai notifikasi sebagai sudah ditindak lanjuti')
   } finally {
     markingResolvedIds.value.delete(notification.id)
@@ -363,20 +364,20 @@ const handleMarkAsResolved = async (notification: Notification) => {
 }
 
 const handleRowClick = async (notification: Notification, event?: Event) => {
-  console.log('👆 [NotificationsView] Row clicked:', notification.id)
+  logger.debug('👆 [NotificationsView] Row clicked:', notification.id)
   
   // Prevent navigation jika klik di action column
   if (event && (event.target as HTMLElement).closest('.action-cell')) {
-    console.log('🚫 [NotificationsView] Click on action cell, ignoring')
+    logger.debug('🚫 [NotificationsView] Click on action cell, ignoring')
     return
   }
   
   // Navigate to resource if available (TIDAK mark as read otomatis)
   if (notification.resource_type === 'document' && notification.resource_id) {
-    console.log('📄 [NotificationsView] Navigating to document:', notification.resource_id)
+    logger.debug('📄 [NotificationsView] Navigating to document:', notification.resource_id)
     router.push(`/documents/${notification.resource_id}`)
   } else {
-    console.log('📋 [NotificationsView] No resource to navigate to')
+    logger.debug('📋 [NotificationsView] No resource to navigate to')
   }
 }
 
@@ -387,7 +388,7 @@ const handleMarkAllAsRead = async () => {
     message.success('Semua notifikasi telah ditandai sebagai sudah ditindak lanjuti')
     await loadNotifications()
   } catch (error) {
-    console.error('Failed to mark all as read:', error)
+    logger.error('Failed to mark all as read:', error)
   } finally {
     markingAllAsRead.value = false
   }
@@ -419,7 +420,7 @@ const handleDeleteAll = async () => {
         await loadNotifications()
         message.success('Semua notifikasi berhasil dihapus')
       } catch (error) {
-        console.error('Failed to delete all notifications:', error)
+        logger.error('Failed to delete all notifications:', error)
         message.error('Gagal menghapus notifikasi')
       } finally {
         deletingAll.value = false
@@ -529,7 +530,7 @@ const loadUnreadCount = async () => {
   try {
     unreadCount.value = await notificationApi.getUnreadCount()
   } catch (error) {
-    console.error('Failed to load unread count:', error)
+    logger.error('Failed to load unread count:', error)
   }
 }
 

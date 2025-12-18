@@ -189,8 +189,37 @@ jobs:
 
       - name: Push Docker images
         run: |
-          docker push "${{ steps.meta.outputs.backend_image_versioned }}"
-          docker push "${{ steps.meta.outputs.backend_image_latest }}"
+          # Function to push with retry
+          push_with_retry() {
+            local image=$1
+            local max_attempts=3
+            local attempt=1
+            local delay=10
+            
+            while [ $attempt -le $max_attempts ]; do
+              echo "🔄 Pushing $image (attempt $attempt/$max_attempts)..."
+              if docker push "$image"; then
+                echo "✅ Successfully pushed $image"
+                return 0
+              else
+                if [ $attempt -lt $max_attempts ]; then
+                  echo "⚠️  Push failed, retrying in ${delay}s..."
+                  sleep $delay
+                  delay=$((delay * 2))  # Exponential backoff
+                  attempt=$((attempt + 1))
+                else
+                  echo "❌ Failed to push $image after $max_attempts attempts"
+                  return 1
+                fi
+              fi
+            done
+          }
+          
+          # Push versioned image first
+          push_with_retry "${{ steps.meta.outputs.backend_image_versioned }}"
+          
+          # Push latest tag
+          push_with_retry "${{ steps.meta.outputs.backend_image_latest }}"
 
       # ===== GENERATE CHANGELOG & CREATE RELEASE =====
       - name: Generate changelog

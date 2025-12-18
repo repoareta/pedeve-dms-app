@@ -33,6 +33,24 @@ if ! command -v docker &> /dev/null; then
   rm -f get-docker.sh
 fi
 
+# Check if Cloud SQL Proxy is running (required for database connection)
+echo "🔍 Checking Cloud SQL Proxy..."
+if ! ps aux | grep -q "[c]loud-sql-proxy"; then
+  echo "⚠️  WARNING: Cloud SQL Proxy is not running!"
+  echo "   Attempting to start Cloud SQL Proxy service..."
+  
+  # Try to start Cloud SQL Proxy service if it exists
+  if sudo systemctl list-units --type=service | grep -q cloud-sql-proxy; then
+    sudo systemctl start cloud-sql-proxy || echo "⚠️  Failed to start Cloud SQL Proxy service"
+    sleep 5
+  else
+    echo "⚠️  Cloud SQL Proxy service not found. Please ensure it's installed and configured."
+    echo "   Container will start, but database connection may fail if Cloud SQL Proxy is not running."
+  fi
+else
+  echo "✅ Cloud SQL Proxy is running"
+fi
+
 # Load Docker image
 echo "🐳 Loading Docker image..."
 sudo docker load -i ~/backend-image.tar
@@ -64,7 +82,11 @@ echo "✅ Password retrieved: ${#DB_PASSWORD} characters"
 DB_PASSWORD_ENCODED=$(echo -n "${DB_PASSWORD}" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=''))")
 
 # Construct DATABASE_URL dengan password yang sudah di-encode
-DATABASE_URL="postgres://${DB_USER}:${DB_PASSWORD_ENCODED}@127.0.0.1:5432/${DB_NAME}?sslmode=require"
+# IMPORTANT: Cloud SQL Proxy tidak memerlukan TLS, jadi gunakan sslmode=disable
+# Untuk production dengan Private IP atau direct connection, mungkin perlu sslmode=require
+# Tapi karena kita pakai Cloud SQL Proxy, selalu gunakan sslmode=disable
+SSL_MODE=${SSL_MODE:-"disable"}
+DATABASE_URL="postgres://${DB_USER}:${DB_PASSWORD_ENCODED}@127.0.0.1:5432/${DB_NAME}?sslmode=${SSL_MODE}"
 
 # Debug: Verify DATABASE_URL format (without showing password)
 echo "✅ DATABASE_URL length: ${#DATABASE_URL} characters"

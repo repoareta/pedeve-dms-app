@@ -50,6 +50,8 @@ fi
 # Update Nginx config untuk HTTP-only (Certbot will add HTTPS block automatically)
 echo "📝 Updating Nginx config for HTTP (Certbot will add HTTPS automatically)..."
 
+# Temporarily disable unbound variable check for heredoc (Nginx variables will be evaluated by Nginx, not bash)
+set +u
 sudo tee /etc/nginx/sites-available/backend-api > /dev/null <<EOF
 server {
     listen 80;
@@ -85,6 +87,7 @@ server {
     }
 }
 EOF
+set -u
 
 # Enable the config (create symlink to sites-enabled)
 echo "🔗 Enabling Nginx config..."

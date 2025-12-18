@@ -206,6 +206,8 @@ if [ "$SSL_CERT_EXISTS" = true ]; then
   fi
   
   # Create Nginx config with HTTPS
+  # Temporarily disable unbound variable check for heredoc (Nginx variables will be evaluated by Nginx, not bash)
+  set +u
   sudo tee /etc/nginx/sites-available/backend-api > /dev/null <<EOF
 # HTTP server - redirect to HTTPS
 server {
@@ -258,6 +260,7 @@ server {
     }
 }
 EOF
+  set -u
 else
   echo "⚠️  SSL certificate not found, creating/updating HTTP-only config..."
   
@@ -268,6 +271,8 @@ else
   fi
   
   # Create Nginx config for backend API reverse proxy (HTTP only)
+  # Temporarily disable unbound variable check for heredoc (Nginx variables will be evaluated by Nginx, not bash)
+  set +u
   sudo tee /etc/nginx/sites-available/backend-api > /dev/null <<EOF
 server {
     listen 80;
@@ -306,6 +311,7 @@ server {
     }
 }
 EOF
+  set -u
 fi
 
 # Only remove conflicting enabled sites (not all)

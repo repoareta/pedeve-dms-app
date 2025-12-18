@@ -199,6 +199,8 @@ if [ "$SSL_CERT_EXISTS" = true ]; then
   fi
   
   # Create Nginx config with HTTPS
+  # Temporarily disable unbound variable check for heredoc (Nginx variables will be evaluated by Nginx, not bash)
+  set +u
   sudo tee /etc/nginx/sites-available/default > /dev/null <<EOF
 # HTTP server - redirect to HTTPS
 server {
@@ -242,11 +244,11 @@ server {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
         add_header Pragma "no-cache";
         add_header Expires "0";
-        try_files $uri /index.html;
+        try_files \$uri /index.html;
     }
 
     location / {
-        try_files $uri $uri/ /index.html;
+        try_files \$uri \$uri/ /index.html;
     }
 
     # Static assets with hash in filename can be cached aggressively
@@ -264,6 +266,7 @@ server {
     }
 }
 EOF
+  set -u
 else
   echo "⚠️  SSL certificate not found, creating/updating HTTP-only config..."
   
@@ -274,6 +277,8 @@ else
   fi
   
   # Create Nginx config for SPA (HTTP only)
+  # Temporarily disable unbound variable check for heredoc (Nginx variables will be evaluated by Nginx, not bash)
+  set +u
   sudo tee /etc/nginx/sites-available/default > /dev/null <<EOF
 server {
     listen 80;
@@ -299,12 +304,12 @@ server {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
         add_header Pragma "no-cache";
         add_header Expires "0";
-        try_files $uri /index.html;
+        try_files \$uri /index.html;
     }
 
     # SPA routing - semua request ke index.html kecuali static files
     location / {
-        try_files $uri $uri/ /index.html;
+        try_files \$uri \$uri/ /index.html;
     }
 
     # Static assets with hash in filename can be cached aggressively
@@ -323,6 +328,7 @@ server {
     }
 }
 EOF
+  set -u
 fi
 
 # Only remove conflicting enabled sites (not all)

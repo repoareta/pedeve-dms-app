@@ -752,17 +752,26 @@ jobs:
             --command="
               chmod +x ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/setup-backend-ssl.sh ~/verify-backend-deployment.sh ~/ensure-services-running.sh
               
+              # Set environment variables untuk production
+              export DB_SECRET_SUFFIX='_prod'
+              export DB_NAME='db_prod_pedeve'
+              export DB_USER='pedeve_user_db_prod'
+              export STORAGE_BUCKET='pedeve-prod-bucket'
+              export CORS_ORIGIN='https://reports.pertamina-pedeve.co.id'
+              export DISABLE_RATE_LIMIT='false'
+              
               if ! ~/deploy-backend-vm.sh ${{ secrets.GCP_PROJECT_ID_PROD }} ${BACKEND_IMAGE}; then
                 echo '❌ ERROR: deploy-backend-vm.sh failed!'
                 exit 1
               fi
               
               echo '🔒 Checking SSL certificate...'
-              if ! ~/setup-backend-ssl.sh; then
+              export DOMAIN='api-reports.pertamina-pedeve.co.id'
+              if ! ~/setup-backend-ssl.sh ${DOMAIN}; then
                 echo '⚠️  WARNING: SSL setup may have failed, but continuing...'
               fi
               
-              if ! ~/setup-backend-nginx.sh; then
+              if ! ~/setup-backend-nginx.sh ${DOMAIN}; then
                 echo '❌ ERROR: setup-backend-nginx.sh failed!'
                 exit 1
               fi
@@ -842,8 +851,9 @@ jobs:
               sudo chmod -R 755 /var/www/html
 
               chmod +x ~/setup-nginx-frontend.sh ~/setup-frontend-ssl.sh ~/verify-frontend-deployment.sh ~/ensure-services-running.sh
-              ~/setup-frontend-ssl.sh || true
-              ~/setup-nginx-frontend.sh
+              export DOMAIN='reports.pertamina-pedeve.co.id'
+              ~/setup-frontend-ssl.sh ${DOMAIN} || true
+              ~/setup-nginx-frontend.sh ${DOMAIN}
               ~/ensure-services-running.sh frontend
               ~/verify-frontend-deployment.sh
 

@@ -2,9 +2,15 @@
 set -euo pipefail
 
 # Script untuk setup Nginx reverse proxy di backend VM
-# Usage: ./setup-backend-nginx.sh
+# Usage: ./setup-backend-nginx.sh [DOMAIN]
+# 
+# Jika DOMAIN tidak diberikan, akan menggunakan default untuk development
+# Atau bisa set via environment variable: DOMAIN=api-reports.pertamina-pedeve.co.id
+
+DOMAIN=${1:-${DOMAIN:-"api-pedeve-dev.aretaamany.com"}}
 
 echo "🔧 Setting up Nginx reverse proxy for backend..."
+echo "   Domain: ${DOMAIN}"
 
 # Install Nginx if not exists
 if ! command -v nginx &> /dev/null; then
@@ -27,8 +33,8 @@ SSL_CERT_EXISTS=false
 # Check if SSL certificate exists
 # IMPORTANT: Preserve existing SSL certificate - DO NOT OVERWRITE
 # Also check if port 443 is listening - if cert exists but port not listening, we need to fix config
-if [ -f /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/fullchain.pem ] && \
-   [ -f /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/privkey.pem ]; then
+if [ -f /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ] && \
+   [ -f /etc/letsencrypt/live/${DOMAIN}/privkey.pem ]; then
   SSL_CERT_EXISTS=true
   echo "✅ SSL certificate found (preserving existing certificate)"
   
@@ -47,7 +53,7 @@ if [ -f /etc/nginx/sites-available/backend-api ]; then
   echo "✅ Backend Nginx config already exists"
   
   # Check if config is correct (has correct server_name and proxy_pass)
-  if sudo grep -q "server_name api-pedeve-dev.aretaamany.com" /etc/nginx/sites-available/backend-api && \
+  if sudo grep -q "server_name ${DOMAIN}" /etc/nginx/sites-available/backend-api && \
      sudo grep -q "proxy_pass http://127.0.0.1:8080" /etc/nginx/sites-available/backend-api; then
     CONFIG_CORRECT=true
     echo "✅ Backend Nginx config is correct"
@@ -56,10 +62,10 @@ if [ -f /etc/nginx/sites-available/backend-api ]; then
     # IMPORTANT: Preserve existing SSL configuration - DO NOT OVERWRITE if correct
     if [ "$SSL_CERT_EXISTS" = true ]; then
       # Comprehensive check for HTTPS config
-      if sudo grep -q "ssl_certificate.*api-pedeve-dev.aretaamany.com" /etc/nginx/sites-available/backend-api && \
+      if sudo grep -q "ssl_certificate.*${DOMAIN}" /etc/nginx/sites-available/backend-api && \
          sudo grep -q "listen.*443.*ssl" /etc/nginx/sites-available/backend-api && \
-         sudo grep -q "server_name.*api-pedeve-dev.aretaamany.com" /etc/nginx/sites-available/backend-api && \
-         sudo grep -q "ssl_certificate_key.*api-pedeve-dev.aretaamany.com" /etc/nginx/sites-available/backend-api && \
+         sudo grep -q "server_name.*${DOMAIN}" /etc/nginx/sites-available/backend-api && \
+         sudo grep -q "ssl_certificate_key.*${DOMAIN}" /etc/nginx/sites-available/backend-api && \
          sudo grep -q "proxy_pass.*127.0.0.1:8080" /etc/nginx/sites-available/backend-api; then
         echo "✅ HTTPS config already present and correct"
         
@@ -68,9 +74,9 @@ if [ -f /etc/nginx/sites-available/backend-api ]; then
         if sudo nginx -t 2>/dev/null; then
           echo "✅ Nginx config syntax is valid"
           echo "⏭️  SKIPPING config update - preserving existing SSL configuration"
-          echo "   - SSL certificate: /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/"
+          echo "   - SSL certificate: /etc/letsencrypt/live/${DOMAIN}/"
           echo "   - Port 443: configured"
-          echo "   - Server name: api-pedeve-dev.aretaamany.com"
+          echo "   - Server name: ${DOMAIN}"
           echo "   - Proxy pass: http://127.0.0.1:8080"
           echo "   - Config file: /etc/nginx/sites-available/backend-api"
           echo ""
@@ -113,7 +119,7 @@ if [ -f /etc/nginx/sites-available/backend-api ]; then
         if sudo nginx -t 2>/dev/null; then
           echo "✅ Nginx config syntax is valid"
           echo "⏭️  SKIPPING config update - existing config is correct"
-          echo "   - Server name: api-pedeve-dev.aretaamany.com"
+          echo "   - Server name: ${DOMAIN}"
           echo "   - Proxy pass: http://127.0.0.1:8080"
           echo "   - Config file: /etc/nginx/sites-available/backend-api"
           echo ""
@@ -162,8 +168,8 @@ if [ "$SSL_CERT_EXISTS" = false ]; then
     fi
     
     # Always re-check if certificate exists (Certbot might have created it)
-    if [ -f /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/fullchain.pem ] && \
-       [ -f /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/privkey.pem ]; then
+    if [ -f /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ] && \
+       [ -f /etc/letsencrypt/live/${DOMAIN}/privkey.pem ]; then
       SSL_CERT_EXISTS=true
       echo "✅ SSL certificate found after SSL setup"
     else
@@ -200,26 +206,26 @@ if [ "$SSL_CERT_EXISTS" = true ]; then
   fi
   
   # Create Nginx config with HTTPS
-  sudo tee /etc/nginx/sites-available/backend-api > /dev/null <<'EOF'
+  sudo tee /etc/nginx/sites-available/backend-api > /dev/null <<EOF
 # HTTP server - redirect to HTTPS
 server {
     listen 80;
     listen [::]:80;
-    server_name api-pedeve-dev.aretaamany.com;
+    server_name ${DOMAIN};
 
-    return 301 https://$server_name$request_uri;
+    return 301 https://\$server_name\$request_uri;
 }
 
 # HTTPS server
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name api-pedeve-dev.aretaamany.com;
+    server_name ${DOMAIN};
     # Allow uploads up to 10MB (matching Fiber BodyLimit)
     client_max_body_size 10m;
 
-    ssl_certificate /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
 
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
@@ -262,11 +268,11 @@ else
   fi
   
   # Create Nginx config for backend API reverse proxy (HTTP only)
-  sudo tee /etc/nginx/sites-available/backend-api > /dev/null <<'EOF'
+  sudo tee /etc/nginx/sites-available/backend-api > /dev/null <<EOF
 server {
     listen 80;
     listen [::]:80;
-    server_name api-pedeve-dev.aretaamany.com;
+    server_name ${DOMAIN};
 
     # Allow uploads up to 10MB (matching Fiber BodyLimit)
     client_max_body_size 10m;
@@ -384,9 +390,9 @@ echo "✅ Nginx reverse proxy setup completed!"
 echo ""
 echo "📋 Configuration:"
 echo "   - Listen: port 80"
-echo "   - Server name: api-pedeve-dev.aretaamany.com"
+echo "   - Server name: ${DOMAIN}"
 echo "   - Proxy to: http://127.0.0.1:8080"
 echo ""
 echo "🧪 Test commands:"
-echo "   curl http://api-pedeve-dev.aretaamany.com/health"
-echo "   curl http://api-pedeve-dev.aretaamany.com/api/v1/csrf-token"
+echo "   curl http://${DOMAIN}/health"
+echo "   curl http://${DOMAIN}/api/v1/csrf-token"

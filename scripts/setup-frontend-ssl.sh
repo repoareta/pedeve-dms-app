@@ -2,10 +2,12 @@
 set -euo pipefail
 
 # Script untuk setup SSL certificate untuk frontend
-# Usage: ./setup-frontend-ssl.sh
+# Usage: ./setup-frontend-ssl.sh [DOMAIN]
 # Script ini idempotent - aman dipanggil berkali-kali
+# 
+# Jika DOMAIN tidak diberikan, akan menggunakan default untuk development
 
-DOMAIN="pedeve-dev.aretaamany.com"
+DOMAIN=${1:-"pedeve-dev.aretaamany.com"}
 EMAIL="info@aretaamany.com"  # Email untuk Let's Encrypt
 
 echo "🔒 Setting up SSL certificate for ${DOMAIN}..."

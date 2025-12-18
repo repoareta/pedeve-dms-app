@@ -2,10 +2,12 @@
 set -euo pipefail
 
 # Script untuk setup SSL certificate untuk backend API
-# Usage: ./setup-backend-ssl.sh
+# Usage: ./setup-backend-ssl.sh [DOMAIN]
 # Script ini idempotent - aman dipanggil berkali-kali
+# 
+# Jika DOMAIN tidak diberikan, akan menggunakan default untuk development
 
-DOMAIN="api-pedeve-dev.aretaamany.com"
+DOMAIN=${1:-"api-pedeve-dev.aretaamany.com"}
 EMAIL="info@aretaamany.com"  # Email untuk Let's Encrypt
 
 echo "🔒 Setting up SSL certificate for ${DOMAIN}..."
@@ -52,7 +54,7 @@ sudo tee /etc/nginx/sites-available/backend-api > /dev/null <<'EOF'
 server {
     listen 80;
     listen [::]:80;
-    server_name api-pedeve-dev.aretaamany.com;
+    server_name ${DOMAIN};
 
     # Security headers
     add_header X-Frame-Options "SAMEORIGIN" always;

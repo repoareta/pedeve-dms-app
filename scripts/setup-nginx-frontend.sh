@@ -2,9 +2,15 @@
 set -euo pipefail
 
 # Script untuk setup Nginx di frontend VM
-# Usage: ./setup-nginx-frontend.sh
+# Usage: ./setup-nginx-frontend.sh [DOMAIN]
+# 
+# Jika DOMAIN tidak diberikan, akan menggunakan default untuk development
+# Atau bisa set via environment variable: DOMAIN=reports.pertamina-pedeve.co.id
+
+DOMAIN=${1:-${DOMAIN:-"pedeve-dev.aretaamany.com"}}
 
 echo "🔧 Setting up Nginx for frontend..."
+echo "   Domain: ${DOMAIN}"
 
 # Backup default config
 if [ -f /etc/nginx/sites-available/default ]; then
@@ -19,8 +25,8 @@ SSL_CERT_EXISTS=false
 # Check if SSL certificate exists
 # IMPORTANT: Preserve existing SSL certificate - DO NOT OVERWRITE
 # Also check if port 443 is listening - if cert exists but port not listening, we need to fix config
-if [ -f /etc/letsencrypt/live/pedeve-dev.aretaamany.com/fullchain.pem ] && \
-   [ -f /etc/letsencrypt/live/pedeve-dev.aretaamany.com/privkey.pem ]; then
+if [ -f /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ] && \
+   [ -f /etc/letsencrypt/live/${DOMAIN}/privkey.pem ]; then
   SSL_CERT_EXISTS=true
   echo "✅ SSL certificate found (preserving existing certificate)"
   
@@ -48,10 +54,10 @@ if [ -f /etc/nginx/sites-available/default ]; then
     # IMPORTANT: Preserve existing SSL configuration - DO NOT OVERWRITE if correct
     if [ "$SSL_CERT_EXISTS" = true ]; then
       # Comprehensive check for HTTPS config
-      if sudo grep -q "ssl_certificate.*pedeve-dev.aretaamany.com" /etc/nginx/sites-available/default && \
+      if sudo grep -q "ssl_certificate.*${DOMAIN}" /etc/nginx/sites-available/default && \
          sudo grep -q "listen.*443.*ssl" /etc/nginx/sites-available/default && \
-         sudo grep -q "server_name.*pedeve-dev.aretaamany.com" /etc/nginx/sites-available/default && \
-         sudo grep -q "ssl_certificate_key.*pedeve-dev.aretaamany.com" /etc/nginx/sites-available/default; then
+         sudo grep -q "server_name.*${DOMAIN}" /etc/nginx/sites-available/default && \
+         sudo grep -q "ssl_certificate_key.*${DOMAIN}" /etc/nginx/sites-available/default; then
         echo "✅ HTTPS config already present and correct"
         
         # CRITICAL: Validate config syntax before skipping
@@ -59,9 +65,9 @@ if [ -f /etc/nginx/sites-available/default ]; then
         if sudo nginx -t 2>/dev/null; then
           echo "✅ Nginx config syntax is valid"
           echo "⏭️  SKIPPING config update - preserving existing SSL configuration"
-          echo "   - SSL certificate: /etc/letsencrypt/live/pedeve-dev.aretaamany.com/"
+          echo "   - SSL certificate: /etc/letsencrypt/live/${DOMAIN}/"
           echo "   - Port 443: configured"
-          echo "   - Server name: pedeve-dev.aretaamany.com"
+          echo "   - Server name: ${DOMAIN}"
           echo "   - Config file: /etc/nginx/sites-available/default"
           echo ""
           echo "🔒 PRESERVATION MODE: Config will NOT be overwritten"
@@ -155,8 +161,8 @@ if [ "$SSL_CERT_EXISTS" = false ]; then
     fi
     
     # Always re-check if certificate exists (Certbot might have created it)
-    if [ -f /etc/letsencrypt/live/pedeve-dev.aretaamany.com/fullchain.pem ] && \
-       [ -f /etc/letsencrypt/live/pedeve-dev.aretaamany.com/privkey.pem ]; then
+    if [ -f /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ] && \
+       [ -f /etc/letsencrypt/live/${DOMAIN}/privkey.pem ]; then
       SSL_CERT_EXISTS=true
       echo "✅ SSL certificate found after SSL setup"
     else
@@ -193,24 +199,24 @@ if [ "$SSL_CERT_EXISTS" = true ]; then
   fi
   
   # Create Nginx config with HTTPS
-  sudo tee /etc/nginx/sites-available/default > /dev/null <<'EOF'
+  sudo tee /etc/nginx/sites-available/default > /dev/null <<EOF
 # HTTP server - redirect to HTTPS
 server {
     listen 80;
     listen [::]:80;
-    server_name pedeve-dev.aretaamany.com _;
+    server_name ${DOMAIN} _;
 
-    return 301 https://$server_name$request_uri;
+    return 301 https://\$server_name\$request_uri;
 }
 
 # HTTPS server
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name pedeve-dev.aretaamany.com;
+    server_name ${DOMAIN};
 
-    ssl_certificate /etc/letsencrypt/live/pedeve-dev.aretaamany.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/pedeve-dev.aretaamany.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
 
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
@@ -268,7 +274,7 @@ else
   fi
   
   # Create Nginx config for SPA (HTTP only)
-  sudo tee /etc/nginx/sites-available/default > /dev/null <<'EOF'
+  sudo tee /etc/nginx/sites-available/default > /dev/null <<EOF
 server {
     listen 80;
     listen [::]:80;

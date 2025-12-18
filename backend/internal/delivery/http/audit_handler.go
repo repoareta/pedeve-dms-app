@@ -2,18 +2,21 @@ package http
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/audit"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
 	"github.com/gofiber/fiber/v2"
+	"go.uber.org/zap"
 )
 
 // GetAuditLogsHandler menangani request GET untuk audit logs (untuk Fiber)
 // @Summary      Ambil Audit Logs
-// @Description  Mengambil audit logs dengan pagination dan filter. User reguler hanya bisa melihat audit logs mereka sendiri, sedangkan admin/superadmin bisa melihat semua audit logs. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).
+// @Description  Mengambil audit logs dengan pagination dan filter. Data ini memiliki retention policy: 90 hari untuk user actions, 30 hari untuk technical errors. User reguler hanya bisa melihat audit logs mereka sendiri, sedangkan admin/superadmin bisa melihat semua audit logs. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only). Catatan: Data penting (report, document, company, user) disimpan di endpoint /user-activity-logs dengan permanent storage.
 // @Tags         Audit
 // @Accept       json
 // @Produce      json
@@ -21,7 +24,7 @@ import (
 // @Param        page      query     int     false  "Nomor halaman (default: 1)"
 // @Param        pageSize  query     int     false  "Jumlah item per halaman (default: 10, maksimal: 100)"
 // @Param        action    query     string  false  "Filter berdasarkan action (contoh: login, logout, create_document)"
-// @Param        resource  query     string  false  "Filter berdasarkan resource (contoh: auth, document, user)"
+// @Param        resource  query     string  false  "Filter berdasarkan resource (contoh: auth, document, user, company, report)"
 // @Param        status    query     string  false  "Filter berdasarkan status (success, failure, error)"
 // @Param        logType   query     string  false  "Filter berdasarkan tipe log (user_action atau technical_error)"
 // @Success      200       {object}  map[string]interface{}  "Audit logs berhasil diambil. Response berisi data (array audit logs), total, page, pageSize, dan totalPages"
@@ -33,8 +36,10 @@ import (
 // @note         1. Authentication: Memerlukan JWT token valid dalam httpOnly cookie (auth_token) atau Authorization header
 // @note         2. CSRF Protection: Endpoint ini tidak memerlukan CSRF token karena menggunakan GET method (read-only)
 // @note         3. Authorization: User reguler hanya melihat logs sendiri, admin/superadmin melihat semua logs
-// @note         4. Pagination: Default page=1, pageSize=10, maksimal pageSize=100
-// @note         5. Filtering: Filter dapat dikombinasikan untuk hasil yang lebih spesifik
+// @note         4. Retention Policy: User actions (90 hari), Technical errors (30 hari) - data akan dihapus otomatis setelah periode tersebut
+// @note         5. Permanent Storage: Untuk data penting (report, document, company, user), gunakan endpoint /user-activity-logs
+// @note         6. Pagination: Default page=1, pageSize=10, maksimal pageSize=100
+// @note         7. Filtering: Filter dapat dikombinasikan untuk hasil yang lebih spesifik
 func GetAuditLogsHandler(c *fiber.Ctx) error {
 	// Ambil user saat ini dari locals
 	userIDVal := c.Locals("userID")
@@ -81,6 +86,44 @@ func GetAuditLogsHandler(c *fiber.Ctx) error {
 	if currentUser.Role == "admin" || currentUser.Role == "superadmin" {
 		// Admin bisa lihat semua logs, jangan filter berdasarkan userID
 		filterUserID = ""
+	}
+	
+	// CRITICAL: Admin holding hanya bisa lihat user activity logs (bukan technical logs)
+	// Filter out technical_error logs untuk admin (superadmin bisa lihat semua)
+	if currentUser.Role == "admin" && logType == audit.LogTypeTechnicalError {
+		// Admin tidak boleh lihat technical logs, return empty
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"data":       []interface{}{},
+			"total":      0,
+			"page":       page,
+			"pageSize":   pageSize,
+			"totalPages": 0,
+		})
+	}
+	
+	// Jika admin tidak specify logType, default ke user_action (bukan technical_error)
+	if currentUser.Role == "admin" && logType == "" {
+		// Admin default hanya lihat user_action logs
+		logType = audit.LogTypeUserAction
+	}
+	
+	// CRITICAL: Admin holding hanya bisa lihat user activity logs (bukan technical logs)
+	// Filter out technical_error logs untuk admin (superadmin bisa lihat semua)
+	if currentUser.Role == "admin" && logType == "technical_error" {
+		// Admin tidak boleh lihat technical logs, return empty
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"data":       []interface{}{},
+			"total":      0,
+			"page":       page,
+			"pageSize":   pageSize,
+			"totalPages": 0,
+		})
+	}
+	
+	// Jika admin tidak specify logType, default ke user_action (bukan technical_error)
+	if currentUser.Role == "admin" && logType == "" {
+		// Admin default hanya lihat user_action logs
+		logType = audit.LogTypeUserAction
 	}
 
 	// Hitung offset
@@ -143,3 +186,172 @@ func GetAuditLogStatsHandler(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(stats)
 }
 
+// GetUserActivityLogsHandler menangani request GET untuk user activity logs (permanent)
+// @Summary      Ambil User Activity Logs
+// @Description  Mengambil user activity logs (permanent) untuk resource penting: report, document, company, user. Data ini tidak akan dihapus (permanent storage tanpa retention policy) untuk keperluan compliance dan legal. User reguler hanya bisa melihat logs mereka sendiri, sedangkan admin/superadmin bisa melihat semua logs. Endpoint ini tidak memerlukan CSRF token karena menggunakan method GET (read-only).
+// @Tags         Audit
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        page      query     int     false  "Nomor halaman (default: 1)"
+// @Param        pageSize  query     int     false  "Jumlah item per halaman (default: 10, maksimal: 100)"
+// @Param        action    query     string  false  "Filter berdasarkan action (contoh: create_report, update_document, create_company, create_user)"
+// @Param        resource  query     string  false  "Filter berdasarkan resource (report, document, company, user)"
+// @Param        status    query     string  false  "Filter berdasarkan status (success, failure, error)"
+// @Success      200       {object}  map[string]interface{}  "User activity logs berhasil diambil. Response berisi data (array user activity logs), total, page, pageSize, dan totalPages"
+// @Failure      401       {object}  domain.ErrorResponse  "Token tidak valid atau user tidak terautentikasi"
+// @Failure      404       {object}  domain.ErrorResponse  "User tidak ditemukan di database"
+// @Failure      500       {object}  domain.ErrorResponse  "Gagal mengambil user activity logs"
+// @Router       /api/v1/user-activity-logs [get]
+// @note         Catatan Teknis:
+// @note         1. Authentication: Memerlukan JWT token valid dalam httpOnly cookie (auth_token) atau Authorization header
+// @note         2. CSRF Protection: Endpoint ini tidak memerlukan CSRF token karena menggunakan GET method (read-only)
+// @note         3. Authorization: User reguler hanya melihat logs sendiri, admin/superadmin melihat semua logs
+// @note         4. Permanent Storage: Data ini disimpan permanen tanpa retention policy untuk compliance
+// @note         5. Resources: Hanya menampilkan logs untuk resource penting: report, document, company, user
+// @note         6. Pagination: Default page=1, pageSize=10, maksimal pageSize=100
+// @note         7. Filtering: Filter dapat dikombinasikan untuk hasil yang lebih spesifik
+func GetUserActivityLogsHandler(c *fiber.Ctx) error {
+	// Ambil user saat ini dari locals
+	userIDVal := c.Locals("userID")
+	if userIDVal == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+	}
+
+	currentUserID := userIDVal.(string)
+
+	// Parse parameter query
+	page := 1
+	pageSize := 10
+	action := c.Query("action")
+	resource := c.Query("resource")
+	resourceID := c.Query("resource_id")
+	status := c.Query("status")
+
+	if pageStr := c.Query("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	if pageSizeStr := c.Query("pageSize"); pageSizeStr != "" {
+		if ps, err := strconv.Atoi(pageSizeStr); err == nil && ps > 0 && ps <= 100 {
+			pageSize = ps
+		}
+	}
+
+	// Ambil user dari database untuk cek role
+	var currentUser domain.UserModel
+	if err := database.GetDB().First(&currentUser, "id = ?", currentUserID).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
+			Error:   "user_not_found",
+			Message: "User not found",
+		})
+	}
+
+	// Determine role: prefer RoleModel.Name if RoleID exists, fallback to legacy Role field
+	userRole := currentUser.Role
+	if currentUser.RoleID != nil && *currentUser.RoleID != "" {
+		var roleModel domain.RoleModel
+		if err := database.GetDB().First(&roleModel, "id = ?", *currentUser.RoleID).Error; err == nil {
+			userRole = roleModel.Name
+		}
+	}
+
+	// User reguler hanya bisa lihat logs mereka sendiri.
+	// Admin/superadmin/administrator bisa lihat semua logs, namun administrator tidak boleh melihat log milik superadmin.
+	zapLog := logger.GetLogger()
+	
+	// Debug: Log role information
+	zapLog.Info("GetUserActivityLogsHandler - Role check",
+		zap.String("current_user_id", currentUserID),
+		zap.String("user_role_legacy", currentUser.Role),
+		zap.String("user_role_id", func() string {
+			if currentUser.RoleID != nil {
+				return *currentUser.RoleID
+			}
+			return ""
+		}()),
+		zap.String("user_role_final", userRole),
+		zap.String("user_role_trimmed", strings.TrimSpace(userRole)),
+		zap.String("user_role_lower", strings.ToLower(strings.TrimSpace(userRole))),
+	)
+	
+	filterUserID := currentUserID
+	// Normalize role to lowercase for comparison (handle case sensitivity issues)
+	roleLower := strings.ToLower(strings.TrimSpace(userRole))
+	
+	// Determine access level:
+	// - superadmin: bisa lihat semua logs termasuk milik superadmin
+	// - administrator: bisa lihat semua logs kecuali milik superadmin
+	// - admin, manager, staff: bisa lihat semua logs kecuali milik superadmin
+	// - user reguler lainnya: hanya bisa lihat logs mereka sendiri
+	isSuperadmin := roleLower == "superadmin"
+	isAdministrator := roleLower == "administrator"
+	isAdminLike := roleLower == "admin" || roleLower == "manager" || roleLower == "staff" || isAdministrator || isSuperadmin
+	
+	zapLog.Info("GetUserActivityLogsHandler - RBAC check",
+		zap.String("role", roleLower),
+		zap.Bool("is_superadmin", isSuperadmin),
+		zap.Bool("is_administrator", isAdministrator),
+		zap.Bool("is_admin_like", isAdminLike),
+		zap.String("original_filter_user_id", filterUserID),
+	)
+	
+	if isAdminLike {
+		// Admin, manager, staff, administrator, dan superadmin bisa lihat semua logs (tidak filter berdasarkan userID)
+		filterUserID = ""
+		zapLog.Info("GetUserActivityLogsHandler - Admin access granted, removing user filter")
+	} else {
+		zapLog.Info("GetUserActivityLogsHandler - Regular user, filtering by userID", zap.String("filter_user_id", filterUserID))
+	}
+
+	// Hitung offset
+	offset := (page - 1) * pageSize
+
+	// Ambil user activity logs
+	logs, total, err := repository.GetUserActivityLogs(filterUserID, action, resource, resourceID, status, pageSize, offset)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to get user activity logs",
+		})
+	}
+
+	// Filter out superadmin logs untuk administrator, admin, manager, dan staff
+	// Superadmin tetap bisa melihat semua logs termasuk milik superadmin
+	if !isSuperadmin && isAdminLike {
+		zapLog.Info("GetUserActivityLogsHandler - Filtering out superadmin logs",
+			zap.String("role", roleLower),
+		)
+		filtered := make([]domain.UserActivityLog, 0, len(logs))
+		for _, l := range logs {
+			// Sembunyikan log milik superadmin untuk non-superadmin admin users
+			if l.Username != "" && l.Username != "superadmin" {
+				filtered = append(filtered, l)
+			}
+		}
+		zapLog.Info("GetUserActivityLogsHandler - After filtering",
+			zap.Int("original_count", len(logs)),
+			zap.Int("filtered_count", len(filtered)),
+		)
+		logs = filtered
+		if total > int64(len(filtered)) {
+			total = int64(len(filtered))
+		}
+	} else if isSuperadmin {
+		zapLog.Info("GetUserActivityLogsHandler - Superadmin access, showing all logs including superadmin")
+	}
+
+	// Kembalikan response
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"data":       logs,
+		"total":      total,
+		"page":       page,
+		"pageSize":   pageSize,
+		"totalPages": (total + int64(pageSize) - 1) / int64(pageSize),
+	})
+}

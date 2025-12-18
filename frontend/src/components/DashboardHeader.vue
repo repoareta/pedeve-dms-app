@@ -1,9 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import { userApi } from '../api/userManagement'
+import { notificationApi, type Notification } from '../api/notifications'
+import { notification } from 'ant-design-vue'
+import dayjs from 'dayjs'
+import relativeTime from 'dayjs/plugin/relativeTime'
+import { logger } from '../utils/logger'
+
+dayjs.extend(relativeTime)
 
 const router = useRouter()
 const route = useRoute()
@@ -15,11 +22,26 @@ const userCompaniesCount = ref(0)
 const loadingCompaniesCount = ref(false)
 
 const showUserMenu = ref(false)
+const showNotificationMenu = ref(false)
 const showMobileMenu = ref(false)
 const isScrolled = ref(false)
+const isMaximized = ref(false)
+
+// Notifications
+const notifications = ref<Notification[]>([])
+const unreadCount = ref(0)
+const loadingNotifications = ref(false)
+const notificationPollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
+const shownNotificationIds = ref<Set<string>>(new Set()) // Track notifikasi yang sudah ditampilkan
+const isFirstLoad = ref(true) // Flag untuk menandai load pertama
+const hasShownInitialNotifications = ref(false) // Flag untuk track apakah sudah menampilkan notifikasi saat login
+
+// Stack configuration untuk notification
+// Ant Design Vue automatically stacks notifications when there are multiple
+// Stack behavior is built-in and doesn't require explicit configuration
 
 // Valid roles that can access the application
-const validRoles = ['superadmin', 'admin', 'manager', 'staff']
+const validRoles = ['superadmin', 'administrator', 'admin', 'manager', 'staff']
 
 // Check if user role is valid
 const isRoleValid = computed(() => {
@@ -35,9 +57,9 @@ const menuItems = computed(() => {
   }
   
   return [
-    { label: 'Dashboard', key: 'dashboard', path: '/dashboard', icon: 'mdi:view-dashboard' },
-    { label: 'Anak Perusahaan', key: 'subsidiaries', path: '/subsidiaries', icon: 'mdi:office-building' },
-    { label: 'Dokumen', key: 'documents', path: '/documents', icon: 'mdi:file-document' },
+    // { label: 'Dashboard', key: 'dashboard', path: '/dashboard', icon: 'mdi:view-dashboard' },
+    { label: 'Daftar Perusahaan', key: 'subsidiaries', path: '/subsidiaries', icon: 'mdi:office-building' },
+    { label: 'Documents', key: 'documents', path: '/documents', icon: 'mdi:file-document' },
     { label: 'Laporan', key: 'reports', path: '/reports', icon: 'mdi:chart-box' },
     { label: 'Manajemen Pengguna', key: 'users', path: '/users', icon: 'mdi:account-group' },
   ]
@@ -45,15 +67,102 @@ const menuItems = computed(() => {
 
 const emit = defineEmits<{
   logout: []
+  toggleMaximize: [value: boolean]
 }>()
 
 const handleLogout = () => {
   emit('logout')
 }
 
+const handleToggleMaximize = () => {
+  // Check if browser supports fullscreen API
+  if (document.fullscreenElement) {
+    // Exit fullscreen
+    document.exitFullscreen().then(() => {
+      isMaximized.value = false
+      emit('toggleMaximize', false)
+    }).catch(() => {
+      // Fallback: try to minimize window (if in Electron or similar)
+      interface WindowWithElectron extends Window {
+        electron?: {
+          minimize?: () => void
+          maximize?: () => void
+        }
+      }
+      const win = window as WindowWithElectron
+      if (win.electron?.minimize) {
+        win.electron.minimize()
+      }
+    })
+  } else {
+    // Enter fullscreen
+    const element = document.documentElement
+    if (element.requestFullscreen) {
+      element.requestFullscreen().then(() => {
+        isMaximized.value = true
+        emit('toggleMaximize', true)
+      }).catch(() => {
+        // Fallback: try to maximize window (if in Electron or similar)
+        interface WindowWithElectron extends Window {
+          electron?: {
+            minimize?: () => void
+            maximize?: () => void
+          }
+        }
+        const win = window as WindowWithElectron
+        if (win.electron?.maximize) {
+          win.electron.maximize()
+          isMaximized.value = true
+          emit('toggleMaximize', true)
+        }
+      })
+    }
+  }
+}
+
+// Listen for fullscreen changes
+onMounted(() => {
+  const handleFullscreenChange = () => {
+    isMaximized.value = !!document.fullscreenElement
+  }
+  
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
+  document.addEventListener('mozfullscreenchange', handleFullscreenChange)
+  document.addEventListener('MSFullscreenChange', handleFullscreenChange)
+  
+  // Store handler for cleanup
+  interface WindowWithFullscreenHandler extends Window {
+    __fullscreenHandler?: () => void
+  }
+  ;(window as WindowWithFullscreenHandler).__fullscreenHandler = handleFullscreenChange
+})
+
 const handleMenuItemClick = (path: string) => {
   router.push(path)
   showMobileMenu.value = false
+}
+
+const handleMenuClick = (e: { key: string }) => {
+  // Handle menu item clicks safely
+  switch (e.key) {
+    case 'profile':
+      handleMenuItemClick('/profile')
+      showUserMenu.value = false
+      break
+    case 'my-company':
+      handleMenuItemClick('/my-company')
+      showUserMenu.value = false
+      break
+    case 'settings':
+      handleMenuItemClick('/settings')
+      showUserMenu.value = false
+      break
+    case 'logout':
+      handleLogout()
+      showUserMenu.value = false
+      break
+  }
 }
 
 const toggleMobileMenu = () => {
@@ -70,10 +179,6 @@ const updateScrollState = () => {
   
   if (isScrolled.value !== newValue) {
     isScrolled.value = newValue
-    // console.log('📜 Scroll state changed:', scrollTop, '-> isScrolled:', newValue)
-    // console.log('🔍 DOM element classes:', document.querySelector('.header-container')?.className)
-  } else {
-    // console.log('📊 Current scroll:', scrollTop, 'isScrolled:', newValue)
   }
 }
 
@@ -87,48 +192,291 @@ const loadUserCompaniesCount = async () => {
     userCompaniesCount.value = companies.length
   } catch (error) {
     // Silently fail - badge is not critical
-    console.warn('Failed to load user companies count:', error)
+    logger.warn('Failed to load user companies count:', error)
     userCompaniesCount.value = 0
   } finally {
     loadingCompaniesCount.value = false
   }
 }
 
+// Open notification box
+const openNotificationBox = (notif: Notification) => {
+  // Tentukan type berdasarkan notif.type
+  let type: 'info' | 'success' | 'warning' | 'error' = 'info'
+  switch (notif.type) {
+    case 'success':
+      type = 'success'
+      break
+    case 'warning':
+      type = 'warning'
+      break
+    case 'error':
+      type = 'error'
+      break
+    default:
+      type = 'info'
+  }
+  
+  try {
+    // Tampilkan notification dengan Ant Design Vue
+    // Note: showProgress dan pauseOnHover tidak didukung di Ant Design Vue
+    notification[type]({
+      message: notif.title,
+      description: formatDynamicMessage(notif),
+      duration: 4.5, // Auto hide setelah 4.5 detik
+      placement: 'topRight',
+      onClick: () => {
+        handleNotificationClick(notif)
+      },
+    })
+  } catch (error) {
+    logger.error('❌ [PushNotification] Failed to show notification:', error)
+  }
+}
+
+// Show push notification
+const showPushNotification = (notif: Notification) => {
+  try {
+    // Gunakan openNotificationBox untuk menampilkan notification
+    openNotificationBox(notif)
+  } catch (error) {
+    logger.error('❌ [PushNotification] Failed to show notification:', error)
+  }
+}
+
+// Load notifications
+// PENTING: RBAC sudah di-handle di backend melalui GetNotificationsWithRBAC
+// - Superadmin/Administrator: melihat semua notifikasi
+// - Admin: melihat notifikasi dari company mereka + descendants
+// - Regular users: hanya melihat notifikasi mereka sendiri
+// Frontend tidak perlu melakukan filtering tambahan, cukup menggunakan endpoint yang sudah ada
+const loadNotifications = async () => {
+  if (!authStore.isAuthenticated) {
+    // Stop polling jika user tidak authenticated
+    stopNotificationPolling()
+    return
+  }
+  
+  // Jangan restart polling di sini - biarkan hanya di startNotificationPolling
+  // untuk menghindari infinite loop
+  
+  loadingNotifications.value = true
+  try {
+    // Endpoint ini sudah menggunakan RBAC di backend (GetNotificationsWithRBAC)
+    // Tidak perlu filtering tambahan di frontend
+    const [notifs, count] = await Promise.all([
+      notificationApi.getNotifications(false, 5), // Ambil 5 notifikasi terakhir (read + unread) - sudah filtered by RBAC
+      notificationApi.getUnreadCount(), // Unread count - sudah filtered by RBAC
+    ])
+    
+    // Hanya tampilkan notifikasi yang belum dibaca di dropdown
+    const unreadNotifs = notifs.filter(n => !n.is_read)
+    notifications.value = unreadNotifs.slice(0, 5) // Maksimal 5 notifikasi unread
+    
+    unreadCount.value = count
+    
+    // PENTING: Saat first load setelah login (session baru), tampilkan SEMUA notifikasi unread sebagai push notification
+    if (isFirstLoad.value && !hasShownInitialNotifications.value) {
+      // Tampilkan semua notifikasi unread sebagai push notification (PENTING untuk reminder expired document)
+      if (unreadNotifs.length > 0) {
+        // Tampilkan maksimal 5 notifikasi unread (untuk menghindari spam berlebihan)
+        const notificationsToShow = unreadNotifs.slice(0, 5)
+        notificationsToShow.forEach((notif, index) => {
+          // Jangan tambahkan ke shownNotificationIds - biarkan muncul berulang sampai ditindak lanjuti
+          
+          // Tampilkan dengan delay berurutan (setiap 1000ms untuk visibility yang baik)
+          setTimeout(() => {
+            showPushNotification(notif)
+          }, index * 1000) // 1 detik delay
+        })
+        
+        // Tandai bahwa sudah menampilkan notifikasi awal
+        hasShownInitialNotifications.value = true
+      }
+      
+      // Reset isFirstLoad setelah beberapa detik
+      setTimeout(() => {
+        isFirstLoad.value = false
+      }, 3000)
+      return
+    }
+    
+    // PENTING: Tampilkan push notification untuk notifikasi yang BELUM ditindak lanjuti (is_read = false)
+    // Push notification akan muncul berulang-ulang sampai user klik "Sudah ditindak lanjuti"
+    // Bahkan setelah expired date lewat, push notification tetap muncul sampai ditindak lanjuti
+    const unresolvedNotifications = notifs.filter(notif => !notif.is_read)
+    
+    // Tampilkan push notification untuk notifikasi yang belum ditindak lanjuti
+    // Jangan skip notifikasi yang sudah pernah ditampilkan - tampilkan lagi jika masih belum ditindak lanjuti
+    if (unresolvedNotifications.length > 0) {
+      const notificationsToShow = unresolvedNotifications.slice(0, 3) // Maksimal 3 notifikasi
+      notificationsToShow.forEach((notif, index) => {
+        // Jangan tambahkan ke shownNotificationIds - biarkan muncul berulang sampai ditindak lanjuti
+        
+        // Tampilkan dengan delay berurutan (setiap 800ms untuk balance antara visibility dan performance)
+        setTimeout(() => {
+          showPushNotification(notif)
+        }, index * 800) // 800ms delay
+      })
+    }
+  } catch (error) {
+    logger.error('❌ [Notifications] Failed to load notifications:', error)
+  } finally {
+    loadingNotifications.value = false
+  }
+}
+
+// Start polling for notifications
+const startNotificationPolling = () => {
+  // Prevent multiple polling instances
+  if (notificationPollingInterval.value) {
+    return // Already running
+  }
+  
+  // Load immediately - akan menampilkan semua unread notifications jika first load
+  loadNotifications()
+  
+  // Poll every 30 seconds (reduced frequency untuk mengurangi load)
+  notificationPollingInterval.value = setInterval(() => {
+    loadNotifications()
+  }, 30000) // 30 detik
+}
+
+// Stop polling
+const stopNotificationPolling = () => {
+  if (notificationPollingInterval.value) {
+    clearInterval(notificationPollingInterval.value)
+    notificationPollingInterval.value = null
+  }
+}
+
+// Handle notification click
+// PENTING: Hanya navigate, TIDAK mark as read
+// Notifikasi hanya selesai setelah user klik button "Sudah ditindak lanjuti" di halaman notifikasi
+const handleNotificationClick = async (notification: Notification) => {
+  // Navigate to resource if available (TIDAK mark as read)
+  if (notification.resource_type === 'document' && notification.resource_id) {
+    router.push(`/documents/${notification.resource_id}`)
+    showNotificationMenu.value = false
+  } else {
+    // Navigate to notifications inbox
+    router.push('/notifications')
+    showNotificationMenu.value = false
+  }
+}
+
+// Format time
+const formatTime = (date: string) => {
+  return dayjs(date).fromNow()
+}
+
+// Format dynamic message berdasarkan waktu real-time untuk document expiry notifications
+const formatDynamicMessage = (notif: Notification): string => {
+  // Hanya untuk document_expiry notification yang memiliki document dengan expiry_date
+  if (notif.type === 'document_expiry' && notif.document?.expiry_date) {
+    const expiryDate = dayjs(notif.document.expiry_date)
+    const now = dayjs()
+    const diffDays = expiryDate.diff(now, 'day')
+    
+    // Extract document name dari original message atau dari document.name
+    const docName = notif.document.name || notif.title.replace("Dokumen '", '').replace("' Akan Expired", '')
+    
+    if (diffDays < 0) {
+      // Sudah expired
+      const daysAgo = Math.abs(diffDays)
+      if (daysAgo === 0) {
+        return `Dokumen '${docName}' sudah expired hari ini. Silakan perbarui atau perpanjang dokumen tersebut.`
+      } else if (daysAgo === 1) {
+        return `Dokumen '${docName}' sudah expired 1 hari yang lalu. Silakan perbarui atau perpanjang dokumen tersebut.`
+      } else if (daysAgo < 7) {
+        return `Dokumen '${docName}' sudah expired ${daysAgo} hari yang lalu. Silakan perbarui atau perpanjang dokumen tersebut.`
+      } else if (daysAgo < 30) {
+        const weeksAgo = Math.floor(daysAgo / 7)
+        return `Dokumen '${docName}' sudah expired ${weeksAgo} minggu yang lalu. Silakan perbarui atau perpanjang dokumen tersebut.`
+      } else {
+        const monthsAgo = Math.floor(daysAgo / 30)
+        return `Dokumen '${docName}' sudah expired lebih dari ${monthsAgo} bulan yang lalu. Silakan perbarui atau perpanjang dokumen tersebut.`
+      }
+    } else if (diffDays === 0) {
+      // Expired hari ini
+      return `Dokumen '${docName}' akan expired hari ini. Silakan perbarui atau perpanjang dokumen tersebut.`
+    } else if (diffDays === 1) {
+      // Expired besok
+      return `Dokumen '${docName}' akan expired dalam 1 hari. Silakan perbarui atau perpanjang dokumen tersebut.`
+    } else {
+      // Masih beberapa hari lagi
+      return `Dokumen '${docName}' akan expired dalam ${diffDays} hari. Silakan perbarui atau perpanjang dokumen tersebut.`
+    }
+  }
+  
+  // Untuk notification type lain, gunakan message as-is
+  return notif.message
+}
+
+// Watch untuk detect login (session baru)
+// Saat user login, reset state untuk menampilkan semua unread notifications
+let previousAuthState = authStore.isAuthenticated
+watch(() => authStore.isAuthenticated, (isAuthenticated) => {
+  // Jika user baru login (berubah dari false ke true)
+  if (!previousAuthState && isAuthenticated) {
+    // Reset state untuk menampilkan semua unread notifications saat login
+    isFirstLoad.value = true
+    hasShownInitialNotifications.value = false
+    shownNotificationIds.value.clear()
+    
+    // Restart polling jika belum berjalan
+    if (!notificationPollingInterval.value) {
+      startNotificationPolling()
+    } else {
+      // Jika polling sudah berjalan, load notifications untuk menampilkan push notification
+      loadNotifications()
+    }
+  }
+  // Update previous state
+  previousAuthState = isAuthenticated
+})
+
 onMounted(() => {
+  // Setup notification configuration
+  // Note: Stack configuration is handled automatically by Ant Design Vue
+  // Multiple notifications will be stacked automatically
+  notification.config({
+    placement: 'topRight',
+    top: 24,
+    bottom: 24,
+    duration: 4.5,
+    rtl: false,
+  })
+  
   loadUserCompaniesCount()
-//   console.log('🚀 DashboardHeader mounted')
+  startNotificationPolling()
+  
+  // Listen untuk refresh notifications setelah navigate
+  const handleNotificationRead = () => {
+    // Refresh notifications setelah beberapa detik (untuk memberi waktu backend update)
+    setTimeout(() => {
+      loadNotifications()
+    }, 1000)
+  }
+  
+  // Store handler reference untuk cleanup
+  interface WindowWithNotificationHandler extends Window {
+    __notificationReadHandler?: EventListener
+  }
+  ;(window as WindowWithNotificationHandler).__notificationReadHandler = handleNotificationRead as EventListener
+  window.addEventListener('notification-read', handleNotificationRead as EventListener)
   
   // Check initial scroll position
   updateScrollState()
   
   // Create scroll handler function
   const scrollHandler = () => {
-    // console.log('📜 Scroll event fired!')
     updateScrollState()
   }
   
-  // Method 1: window scroll (passive)
+  // Hanya gunakan 1 scroll listener untuk menghindari ribuan event fires
   if (window.addEventListener) {
-    window.addEventListener('scroll', scrollHandler, { passive: true, capture: false })
-    // console.log('✅ Added scroll listener to window (passive)')
-  }
-  
-  // Method 2: window scroll without passive (for testing)
-  window.addEventListener('scroll', () => {
-    // console.log('🔄 Direct scroll handler called')
-    updateScrollState()
-  })
-  
-  // Method 3: document scroll
-  if (document.addEventListener) {
-    document.addEventListener('scroll', scrollHandler, { passive: true, capture: true })
-    // console.log('✅ Added scroll listener to document (passive)')
-  }
-  
-  // Method 4: document.body scroll (for some cases)
-  if (document.body) {
-    document.body.addEventListener('scroll', scrollHandler, { passive: true })
-    // console.log('✅ Added scroll listener to document.body')
+    window.addEventListener('scroll', scrollHandler, { passive: true })
   }
   
   // Store handler reference for cleanup
@@ -137,31 +485,13 @@ onMounted(() => {
   }
   ;(window as WindowWithScrollHandler).__dashboardHeaderScrollHandler = scrollHandler
   
-  // Test scroll detection with polling (temporary for debugging)
-  let pollCount = 0
-  const pollInterval = setInterval(() => {
-    pollCount++
-    const currentScroll = window.pageYOffset || document.documentElement.scrollTop || 0
-    if (currentScroll > 0 || pollCount > 10) {
-    //   console.log(`⏱️ Poll ${pollCount}: scroll = ${currentScroll}`)
-      updateScrollState()
-      if (pollCount > 50) {
-        clearInterval(pollInterval)
-        // console.log('⏹️ Stopped polling after 50 checks')
-      }
-    }
-  }, 200)
-  
-  // Cleanup polling after 10 seconds
-  setTimeout(() => {
-    clearInterval(pollInterval)
-  }, 10000)
+  // Scroll detection sudah menggunakan event listeners, tidak perlu polling
 })
 
 onUnmounted(() => {
-//   console.log('🛑 DashboardHeader unmounting, removing listeners')
   interface WindowWithScrollHandler extends Window {
     __dashboardHeaderScrollHandler?: () => void
+    __fullscreenHandler?: () => void
   }
   const handler = (window as WindowWithScrollHandler).__dashboardHeaderScrollHandler
   if (handler) {
@@ -171,6 +501,32 @@ onUnmounted(() => {
       document.body.removeEventListener('scroll', handler)
     }
     delete (window as WindowWithScrollHandler).__dashboardHeaderScrollHandler
+  }
+  
+  // Remove fullscreen listeners
+  const fullscreenHandler = (window as WindowWithScrollHandler).__fullscreenHandler
+  if (fullscreenHandler) {
+    document.removeEventListener('fullscreenchange', fullscreenHandler)
+    document.removeEventListener('webkitfullscreenchange', fullscreenHandler)
+    document.removeEventListener('mozfullscreenchange', fullscreenHandler)
+    document.removeEventListener('MSFullscreenChange', fullscreenHandler)
+    delete (window as WindowWithScrollHandler).__fullscreenHandler
+  }
+  
+  // Stop notification polling
+  stopNotificationPolling()
+  
+  // Clear shown notification IDs saat unmount
+  shownNotificationIds.value.clear()
+  
+  // Remove notification-read event listener
+  interface WindowWithNotificationHandler extends Window {
+    __notificationReadHandler?: EventListener
+  }
+  const notificationHandler = (window as WindowWithNotificationHandler).__notificationReadHandler
+  if (notificationHandler) {
+    window.removeEventListener('notification-read', notificationHandler)
+    delete (window as WindowWithNotificationHandler).__notificationReadHandler
   }
 })
 </script>
@@ -186,20 +542,17 @@ onUnmounted(() => {
       </div>
 
       <div class="header-center">
-          <a-menu 
-          mode="horizontal" 
-          :selected-keys="[route.name as string]"
-          class="nav-menu desktop-menu"
-        >
-          <a-menu-item 
+        <nav class="custom-nav-menu">
+          <button
             v-for="item in menuItems" 
             :key="item.key"
             @click="handleMenuItemClick(item.path)"
+            :class="['nav-item', { 'nav-item-active': route.name === item.key }]"
           >
             <IconifyIcon :icon="item.icon" width="18" style="margin-right: 8px;" />
             {{ item.label }}
-          </a-menu-item>
-        </a-menu>
+          </button>
+        </nav>
         <!-- Show message if role is not recognized -->
         <div v-if="!isRoleValid" class="role-warning-message">
           <IconifyIcon icon="mdi:alert" width="18" style="margin-right: 8px; color: #faad14;" />
@@ -208,11 +561,74 @@ onUnmounted(() => {
       </div>
 
       <div class="header-right">
-        <a-button type="text" class="icon-btn desktop-icon">
-          <IconifyIcon icon="mdi:bell-outline" width="20" height="20" />
+        <a-button 
+          type="text" 
+          class="icon-btn desktop-icon"
+          @click="handleToggleMaximize"
+          :title="isMaximized ? 'Exit Fullscreen' : 'Fullscreen'"
+        >
+          <IconifyIcon 
+            :icon="isMaximized ? 'ant-design:fullscreen-exit-outlined' : 'ant-design:fullscreen-outlined'" 
+            width="20" 
+            height="20" 
+          />
         </a-button>
 
-        <a-dropdown v-model:open="showUserMenu" placement="bottomRight">
+        <a-dropdown 
+          v-model:open="showNotificationMenu" 
+          placement="bottomRight"
+          :z-index="1001"
+          :trigger="['click']"
+        >
+          <a-badge :count="unreadCount" :offset="[10, 0]">
+            <a-button type="text" class="icon-btn desktop-icon">
+              <IconifyIcon icon="mdi:bell-outline" width="20" height="20" />
+            </a-button>
+          </a-badge>
+          <template #overlay>
+            <div class="notification-dropdown">
+              <div class="notification-header">
+                <span class="notification-title">Notifikasi</span>
+                <a-button 
+                  type="link" 
+                  size="small" 
+                  @click="router.push('/notifications'); showNotificationMenu = false"
+                >
+                  Lihat Semua
+                </a-button>
+              </div>
+              <a-spin :spinning="loadingNotifications">
+                <div class="notification-list">
+                  <div 
+                    v-if="notifications.length === 0" 
+                    class="notification-empty"
+                  >
+                    Tidak ada notifikasi baru
+                  </div>
+                  <div
+                    v-for="notif in notifications"
+                    :key="notif.id"
+                    class="notification-item"
+                    :class="{ 'unread': !notif.is_read }"
+                    @click="handleNotificationClick(notif)"
+                  >
+                    <div class="notification-content">
+                      <div class="notification-title-text">{{ notif.title }}</div>
+                      <div class="notification-message">{{ formatDynamicMessage(notif) }}</div>
+                      <div class="notification-time">{{ formatTime(notif.created_at) }}</div>
+                    </div>
+                  </div>
+                </div>
+              </a-spin>
+            </div>
+          </template>
+        </a-dropdown>
+
+        <a-dropdown 
+          v-model:open="showUserMenu" 
+          placement="bottomRight"
+          :z-index="1002"
+        >
           <div class="user-profile">
             <div class="user-avatar">
               {{ user?.username?.charAt(0).toUpperCase() || 'U' }}
@@ -221,22 +637,22 @@ onUnmounted(() => {
             <IconifyIcon icon="mdi:chevron-down" width="16" class="desktop-icon" />
           </div>
           <template #overlay>
-            <a-menu>
-              <a-menu-item key="profile" @click="handleMenuItemClick('/profile')">
+            <a-menu style="z-index: 1002;" @click="handleMenuClick">
+              <a-menu-item key="profile">
                 <IconifyIcon icon="mdi:account" width="16" style="margin-right: 8px;" />
                 Profil
               </a-menu-item>
-              <a-menu-item key="my-company" @click="handleMenuItemClick('/my-company')">
+              <a-menu-item key="my-company">
                 <IconifyIcon icon="mdi:office-building" width="16" style="margin-right: 8px;" />
                 My Company
                 <a-badge v-if="userCompaniesCount > 1" :count="userCompaniesCount" :number-style="{ backgroundColor: '#52c41a' }" style="margin-left: 8px;" />
               </a-menu-item>
-              <a-menu-item key="settings" @click="handleMenuItemClick('/settings')">
+              <a-menu-item key="settings">
                 <IconifyIcon icon="mdi:cog" width="16" style="margin-right: 8px;" />
                 Pengaturan
               </a-menu-item>
               <a-menu-divider />
-              <a-menu-item key="logout" @click="handleLogout">
+              <a-menu-item key="logout">
                 <IconifyIcon icon="mdi:logout" width="16" style="margin-right: 8px;" />
                 Keluar
               </a-menu-item>
@@ -288,3 +704,74 @@ onUnmounted(() => {
   </div>
 </template>
 
+<style lang="scss" scoped>
+.notification-dropdown {
+  width: 360px;
+  max-height: 480px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  
+  .notification-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    border-bottom: 1px solid #f0f0f0;
+    
+    .notification-title {
+      font-weight: 600;
+      font-size: 16px;
+      color: #333;
+    }
+  }
+  
+  .notification-list {
+    max-height: 400px;
+    overflow-y: auto;
+    
+    .notification-empty {
+      padding: 40px 20px;
+      text-align: center;
+      color: #8c8c8c;
+    }
+    
+    .notification-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid #f0f0f0;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      
+      &:hover {
+        background-color: #f5f5f5;
+      }
+      
+      &.unread {
+        background-color: #e6f7ff;
+        border-left: 3px solid #1890ff;
+      }
+      
+      .notification-content {
+        .notification-title-text {
+          font-weight: 500;
+          color: #333;
+          margin-bottom: 4px;
+          font-size: 14px;
+        }
+        
+        .notification-message {
+          color: #666;
+          font-size: 13px;
+          margin-bottom: 4px;
+          line-height: 1.4;
+        }
+        
+        .notification-time {
+          color: #8c8c8c;
+          font-size: 12px;
+        }
+      }
+    }
+  }
+}
+</style>

@@ -7,7 +7,7 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      redirect: '/dashboard',
+      redirect: '/subsidiaries',
     },
     {
       path: '/dashboard',
@@ -66,7 +66,7 @@ const router = createRouter({
     {
       path: '/my-company',
       name: 'my-company',
-      component: () => import('../views/MyCompanyView.vue'),
+      component: () => import('../views/MyCompanyRedirectView.vue'),
       meta: { requiresAuth: true, title: 'My Company' },
     },
     {
@@ -74,6 +74,60 @@ const router = createRouter({
       name: 'users',
       component: () => import('../views/UserManagementView.vue'),
       meta: { requiresAuth: true, title: 'Manajemen Pengguna' },
+    },
+    {
+      path: '/reports',
+      name: 'reports',
+      component: () => import('../views/ReportsView.vue'),
+      meta: { requiresAuth: true, title: 'Laporan' },
+    },
+    {
+      path: '/reports/new',
+      name: 'report-new',
+      component: () => import('../views/ReportFormView.vue'),
+      meta: { requiresAuth: true, title: 'Tambah Laporan' },
+    },
+    {
+      path: '/reports/:id/edit',
+      name: 'report-edit',
+      component: () => import('../views/ReportFormView.vue'),
+      meta: { requiresAuth: true, title: 'Edit Laporan' },
+    },
+    {
+      path: '/documents',
+      name: 'documents',
+      component: () => import('../views/DocumentManagementView.vue'),
+      meta: { requiresAuth: true, title: 'Documents' },
+    },
+    {
+      path: '/documents/folders/:id',
+      name: 'document-folder-detail',
+      component: () => import('../views/DocumentFolderDetailView.vue'),
+      meta: { requiresAuth: true, title: 'Folder Detail' },
+    },
+    {
+      path: '/documents/upload',
+      name: 'documents-upload',
+      component: () => import('../views/DocumentUploadView.vue'),
+      meta: { requiresAuth: true, title: 'Upload Document' },
+    },
+    {
+      path: '/documents/:id/edit',
+      name: 'document-edit',
+      component: () => import('../views/DocumentUploadView.vue'),
+      meta: { requiresAuth: true, title: 'Edit Document Metadata' },
+    },
+    {
+      path: '/documents/:id',
+      name: 'document-detail',
+      component: () => import('../views/DocumentDetailView.vue'),
+      meta: { requiresAuth: true, title: 'Document Detail' },
+    },
+    {
+      path: '/notifications',
+      name: 'notifications',
+      component: () => import('../views/NotificationsView.vue'),
+      meta: { requiresAuth: true, title: 'Notifikasi' },
     },
     {
       path: '/about',
@@ -109,12 +163,12 @@ router.beforeEach(async (to, from, next) => {
       
       // Validasi role - hanya izinkan role yang dikenali
       const userRole = authStore.user?.role?.toLowerCase() || ''
-      const validRoles = ['superadmin', 'admin', 'manager', 'staff']
+      const validRoles = ['superadmin', 'administrator', 'admin', 'manager', 'staff']
       const isRoleValid = validRoles.includes(userRole)
       
-      // Jika role tidak dikenali dan bukan di dashboard, redirect ke dashboard
-      if (!isRoleValid && to.name !== 'dashboard' && to.name !== 'profile' && to.name !== 'settings') {
-        next({ name: 'dashboard' })
+      // Jika role tidak dikenali dan bukan di subsidiaries, redirect ke subsidiaries
+      if (!isRoleValid && to.name !== 'subsidiaries' && to.name !== 'profile' && to.name !== 'settings') {
+        next({ name: 'subsidiaries' })
         return
       }
       
@@ -173,8 +227,8 @@ router.beforeEach(async (to, from, next) => {
       try {
         // Coba validasi dengan backend (diam-diam)
         await authStore.fetchProfile()
-        // Cookie valid, redirect ke dashboard
-        next({ name: 'dashboard' })
+        // Cookie valid, redirect ke subsidiaries
+        next({ name: 'subsidiaries' })
         return
       } catch {
         // Cookie tidak valid atau hilang atau server tidak tersedia
@@ -206,10 +260,10 @@ router.afterEach((to) => {
 // Tangani error navigasi
 router.onError((error) => {
   console.error('Router error:', error)
-  // Fallback ke dashboard jika ada error
+  // Fallback ke subsidiaries jika ada error
   if (error.message.includes('Failed to fetch dynamically imported module')) {
-    router.push('/dashboard').catch(() => {
-      window.location.href = '/dashboard'
+    router.push('/subsidiaries').catch(() => {
+      window.location.href = '/subsidiaries'
     })
   }
 })

@@ -1,21 +1,32 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, h } from 'vue'
+import { ref, onMounted, onUnmounted, computed, h, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { message, Modal } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { Icon as IconifyIcon } from '@iconify/vue'
-import { auditApi, type AuditLog, type AuditLogsParams, type AuditLogStats } from '../api/audit'
+import { auditApi, type AuditLog, type AuditLogsParams, type AuditLogStats, type UserActivityLog, type UserActivityLogsParams } from '../api/audit'
 import developmentApi from '../api/development'
+import { sonarqubeApi, type SonarQubeIssue, type SonarQubeIssuesParams } from '../api/sonarqube'
+import documentsApi, { type DocumentType } from '../api/documents'
+import { userApi, shareholderTypesApi, directorPositionsApi, type User, type ShareholderType, type DirectorPosition } from '../api/userManagement'
 import type { TableColumnsType } from 'ant-design-vue'
+import { logger } from '../utils/logger'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 // Check if user is superadmin
-const isSuperadmin = computed(() => {
-  return authStore.user?.role?.toLowerCase() === 'superadmin'
-})
+const isSuperadmin = computed(() => authStore.user?.role?.toLowerCase() === 'superadmin')
+
+// Role administrator
+const isAdministrator = computed(() => authStore.user?.role?.toLowerCase() === 'administrator')
+
+// Superadmin-like: superadmin atau administrator (akses penuh, kecuali fitur development tetap superadmin-only)
+const isSuperadminLike = computed(() => ['superadmin', 'administrator'].includes(authStore.user?.role?.toLowerCase() || ''))
+
+// Check if user is admin
+const isAdmin = computed(() => authStore.user?.role?.toLowerCase() === 'admin')
 
 const loading = ref(false)
 const is2FAEnabled = ref(false)
@@ -25,11 +36,15 @@ const secret = ref<string>('')
 const twoFACode = ref('')
 const backupCodes = ref<string[]>([])
 
-// Development features
-const seederStatusLoading = ref(false)
-const seederStatus = ref<{ exists: boolean; message: string } | null>(null)
-const resetLoading = ref(false)
-const runSeederLoading = ref(false)
+// Development features - Combined
+const allSeederStatusLoading = ref(false)
+const allSeederStatus = ref<{ status: Record<string, boolean>; message: string } | null>(null)
+const resetAllLoading = ref(false)
+const runAllSeedersLoading = ref(false)
+const resetFinancialReportsLoading = ref(false)
+const checkExpiringDocumentsLoading = ref(false)
+const checkExpiringDirectorTermsLoading = ref(false)
+const checkAllExpiringNotificationsLoading = ref(false)
 
 // Audit logs
 const auditLogs = ref<AuditLog[]>([])
@@ -51,9 +66,80 @@ const selectedAuditLog = ref<AuditLog | null>(null)
 const detailModalVisible = ref(false)
 let auditStatsInterval: number | null = null
 
+// User Activity Logs (permanent logs untuk data penting)
+const userActivityLogs = ref<UserActivityLog[]>([])
+const userActivityLoading = ref(false)
+const userActivityPagination = ref({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+})
+const userActivityFilters = ref({
+  action: undefined as string | undefined,
+  resource: undefined as string | undefined,
+  status: undefined as string | undefined,
+})
+const selectedUserActivityLog = ref<UserActivityLog | null>(null)
+const userActivityDetailModalVisible = ref(false)
+
+// Tab state untuk audit logs (administrator langsung ke User Activity)
+const auditLogActiveTab = ref<string>(isSuperadmin.value ? 'audit' : 'user-activity') // 'audit' atau 'user-activity'
+
+// SonarQube state
+const sonarqubeEnabled = ref(false) // Track if feature is enabled
+const sonarqubeIssues = ref<SonarQubeIssue[]>([])
+const sonarqubeLoading = ref(false)
+const sonarqubeExporting = ref(false)
+const sonarqubeTotal = ref(0)
+const sonarqubeFilters = ref<SonarQubeIssuesParams>({
+  severities: ['BLOCKER', 'CRITICAL', 'MAJOR'],
+  types: ['BUG', 'VULNERABILITY', 'CODE_SMELL'], // Include CODE_SMELL untuk melihat semua issues
+  statuses: ['OPEN', 'CONFIRMED', 'REOPENED'],
+})
+const sonarqubeComponents = ref<Record<string, string>>({})
+
+// Master Data state
+const masterDataActiveTab = ref<string>('document-types')
+const documentTypes = ref<DocumentType[]>([])
+const documentTypesLoading = ref(false)
+const updatingDocumentTypeIds = ref<Set<string>>(new Set())
+const documentTypeModalVisible = ref(false)
+const documentTypeModalMode = ref<'create' | 'edit'>('create')
+const editingDocumentType = ref<DocumentType | null>(null)
+const newDocumentTypeName = ref('')
+const userNamesMap = ref<Map<string, string>>(new Map()) // Map user ID -> username
+
+// Shareholder Types state
+const shareholderTypes = ref<ShareholderType[]>([])
+const shareholderTypesLoading = ref(false)
+const updatingShareholderTypeIds = ref<Set<string>>(new Set())
+const shareholderTypeModalVisible = ref(false)
+const shareholderTypeModalMode = ref<'create' | 'edit'>('create')
+const editingShareholderType = ref<ShareholderType | null>(null)
+const newShareholderTypeName = ref('')
+
+// Director Positions state
+const directorPositions = ref<DirectorPosition[]>([])
+const directorPositionsLoading = ref(false)
+const updatingDirectorPositionIds = ref<Set<string>>(new Set())
+const directorPositionModalVisible = ref(false)
+const directorPositionModalMode = ref<'create' | 'edit'>('create')
+const editingDirectorPosition = ref<DirectorPosition | null>(null)
+const newDirectorPositionName = ref('')
+
+// Navigation state
+const selectedMenuKey = ref<string>('2fa') // Default: 2FA Setting
+const selectedKeys = ref<string[]>(['2fa']) // Array untuk v-model:selectedKeys
+const openKeys = ref<string[]>(['2fa']) // Default: 2FA Setting open
+const isMaximized = ref(false) // State untuk maximize/minimize
+
 const handleLogout = async () => {
   await authStore.logout()
   router.push('/login')
+}
+
+const handleToggleMaximize = (value: boolean) => {
+  isMaximized.value = value
 }
 
 const check2FAStatus = async () => {
@@ -65,7 +151,7 @@ const check2FAStatus = async () => {
       setupStep.value = 'idle'
     }
   } catch (error: unknown) {
-    console.error('Failed to get 2FA status:', error)
+    logger.error('Failed to get 2FA status:', error)
   } finally {
     loading.value = false
   }
@@ -80,7 +166,7 @@ const handleEnable2FA = async () => {
     setupStep.value = 'generate'
     message.success('QR Code berhasil di-generate. Silakan scan dengan authenticator app Anda.')
   } catch (error: unknown) {
-    console.error('Error generating 2FA:', error)
+    logger.error('Error generating 2FA:', error)
     const axiosError = error as { response?: { data?: { message?: string; Message?: string } }; message?: string }
     const errorMessage = 
       axiosError.response?.data?.message || 
@@ -186,7 +272,7 @@ const fetchAuditStats = async () => {
     const stats = await auditApi.getAuditLogStats()
     auditStats.value = stats
   } catch (error: unknown) {
-    console.error('Failed to fetch audit stats:', error)
+    logger.error('Failed to fetch audit stats:', error)
     // Set default values jika error
     if (!auditStats.value) {
       auditStats.value = {
@@ -223,7 +309,7 @@ const fetchAuditLogs = async (page: number = 1, pageSize: number = 10) => {
     }
     // Tidak refresh stats otomatis saat fetch logs, hanya saat user klik refresh atau auto-refresh interval
   } catch (error: unknown) {
-    console.error('Failed to fetch audit logs:', error)
+    logger.error('Failed to fetch audit logs:', error)
     message.error('Gagal mengambil audit logs')
   } finally {
     auditLoading.value = false
@@ -270,22 +356,79 @@ const getStatusColor = (status: string) => {
   }
 }
 
+const getActionColor = (action: string) => {
+  if (action.includes('create') || action.includes('generate')) {
+    return 'green'
+  } else if (action.includes('update')) {
+    return 'blue'
+  } else if (action.includes('delete')) {
+    return 'red'
+  } else if (action.includes('view') || action.includes('export')) {
+    return 'cyan'
+  }
+  return 'default'
+}
+
 const getActionLabel = (action: string) => {
   const labels: Record<string, string> = {
+    // Authentication actions
     login: 'Login',
     logout: 'Logout',
     register: 'Register',
+    failed_login: 'Failed Login',
+    password_reset: 'Password Reset',
+    
+    // Generic CRUD actions
+    create: 'Create',
+    update: 'Update',
+    delete: 'Delete',
+    view: 'View',
+    
+    // User Management actions
     create_user: 'Create User',
     update_user: 'Update User',
     delete_user: 'Delete User',
+    
+    // Company/Subsidiary actions
+    create_company: 'Create Company',
+    update_company: 'Update Company',
+    delete_company: 'Delete Company',
+    
+    // Document actions
     create_document: 'Create Document',
     update_document: 'Update Document',
     delete_document: 'Delete Document',
     view_document: 'View Document',
+    
+    // File Management actions
+    create_file: 'Create File',
+    update_file: 'Update File',
+    delete_file: 'Delete File',
+    download_file: 'Download File',
+    view_file: 'View File',
+    upload_file: 'Upload File',
+    
+    // Report Management actions
+    generate_report: 'Generate Report',
+    view_report: 'View Report',
+    export_report: 'Export Report',
+    delete_report: 'Delete Report',
+    
+    // 2FA actions
     enable_2fa: 'Enable 2FA',
     disable_2fa: 'Disable 2FA',
-    failed_login: 'Failed Login',
-    password_reset: 'Password Reset',
+    
+    // Other actions
+    assign_user_to_company: 'Assign User to Company',
+    unassign_user_from_company: 'Unassign User from Company',
+    reset_user_password: 'Reset User Password',
+    update_email: 'Update Email',
+    change_password: 'Change Password',
+    change_password_failed: 'Change Password Failed',
+    assign_permission: 'Assign Permission',
+    revoke_permission: 'Revoke Permission',
+    
+    // Technical errors
     system_error: 'System Error',
     database_error: 'Database Error',
     validation_error: 'Validation Error',
@@ -365,6 +508,70 @@ const closeDetailModal = () => {
   selectedAuditLog.value = null
 }
 
+// Fungsi user activity logs (permanent logs)
+const fetchUserActivityLogs = async (page: number = 1, pageSize: number = 10) => {
+  try {
+    userActivityLoading.value = true
+    const params: UserActivityLogsParams = {
+      page,
+      pageSize,
+      action: userActivityFilters.value.action,
+      resource: userActivityFilters.value.resource,
+      status: userActivityFilters.value.status,
+    }
+    
+    const response = await auditApi.getUserActivityLogs(params)
+    let rows = response.data
+
+    // Administrator melihat semua log kecuali yang berasal dari superadmin
+    if (isAdministrator.value) {
+      rows = rows.filter((item) => item.username?.toLowerCase() !== 'superadmin')
+    }
+
+    userActivityLogs.value = rows
+    const removed = response.data.length - rows.length
+    const adjustedTotal = isAdministrator.value
+      ? Math.max(response.total - removed, rows.length)
+      : response.total
+
+    userActivityPagination.value = {
+      current: response.page,
+      pageSize: response.pageSize,
+      total: adjustedTotal,
+    }
+  } catch (error: unknown) {
+    logger.error('Failed to fetch user activity logs:', error)
+    message.error('Gagal mengambil user activity logs')
+  } finally {
+    userActivityLoading.value = false
+  }
+}
+
+const handleUserActivityTableChange = (pag: { current?: number; pageSize?: number }) => {
+  if (pag.current) {
+    userActivityPagination.value.current = pag.current
+  }
+  if (pag.pageSize) {
+    userActivityPagination.value.pageSize = pag.pageSize
+  }
+  fetchUserActivityLogs(userActivityPagination.value.current, userActivityPagination.value.pageSize)
+}
+
+const handleUserActivityFilterChange = () => {
+  userActivityPagination.value.current = 1
+  fetchUserActivityLogs(1, userActivityPagination.value.pageSize)
+}
+
+const showUserActivityDetailModal = (log: UserActivityLog) => {
+  selectedUserActivityLog.value = log
+  userActivityDetailModalVisible.value = true
+}
+
+const closeUserActivityDetailModal = () => {
+  userActivityDetailModalVisible.value = false
+  selectedUserActivityLog.value = null
+}
+
 const parseDetails = (detailsJson: string) => {
   if (!detailsJson) return null
   try {
@@ -374,89 +581,689 @@ const parseDetails = (detailsJson: string) => {
   }
 }
 
-// Development functions
-const checkSeederStatus = async () => {
+// SonarQube functions
+const checkSonarQubeStatus = async () => {
   try {
-    seederStatusLoading.value = true
-    const status = await developmentApi.checkSeederStatus()
-    seederStatus.value = status
+    const status = await sonarqubeApi.getStatus()
+    sonarqubeEnabled.value = status.enabled
+  } catch (error) {
+    // If check fails, assume feature is disabled
+    sonarqubeEnabled.value = false
+    logger.warn('SonarQube Monitor status check failed:', error)
+  }
+}
+
+const fetchSonarQubeIssues = async () => {
+  try {
+    sonarqubeLoading.value = true
+    const response = await sonarqubeApi.getIssues(sonarqubeFilters.value)
+    
+    // Debug logging
+    logger.debug('SonarQube API Response:', {
+      total: response.total,
+      issuesCount: response.issues?.length || 0,
+      componentsCount: response.components?.length || 0,
+      issues: response.issues,
+      components: response.components,
+    })
+    
+    sonarqubeIssues.value = response.issues || []
+    sonarqubeTotal.value = response.total || 0
+    
+    // Build component map for display
+    const componentMap: Record<string, string> = {}
+    if (response.components) {
+      response.components.forEach(comp => {
+        componentMap[comp.key] = comp.name || comp.key
+      })
+    }
+    sonarqubeComponents.value = componentMap
+    
+    if (response.total > 0) {
+      message.success(`Berhasil mengambil ${response.total} issues dari SonarCloud (${response.issues?.length || 0} ditampilkan)`)
+    } else {
+      message.warning('Tidak ada issues yang ditemukan dengan filter yang dipilih')
+    }
   } catch (error: unknown) {
-    console.error('Failed to check seeder status:', error)
+    logger.error('Failed to fetch SonarQube issues:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Gagal mengambil issues dari SonarCloud'
+    message.error({
+      content: errorMessage,
+      duration: 5,
+    })
+    sonarqubeIssues.value = []
+  } finally {
+    sonarqubeLoading.value = false
+  }
+}
+
+const handleSonarQubeFilterChange = () => {
+  // Filter change handler - bisa digunakan untuk auto-refresh jika diperlukan
+  // Untuk sekarang, user harus klik Refresh button
+}
+
+const exportSonarQubeIssues = async () => {
+  try {
+    sonarqubeExporting.value = true
+    const blob = await sonarqubeApi.exportIssues(sonarqubeFilters.value)
+    
+    // Create download link
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `sonarqube-issues-${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    message.success('Berhasil export issues ke JSON')
+  } catch (error: unknown) {
+    logger.error('Failed to export SonarQube issues:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Gagal export issues'
+    message.error({
+      content: errorMessage,
+      duration: 5,
+    })
+  } finally {
+    sonarqubeExporting.value = false
+  }
+}
+
+const getSeverityCount = (severity: string) => {
+  return sonarqubeIssues.value.filter(issue => issue.severity === severity).length
+}
+
+const getSeverityColor = (severity: string) => {
+  switch (severity) {
+    case 'BLOCKER':
+      return 'red'
+    case 'CRITICAL':
+      return 'volcano'
+    case 'MAJOR':
+      return 'orange'
+    case 'MINOR':
+      return 'blue'
+    case 'INFO':
+      return 'default'
+    default:
+      return 'default'
+  }
+}
+
+const getTypeColor = (type: string) => {
+  switch (type) {
+    case 'BUG':
+      return 'red'
+    case 'VULNERABILITY':
+      return 'volcano'
+    case 'CODE_SMELL':
+      return 'orange'
+    default:
+      return 'default'
+  }
+}
+
+const getComponentName = (componentKey: string) => {
+  return sonarqubeComponents.value[componentKey] || componentKey.split(':').pop() || componentKey
+}
+
+const sonarqubeColumns: TableColumnsType = [
+  {
+    title: 'Severity',
+    dataIndex: 'severity',
+    key: 'severity',
+    width: 100,
+    fixed: 'left',
+  },
+  {
+    title: 'Type',
+    dataIndex: 'type',
+    key: 'type',
+    width: 120,
+  },
+  {
+    title: 'Component',
+    dataIndex: 'component',
+    key: 'component',
+    width: 200,
+    ellipsis: true,
+  },
+  {
+    title: 'Message',
+    dataIndex: 'message',
+    key: 'message',
+    width: 300,
+    ellipsis: true,
+  },
+  {
+    title: 'Line',
+    dataIndex: 'line',
+    key: 'line',
+    width: 80,
+  },
+  {
+    title: 'Status',
+    dataIndex: 'status',
+    key: 'status',
+    width: 100,
+  },
+  {
+    title: 'Rule',
+    dataIndex: 'rule',
+    key: 'rule',
+    width: 150,
+    ellipsis: true,
+  },
+]
+
+// Combined Development functions
+const checkAllSeederStatus = async () => {
+  try {
+    allSeederStatusLoading.value = true
+    const status = await developmentApi.checkAllSeederStatus()
+    allSeederStatus.value = status
+  } catch (error: unknown) {
+    logger.error('Failed to check all seeder status:', error)
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal memeriksa status seeder'
     message.error(errorMessage)
   } finally {
-    seederStatusLoading.value = false
+    allSeederStatusLoading.value = false
   }
 }
 
-const handleResetSubsidiaryData = () => {
+const handleResetAllSeededData = () => {
   Modal.confirm({
-    title: 'Reset Data Subsidiary',
-    content: 'Apakah Anda yakin ingin menghapus semua data subsidiary dan user yang terkait? Tindakan ini tidak dapat dibatalkan!',
-    okText: 'Ya, Reset',
-    cancelText: 'Batal',
+    title: 'Reset Semua Data Seeder',
+    content: 'Apakah Anda yakin ingin menghapus semua data yang sudah di-seed (Reports, Companies, Users)? Tindakan ini tidak dapat dibatalkan dan akan menghapus semua relasi data.',
+    okText: 'Ya, Reset Semua',
     okType: 'danger',
+    cancelText: 'Batal',
     onOk: async () => {
       try {
-        resetLoading.value = true
-        await developmentApi.resetSubsidiaryData()
-        message.success('Data subsidiary berhasil di-reset')
-        // Refresh seeder status
-        await checkSeederStatus()
+        resetAllLoading.value = true
+        const result = await developmentApi.resetAllSeededData()
+        message.success(result.message || 'Semua data seeder berhasil di-reset')
+        // Refresh status
+        await checkAllSeederStatus()
       } catch (error: unknown) {
-        console.error('Failed to reset subsidiary data:', error)
+        logger.error('Failed to reset all seeded data:', error)
         const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
-        const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal reset data subsidiary'
+        const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal reset semua data seeder'
         message.error(errorMessage)
       } finally {
-        resetLoading.value = false
+        resetAllLoading.value = false
       }
     },
   })
 }
 
-const handleRunSubsidiarySeeder = async () => {
+const handleResetAllFinancialReports = () => {
+  Modal.confirm({
+    title: 'Reset Data Laporan',
+    content: 'Apakah Anda yakin ingin menghapus semua data laporan keuangan dari semua perusahaan? Tindakan ini tidak dapat dibatalkan dan akan menghapus semua data laporan (Neraca, Laba Rugi, Cashflow, dan Rasio Keuangan) dari seluruh perusahaan.',
+    okText: 'Ya, Reset Data Laporan',
+    okType: 'danger',
+    cancelText: 'Batal',
+    onOk: async () => {
+      try {
+        resetFinancialReportsLoading.value = true
+        const result = await developmentApi.resetAllFinancialReports()
+        message.success(result.message || 'Semua data laporan keuangan berhasil di-reset')
+      } catch (error: unknown) {
+        logger.error('Failed to reset all financial reports:', error)
+        const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+        const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal reset data laporan keuangan'
+        message.error(errorMessage)
+      } finally {
+        resetFinancialReportsLoading.value = false
+      }
+    },
+  })
+}
+
+const handleCheckExpiringDocuments = async () => {
   try {
-    runSeederLoading.value = true
-    await developmentApi.runSubsidiarySeeder()
-    message.success('Seeder data subsidiary berhasil dijalankan')
-    // Refresh seeder status
-    await checkSeederStatus()
+    checkExpiringDocumentsLoading.value = true
+    const result = await developmentApi.checkExpiringDocuments(30)
+    const msg = `${result.message || 'Check expiring documents completed'}. Ditemukan: ${result.documents_found || 0} dokumen, Notifikasi dibuat: ${result.notifications_created || 0}`
+    message.success(msg)
   } catch (error: unknown) {
-    console.error('Failed to run seeder:', error)
-    const axiosError = error as { response?: { status?: number; data?: { message?: string } }; message?: string }
-    const errorCode = axiosError.response?.status
-    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal menjalankan seeder'
-    
-    if (errorCode === 409) {
-      // Conflict - data already exists
-      Modal.warning({
-        title: 'Data Seeder Sudah Tersedia',
-        content: errorMessage,
-        okText: 'OK',
-      })
-    } else {
-      message.error(errorMessage)
-    }
+    logger.error('Failed to check expiring documents:', error)
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal check expiring documents'
+    message.error(errorMessage)
   } finally {
-    runSeederLoading.value = false
+    checkExpiringDocumentsLoading.value = false
   }
 }
 
+const handleCheckExpiringDirectorTerms = async () => {
+  try {
+    checkExpiringDirectorTermsLoading.value = true
+    const result = await developmentApi.checkExpiringDirectorTerms(30)
+    const msg = `${result.message || 'Check expiring director terms completed'}. Ditemukan: ${result.directors_found || 0} director, Notifikasi dibuat: ${result.notifications_created || 0}`
+    message.success(msg)
+  } catch (error: unknown) {
+    logger.error('Failed to check expiring director terms:', error)
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal check expiring director terms'
+    message.error(errorMessage)
+  } finally {
+    checkExpiringDirectorTermsLoading.value = false
+  }
+}
+
+const handleCheckAllExpiringNotifications = async () => {
+  try {
+    checkAllExpiringNotificationsLoading.value = true
+    const result = await developmentApi.checkAllExpiringNotifications(30)
+    const msg = `${result.message || 'Check all expiring notifications completed'}. Dokumen: ditemukan ${result.documents?.found || 0}, notifikasi ${result.documents?.notifications_created || 0}. Directors: ditemukan ${result.directors?.found || 0}, notifikasi ${result.directors?.notifications_created || 0}. Total: ${result.total_notifications_created || 0} notifikasi`
+    message.success(msg)
+  } catch (error: unknown) {
+    logger.error('Failed to check all expiring notifications:', error)
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal check all expiring notifications'
+    message.error(errorMessage)
+  } finally {
+    checkAllExpiringNotificationsLoading.value = false
+  }
+}
+
+const handleRunAllSeeders = async () => {
+  Modal.confirm({
+    title: 'Jalankan Semua Seeder Data',
+    content: 'Ini akan menjalankan semua seeder secara berurutan: Company → Reports. Memastikan relasi data terjaga dengan benar. Lanjutkan?',
+    okText: 'Ya, Jalankan',
+    cancelText: 'Batal',
+    onOk: async () => {
+      try {
+        runAllSeedersLoading.value = true
+        const result = await developmentApi.runAllSeeders()
+        message.success(result.message || 'Semua seeder berhasil dijalankan')
+        if (result.details) {
+          // Show details if available
+          const detailsText = Object.entries(result.details).map(([key, value]) => `• ${key}: ${value}`).join('\n')
+          Modal.info({
+            title: 'Seeder Details',
+            content: detailsText,
+            okText: 'OK',
+          })
+        }
+        // Refresh status
+        await checkAllSeederStatus()
+      } catch (error: unknown) {
+        logger.error('Failed to run all seeders:', error)
+        const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+        const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal menjalankan semua seeder'
+        message.error(errorMessage)
+      } finally {
+        runAllSeedersLoading.value = false
+      }
+    },
+  })
+}
+
+const handleMenuClick = (e: { key: string }) => {
+  selectedMenuKey.value = e.key
+  selectedKeys.value = [e.key]
+}
+
+const handleOpenChange = (keys: string[]) => {
+  openKeys.value = keys
+}
+
+// Master Data functions
+const loadDocumentTypes = async () => {
+  documentTypesLoading.value = true
+  try {
+    const data = await documentsApi.getDocumentTypes(true) // Include inactive
+    documentTypes.value = data
+    
+    // Collect unique user IDs from created_by
+    const uniqueUserIds = new Set<string>()
+    data.forEach((docType: DocumentType) => {
+      if (docType.created_by) {
+        uniqueUserIds.add(docType.created_by)
+      }
+    })
+    
+    // Fetch user data for all unique IDs
+    const userNames = new Map<string, string>()
+    if (uniqueUserIds.size > 0) {
+      try {
+        const users = await userApi.getAll()
+        users.forEach((user: User) => {
+          userNames.set(user.id, user.username)
+        })
+      } catch (err) {
+        logger.error('Failed to load user names:', err)
+        // If fetch fails, try to get individual users
+        for (const userId of uniqueUserIds) {
+          try {
+            const user = await userApi.getById(userId)
+            userNames.set(user.id, user.username)
+          } catch {
+            // If individual fetch fails, use ID as fallback
+            userNames.set(userId, userId)
+          }
+        }
+      }
+    }
+    
+    userNamesMap.value = userNames
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    message.error(err.message || 'Gagal memuat jenis dokumen')
+  } finally {
+    documentTypesLoading.value = false
+  }
+}
+
+const handleCreateDocumentType = () => {
+  documentTypeModalMode.value = 'create'
+  editingDocumentType.value = null
+  newDocumentTypeName.value = ''
+  documentTypeModalVisible.value = true
+}
+
+const handleEditDocumentType = (docType: DocumentType) => {
+  documentTypeModalMode.value = 'edit'
+  editingDocumentType.value = docType
+  newDocumentTypeName.value = docType.name
+  documentTypeModalVisible.value = true
+}
+
+const handleSaveDocumentType = async () => {
+  if (!newDocumentTypeName.value.trim()) {
+    message.warning('Nama jenis dokumen tidak boleh kosong')
+    return
+  }
+
+  try {
+    if (documentTypeModalMode.value === 'create') {
+      await documentsApi.createDocumentType(newDocumentTypeName.value.trim())
+      message.success('Jenis dokumen berhasil dibuat')
+    } else if (editingDocumentType.value) {
+      // Edit mode - update name
+      await documentsApi.updateDocumentType(editingDocumentType.value.id, {
+        name: newDocumentTypeName.value.trim(),
+      })
+      message.success('Nama jenis dokumen berhasil diperbarui')
+    }
+    documentTypeModalVisible.value = false
+    await loadDocumentTypes()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = err.response?.data?.message || err.message || 'Gagal menyimpan jenis dokumen'
+    message.error(errorMessage)
+  }
+}
+
+const handleToggleDocumentTypeStatus = async (id: string, name: string, isActive: boolean) => {
+  updatingDocumentTypeIds.value.add(id)
+  try {
+    await documentsApi.updateDocumentType(id, { is_active: isActive })
+    message.success(`Jenis dokumen "${name}" berhasil ${isActive ? 'diaktifkan' : 'dinonaktifkan'}`)
+    await loadDocumentTypes()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = err.response?.data?.message || err.message || `Gagal ${isActive ? 'mengaktifkan' : 'menonaktifkan'} jenis dokumen`
+    message.error(errorMessage)
+    // Reload to revert switch state
+    await loadDocumentTypes()
+  } finally {
+    updatingDocumentTypeIds.value.delete(id)
+  }
+}
+
+// Removed unused function: handleDeleteDocumentType
+// Note: Document type deletion is handled via soft delete through the status toggle switch
+
+// Shareholder Types functions
+const loadShareholderTypes = async () => {
+  shareholderTypesLoading.value = true
+  try {
+    const data = await shareholderTypesApi.getShareholderTypes(true) // Include inactive
+    shareholderTypes.value = data || []
+    
+    // Collect unique user IDs from created_by
+    const uniqueUserIds = new Set<string>()
+    data.forEach((shareholderType: ShareholderType) => {
+      if (shareholderType.created_by) {
+        uniqueUserIds.add(shareholderType.created_by)
+      }
+    })
+    
+    // Fetch user data for all unique IDs (reuse existing userNamesMap)
+    if (uniqueUserIds.size > 0) {
+      try {
+        const users = await userApi.getAll()
+        users.forEach((user: User) => {
+          if (!userNamesMap.value.has(user.id)) {
+            userNamesMap.value.set(user.id, user.username)
+          }
+        })
+      } catch (err) {
+        logger.error('Failed to load user names:', err)
+        // If fetch fails, try to get individual users
+        for (const userId of uniqueUserIds) {
+          if (!userNamesMap.value.has(userId)) {
+            try {
+              const user = await userApi.getById(userId)
+              userNamesMap.value.set(user.id, user.username)
+            } catch {
+              // If individual fetch fails, use ID as fallback
+              userNamesMap.value.set(userId, userId)
+            }
+          }
+        }
+      }
+    }
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    message.error(err.message || 'Gagal memuat jenis pemegang saham')
+  } finally {
+    shareholderTypesLoading.value = false
+  }
+}
+
+const handleCreateShareholderType = () => {
+  shareholderTypeModalMode.value = 'create'
+  editingShareholderType.value = null
+  newShareholderTypeName.value = ''
+  shareholderTypeModalVisible.value = true
+}
+
+const handleEditShareholderType = (shareholderType: ShareholderType) => {
+  shareholderTypeModalMode.value = 'edit'
+  editingShareholderType.value = shareholderType
+  newShareholderTypeName.value = shareholderType.name
+  shareholderTypeModalVisible.value = true
+}
+
+const handleSaveShareholderType = async () => {
+  if (!newShareholderTypeName.value.trim()) {
+    message.warning('Nama jenis pemegang saham tidak boleh kosong')
+    return
+  }
+
+  try {
+    if (shareholderTypeModalMode.value === 'create') {
+      await shareholderTypesApi.createShareholderType(newShareholderTypeName.value.trim())
+      message.success('Jenis pemegang saham berhasil dibuat')
+    } else if (editingShareholderType.value) {
+      await shareholderTypesApi.updateShareholderType(editingShareholderType.value.id, {
+        name: newShareholderTypeName.value.trim(),
+      })
+      message.success('Jenis pemegang saham berhasil diupdate')
+    }
+    shareholderTypeModalVisible.value = false
+    await loadShareholderTypes()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || 'Gagal menyimpan jenis pemegang saham')
+  }
+}
+
+const handleToggleShareholderTypeStatus = async (id: string, name: string, isActive: boolean) => {
+  updatingShareholderTypeIds.value.add(id)
+  try {
+    await shareholderTypesApi.updateShareholderType(id, { is_active: isActive })
+    message.success(`Jenis pemegang saham "${name}" berhasil ${isActive ? 'diaktifkan' : 'dinonaktifkan'}`)
+    await loadShareholderTypes()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || 'Gagal mengupdate status jenis pemegang saham')
+    await loadShareholderTypes()
+  } finally {
+    updatingShareholderTypeIds.value.delete(id)
+  }
+}
+
+// Director Positions functions
+const loadDirectorPositions = async () => {
+  directorPositionsLoading.value = true
+  try {
+    const data = await directorPositionsApi.getDirectorPositions(true) // Include inactive
+    directorPositions.value = data || []
+    
+    // Collect unique user IDs from created_by
+    const uniqueUserIds = new Set<string>()
+    data.forEach((directorPosition: DirectorPosition) => {
+      if (directorPosition.created_by) {
+        uniqueUserIds.add(directorPosition.created_by)
+      }
+    })
+    
+    // Fetch user data for all unique IDs (reuse existing userNamesMap)
+    if (uniqueUserIds.size > 0) {
+      try {
+        const users = await userApi.getAll()
+        users.forEach((user: User) => {
+          if (!userNamesMap.value.has(user.id)) {
+            userNamesMap.value.set(user.id, user.username)
+          }
+        })
+      } catch (err) {
+        logger.error('Failed to load user names:', err)
+        // If fetch fails, try to get individual users
+        for (const userId of uniqueUserIds) {
+          if (!userNamesMap.value.has(userId)) {
+            try {
+              const user = await userApi.getById(userId)
+              userNamesMap.value.set(user.id, user.username)
+            } catch {
+              // If individual fetch fails, use ID as fallback
+              userNamesMap.value.set(userId, userId)
+            }
+          }
+        }
+      }
+    }
+  } catch (error: unknown) {
+    const err = error as { message?: string }
+    message.error(err.message || 'Gagal memuat jabatan pengurus')
+  } finally {
+    directorPositionsLoading.value = false
+  }
+}
+
+const handleCreateDirectorPosition = () => {
+  directorPositionModalMode.value = 'create'
+  editingDirectorPosition.value = null
+  newDirectorPositionName.value = ''
+  directorPositionModalVisible.value = true
+}
+
+const handleEditDirectorPosition = (directorPosition: DirectorPosition) => {
+  directorPositionModalMode.value = 'edit'
+  editingDirectorPosition.value = directorPosition
+  newDirectorPositionName.value = directorPosition.name
+  directorPositionModalVisible.value = true
+}
+
+const handleSaveDirectorPosition = async () => {
+  if (!newDirectorPositionName.value.trim()) {
+    message.warning('Nama jabatan pengurus tidak boleh kosong')
+    return
+  }
+
+  try {
+    if (directorPositionModalMode.value === 'create') {
+      await directorPositionsApi.createDirectorPosition(newDirectorPositionName.value.trim())
+      message.success('Jabatan pengurus berhasil dibuat')
+    } else if (editingDirectorPosition.value) {
+      await directorPositionsApi.updateDirectorPosition(editingDirectorPosition.value.id, {
+        name: newDirectorPositionName.value.trim(),
+      })
+      message.success('Jabatan pengurus berhasil diupdate')
+    }
+    directorPositionModalVisible.value = false
+    await loadDirectorPositions()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || 'Gagal menyimpan jabatan pengurus')
+  }
+}
+
+const handleToggleDirectorPositionStatus = async (id: string, name: string, isActive: boolean) => {
+  updatingDirectorPositionIds.value.add(id)
+  try {
+    await directorPositionsApi.updateDirectorPosition(id, { is_active: isActive })
+    message.success(`Jabatan pengurus "${name}" berhasil ${isActive ? 'diaktifkan' : 'dinonaktifkan'}`)
+    await loadDirectorPositions()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || 'Gagal mengupdate status jabatan pengurus')
+    await loadDirectorPositions()
+  } finally {
+    updatingDirectorPositionIds.value.delete(id)
+  }
+}
+
+// Sinkronkan data sesuai tab yang dipilih
+watch(
+  () => auditLogActiveTab.value,
+  (tab) => {
+    if (tab === 'audit' && isSuperadmin.value) {
+      fetchAuditLogs()
+    }
+    if (tab === 'user-activity' && isSuperadminLike.value) {
+      fetchUserActivityLogs(userActivityPagination.value.current, userActivityPagination.value.pageSize)
+    }
+  },
+  { immediate: false },
+)
+
 onMounted(() => {
   check2FAStatus()
-  // Only fetch audit logs if user is superadmin
+  // Fetch audit/user activity sesuai role
   if (isSuperadmin.value) {
     fetchAuditLogs()
     fetchAuditStats()
-    checkSeederStatus()
-    
-    // Auto-refresh stats cards saja setiap 30 detik (hanya untuk audit stats, bukan seluruh halaman)
-    // Interval akan dihentikan otomatis saat user keluar dari halaman (onUnmounted)
+    fetchUserActivityLogs(userActivityPagination.value.current, userActivityPagination.value.pageSize)
+    checkAllSeederStatus()
+    // Refresh stats cards setiap 30 detik (hanya untuk superadmin)
     auditStatsInterval = window.setInterval(() => {
       fetchAuditStats()
-    }, 30000) // 30 detik - hanya refresh stats cards
+    }, 30000)
+  } else if (isSuperadminLike.value) {
+    // Administrator: hanya user activity
+    fetchUserActivityLogs(userActivityPagination.value.current, userActivityPagination.value.pageSize)
+  }
+
+  // Check SonarQube Monitor status (superadmin/administrator/admin)
+  if (isSuperadminLike.value || isAdmin.value) {
+    checkSonarQubeStatus()
+  }
+
+  // Load Master Data if user has access
+  if (isSuperadminLike.value) {
+    loadDocumentTypes()
+    loadShareholderTypes()
+    loadDirectorPositions()
   }
 })
 
@@ -471,23 +1278,88 @@ onUnmounted(() => {
 
 <template>
   <div class="settings-page">
-    <DashboardHeader @logout="handleLogout" />
+    <DashboardHeader @logout="handleLogout" @toggleMaximize="handleToggleMaximize" />
 
-    <div class="settings-content">
-      <div class="settings-container">
-        <h1 class="settings-title">Settings</h1>
+    <div class="settings-wrapper-layout">
+      <!-- Page Header Section -->
+      <div class="page-header-container">
+        <div class="page-header">
+          <div class="header-left">
+            <h1 class="page-title">Settings</h1>
+            <p class="page-description">
+              Kelola pengaturan akun, keamanan, dan konfigurasi sistem Anda.
+            </p>
+          </div>
+        </div>
+      </div>
 
-        <!-- Security Section -->
-        <a-card class="security-card" :loading="loading">
-          <template #title>
-            <div class="card-title">
-              <IconifyIcon icon="mdi:shield-lock" width="24" height="24" />
-              <span>Security</span>
+      <!-- Main Content -->
+      <div class="mainContentPage">
+        <a-layout-content class="settings-content">
+          <div class="settings-container">
+            <a-card class="settings-wrapper-card">
+          <div class="settings-wrapper">
+            <!-- Sidebar Navigation -->
+            <div class="settings-sidebar" :class="{ 'sidebar-hidden': isMaximized }">
+              <a-menu
+                v-model:selectedKeys="selectedKeys"
+                v-model:openKeys="openKeys"
+                mode="inline"
+                @click="handleMenuClick"
+                @openChange="handleOpenChange"
+                class="settings-menu"
+              >
+                <a-menu-item key="2fa">
+                  <template #icon>
+                    <IconifyIcon icon="mdi:shield-lock" width="20" />
+                  </template>
+                  <span>2FA Setting</span>
+                </a-menu-item>
+                
+                <a-menu-item v-if="isSuperadmin" key="development">
+                  <template #icon>
+                    <IconifyIcon icon="mdi:code-tags" width="20" />
+                  </template>
+                  <span>Fitur untuk Development</span>
+                </a-menu-item>
+                
+                <a-menu-item v-if="isSuperadminLike" key="audit">
+                  <template #icon>
+                    <IconifyIcon icon="mdi:file-document-outline" width="20" />
+                  </template>
+                  <span>Audit Log</span>
+                </a-menu-item>
+                
+                <a-menu-item v-if="(isSuperadminLike || isAdmin) && sonarqubeEnabled" key="sonarqube">
+                  <template #icon>
+                    <IconifyIcon icon="mdi:code-tags-check" width="20" />
+                  </template>
+                  <span>SonarQube Monitor</span>
+                </a-menu-item>
+                
+                <a-menu-item v-if="isSuperadminLike" key="master-data">
+                  <template #icon>
+                    <IconifyIcon icon="mdi:database-cog" width="20" />
+                  </template>
+                  <span>Master Data</span>
+                </a-menu-item>
+              </a-menu>
             </div>
-          </template>
 
-          <!-- Two-Factor Authentication -->
-          <div class="security-section">
+            <!-- Main Content Area -->
+            <div class="settings-main-content" :class="{ 'content-maximized': isMaximized }">
+          <!-- 2FA Setting Content -->
+          <div v-if="selectedMenuKey === '2fa'" class="settings-section">
+            <a-card class="security-card" :loading="loading">
+              <template #title>
+                <div class="card-title">
+                  <IconifyIcon icon="mdi:shield-lock" width="24" height="24" />
+                  <span>Security</span>
+                </div>
+              </template>
+
+              <!-- Two-Factor Authentication -->
+              <div class="security-section">
             <div class="section-header">
               <div>
                 <h3 class="section-title">Two-Factor Authentication (2FA)</h3>
@@ -623,122 +1495,240 @@ onUnmounted(() => {
                 </a-button>
               </a-popconfirm>
             </div>
-          </div>
-        </a-card>
-
-        <!-- Development Features Section (Superadmin Only) -->
-        <a-card v-if="isSuperadmin" class="development-card" style="margin-top: 24px;">
-          <template #title>
-            <div class="card-title">
-              <IconifyIcon icon="mdi:code-tags" width="24" height="24" />
-              <span>Fitur untuk Development</span>
-            </div>
-          </template>
-
-          <div class="development-section">
-            <div class="section-header">
-              <div>
-                <h3 class="section-title">Manajemen Data Subsidiary</h3>
-                <p class="section-description">
-                  Reset dan seed data subsidiary untuk kebutuhan development
-                </p>
               </div>
-            </div>
-
-            <!-- Seeder Status -->
-            <div class="seeder-status" style="margin-bottom: 24px;">
-              <a-space size="middle" align="center">
-                <a-spin v-if="seederStatusLoading" size="small" />
-                <a-tag v-else-if="seederStatus?.exists" color="success">
-                  <IconifyIcon icon="mdi:check-circle" width="16" style="margin-right: 4px;" />
-                  Data Seeder Tersedia
-                </a-tag>
-                <a-tag v-else color="default">
-                  <IconifyIcon icon="mdi:alert-circle" width="16" style="margin-right: 4px;" />
-                  Data Seeder Belum Tersedia
-                </a-tag>
-                <a-button size="small" @click="checkSeederStatus" :loading="seederStatusLoading">
-                  <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
-                  Refresh Status
-                </a-button>
-              </a-space>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="development-actions">
-              <a-space size="large" direction="vertical" style="width: 100%;">
-                <a-button
-                  type="primary"
-                  danger
-                  size="large"
-                  block
-                  @click="handleResetSubsidiaryData"
-                  :loading="resetLoading"
-                >
-                  <IconifyIcon icon="mdi:delete-sweep" width="18" style="margin-right: 8px;" />
-                  Reset Data Subsidiary
-                </a-button>
-                <a-button
-                  type="primary"
-                  size="large"
-                  block
-                  @click="handleRunSubsidiarySeeder"
-                  :loading="runSeederLoading"
-                >
-                  <IconifyIcon icon="mdi:database-plus" width="18" style="margin-right: 8px;" />
-                  Jalankan Seeder Data Subsidiary
-                </a-button>
-              </a-space>
-            </div>
-
-            <!-- Info Alert -->
-            <a-alert
-              message="Informasi"
-              description="Reset Data Subsidiary akan menghapus semua data subsidiary dan user yang terkait. Jalankan Seeder akan membuat sample data subsidiary. Jika data sudah ada, proses seeder akan dibatalkan untuk mencegah duplikasi."
-              type="info"
-              show-icon
-              style="margin-top: 24px;"
-            />
+            </a-card>
           </div>
-        </a-card>
 
-        <!-- Audit Logs Section (Superadmin Only) -->
-        <a-card v-if="isSuperadmin" class="audit-logs-card" style="margin-top: 24px;">
-          <template #title>
-            <div class="card-title">
-              <IconifyIcon icon="mdi:file-document-outline" width="24" height="24" />
-              <span>Audit Logs</span>
-            </div>
-          </template>
+          <!-- Development Features Content -->
+          <div v-if="selectedMenuKey === 'development' && isSuperadmin" class="settings-section">
+            <a-card class="development-card">
+              <template #title>
+                <div class="card-title">
+                  <IconifyIcon icon="mdi:code-tags" width="24" height="24" />
+                  <span>Fitur untuk Development</span>
+                </div>
+              </template>
 
-          <div class="audit-logs-section">
-            <div class="section-header">
-              <div>
-                <h3 class="section-title">Activity Log</h3>
-                <p class="section-description">
-                  Riwayat aktivitas dan akses ke sistem
-                </p>
+              <div class="development-section">
+                <div class="section-header">
+                  <div>
+                    <h3 class="section-title">Manajemen Data Seeder</h3>
+                    <p class="section-description">
+                      Reset dan seed semua data sample (Company, User, Reports) secara terpusat. Memastikan relasi data terjaga dengan benar.
+                    </p>
+                  </div>
+                </div>
+
+                <!-- All Seeder Status -->
+                <div class="seeder-status" style="margin-bottom: 24px;">
+                  <a-space size="middle" align="center" wrap>
+                    <a-spin v-if="allSeederStatusLoading" size="small" />
+                    <template v-else-if="allSeederStatus">
+                      <a-tag :color="allSeederStatus.status.company ? 'success' : 'default'">
+                        <IconifyIcon :icon="allSeederStatus.status.company ? 'mdi:check-circle' : 'mdi:alert-circle'" width="16" style="margin-right: 4px;" />
+                        Company: {{ allSeederStatus.status.company ? 'Tersedia' : 'Belum Tersedia' }}
+                      </a-tag>
+                      <a-tag :color="allSeederStatus.status.report ? 'success' : 'default'">
+                        <IconifyIcon :icon="allSeederStatus.status.report ? 'mdi:check-circle' : 'mdi:alert-circle'" width="16" style="margin-right: 4px;" />
+                        Report: {{ allSeederStatus.status.report ? 'Tersedia' : 'Belum Tersedia' }}
+                      </a-tag>
+                    </template>
+                    <a-button size="small" @click="checkAllSeederStatus" :loading="allSeederStatusLoading">
+                      <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
+                      Refresh Status
+                    </a-button>
+                  </a-space>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="development-actions">
+                  <a-space size="large" direction="vertical" style="width: 100%;">
+                    <a-button
+                      type="primary"
+                      danger
+                      size="large"
+                      block
+                      @click="handleResetAllSeededData"
+                      :loading="resetAllLoading"
+                    >
+                      <IconifyIcon icon="mdi:delete-sweep" width="18" style="margin-right: 8px;" />
+                      Reset Semua Data Seeder
+                    </a-button>
+                    <a-button
+                      type="primary"
+                      size="large"
+                      block
+                      @click="handleRunAllSeeders"
+                      :loading="runAllSeedersLoading"
+                    >
+                      <IconifyIcon icon="mdi:database-plus" width="18" style="margin-right: 8px;" />
+                      Seeder Data
+                    </a-button>
+                    <a-button
+                      type="primary"
+                      danger
+                      size="large"
+                      block
+                      @click="handleResetAllFinancialReports"
+                      :loading="resetFinancialReportsLoading"
+                    >
+                      <IconifyIcon icon="mdi:file-document-remove" width="18" style="margin-right: 8px;" />
+                      Reset Data Laporan
+                    </a-button>
+                  </a-space>
+                </div>
+
+                <!-- Test Notifikasi Section -->
+                <div class="section-header" style="margin-top: 32px;">
+                  <div>
+                    <h3 class="section-title">Test Notifikasi</h3>
+                    <p class="section-description">
+                      Trigger manual check untuk notifikasi expiring documents dan director terms (untuk testing).
+                    </p>
+                  </div>
+                </div>
+
+                <div class="development-actions" style="margin-top: 16px;">
+                  <a-space direction="vertical" size="middle" style="width: 100%;">
+                    <a-button
+                      type="default"
+                      size="large"
+                      block
+                      @click="handleCheckExpiringDocuments"
+                      :loading="checkExpiringDocumentsLoading"
+                    >
+                      <IconifyIcon icon="mdi:file-document-alert" width="18" style="margin-right: 8px;" />
+                      Test Documents Expired
+                    </a-button>
+                    <a-button
+                      type="default"
+                      size="large"
+                      block
+                      @click="handleCheckExpiringDirectorTerms"
+                      :loading="checkExpiringDirectorTermsLoading"
+                    >
+                      <IconifyIcon icon="mdi:account-clock" width="18" style="margin-right: 8px;" />
+                      Test Director Terms Expired
+                    </a-button>
+                    <a-button
+                      type="primary"
+                      size="large"
+                      block
+                      @click="handleCheckAllExpiringNotifications"
+                      :loading="checkAllExpiringNotificationsLoading"
+                    >
+                      <IconifyIcon icon="mdi:bell-alert" width="18" style="margin-right: 8px;" />
+                      Test Semua Notifikasi Sekaligus
+                    </a-button>
+                  </a-space>
+                </div>
+
+                <!-- Info Alert -->
+                <a-alert
+                  message="Informasi"
+                  description="Seeder Data akan menjalankan semua seeder secara berurutan: Company → Reports. Ini memastikan relasi data terjaga dengan benar. Reset Semua Data Seeder akan menghapus semua data yang sudah di-seed (Reports → Companies) untuk memastikan relasi dihapus dengan benar."
+                  type="info"
+                  show-icon
+                  style="margin-top: 24px;"
+                />
               </div>
-            </div>
+            </a-card>
+          </div>
 
-            <!-- Filters -->
-            <div class="audit-filters">
+          <!-- Audit Logs Content -->
+          <div v-if="selectedMenuKey === 'audit' && isSuperadminLike" class="settings-section">
+            <a-card class="audit-logs-card">
+              <template #title>
+                <div class="card-title">
+                  <IconifyIcon icon="mdi:file-document-outline" width="24" height="24" />
+                  <span>Audit Logs</span>
+                </div>
+              </template>
+
+              <!-- Tabs untuk Audit Logs dan User Activity -->
+              <a-tabs v-model:activeKey="auditLogActiveTab" class="audit-tabs">
+                <a-tab-pane v-if="isSuperadmin" key="audit" tab="Audit Logs">
+                  <div class="audit-logs-section">
+                <!-- Fixed Header Section -->
+                <div class="section-header-fixed">
+                  <div class="section-header-content">
+                    <div>
+                      <h3 class="section-title">Activity Log</h3>
+                      <p class="section-description">
+                        Riwayat aktivitas dan akses ke sistem
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Scrollable Content -->
+                <div class="audit-logs-content">
+
+                  <!-- Filters -->
+                  <div class="audit-filters">
               <a-space size="middle" wrap>
                 <a-select
                   v-model:value="auditFilters.action"
                   placeholder="Filter by Action"
                   allow-clear
-                  style="width: 180px"
+                  style="width: 220px"
                   @change="handleFilterChange"
+                  show-search
+                  :filter-option="(input: string, option: any) => 
+                    option.children.toLowerCase().includes(input.toLowerCase())"
                 >
+                  <!-- Authentication Actions -->
                   <a-select-option value="login">Login</a-select-option>
                   <a-select-option value="logout">Logout</a-select-option>
-                  <a-select-option value="enable_2fa">Enable 2FA</a-select-option>
-                  <a-select-option value="disable_2fa">Disable 2FA</a-select-option>
+                  <a-select-option value="register">Register</a-select-option>
                   <a-select-option value="failed_login">Failed Login</a-select-option>
+                  <a-select-option value="password_reset">Password Reset</a-select-option>
+                  
+                  <!-- User Management -->
+                  <a-select-option value="create_user">Create User</a-select-option>
+                  <a-select-option value="update_user">Update User</a-select-option>
+                  <a-select-option value="delete_user">Delete User</a-select-option>
+                  <a-select-option value="reset_user_password">Reset User Password</a-select-option>
+                  <a-select-option value="assign_user_to_company">Assign User to Company</a-select-option>
+                  <a-select-option value="unassign_user_from_company">Unassign User from Company</a-select-option>
+                  <a-select-option value="update_email">Update Email</a-select-option>
+                  <a-select-option value="change_password">Change Password</a-select-option>
+                  
+                  <!-- Company/Subsidiary -->
+                  <a-select-option value="create_company">Create Company</a-select-option>
+                  <a-select-option value="update_company">Update Company</a-select-option>
+                  <a-select-option value="delete_company">Delete Company</a-select-option>
+                  
+                  <!-- Document -->
                   <a-select-option value="create_document">Create Document</a-select-option>
                   <a-select-option value="update_document">Update Document</a-select-option>
                   <a-select-option value="delete_document">Delete Document</a-select-option>
+                  <a-select-option value="view_document">View Document</a-select-option>
+                  
+                  <!-- File Management -->
+                  <a-select-option value="create_file">Create File</a-select-option>
+                  <a-select-option value="update_file">Update File</a-select-option>
+                  <a-select-option value="delete_file">Delete File</a-select-option>
+                  <a-select-option value="upload_file">Upload File</a-select-option>
+                  <a-select-option value="download_file">Download File</a-select-option>
+                  <a-select-option value="view_file">View File</a-select-option>
+                  
+                  <!-- Report Management -->
+                  <a-select-option value="generate_report">Generate Report</a-select-option>
+                  <a-select-option value="view_report">View Report</a-select-option>
+                  <a-select-option value="export_report">Export Report</a-select-option>
+                  <a-select-option value="delete_report">Delete Report</a-select-option>
+                  
+                  <!-- Role & Permission -->
+                  <a-select-option value="create">Create Role/Permission</a-select-option>
+                  <a-select-option value="update">Update Role/Permission</a-select-option>
+                  <a-select-option value="delete">Delete Role/Permission</a-select-option>
+                  <a-select-option value="assign_permission">Assign Permission</a-select-option>
+                  <a-select-option value="revoke_permission">Revoke Permission</a-select-option>
+                  
+                  <!-- 2FA -->
+                  <a-select-option value="enable_2fa">Enable 2FA</a-select-option>
+                  <a-select-option value="disable_2fa">Disable 2FA</a-select-option>
                 </a-select>
 
                 <a-select
@@ -750,7 +1740,12 @@ onUnmounted(() => {
                 >
                   <a-select-option value="auth">Auth</a-select-option>
                   <a-select-option value="user">User</a-select-option>
+                  <a-select-option value="company">Company</a-select-option>
                   <a-select-option value="document">Document</a-select-option>
+                  <a-select-option value="file">File</a-select-option>
+                  <a-select-option value="report">Report</a-select-option>
+                  <a-select-option value="role">Role</a-select-option>
+                  <a-select-option value="permission">Permission</a-select-option>
                 </a-select>
 
                 <a-select
@@ -783,25 +1778,25 @@ onUnmounted(() => {
               </a-space>
             </div>
 
-            <!-- Summary Stats Cards -->
-            <div class="audit-stats-cards" style="margin-bottom: 24px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <h4 style="margin: 0;">Audit Log Statistics</h4>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <a-spin v-if="auditStatsLoading" size="small" />
-                  <span v-if="auditStatsLoading" style="font-size: 12px; color: #8c8c8c;">Refreshing...</span>
-                  <a-button 
-                    size="small" 
-                    type="text" 
-                    @click="fetchAuditStats"
-                    :loading="auditStatsLoading"
-                    style="padding: 0 8px;"
-                  >
-                    <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
-                    Refresh Stats
-                  </a-button>
-                </div>
-              </div>
+                  <!-- Summary Stats Cards -->
+                  <div class="audit-stats-cards">
+                    <div class="stats-header">
+                      <h4>Audit Log Statistics</h4>
+                      <div class="stats-header-actions">
+                        <a-spin v-if="auditStatsLoading" size="small" />
+                        <span v-if="auditStatsLoading" class="refreshing-text">Refreshing...</span>
+                        <a-button 
+                          size="small" 
+                          type="text" 
+                          @click="fetchAuditStats"
+                          :loading="auditStatsLoading"
+                          class="refresh-stats-btn"
+                        >
+                          <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
+                          Refresh Stats
+                        </a-button>
+                      </div>
+                    </div>
               <a-row :gutter="[16, 16]">
                 <a-col :xs="24" :sm="12" :md="6">
                   <a-card :loading="auditStatsLoading" size="small">
@@ -862,13 +1857,15 @@ onUnmounted(() => {
                   </a-card>
                 </a-col>
               </a-row>
-              <div style="margin-top: 12px; font-size: 12px; color: #8c8c8c; text-align: center;">
-                Stats akan auto-refresh setiap 30 detik
-              </div>
-            </div>
+                    <div class="stats-footer">
+                      <span class="auto-refresh-note">Stats akan auto-refresh setiap 30 detik</span>
+                      <span class="retention-info">Retention: 90d/30d</span>
+                    </div>
+                  </div>
 
             <!-- Table -->
-            <div class="audit-table">
+                  <!-- Audit Table -->
+                  <div class="audit-table">
               <a-table
                 :columns="auditColumns"
                 :data-source="auditLogs"
@@ -892,9 +1889,475 @@ onUnmounted(() => {
                   </template>
                 </template>
               </a-table>
+                  </div>
+                </div>
+              </div>
+                </a-tab-pane>
+
+                <!-- Tab User Activity -->
+                <a-tab-pane key="user-activity" tab="User Activity">
+                  <div class="audit-logs-section">
+                    <!-- Fixed Header Section -->
+                    <div class="section-header-fixed">
+                      <div class="section-header-content">
+                        <div>
+                          <h3 class="section-title">User Activity Logs</h3>
+                          <p class="section-description">
+                            Riwayat aktivitas permanen untuk data penting: Report, Document, Subsidiary, dan User Management
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Scrollable Content -->
+                    <div class="audit-logs-content">
+                      <!-- Filters -->
+                      <div class="audit-filters">
+                        <a-space size="middle" wrap>
+                          <a-select
+                            v-model:value="userActivityFilters.action"
+                            placeholder="Filter by Action"
+                            allow-clear
+                            style="width: 220px"
+                            @change="handleUserActivityFilterChange"
+                            show-search
+                            :filter-option="(input: string, option: any) => 
+                              option.children.toLowerCase().includes(input.toLowerCase())"
+                          >
+                            <!-- Report Actions -->
+                            <a-select-option value="generate_report">Generate Report</a-select-option>
+                            <a-select-option value="view_report">View Report</a-select-option>
+                            <a-select-option value="export_report">Export Report</a-select-option>
+                            <a-select-option value="delete_report">Delete Report</a-select-option>
+                            
+                            <!-- Document Actions -->
+                            <a-select-option value="create_document">Create Document</a-select-option>
+                            <a-select-option value="update_document">Update Document</a-select-option>
+                            <a-select-option value="delete_document">Delete Document</a-select-option>
+                            <a-select-option value="view_document">View Document</a-select-option>
+                            
+                            <!-- Company/Subsidiary Actions -->
+                            <a-select-option value="create_company">Create Company</a-select-option>
+                            <a-select-option value="update_company">Update Company</a-select-option>
+                            <a-select-option value="delete_company">Delete Company</a-select-option>
+                            
+                            <!-- User Management Actions -->
+                            <a-select-option value="create_user">Create User</a-select-option>
+                            <a-select-option value="update_user">Update User</a-select-option>
+                            <a-select-option value="delete_user">Delete User</a-select-option>
+                          </a-select>
+
+                          <a-select
+                            v-model:value="userActivityFilters.resource"
+                            placeholder="Filter by Resource"
+                            allow-clear
+                            style="width: 180px"
+                            @change="handleUserActivityFilterChange"
+                          >
+                            <a-select-option value="report">Report</a-select-option>
+                            <a-select-option value="document">Document</a-select-option>
+                            <a-select-option value="company">Company</a-select-option>
+                            <a-select-option value="user">User</a-select-option>
+                          </a-select>
+
+                          <a-select
+                            v-model:value="userActivityFilters.status"
+                            placeholder="Filter by Status"
+                            allow-clear
+                            style="width: 150px"
+                            @change="handleUserActivityFilterChange"
+                          >
+                            <a-select-option value="success">Success</a-select-option>
+                            <a-select-option value="failure">Failure</a-select-option>
+                            <a-select-option value="error">Error</a-select-option>
+                          </a-select>
+
+                          <a-button @click="handleUserActivityFilterChange">
+                            <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
+                            Refresh
+                          </a-button>
+                        </a-space>
+                      </div>
+
+                      <!-- Info Alert -->
+                      <a-alert
+                        message="Permanent Storage"
+                        description="Data ini disimpan secara permanen (tidak ada retention policy) untuk keperluan compliance dan legal. Hanya menampilkan aktivitas untuk resource: Report, Document, Company, dan User Management."
+                        type="info"
+                        show-icon
+                        style="margin-top: 16px; margin-bottom: 16px;"
+                      />
+
+                      <!-- User Activity Table -->
+                      <div class="audit-table">
+                        <a-table
+                          :columns="auditColumns.filter(col => col.key !== 'log_type')"
+                          :data-source="userActivityLogs"
+                          :loading="userActivityLoading"
+                          :pagination="{
+                            current: userActivityPagination.current,
+                            pageSize: userActivityPagination.pageSize,
+                            total: userActivityPagination.total,
+                            showSizeChanger: true,
+                            showTotal: (total: number) => `Total ${total} logs`,
+                            pageSizeOptions: ['10', '20', '50', '100'],
+                          }"
+                          :scroll="{ x: 800 }"
+                          @change="handleUserActivityTableChange"
+                        >
+                          <template #bodyCell="{ column, record }">
+                            <template v-if="column.key === 'action_buttons'">
+                              <a-button type="link" size="small" @click="showUserActivityDetailModal(record)">
+                                Detail
+                              </a-button>
+                            </template>
+                          </template>
+                        </a-table>
+                      </div>
+                    </div>
+                  </div>
+                </a-tab-pane>
+              </a-tabs>
+            </a-card>
+          </div>
+
+          <!-- SonarQube Monitor Content -->
+          <div v-if="selectedMenuKey === 'sonarqube' && (isSuperadminLike || isAdmin) && sonarqubeEnabled" class="settings-section">
+            <a-card class="sonarqube-card">
+              <template #title>
+                <div class="card-title">
+                  <IconifyIcon icon="mdi:code-tags-check" width="24" height="24" />
+                  <span>SonarQube Monitor</span>
+                </div>
+              </template>
+
+              <div class="sonarqube-section">
+                <!-- Fixed Header Section -->
+                <div class="section-header-fixed">
+                  <div class="section-header-content">
+                    <div>
+                      <h3 class="section-title">Code Quality Issues</h3>
+                      <p class="section-description">
+                        Monitor dan analisis issues dari SonarCloud untuk kebutuhan VAPT
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Scrollable Content -->
+                <div class="sonarqube-content">
+                  <!-- Filters -->
+                  <div class="sonarqube-filters">
+                    <a-space size="middle" wrap>
+                      <a-select
+                        v-model:value="sonarqubeFilters.severities"
+                        placeholder="Filter by Severity"
+                        allow-clear
+                        mode="multiple"
+                        style="width: 200px"
+                        @change="handleSonarQubeFilterChange"
+                      >
+                        <a-select-option value="BLOCKER">BLOCKER</a-select-option>
+                        <a-select-option value="CRITICAL">CRITICAL</a-select-option>
+                        <a-select-option value="MAJOR">MAJOR</a-select-option>
+                        <a-select-option value="MINOR">MINOR</a-select-option>
+                        <a-select-option value="INFO">INFO</a-select-option>
+                      </a-select>
+
+                      <a-select
+                        v-model:value="sonarqubeFilters.types"
+                        placeholder="Filter by Type"
+                        allow-clear
+                        mode="multiple"
+                        style="width: 200px"
+                        @change="handleSonarQubeFilterChange"
+                      >
+                        <a-select-option value="BUG">BUG</a-select-option>
+                        <a-select-option value="VULNERABILITY">VULNERABILITY</a-select-option>
+                        <a-select-option value="CODE_SMELL">CODE_SMELL</a-select-option>
+                      </a-select>
+
+                      <a-select
+                        v-model:value="sonarqubeFilters.statuses"
+                        placeholder="Filter by Status"
+                        allow-clear
+                        mode="multiple"
+                        style="width: 200px"
+                        @change="handleSonarQubeFilterChange"
+                      >
+                        <a-select-option value="OPEN">OPEN</a-select-option>
+                        <a-select-option value="CONFIRMED">CONFIRMED</a-select-option>
+                        <a-select-option value="REOPENED">REOPENED</a-select-option>
+                        <a-select-option value="RESOLVED">RESOLVED</a-select-option>
+                      </a-select>
+
+                      <a-button type="primary" @click="fetchSonarQubeIssues" :loading="sonarqubeLoading">
+                        <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
+                        Refresh
+                      </a-button>
+
+                      <a-button @click="exportSonarQubeIssues" :loading="sonarqubeExporting" :disabled="sonarqubeIssues.length === 0">
+                        <IconifyIcon icon="mdi:download" width="16" style="margin-right: 4px;" />
+                        Export JSON
+                      </a-button>
+                    </a-space>
+                  </div>
+
+                  <!-- Summary Stats -->
+                  <div v-if="sonarqubeIssues.length > 0" class="sonarqube-stats" style="margin-bottom: 20px;">
+                    <a-row :gutter="[16, 16]">
+                      <a-col :xs="24" :sm="12" :md="6">
+                        <a-card size="small">
+                          <a-statistic
+                            title="Total Issues"
+                            :value="sonarqubeIssues.length"
+                            :value-style="{ color: '#1890ff' }"
+                          >
+                            <template #prefix>
+                              <IconifyIcon icon="mdi:alert-circle" width="20" />
+                            </template>
+                          </a-statistic>
+                        </a-card>
+                      </a-col>
+                      <a-col :xs="24" :sm="12" :md="6">
+                        <a-card size="small">
+                          <a-statistic
+                            title="BLOCKER"
+                            :value="getSeverityCount('BLOCKER')"
+                            :value-style="{ color: '#ff4d4f' }"
+                          />
+                        </a-card>
+                      </a-col>
+                      <a-col :xs="24" :sm="12" :md="6">
+                        <a-card size="small">
+                          <a-statistic
+                            title="CRITICAL"
+                            :value="getSeverityCount('CRITICAL')"
+                            :value-style="{ color: '#ff7875' }"
+                          />
+                        </a-card>
+                      </a-col>
+                      <a-col :xs="24" :sm="12" :md="6">
+                        <a-card size="small">
+                          <a-statistic
+                            title="MAJOR"
+                            :value="getSeverityCount('MAJOR')"
+                            :value-style="{ color: '#faad14' }"
+                          />
+                        </a-card>
+                      </a-col>
+                    </a-row>
+                  </div>
+
+                  <!-- Issues Table -->
+                  <div class="sonarqube-table">
+                    <a-table
+                      :columns="sonarqubeColumns"
+                      :data-source="sonarqubeIssues"
+                      :loading="sonarqubeLoading"
+                      :pagination="{
+                        current: 1,
+                        pageSize: 20,
+                        total: sonarqubeTotal,
+                        showSizeChanger: true,
+                        showTotal: (total: number) => `Total ${total} issues`,
+                        pageSizeOptions: ['10', '20', '50', '100'],
+                      }"
+                      :scroll="{ x: 1000 }"
+                    >
+                      <template #bodyCell="{ column, record }">
+                        <template v-if="column.key === 'severity'">
+                          <a-tag :color="getSeverityColor(record.severity)">
+                            {{ record.severity }}
+                          </a-tag>
+                        </template>
+                        <template v-if="column.key === 'type'">
+                          <a-tag :color="getTypeColor(record.type)">
+                            {{ record.type }}
+                          </a-tag>
+                        </template>
+                        <template v-if="column.key === 'status'">
+                          <a-tag :color="getStatusColor(record.status)">
+                            {{ record.status }}
+                          </a-tag>
+                        </template>
+                        <template v-if="column.key === 'component'">
+                          <code>{{ getComponentName(record.component) }}</code>
+                        </template>
+                      </template>
+                    </a-table>
+                  </div>
+                </div>
+              </div>
+            </a-card>
+          </div>
+
+          <!-- Master Data Content -->
+          <div v-if="selectedMenuKey === 'master-data' && isSuperadminLike" class="settings-section">
+            <a-card class="master-data-card">
+              <template #title>
+                <div class="card-title">
+                  <IconifyIcon icon="mdi:database-cog" width="24" height="24" />
+                  <span>Master Data</span>
+                </div>
+              </template>
+
+              <a-tabs v-model:activeKey="masterDataActiveTab">
+                <a-tab-pane key="document-types" tab="Jenis Dokumen">
+                  <div style="margin-bottom: 16px;">
+                    <a-button type="primary" @click="handleCreateDocumentType">
+                      <IconifyIcon icon="mdi:plus" width="18" style="margin-right: 8px;" />
+                      Tambah Jenis Dokumen
+                    </a-button>
+                  </div>
+
+                  <a-table
+                    :columns="[
+                      { title: 'Nama', dataIndex: 'name', key: 'name' },
+                      { title: 'Status', key: 'is_active', width: 120 },
+                      { title: 'Dibuat Oleh', key: 'created_by', width: 200 },
+                      { title: 'Aksi', key: 'action', width: 150, align: 'center' },
+                    ]"
+                    :data-source="documentTypes"
+                    :loading="documentTypesLoading"
+                    :pagination="{ pageSize: 20 }"
+                    row-key="id"
+                  >
+                    <template #bodyCell="{ column, record }">
+                      <template v-if="column.key === 'is_active'">
+                        <a-tag :color="record.is_active ? 'success' : 'default'">
+                          {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
+                        </a-tag>
+                      </template>
+                      <template v-if="column.key === 'created_by'">
+                        {{ userNamesMap.get(record.created_by) || record.created_by || '-' }}
+                      </template>
+                      <template v-if="column.key === 'action'">
+                        <a-space>
+                          <a-button type="link" size="small" @click="handleEditDocumentType(record)">
+                            <IconifyIcon icon="mdi:pencil" width="16" />
+                          </a-button>
+                          <a-switch
+                            :checked="record.is_active"
+                            :loading="updatingDocumentTypeIds.has(record.id)"
+                            :disabled="updatingDocumentTypeIds.has(record.id)"
+                            @change="(checked: boolean) => handleToggleDocumentTypeStatus(record.id, record.name, checked)"
+                            checked-children="Aktif"
+                            un-checked-children="Non Aktif"
+                          />
+                        </a-space>
+                      </template>
+                    </template>
+                  </a-table>
+                </a-tab-pane>
+
+                <a-tab-pane key="shareholder-types" tab="Jenis Pemegang Saham">
+                  <div style="margin-bottom: 16px;">
+                    <a-button type="primary" @click="handleCreateShareholderType">
+                      <IconifyIcon icon="mdi:plus" width="18" style="margin-right: 8px;" />
+                      Tambah Jenis Pemegang Saham
+                    </a-button>
+                  </div>
+
+                  <a-table
+                    :columns="[
+                      { title: 'Nama', dataIndex: 'name', key: 'name', sorter: (a: ShareholderType, b: ShareholderType) => a.name.localeCompare(b.name) },
+                      { title: 'Status', key: 'is_active', width: 120, align: 'center' },
+                      { title: 'Dibuat Oleh', key: 'created_by', width: 200 },
+                      { title: 'Aksi', key: 'action', width: 180, align: 'center', fixed: 'right' },
+                    ]"
+                    :data-source="shareholderTypes"
+                    :loading="shareholderTypesLoading"
+                    :pagination="{ pageSize: 20, showSizeChanger: true, showTotal: (total: number) => `Total ${total} jenis pemegang saham` }"
+                    row-key="id"
+                    :scroll="{ x: 800 }"
+                  >
+                    <template #bodyCell="{ column, record }">
+                      <template v-if="column.key === 'is_active'">
+                        <a-tag :color="record.is_active ? 'success' : 'default'">
+                          {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
+                        </a-tag>
+                      </template>
+                      <template v-if="column.key === 'created_by'">
+                        {{ userNamesMap.get(record.created_by) || record.created_by || '-' }}
+                      </template>
+                      <template v-if="column.key === 'action'">
+                        <a-space>
+                          <a-button type="link" size="small" @click="handleEditShareholderType(record)" title="Edit">
+                            <IconifyIcon icon="mdi:pencil" width="16" />
+                          </a-button>
+                          <a-switch
+                            :checked="record.is_active"
+                            :loading="updatingShareholderTypeIds.has(record.id)"
+                            :disabled="updatingShareholderTypeIds.has(record.id)"
+                            @change="(checked: boolean) => handleToggleShareholderTypeStatus(record.id, record.name, checked)"
+                            checked-children="Aktif"
+                            un-checked-children="Non Aktif"
+                            title="Toggle Status"
+                          />
+                        </a-space>
+                      </template>
+                    </template>
+                  </a-table>
+                </a-tab-pane>
+
+                <a-tab-pane key="director-positions" tab="Jabatan Pengurus">
+                  <div style="margin-bottom: 16px;">
+                    <a-button type="primary" @click="handleCreateDirectorPosition">
+                      <IconifyIcon icon="mdi:plus" width="18" style="margin-right: 8px;" />
+                      Tambah Jabatan Pengurus
+                    </a-button>
+                  </div>
+
+                  <a-table
+                    :columns="[
+                      { title: 'Nama', dataIndex: 'name', key: 'name', sorter: (a: DirectorPosition, b: DirectorPosition) => a.name.localeCompare(b.name) },
+                      { title: 'Status', key: 'is_active', width: 120, align: 'center' },
+                      { title: 'Dibuat Oleh', key: 'created_by', width: 200 },
+                      { title: 'Aksi', key: 'action', width: 180, align: 'center', fixed: 'right' },
+                    ]"
+                    :data-source="directorPositions"
+                    :loading="directorPositionsLoading"
+                    :pagination="{ pageSize: 20, showSizeChanger: true, showTotal: (total: number) => `Total ${total} jabatan pengurus` }"
+                    row-key="id"
+                    :scroll="{ x: 800 }"
+                  >
+                    <template #bodyCell="{ column, record }">
+                      <template v-if="column.key === 'is_active'">
+                        <a-tag :color="record.is_active ? 'success' : 'default'">
+                          {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
+                        </a-tag>
+                      </template>
+                      <template v-if="column.key === 'created_by'">
+                        {{ userNamesMap.get(record.created_by) || record.created_by || '-' }}
+                      </template>
+                      <template v-if="column.key === 'action'">
+                        <a-space>
+                          <a-button type="link" size="small" @click="handleEditDirectorPosition(record)" title="Edit">
+                            <IconifyIcon icon="mdi:pencil" width="16" />
+                          </a-button>
+                          <a-switch
+                            :checked="record.is_active"
+                            :loading="updatingDirectorPositionIds.has(record.id)"
+                            :disabled="updatingDirectorPositionIds.has(record.id)"
+                            @change="(checked: boolean) => handleToggleDirectorPositionStatus(record.id, record.name, checked)"
+                            checked-children="Aktif"
+                            un-checked-children="Non Aktif"
+                            title="Toggle Status"
+                          />
+                        </a-space>
+                      </template>
+                    </template>
+                  </a-table>
+                </a-tab-pane>
+              </a-tabs>
+            </a-card>
+          </div>
             </div>
           </div>
         </a-card>
+          </div>
+        </a-layout-content>
       </div>
     </div>
 
@@ -954,6 +2417,133 @@ onUnmounted(() => {
         </div>
       </div>
     </a-modal>
+
+    <!-- User Activity Log Detail Modal (Superadmin/Administrator) -->
+    <a-modal
+      v-if="isSuperadminLike"
+      v-model:open="userActivityDetailModalVisible"
+      title="Detail User Activity Log"
+      width="800px"
+      :footer="null"
+      @cancel="closeUserActivityDetailModal"
+    >
+      <div v-if="selectedUserActivityLog" class="audit-log-detail">
+        <a-descriptions bordered :column="1" size="small">
+          <a-descriptions-item label="ID">
+            {{ selectedUserActivityLog.id }}
+          </a-descriptions-item>
+          <a-descriptions-item label="User ID">
+            {{ selectedUserActivityLog.user_id }}
+          </a-descriptions-item>
+          <a-descriptions-item label="Username">
+            {{ selectedUserActivityLog.username }}
+          </a-descriptions-item>
+          <a-descriptions-item label="Action">
+            <a-tag :color="getActionColor(selectedUserActivityLog.action)">
+              {{ getActionLabel(selectedUserActivityLog.action) }}
+            </a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item label="Resource">
+            <a-tag color="blue">{{ selectedUserActivityLog.resource }}</a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item label="Resource ID">
+            {{ selectedUserActivityLog.resource_id || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="Status">
+            <a-tag :color="getStatusColor(selectedUserActivityLog.status)">
+              {{ selectedUserActivityLog.status.toUpperCase() }}
+            </a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item label="IP Address">
+            {{ selectedUserActivityLog.ip_address || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="User Agent">
+            {{ selectedUserActivityLog.user_agent || '-' }}
+          </a-descriptions-item>
+          <a-descriptions-item label="Created At">
+            {{ formatDate(selectedUserActivityLog.created_at) }}
+          </a-descriptions-item>
+          <a-descriptions-item label="Details" v-if="selectedUserActivityLog.details">
+            <pre class="details-json">{{ parseDetails(selectedUserActivityLog.details) }}</pre>
+          </a-descriptions-item>
+        </a-descriptions>
+      </div>
+    </a-modal>
+
+    <!-- Document Type Modal -->
+    <a-modal
+      v-model:open="documentTypeModalVisible"
+      :title="documentTypeModalMode === 'create' ? 'Tambah Jenis Dokumen' : 'Edit Jenis Dokumen'"
+      @ok="handleSaveDocumentType"
+      @cancel="documentTypeModalVisible = false"
+    >
+      <a-form-item label="Nama Jenis Dokumen" :required="true">
+        <a-input
+          v-model:value="newDocumentTypeName"
+          placeholder="Masukkan nama jenis dokumen"
+          @pressEnter="handleSaveDocumentType"
+        />
+      </a-form-item>
+      <template v-if="documentTypeModalMode === 'edit' && editingDocumentType">
+        <a-alert
+          message="Info"
+          description="Fitur edit nama jenis dokumen akan segera tersedia. Untuk saat ini, Anda dapat menghapus dan membuat ulang jenis dokumen baru."
+          type="info"
+          show-icon
+          style="margin-top: 16px;"
+        />
+      </template>
+    </a-modal>
+
+    <!-- Shareholder Type Modal -->
+    <a-modal
+      v-model:open="shareholderTypeModalVisible"
+      :title="shareholderTypeModalMode === 'create' ? 'Tambah Jenis Pemegang Saham' : 'Edit Jenis Pemegang Saham'"
+      @ok="handleSaveShareholderType"
+      @cancel="shareholderTypeModalVisible = false"
+    >
+      <a-form-item label="Nama Jenis Pemegang Saham" :required="true">
+        <a-input
+          v-model:value="newShareholderTypeName"
+          placeholder="Masukkan nama jenis pemegang saham"
+          @pressEnter="handleSaveShareholderType"
+        />
+      </a-form-item>
+      <template v-if="shareholderTypeModalMode === 'edit' && editingShareholderType">
+        <a-alert
+          message="Info"
+          description="Fitur edit nama jenis pemegang saham akan segera tersedia. Untuk saat ini, Anda dapat menghapus dan membuat ulang jenis pemegang saham baru."
+          type="info"
+          show-icon
+          style="margin-top: 16px;"
+        />
+      </template>
+    </a-modal>
+
+    <!-- Director Position Modal -->
+    <a-modal
+      v-model:open="directorPositionModalVisible"
+      :title="directorPositionModalMode === 'create' ? 'Tambah Jabatan Pengurus' : 'Edit Jabatan Pengurus'"
+      @ok="handleSaveDirectorPosition"
+      @cancel="directorPositionModalVisible = false"
+    >
+      <a-form-item label="Nama Jabatan Pengurus" :required="true">
+        <a-input
+          v-model:value="newDirectorPositionName"
+          placeholder="Masukkan nama jabatan pengurus"
+          @pressEnter="handleSaveDirectorPosition"
+        />
+      </a-form-item>
+      <template v-if="directorPositionModalMode === 'edit' && editingDirectorPosition">
+        <a-alert
+          message="Info"
+          description="Fitur edit nama jabatan pengurus akan segera tersedia. Untuk saat ini, Anda dapat menghapus dan membuat ulang jabatan pengurus baru."
+          type="info"
+          show-icon
+          style="margin-top: 16px;"
+        />
+      </template>
+    </a-modal>
   </div>
 </template>
 
@@ -963,18 +2553,133 @@ onUnmounted(() => {
   background: #f5f5f5;
 }
 
+.settings-wrapper-layout {
+  width: 100%;
+}
+
 .settings-content {
-  padding: 24px;
-  max-width: 1200px;
-  margin: 0 auto;
+  padding: 0;
+  background: #f5f5f5;
+  overflow-y: auto;
 }
 
 .settings-container {
-  .settings-title {
-    font-size: 28px;
-    font-weight: 600;
-    margin-bottom: 24px;
-    color: #1a1a1a;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0;
+}
+
+.settings-wrapper-card {
+background: white;
+  :deep(.ant-card-body) {
+    padding: 0;
+  }
+}
+
+.settings-wrapper {
+  display: flex;
+  min-height: 600px;
+  gap: 0;
+}
+
+.settings-sidebar {
+  width: 300px;
+  background: #fff;
+  border-right: 1px solid #e8e8e8;
+  padding: 16px;
+  flex-shrink: 0;
+  border-top-left-radius: 20px;
+  border-bottom-left-radius: 20px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  min-width: 300px;
+
+  &.sidebar-hidden {
+    width: 0 !important;
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+    border-right: none;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .settings-menu {
+    border-right: none;
+    background: transparent;
+    height: 100%;
+
+    :deep(.ant-menu-item) {
+      margin: 4px 8px;
+      border-radius: 6px;
+      height: 40px;
+      line-height: 40px;
+      
+      &:hover {
+        background: #f0f7ff;
+      }
+
+      &.ant-menu-item-selected {
+        background: #e6f4ff;
+        color: #035CAB;
+        font-weight: 500;
+
+        &::after {
+          display: none;
+        }
+      }
+    }
+
+    :deep(.ant-menu-item-icon) {
+      margin-right: 12px;
+    }
+  }
+}
+
+.settings-main-content {
+  flex: 1;
+  padding: 24px;
+  background: transparent;
+  overflow-y: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  &.content-maximized {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  &::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  
+  &::-webkit-scrollbar-track {
+    display: none;
+  }
+}
+
+.settings-section {
+  width: 100%;
+
+  :deep(.ant-card) {
+    border-radius: 12px;
+    // box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border: 1px solid #f0f0f0;
+  }
+
+  :deep(.ant-card-head) {
+    padding: 20px 24px;
+    border-bottom: 1px solid #f0f0f0;
+    background: #fafafa;
+    border-radius: 12px 12px 0 0;
+  }
+
+  :deep(.ant-card-body) {
+    padding: 24px;
   }
 }
 
@@ -994,21 +2699,23 @@ onUnmounted(() => {
     justify-content: space-between;
     align-items: flex-start;
     margin-bottom: 24px;
-    padding-bottom: 16px;
+    padding-bottom: 20px;
     border-bottom: 1px solid #f0f0f0;
   }
 
   .section-title {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 600;
-    margin: 0 0 4px 0;
+    margin: 0 0 8px 0;
     color: #1a1a1a;
+    line-height: 1.4;
   }
 
   .section-description {
     margin: 0;
     color: #666;
     font-size: 14px;
+    line-height: 1.5;
   }
 }
 
@@ -1143,31 +2850,46 @@ onUnmounted(() => {
 .development-section {
   .section-header {
     margin-bottom: 24px;
-    padding-bottom: 16px;
+    padding-bottom: 20px;
     border-bottom: 1px solid #f0f0f0;
   }
 
   .section-title {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 600;
-    margin: 0 0 4px 0;
+    margin: 0 0 8px 0;
     color: #1a1a1a;
+    line-height: 1.4;
   }
 
   .section-description {
     margin: 0;
     color: #666;
     font-size: 14px;
+    line-height: 1.5;
   }
 
   .seeder-status {
     padding: 16px;
-    background: #f5f5f5;
-    border-radius: 6px;
+    background: #fafafa;
+    border-radius: 8px;
+    border: 1px solid #f0f0f0;
+    margin-bottom: 20px;
   }
 
   .development-actions {
-    margin-top: 16px;
+    margin-top: 20px;
+    margin-bottom: 0;
+
+    :deep(.ant-space) {
+      width: 100%;
+    }
+
+    :deep(.ant-btn) {
+      height: 40px;
+      font-size: 15px;
+      border-radius: 8px;
+    }
   }
 }
 
@@ -1182,39 +2904,269 @@ onUnmounted(() => {
 }
 
 .audit-logs-section {
-  .section-header {
-    margin-bottom: 24px;
-    padding-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+
+  // Fixed Header Section
+  .section-header-fixed {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #fff;
+    padding: 20px 0 16px 0;
+    margin-bottom: 20px;
     border-bottom: 1px solid #f0f0f0;
+
+    .section-header-content {
+      .section-title {
+        font-size: 20px;
+        font-weight: 600;
+        margin: 0 0 6px 0;
+        color: #1a1a1a;
+        line-height: 1.4;
+      }
+
+      .section-description {
+        margin: 0;
+        color: #666;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+    }
   }
 
-  .section-title {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 0 0 4px 0;
-    color: #1a1a1a;
-  }
-
-  .section-description {
-    margin: 0;
-    color: #666;
-    font-size: 14px;
+  // Scrollable Content
+  .audit-logs-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 4px;
+    
+    // Hide scrollbar but keep functionality
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
   }
 
   .audit-filters {
-    margin-bottom: 16px;
+    margin-bottom: 20px;
     padding: 16px;
-    background: #f5f5f5;
-    border-radius: 6px;
+    background: #fafafa;
+    border-radius: 8px;
+    border: 1px solid #f0f0f0;
+  }
+
+  .audit-stats-cards {
+    margin-bottom: 24px;
+
+    .stats-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+
+      h4 {
+        font-size: 16px;
+        font-weight: 600;
+        margin: 0;
+        color: #1a1a1a;
+      }
+
+      .stats-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        .refreshing-text {
+          font-size: 12px;
+          color: #8c8c8c;
+        }
+
+        .refresh-stats-btn {
+          padding: 0 8px;
+          height: auto;
+        }
+      }
+    }
+
+    .stats-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #f0f0f0;
+      flex-wrap: wrap;
+      gap: 8px;
+
+      .auto-refresh-note {
+        font-size: 12px;
+        color: #8c8c8c;
+      }
+
+      .retention-info {
+        font-size: 12px;
+        color: #8c8c8c;
+        font-weight: 500;
+      }
+    }
+
+    :deep(.ant-row) {
+      margin: 0 -8px;
+    }
+
+    :deep(.ant-col) {
+      padding: 0 8px;
+      margin-bottom: 16px;
+    }
+
+    :deep(.ant-card) {
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+      transition: all 0.3s ease;
+      border: 1px solid #f0f0f0;
+
+      &:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        transform: translateY(-2px);
+      }
+    }
   }
 
   .audit-table {
+    margin-top: 0;
+
     .text-ellipsis {
       display: block;
       max-width: 300px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    :deep(.ant-table) {
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    :deep(.ant-table-thead > tr > th) {
+      background: #fafafa;
+      font-weight: 600;
+      border-bottom: 2px solid #f0f0f0;
+    }
+  }
+}
+
+.sonarqube-card {
+  .card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+}
+
+.sonarqube-section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+
+  // Fixed Header Section
+  .section-header-fixed {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #fff;
+    padding: 20px 0 16px 0;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #f0f0f0;
+
+    .section-header-content {
+      .section-title {
+        font-size: 20px;
+        font-weight: 600;
+        margin: 0 0 6px 0;
+        color: #1a1a1a;
+        line-height: 1.4;
+      }
+
+      .section-description {
+        margin: 0;
+        color: #666;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+    }
+  }
+
+  // Scrollable Content
+  .sonarqube-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 4px;
+    
+    // Hide scrollbar but keep functionality
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+  }
+
+  .sonarqube-filters {
+    margin-bottom: 20px;
+    padding: 16px;
+    background: #fafafa;
+    border-radius: 8px;
+    border: 1px solid #f0f0f0;
+  }
+
+  .sonarqube-stats {
+    :deep(.ant-row) {
+      margin: 0 -8px;
+    }
+
+    :deep(.ant-col) {
+      padding: 0 8px;
+      margin-bottom: 16px;
+    }
+
+    :deep(.ant-card) {
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+      transition: all 0.3s ease;
+      border: 1px solid #f0f0f0;
+
+      &:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        transform: translateY(-2px);
+      }
+    }
+  }
+
+  .sonarqube-table {
+    margin-top: 0;
+
+    :deep(.ant-table) {
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    :deep(.ant-table-thead > tr > th) {
+      background: #fafafa;
+      font-weight: 600;
+      border-bottom: 2px solid #f0f0f0;
     }
   }
 }
@@ -1254,23 +3206,79 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .settings-content {
+  .settings-wrapper {
+    flex-direction: column;
+  }
+
+  .settings-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #e8e8e8;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    border-bottom-left-radius: 0;
+    padding: 12px;
+  }
+
+  .settings-main-content {
     padding: 16px;
+  }
+
+  .settings-content {
+    padding: 0;
+  }
+
+  .settings-container {
+    padding: 0;
+  }
+
+  .audit-logs-section {
+    .section-header-fixed {
+      padding: 16px 0 12px 0;
+      margin-bottom: 16px;
+    }
+
+    .audit-filters {
+      padding: 12px;
+      margin-bottom: 16px;
+
+      :deep(.ant-space) {
+        width: 100%;
+      }
+
+      :deep(.ant-select),
+      :deep(.ant-btn) {
+        width: 100%;
+      }
+    }
+
+    .audit-stats-cards {
+      margin-bottom: 20px;
+
+      .stats-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      :deep(.ant-col) {
+        margin-bottom: 12px;
+      }
+    }
+  }
+
+  .security-section,
+  .development-section {
+    .section-header {
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+    }
   }
 
   .backup-codes-list {
     grid-template-columns: 1fr !important;
   }
-
-  .audit-filters {
-    :deep(.ant-space) {
-      width: 100%;
-    }
-
-    :deep(.ant-select) {
-      width: 100% !important;
-    }
-  }
 }
 </style>
-

@@ -1,23 +1,20 @@
 import axios from 'axios'
+import { useAuthStore } from '../stores/auth'
+import { logger } from '../utils/logger'
 
 // Pastikan baseURL selalu diakhiri dengan /api/v1
 const getBaseURL = () => {
-  const envURL = import.meta.env.VITE_API_URL
-  if (envURL) {
-    // Hapus trailing slash jika ada
-    const cleanURL = envURL.replace(/\/$/, '')
-    // Pastikan /api/v1 ditambahkan
-    return cleanURL.endsWith('/api/v1') ? cleanURL : `${cleanURL}/api/v1`
-  }
-  return 'http://localhost:8080/api/v1'
+  const envURL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL
+  const fallbackHost = import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-pedeve-dev.aretaamany.com'
+
+  const base = (envURL || fallbackHost).replace(/\/$/, '')
+  return base.endsWith('/api/v1') ? base : `${base}/api/v1`
 }
 
 const API_BASE_URL = getBaseURL()
 
-// Debug log (hapus di production)
-if (import.meta.env.DEV) {
-  console.log('[API Client] Base URL:', API_BASE_URL)
-}
+// Debug log (hanya muncul di development)
+logger.api('Base URL:', API_BASE_URL)
 
 // Penyimpanan token CSRF
 let csrfToken: string | null = null
@@ -38,7 +35,7 @@ export const getCSRFToken = async (): Promise<string | null> => {
       return null
     }
     // Error lainnya - log untuk debugging
-    console.error('Failed to get CSRF token:', error)
+    logger.error('Failed to get CSRF token:', error)
     csrfToken = null
     return null
   }
@@ -59,9 +56,12 @@ const apiClient = axios.create({
 // Request interceptor untuk menambahkan token JWT dan token CSRF
 apiClient.interceptors.request.use(
   async (config) => {
-    // Token JWT sekarang di httpOnly cookie, jadi tidak perlu menambahkan Authorization header secara manual
-    // Browser akan otomatis mengirim cookie dengan credentials
-    // Fallback: masih support Authorization header untuk kompatibilitas ke belakang
+    // Tambahkan Authorization header jika token tersedia di store/localStorage (fallback jika cookie tidak terkirim)
+    const authStore = useAuthStore()
+    const bearerToken = authStore?.token || localStorage.getItem('auth_token')
+    if (bearerToken) {
+      config.headers.Authorization = `Bearer ${bearerToken}`
+    }
     
     // Tambahkan token CSRF untuk method yang mengubah state (POST, PUT, DELETE, PATCH)
     const stateChangingMethods = ['POST', 'PUT', 'DELETE', 'PATCH']
@@ -128,4 +128,3 @@ apiClient.interceptors.response.use(
 )
 
 export default apiClient
-

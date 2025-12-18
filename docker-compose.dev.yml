@@ -38,6 +38,12 @@ services:
       # Production: ubah ke sslmode=require atau sslmode=verify-full
       # Format: postgres://user:pass@host:port/db?sslmode=require
       - DATABASE_URL=postgres://postgres:dms_password@postgres:5432/db_dms_pedeve?sslmode=disable
+      # SQLCipher encryption untuk SQLite (optional, hanya jika DATABASE_URL tidak set)
+      # Set ENABLE_SQLCIPHER=true untuk enable encryption pada SQLite database
+      # Set SQLCIPHER_KEY dengan encryption key (min 32 karakter)
+      # Atau simpan di Vault dengan key: sqlcipher_key
+      # - ENABLE_SQLCIPHER=false
+      # - SQLCIPHER_KEY=your-encryption-key-min-32-chars
       # Vault configuration (optional - jika tidak set, akan fallback ke ENCRYPTION_KEY atau default)
       - VAULT_ADDR=http://vault:8200
       - VAULT_TOKEN=dev-root-token-12345

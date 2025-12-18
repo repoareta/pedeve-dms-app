@@ -26,10 +26,19 @@ SSL_CERT_EXISTS=false
 
 # Check if SSL certificate exists
 # IMPORTANT: Preserve existing SSL certificate - DO NOT OVERWRITE
+# Also check if port 443 is listening - if cert exists but port not listening, we need to fix config
 if [ -f /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/fullchain.pem ] && \
    [ -f /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/privkey.pem ]; then
   SSL_CERT_EXISTS=true
   echo "✅ SSL certificate found (preserving existing certificate)"
+  
+  # Check if port 443 is listening
+  if ! sudo ss -tlnp | grep -q ':443 '; then
+    echo "⚠️  WARNING: SSL certificate exists but port 443 is not listening"
+    echo "   This means Nginx config needs to be updated with HTTPS block"
+    # Force update config even if it exists
+    CONFIG_CORRECT=false
+  fi
 fi
 
 # Check if backend-api config already exists
@@ -90,8 +99,9 @@ if [ -f /etc/nginx/sites-available/backend-api ]; then
           echo "   - This is safe - we will fix config while preserving SSL certificate paths"
         fi
       else
-        echo "⚠️  SSL exists but config doesn't have HTTPS, will update..."
+        echo "⚠️  SSL exists but config doesn't have HTTPS block, will update..."
         echo "   - This is safe - we will add HTTPS block without removing existing config"
+        CONFIG_CORRECT=false  # Force update
       fi
     else
       # No SSL, check if config is HTTP-only (correct)
@@ -135,8 +145,52 @@ if [ -f /etc/nginx/sites-available/backend-api ]; then
   fi
 fi
 
+# If SSL certificate doesn't exist, try to setup SSL first
+if [ "$SSL_CERT_EXISTS" = false ]; then
+  echo "⚠️  SSL certificate not found, attempting to setup SSL..."
+  
+  # Check if SSL setup script exists
+  if [ -f ~/setup-backend-ssl.sh ]; then
+    echo "🔒 Running SSL setup script..."
+    chmod +x ~/setup-backend-ssl.sh
+    if ~/setup-backend-ssl.sh; then
+      echo "✅ SSL setup completed"
+      # Wait a moment for Certbot to finish
+      sleep 2
+    else
+      echo "⚠️  SSL setup script returned non-zero, but checking if certificate exists anyway..."
+    fi
+    
+    # Always re-check if certificate exists (Certbot might have created it)
+    if [ -f /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/fullchain.pem ] && \
+       [ -f /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/privkey.pem ]; then
+      SSL_CERT_EXISTS=true
+      echo "✅ SSL certificate found after SSL setup"
+    else
+      echo "⚠️  SSL certificate not found after setup attempt"
+      echo "   This might be normal if DNS is not configured or Let's Encrypt rate limit"
+    fi
+  else
+    echo "⚠️  SSL setup script not found, will create HTTP-only config"
+    echo "   To enable HTTPS, run setup-backend-ssl.sh manually"
+  fi
+fi
+
 # Only create/update config if needed
+# CRITICAL: If SSL certificate exists but port 443 is not listening, we MUST update config
 if [ "$SSL_CERT_EXISTS" = true ]; then
+  # Double-check port 443
+  PORT_443_LISTENING=false
+  if sudo ss -tlnp | grep -q ':443 '; then
+    PORT_443_LISTENING=true
+  fi
+  
+  if [ "$PORT_443_LISTENING" = false ]; then
+    echo "⚠️  SSL certificate exists but port 443 is not listening"
+    echo "   Forcing Nginx config update with HTTPS block..."
+    CONFIG_CORRECT=false
+  fi
+  
   echo "✅ SSL certificate found, creating/updating config with HTTPS..."
   
   # Backup existing config if it exists
@@ -161,6 +215,8 @@ server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
     server_name api-pedeve-dev.aretaamany.com;
+    # Allow uploads up to 10MB (matching Fiber BodyLimit)
+    client_max_body_size 10m;
 
     ssl_certificate /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/api-pedeve-dev.aretaamany.com/privkey.pem;
@@ -211,6 +267,9 @@ server {
     listen 80;
     listen [::]:80;
     server_name api-pedeve-dev.aretaamany.com;
+
+    # Allow uploads up to 10MB (matching Fiber BodyLimit)
+    client_max_body_size 10m;
 
     # Logging
     access_log /var/log/nginx/backend-api-access.log;
@@ -301,7 +360,18 @@ if sudo systemctl is-active --quiet nginx; then
   if sudo ss -tlnp | grep -q ':443 '; then
     echo "✅ Port 443 is listening"
   else
-    echo "⚠️  Port 443 is not listening (HTTPS may not be configured)"
+    echo "❌ ERROR: Port 443 is not listening after config update!"
+    echo "   This might indicate a configuration problem"
+    echo "   Checking Nginx error log..."
+    sudo tail -20 /var/log/nginx/error.log 2>/dev/null || true
+    echo "   Attempting to restart Nginx..."
+    sudo systemctl restart nginx
+    sleep 3
+    if sudo ss -tlnp | grep -q ':443 '; then
+      echo "✅ Port 443 is now listening after restart"
+    else
+      echo "❌ Port 443 still not listening - please check Nginx configuration manually"
+    fi
   fi
 else
   echo "❌ ERROR: Nginx failed to start!"
@@ -320,4 +390,3 @@ echo ""
 echo "🧪 Test commands:"
 echo "   curl http://api-pedeve-dev.aretaamany.com/health"
 echo "   curl http://api-pedeve-dev.aretaamany.com/api/v1/csrf-token"
-

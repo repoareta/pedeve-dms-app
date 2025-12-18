@@ -17,7 +17,7 @@ import (
 // SeedSuperAdmin creates a superadmin user if it doesn't exist
 func SeedSuperAdmin() {
 	zapLog := logger.GetLogger()
-	
+
 	// Check if superadmin already exists
 	var existingUser domain.UserModel
 	result := database.GetDB().Where("username = ? OR role = ?", "superadmin", "superadmin").First(&existingUser)
@@ -31,14 +31,14 @@ func SeedSuperAdmin() {
 				zapLog.Info("Superadmin email updated", zap.String("email", existingUser.Email))
 			}
 		}
-		
+
 		// Auto-sync password dari Vault jika enabled (untuk production)
 		if shouldSyncSuperadminPassword() {
 			if err := syncSuperadminPasswordFromVault(&existingUser); err != nil {
 				zapLog.Warn("Failed to sync superadmin password from Vault", zap.Error(err))
 			}
 		}
-		
+
 		zapLog.Info("Superadmin user already exists")
 		return
 	}
@@ -51,7 +51,7 @@ func SeedSuperAdmin() {
 
 	// Get superadmin password from Vault or environment variable or use default
 	superadminPassword := getSuperadminPassword()
-	
+
 	// Hash password for superadmin
 	hashedPassword, err := password.HashPassword(superadminPassword)
 	if err != nil {
@@ -66,9 +66,9 @@ func SeedSuperAdmin() {
 		Username:  "superadmin",
 		Email:     "superadmin@pertamina.com",
 		Password:  hashedPassword,
-		Role:      "superadmin", // Legacy field
+		Role:      "superadmin",       // Legacy field
 		RoleID:    &superadminRole.ID, // New RBAC field
-		CompanyID: nil, // Superadmin tidak punya company (global access)
+		CompanyID: nil,                // Superadmin tidak punya company (global access)
 		IsActive:  true,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -87,10 +87,66 @@ func SeedSuperAdmin() {
 	)
 }
 
+// SeedAdministrator creates a default administrator user (for client global access)
+func SeedAdministrator() {
+	zapLog := logger.GetLogger()
+
+	// Check if administrator user already exists
+	var existingUser domain.UserModel
+	if err := database.GetDB().Where("username = ?", "administrator").First(&existingUser).Error; err == nil {
+		zapLog.Info("Administrator user already exists")
+		return
+	}
+
+	// Get administrator role
+	var adminRole domain.RoleModel
+	if err := database.GetDB().Where("name = ?", "administrator").First(&adminRole).Error; err != nil {
+		zapLog.Warn("Administrator role not found, skipping administrator user creation", zap.Error(err))
+		return
+	}
+
+	// Default password (can be overridden by env ADMINISTRATOR_PASSWORD)
+	adminPassword := os.Getenv("ADMINISTRATOR_PASSWORD")
+	if adminPassword == "" {
+		adminPassword = "Pedeve123"
+		zapLog.Warn("Using default administrator password. Set ADMINISTRATOR_PASSWORD for production!")
+	}
+
+	hashedPassword, err := password.HashPassword(adminPassword)
+	if err != nil {
+		zapLog.Error("Failed to hash administrator password", zap.Error(err))
+		return
+	}
+
+	now := time.Now()
+	adminUser := &domain.UserModel{
+		ID:        uuid.GenerateUUID(),
+		Username:  "administrator",
+		Email:     "administrator@pertamina.com",
+		Password:  hashedPassword,
+		Role:      "administrator",
+		RoleID:    &adminRole.ID,
+		CompanyID: nil, // akan di-assign ke holding lewat assignment di SeedAssignments
+		IsActive:  true,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	if err := database.GetDB().Create(adminUser).Error; err != nil {
+		zapLog.Error("Failed to create administrator user", zap.Error(err))
+		return
+	}
+
+	zapLog.Info("Administrator user created successfully",
+		zap.String("username", adminUser.Username),
+		zap.String("role_id", adminRole.ID),
+	)
+}
+
 // getSuperadminPassword retrieves superadmin password from Vault, env var, or default
 func getSuperadminPassword() string {
 	zapLog := logger.GetLogger()
-	
+
 	// Priority 1: Vault
 	secretManager := secrets.GetSecretManager()
 	password, err := secretManager.GetSecret("superadmin_password")
@@ -99,13 +155,13 @@ func getSuperadminPassword() string {
 		return password
 	}
 	zapLog.Debug("Superadmin password not found in Vault, trying fallback", zap.Error(err))
-	
+
 	// Priority 2: Environment variable
 	if envPassword := os.Getenv("SUPERADMIN_PASSWORD"); envPassword != "" {
 		zapLog.Info("Superadmin password loaded from environment variable")
 		return envPassword
 	}
-	
+
 	// Priority 3: Default (hardcoded fallback)
 	zapLog.Warn("Using default superadmin password. Set SUPERADMIN_PASSWORD env var or store in Vault for production!")
 	return "Pedeve123"
@@ -120,31 +176,31 @@ func shouldSyncSuperadminPassword() bool {
 // syncSuperadminPasswordFromVault updates superadmin password from Vault if different
 func syncSuperadminPasswordFromVault(user *domain.UserModel) error {
 	zapLog := logger.GetLogger()
-	
+
 	// Get password from Vault
 	vaultPassword := getSuperadminPassword()
 	if vaultPassword == "" {
 		return fmt.Errorf("superadmin password not found in Vault or env")
 	}
-	
+
 	// Check if password is different (verify current password)
 	if password.CheckPasswordHash(vaultPassword, user.Password) {
 		// Password sama, tidak perlu update
 		zapLog.Debug("Superadmin password already matches Vault, skipping update")
 		return nil
 	}
-	
+
 	// Password berbeda, update dengan password dari Vault
 	hashedPassword, err := password.HashPassword(vaultPassword)
 	if err != nil {
 		return fmt.Errorf("failed to hash new password: %w", err)
 	}
-	
+
 	user.Password = hashedPassword
 	if err := database.GetDB().Save(user).Error; err != nil {
 		return fmt.Errorf("failed to update superadmin password: %w", err)
 	}
-	
+
 	zapLog.Info("Superadmin password synced from Vault successfully",
 		zap.String("username", user.Username),
 	)
@@ -154,18 +210,24 @@ func syncSuperadminPasswordFromVault(user *domain.UserModel) error {
 // UpdateSuperadminPasswordFromVault updates superadmin password from Vault (public function untuk dipanggil dari luar)
 func UpdateSuperadminPasswordFromVault() error {
 	zapLog := logger.GetLogger()
-	
+
 	var existingUser domain.UserModel
 	result := database.GetDB().Where("username = ? OR role = ?", "superadmin", "superadmin").First(&existingUser)
 	if result.Error != nil {
 		return fmt.Errorf("superadmin user not found: %w", result.Error)
 	}
-	
+
 	if err := syncSuperadminPasswordFromVault(&existingUser); err != nil {
 		zapLog.Error("Failed to update superadmin password from Vault", zap.Error(err))
 		return err
 	}
-	
+
 	return nil
 }
 
+// SeedAll menjalankan seed roles/permissions, superadmin, dan administrator
+func SeedAll() {
+	SeedRolesAndPermissions()
+	SeedSuperAdmin()
+	SeedAdministrator()
+}

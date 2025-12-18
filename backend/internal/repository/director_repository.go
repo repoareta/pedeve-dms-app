@@ -8,6 +8,7 @@ import (
 
 type DirectorRepository interface {
 	Create(director *domain.DirectorModel) error
+	Update(director *domain.DirectorModel) error
 	GetByCompanyID(companyID string) ([]domain.DirectorModel, error)
 	DeleteByCompanyID(companyID string) error
 	Delete(id string) error
@@ -17,14 +18,24 @@ type directorRepository struct {
 	db *gorm.DB
 }
 
-func NewDirectorRepository() DirectorRepository {
+// NewDirectorRepositoryWithDB creates a new director repository with injected DB (for testing)
+func NewDirectorRepositoryWithDB(db *gorm.DB) DirectorRepository {
 	return &directorRepository{
-		db: database.GetDB(),
+		db: db,
 	}
+}
+
+// NewDirectorRepository creates a new director repository with default DB (backward compatibility)
+func NewDirectorRepository() DirectorRepository {
+	return NewDirectorRepositoryWithDB(database.GetDB())
 }
 
 func (r *directorRepository) Create(director *domain.DirectorModel) error {
 	return r.db.Create(director).Error
+}
+
+func (r *directorRepository) Update(director *domain.DirectorModel) error {
+	return r.db.Save(director).Error
 }
 
 func (r *directorRepository) GetByCompanyID(companyID string) ([]domain.DirectorModel, error) {
@@ -40,4 +51,3 @@ func (r *directorRepository) DeleteByCompanyID(companyID string) error {
 func (r *directorRepository) Delete(id string) error {
 	return r.db.Delete(&domain.DirectorModel{}, "id = ?", id).Error
 }
-

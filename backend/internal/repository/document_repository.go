@@ -1,0 +1,253 @@
+package repository
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
+	"gorm.io/gorm"
+)
+
+type DocumentRepository interface {
+	ListFolders(companyID *string) ([]domain.DocumentFolderModel, error)
+	CreateFolder(folder *domain.DocumentFolderModel) error
+	GetFolderByID(id string) (*domain.DocumentFolderModel, error)
+	GetChildFolders(parentID string) ([]domain.DocumentFolderModel, error)
+	UpdateFolderName(id, name string) error
+	DeleteFolder(id string) error
+
+	ListDocuments(folderID *string) ([]domain.DocumentModel, error)
+	ListDocumentsPaginated(q ListDocumentsQuery) ([]domain.DocumentModel, int64, error)
+	GetDocumentByID(id string) (*domain.DocumentModel, error)
+	CreateDocument(doc *domain.DocumentModel) error
+	UpdateDocument(doc *domain.DocumentModel) error
+	DeleteDocument(id string) error
+	DeleteDocumentsByFolder(folderID string) error
+
+	GetFolderStats(companyID *string) ([]domain.DocumentFolderStat, error)
+	GetTotalSize(companyID *string) (int64, error)
+}
+
+type ListDocumentsQuery struct {
+	FolderID   *string
+	CompanyID  *string // Filter berdasarkan company_id dari folder
+	DirectorID *string // Filter berdasarkan director_id (dokumen individu)
+	Search     string
+	SortBy     string
+	SortDir    string
+	Page       int
+	PageSize   int
+	UploaderID *string
+	Type       string
+}
+
+type documentRepository struct {
+	db *gorm.DB
+}
+
+func NewDocumentRepository() DocumentRepository {
+	return &documentRepository{db: database.GetDB()}
+}
+
+func NewDocumentRepositoryWithDB(db *gorm.DB) DocumentRepository {
+	return &documentRepository{db: db}
+}
+
+func (r *documentRepository) ListFolders(companyID *string) ([]domain.DocumentFolderModel, error) {
+	var folders []domain.DocumentFolderModel
+	tx := r.db.Order("created_at DESC")
+	if companyID != nil {
+		tx = tx.Where("company_id = ?", *companyID)
+	}
+	err := tx.Find(&folders).Error
+	return folders, err
+}
+
+func (r *documentRepository) CreateFolder(folder *domain.DocumentFolderModel) error {
+	return r.db.Create(folder).Error
+}
+
+func (r *documentRepository) GetFolderByID(id string) (*domain.DocumentFolderModel, error) {
+	var folder domain.DocumentFolderModel
+	if err := r.db.Where("id = ?", id).First(&folder).Error; err != nil {
+		return nil, err
+	}
+	return &folder, nil
+}
+
+func (r *documentRepository) UpdateFolderName(id, name string) error {
+	return r.db.Model(&domain.DocumentFolderModel{}).
+		Where("id = ?", id).
+		Update("name", name).Error
+}
+
+func (r *documentRepository) GetChildFolders(parentID string) ([]domain.DocumentFolderModel, error) {
+	var folders []domain.DocumentFolderModel
+	err := r.db.Where("parent_id = ?", parentID).Find(&folders).Error
+	return folders, err
+}
+
+func (r *documentRepository) DeleteFolder(id string) error {
+	return r.db.Delete(&domain.DocumentFolderModel{}, "id = ?", id).Error
+}
+
+func (r *documentRepository) ListDocuments(folderID *string) ([]domain.DocumentModel, error) {
+	var docs []domain.DocumentModel
+	tx := r.db.Model(&domain.DocumentModel{}).Order("created_at DESC")
+	if folderID != nil {
+		tx = tx.Where("folder_id = ?", *folderID)
+	}
+	err := tx.Find(&docs).Error
+	return docs, err
+}
+
+func (r *documentRepository) ListDocumentsPaginated(q ListDocumentsQuery) ([]domain.DocumentModel, int64, error) {
+	var docs []domain.DocumentModel
+	tx := r.db.Model(&domain.DocumentModel{})
+
+	// Join dengan folder jika perlu filter berdasarkan company_id
+	if q.CompanyID != nil {
+		tx = tx.Joins("JOIN document_folders ON documents.folder_id = document_folders.id")
+	}
+
+	if q.FolderID != nil {
+		tx = tx.Where("documents.folder_id = ?", *q.FolderID)
+	}
+	if q.CompanyID != nil {
+		tx = tx.Where("document_folders.company_id = ?", *q.CompanyID)
+	}
+	if q.DirectorID != nil {
+		tx = tx.Where("documents.director_id = ?", *q.DirectorID)
+	}
+	if q.UploaderID != nil {
+		tx = tx.Where("documents.uploader_id = ?", *q.UploaderID)
+	}
+	if q.Search != "" {
+		like := "%" + strings.ToLower(q.Search) + "%"
+		tx = tx.Where("LOWER(documents.name) LIKE ? OR LOWER(documents.file_name) LIKE ? OR LOWER(documents.mime_type) LIKE ?", like, like, like)
+	}
+	if q.Type != "" {
+		tx = tx.Where("LOWER(documents.mime_type) LIKE ?", "%"+strings.ToLower(q.Type)+"%")
+	}
+
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	sortField := "created_at"
+	switch strings.ToLower(q.SortBy) {
+	case "name":
+		sortField = "name"
+	case "size":
+		sortField = "size"
+	case "created_at", "updated_at":
+		sortField = q.SortBy
+	}
+	dir := "DESC"
+	if strings.ToLower(q.SortDir) == "asc" {
+		dir = "ASC"
+	}
+
+	page := q.Page
+	pageSize := q.PageSize
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+
+	offset := (page - 1) * pageSize
+
+	// Pastikan sort field menggunakan prefix documents. untuk menghindari ambiguity
+	sortFieldWithPrefix := "documents." + sortField
+
+	if err := tx.Order(fmt.Sprintf("%s %s", sortFieldWithPrefix, dir)).
+		Limit(pageSize).
+		Offset(offset).
+		Find(&docs).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return docs, total, nil
+}
+
+func (r *documentRepository) GetDocumentByID(id string) (*domain.DocumentModel, error) {
+	var doc domain.DocumentModel
+	// Explicitly select all fields including expiry_date to ensure it's loaded
+	if err := r.db.Select("*").Where("id = ?", id).First(&doc).Error; err != nil {
+		return nil, err
+	}
+	return &doc, nil
+}
+
+func (r *documentRepository) CreateDocument(doc *domain.DocumentModel) error {
+	return r.db.Create(doc).Error
+}
+
+func (r *documentRepository) UpdateDocument(doc *domain.DocumentModel) error {
+	return r.db.Model(&domain.DocumentModel{}).Where("id = ?", doc.ID).Updates(doc).Error
+}
+
+func (r *documentRepository) DeleteDocument(id string) error {
+	// Delete notifications for this document first (to avoid foreign key constraint)
+	// Ignore error - notifications might not exist, this prevents foreign key constraint error
+	_ = r.db.Where("resource_type = ? AND resource_id = ?", "document", id).
+		Delete(&domain.NotificationModel{}).Error
+
+	// Now delete the document
+	return r.db.Delete(&domain.DocumentModel{}, "id = ?", id).Error
+}
+
+func (r *documentRepository) DeleteDocumentsByFolder(folderID string) error {
+	// Get all document IDs in this folder first
+	var documents []domain.DocumentModel
+	if err := r.db.Where("folder_id = ?", folderID).Find(&documents).Error; err != nil {
+		return fmt.Errorf("failed to get documents: %w", err)
+	}
+
+	// Delete notifications for each document first (to avoid foreign key constraint)
+	for _, doc := range documents {
+		// Delete notifications where resource_type = 'document' and resource_id = doc.ID
+		// Ignore error - notifications might not exist, this prevents foreign key constraint error
+		_ = r.db.Where("resource_type = ? AND resource_id = ?", "document", doc.ID).
+			Delete(&domain.NotificationModel{}).Error
+	}
+
+	// Now delete all documents in the folder
+	return r.db.Delete(&domain.DocumentModel{}, "folder_id = ?", folderID).Error
+}
+
+func (r *documentRepository) GetFolderStats(companyID *string) ([]domain.DocumentFolderStat, error) {
+	var stats []domain.DocumentFolderStat
+
+	// Join dengan folder untuk filter berdasarkan company_id
+	tx := r.db.Model(&domain.DocumentModel{}).
+		Joins("JOIN document_folders ON documents.folder_id = document_folders.id").
+		Select("documents.folder_id, COUNT(*) as file_count, COALESCE(SUM(documents.size),0) as total_size")
+
+	if companyID != nil {
+		tx = tx.Where("document_folders.company_id = ?", *companyID)
+	}
+
+	err := tx.Group("documents.folder_id").Scan(&stats).Error
+	return stats, err
+}
+
+func (r *documentRepository) GetTotalSize(companyID *string) (int64, error) {
+	var total int64
+
+	// Join dengan folder untuk filter berdasarkan company_id
+	tx := r.db.Model(&domain.DocumentModel{}).
+		Joins("JOIN document_folders ON documents.folder_id = document_folders.id").
+		Select("COALESCE(SUM(documents.size),0)")
+
+	if companyID != nil {
+		tx = tx.Where("document_folders.company_id = ?", *companyID)
+	}
+
+	err := tx.Scan(&total).Error
+	return total, err
+}

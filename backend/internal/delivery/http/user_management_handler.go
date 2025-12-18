@@ -1,10 +1,13 @@
 package http
 
 import (
+	"strings"
+
+	"github.com/gofiber/fiber/v2"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/audit"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
-	"github.com/gofiber/fiber/v2"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/utils"
 )
 
 // UserManagementHandler handles user management HTTP requests
@@ -49,14 +52,27 @@ func (h *UserManagementHandler) CreateUser(c *fiber.Ctx) error {
 
 	// Prevent creating superadmin user
 	if req.RoleID != nil {
-		// Check if role is superadmin
+		// Check role name
 		roleUseCase := usecase.NewRoleManagementUseCase()
 		role, err := roleUseCase.GetRoleByID(*req.RoleID)
-		if err == nil && role != nil && role.Name == "superadmin" {
-			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
-				Error:   "forbidden",
-				Message: "Superadmin role cannot be assigned through this interface. Superadmin is a system account managed separately.",
-			})
+		if err == nil && role != nil {
+			roleNameLower := strings.ToLower(role.Name)
+			if roleNameLower == "superadmin" {
+				return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+					Error:   "forbidden",
+					Message: "Superadmin role cannot be assigned through this interface. Superadmin is a system account managed separately.",
+				})
+			}
+			// Only superadmin can assign administrator
+			if roleNameLower == "administrator" {
+				currentRole := strings.ToLower(c.Locals("roleName").(string))
+				if currentRole != "superadmin" {
+					return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+						Error:   "forbidden",
+						Message: "Hanya superadmin yang dapat meng-assign role administrator.",
+					})
+				}
+			}
 		}
 	}
 
@@ -65,9 +81,9 @@ func (h *UserManagementHandler) CreateUser(c *fiber.Ctx) error {
 	companyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
 
-	// Superadmin can create user in any company or without company (standby)
-	// Admin can only create user in their company or descendants (RBAC)
-	if roleName != "superadmin" && companyID != nil {
+	// Superadmin/administrator can create user di mana saja atau tanpa company (standby)
+	// Admin bisa buat user di company mereka/descendant (RBAC)
+	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
 		// Get user's company ID safely (handle both *string and string)
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
@@ -80,7 +96,7 @@ func (h *UserManagementHandler) CreateUser(c *fiber.Ctx) error {
 				Message: "Invalid company ID format",
 			})
 		}
-		
+
 		// If company_id is provided, validate access
 		if req.CompanyID != nil {
 			companyUseCase := usecase.NewCompanyUseCase()
@@ -126,7 +142,7 @@ func (h *UserManagementHandler) GetUser(c *fiber.Ctx) error {
 	roleName := c.Locals("roleName").(string)
 
 	// Check access
-	if roleName != "superadmin" && companyID != nil {
+	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
 		userCompanyID := companyID.(string)
 		hasAccess, err := h.userUseCase.ValidateUserAccess(userCompanyID, id)
 		if err != nil || !hasAccess {
@@ -161,16 +177,16 @@ func (h *UserManagementHandler) GetAllUsers(c *fiber.Ctx) error {
 	// Get roleName and companyID from JWT
 	roleNameVal := c.Locals("roleName")
 	companyIDVal := c.Locals("companyID")
-	
+
 	roleName := ""
 	if roleNameVal != nil {
 		if rn, ok := roleNameVal.(string); ok {
 			roleName = rn
 		}
 	}
-	
-	// Superadmin sees all users (except other superadmins for security)
-	if roleName == "superadmin" {
+
+	// Superadmin/administrator sees all users (except other superadmins for security)
+	if utils.IsSuperAdminLike(roleName) {
 		users, err := h.userUseCase.GetAllUsers()
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -178,7 +194,7 @@ func (h *UserManagementHandler) GetAllUsers(c *fiber.Ctx) error {
 				Message: "Failed to get users",
 			})
 		}
-		
+
 		// Filter out superadmin users for security
 		filtered := []domain.UserModel{}
 		for _, user := range users {
@@ -188,13 +204,13 @@ func (h *UserManagementHandler) GetAllUsers(c *fiber.Ctx) error {
 		}
 		return c.Status(fiber.StatusOK).JSON(filtered)
 	}
-	
+
 	// Non-superadmin: filter by company hierarchy
 	if companyIDVal == nil {
 		// User has no company, return empty list
 		return c.Status(fiber.StatusOK).JSON([]domain.UserModel{})
 	}
-	
+
 	// Get user's company ID safely
 	var userCompanyID string
 	if companyIDPtr, ok := companyIDVal.(*string); ok && companyIDPtr != nil {
@@ -207,7 +223,7 @@ func (h *UserManagementHandler) GetAllUsers(c *fiber.Ctx) error {
 			Message: "Invalid company ID format",
 		})
 	}
-	
+
 	// Get users from user's company and all descendants (RBAC)
 	users, err := h.userUseCase.GetUsersByCompanyHierarchy(userCompanyID)
 	if err != nil {
@@ -216,7 +232,7 @@ func (h *UserManagementHandler) GetAllUsers(c *fiber.Ctx) error {
 			Message: "Failed to get users: " + err.Error(),
 		})
 	}
-	
+
 	// Filter out superadmin users for security
 	filtered := []domain.UserModel{}
 	for _, user := range users {
@@ -224,7 +240,7 @@ func (h *UserManagementHandler) GetAllUsers(c *fiber.Ctx) error {
 			filtered = append(filtered, user)
 		}
 	}
-	
+
 	return c.Status(fiber.StatusOK).JSON(filtered)
 }
 
@@ -246,8 +262,8 @@ func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 	currentUserID := c.Locals("userID").(string)
 	roleName := c.Locals("roleName").(string)
 
-	// Prevent superadmin from editing themselves
-	if roleName == "superadmin" && id == currentUserID {
+	// Prevent superadmin/administrator from editing themselves
+	if utils.IsSuperAdminLike(roleName) && id == currentUserID {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
 			Message: "Superadmin cannot edit their own account. Please use Vault or system administrator for account changes.",
@@ -263,7 +279,7 @@ func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	// Prevent editing superadmin user (even by other superadmins)
+	// Prevent editing superadmin user (even by other superadmins/administrator)
 	if targetUser.Role == "superadmin" {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
@@ -299,14 +315,39 @@ func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 		}
 	}
 
+	// CRITICAL: Block admin from changing their own role to non-admin
+	if roleName == "admin" && id == currentUserID && req.RoleID != nil {
+		roleUseCase := usecase.NewRoleManagementUseCase()
+		newRole, err := roleUseCase.GetRoleByID(*req.RoleID)
+		if err == nil && newRole != nil && newRole.Name != "admin" {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Admin tidak dapat mengubah role mereka sendiri menjadi non-admin. Hanya superadmin yang dapat mengubah role admin.",
+			})
+		}
+	}
+
 	// Check access
-	if roleName != "superadmin" && userCompanyID != "" {
+	if !utils.IsSuperAdminLike(roleName) && userCompanyID != "" {
 		hasAccess, err := h.userUseCase.ValidateUserAccess(userCompanyID, id)
 		if err != nil || !hasAccess {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
 				Message: "You don't have access to update this user",
 			})
+		}
+	}
+
+	// Only superadmin can assign administrator role
+	if req.RoleID != nil {
+		roleUseCase := usecase.NewRoleManagementUseCase()
+		if role, err := roleUseCase.GetRoleByID(*req.RoleID); err == nil && strings.ToLower(role.Name) == "administrator" {
+			if strings.ToLower(roleName) != "superadmin" {
+				return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+					Error:   "forbidden",
+					Message: "Hanya superadmin yang dapat meng-assign role administrator.",
+				})
+			}
 		}
 	}
 
@@ -342,8 +383,8 @@ func (h *UserManagementHandler) DeleteUser(c *fiber.Ctx) error {
 	currentUserID := c.Locals("userID").(string)
 	roleName := c.Locals("roleName").(string)
 
-	// Prevent superadmin from deleting themselves
-	if roleName == "superadmin" && id == currentUserID {
+	// Prevent superadmin/administrator from deleting themselves
+	if utils.IsSuperAdminLike(roleName) && id == currentUserID {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
 			Message: "Superadmin cannot delete their own account.",
@@ -370,7 +411,7 @@ func (h *UserManagementHandler) DeleteUser(c *fiber.Ctx) error {
 	companyID := c.Locals("companyID")
 
 	// Check access
-	if roleName != "superadmin" && companyID != nil {
+	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
 		userCompanyID := companyID.(string)
 		hasAccess, err := h.userUseCase.ValidateUserAccess(userCompanyID, id)
 		if err != nil || !hasAccess {
@@ -414,8 +455,8 @@ func (h *UserManagementHandler) ToggleUserStatus(c *fiber.Ctx) error {
 	currentUserID := c.Locals("userID").(string)
 	roleName := c.Locals("roleName").(string)
 
-	// Prevent superadmin from deactivating themselves
-	if roleName == "superadmin" && id == currentUserID {
+	// Prevent superadmin/administrator from deactivating themselves
+	if utils.IsSuperAdminLike(roleName) && id == currentUserID {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
 			Message: "Superadmin cannot deactivate their own account.",
@@ -443,7 +484,7 @@ func (h *UserManagementHandler) ToggleUserStatus(c *fiber.Ctx) error {
 	companyID := c.Locals("companyID")
 
 	// Check access
-	if roleName != "superadmin" && companyID != nil {
+	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
 		userCompanyID := companyID.(string)
 		hasAccess, err := h.userUseCase.ValidateUserAccess(userCompanyID, id)
 		if err != nil || !hasAccess {
@@ -496,8 +537,8 @@ func (h *UserManagementHandler) ResetUserPassword(c *fiber.Ctx) error {
 	currentUserID := c.Locals("userID").(string)
 	roleName := c.Locals("roleName").(string)
 
-	// Only superadmin can reset passwords
-	if roleName != "superadmin" {
+	// Only superadmin/administrator can reset passwords
+	if !utils.IsSuperAdminLike(roleName) {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
 			Message: "Only superadmin can reset user passwords",
@@ -553,7 +594,7 @@ func (h *UserManagementHandler) ResetUserPassword(c *fiber.Ctx) error {
 	username := c.Locals("username").(string)
 	audit.LogAction(userID, username, "reset_user_password", audit.ResourceUser, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
 		"target_username": targetUser.Username,
-		"target_email":     targetUser.Email,
+		"target_email":    targetUser.Email,
 	})
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -593,9 +634,9 @@ func (h *UserManagementHandler) AssignUserToCompany(c *fiber.Ctx) error {
 		})
 	}
 
-	// Superadmin can assign to any company
+	// Superadmin/administrator can assign to any company
 	// Admin can only assign to their own company
-	if roleName != "superadmin" {
+	if !utils.IsSuperAdminLike(roleName) {
 		// Check if user has company
 		if companyID == nil {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
@@ -684,7 +725,7 @@ func (h *UserManagementHandler) AssignUserToCompany(c *fiber.Ctx) error {
 	username := c.Locals("username").(string)
 	audit.LogAction(userID, username, "assign_user_to_company", audit.ResourceUser, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
 		"target_username": targetUser.Username,
-		"company_id":       req.CompanyID,
+		"company_id":      req.CompanyID,
 		"role_id":         req.RoleID,
 	})
 
@@ -721,9 +762,9 @@ func (h *UserManagementHandler) UnassignUserFromCompany(c *fiber.Ctx) error {
 		})
 	}
 
-	// Superadmin can unassign from any company
+	// Superadmin/administrator can unassign from any company
 	// Admin can only unassign from their own company
-	if roleName != "superadmin" {
+	if !utils.IsSuperAdminLike(roleName) {
 		// Check if user has company
 		if companyID == nil {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
@@ -801,7 +842,7 @@ func (h *UserManagementHandler) UnassignUserFromCompany(c *fiber.Ctx) error {
 	username := c.Locals("username").(string)
 	audit.LogAction(userID, username, "unassign_user_from_company", audit.ResourceUser, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
 		"target_username": targetUser.Username,
-		"company_id":       req.CompanyID,
+		"company_id":      req.CompanyID,
 	})
 
 	return c.Status(fiber.StatusOK).JSON(updatedUser)
@@ -839,4 +880,3 @@ func (h *UserManagementHandler) GetMyCompanies(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(companies)
 }
-

@@ -5,6 +5,7 @@ import { message, Modal } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { companyApi, userApi, roleApi, permissionApi, type Company, type User, type Role, type Permission } from '../api/userManagement'
 import { useAuthStore } from '../stores/auth'
+import { Icon as IconifyIcon } from '@iconify/vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -36,6 +37,7 @@ const resetPasswordForm = ref<{ user_id: string; username: string; new_password:
 // Search states
 const companySearchText = ref('')
 const userSearchText = ref('')
+const permissionSearchText = ref('')
 
 // Pagination
 const companyPagination = ref({
@@ -69,6 +71,11 @@ const userPagination = ref({
 
 const filteredUsers = computed(() => {
   let filtered = [...users.value]
+
+  // Administrator tidak melihat entri superadmin (jaga agar peran superadmin tetap tersembunyi)
+  if (userRole.value === 'administrator') {
+    filtered = filtered.filter(u => u.role.toLowerCase() !== 'superadmin')
+  }
   
   // Search filter
   if (userSearchText.value) {
@@ -77,6 +84,24 @@ const filteredUsers = computed(() => {
       u.username.toLowerCase().includes(search) ||
       u.email.toLowerCase().includes(search) ||
       u.role.toLowerCase().includes(search)
+    )
+  }
+  
+  return filtered
+})
+
+const filteredPermissions = computed(() => {
+  let filtered = [...permissions.value]
+  
+  // Search filter
+  if (permissionSearchText.value) {
+    const search = permissionSearchText.value.toLowerCase()
+    filtered = filtered.filter(p => 
+      p.name.toLowerCase().includes(search) ||
+      (p.description && p.description.toLowerCase().includes(search)) ||
+      p.resource.toLowerCase().includes(search) ||
+      p.action.toLowerCase().includes(search) ||
+      p.scope.toLowerCase().includes(search)
     )
   }
   
@@ -105,9 +130,17 @@ watch(userSearchText, () => {
   userPagination.value.current = 1 // Reset to first page on search
 })
 
-// Filter roles untuk exclude superadmin
+// Filter roles untuk form/selector:
+// - superadmin tidak pernah tampil
+// - role administrator hanya tampil jika current user adalah superadmin
 const availableRoles = computed(() => {
-  return roles.value.filter(r => r.name !== 'superadmin')
+  const current = userRole.value
+  return roles.value.filter(r => {
+    const name = r.name.toLowerCase()
+    if (name === 'superadmin') return false
+    if (name === 'administrator' && current !== 'superadmin') return false
+    return true
+  })
 })
 
 // Computed: Check user roles
@@ -115,17 +148,19 @@ const userRole = computed(() => {
   return authStore.user?.role?.toLowerCase() || ''
 })
 
-const isSuperAdmin = computed(() => userRole.value === 'superadmin')
+const isSuperAdmin = computed(() => userRole.value === 'superadmin' || userRole.value === 'administrator')
 const isAdmin = computed(() => userRole.value === 'admin')
 const isManager = computed(() => userRole.value === 'manager')
 const isStaff = computed(() => userRole.value === 'staff')
+const showStatusColumn = computed(() => ['superadmin', 'administrator', 'admin'].includes(userRole.value))
 
 // Check if current user is superadmin (for backward compatibility)
 const isCurrentUserSuperadmin = computed(() => {
-  return authStore.user?.role === 'superadmin'
+  const role = authStore.user?.role?.toLowerCase()
+  return role === 'superadmin' || role === 'administrator'
 })
 
-// RBAC: Edit untuk semua role (staff, manager, admin, superadmin)
+// RBAC: Edit untuk semua role (staff, manager, admin, superadmin/administrator)
 const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value)
 
 // RBAC: Delete hanya untuk admin
@@ -134,9 +169,24 @@ const canDelete = computed(() => isAdmin.value || isSuperAdmin.value)
 // RBAC: Create User hanya untuk admin
 const canCreateUser = computed(() => isAdmin.value || isSuperAdmin.value)
 
+// RBAC: view permissions hanya untuk superadmin/administrator
+const canViewPermissions = computed(() => isSuperAdmin.value)
+
+// Pastikan tab aktif tidak berada di permissions jika tidak punya akses
+watch(canViewPermissions, (val) => {
+  if (!val && activeTab.value === 'permissions') {
+    activeTab.value = 'users'
+  }
+}, { immediate: true })
+
 // Check if user is superadmin (for edit/delete protection)
 const isUserSuperadmin = (user: User) => {
-  return user.role === 'superadmin' || user.role_id === roles.value.find(r => r.name === 'superadmin')?.id
+  const roleName = user.role?.toLowerCase()
+  return (
+    roleName === 'superadmin' ||
+    roleName === 'administrator' ||
+    user.role_id === roles.value.find(r => ['superadmin', 'administrator'].includes(r.name.toLowerCase()))?.id
+  )
 }
 
 // Check if user is current logged in user
@@ -168,38 +218,100 @@ const isCurrentUser = (user: User) => {
 //   { title: 'Aksi', key: 'actions', width: 150 },
 // ])
 
-const userColumns = computed(() => [
+const userColumns = computed(() => {
+  const cols: Array<Record<string, unknown>> = [
+    { 
+      title: 'Nama Pengguna', 
+      dataIndex: 'username', 
+      key: 'username', 
+      sorter: (a: User, b: User) => a.username.localeCompare(b.username),
+    },
+    { title: 'Email', dataIndex: 'email', key: 'email', sorter: (a: User, b: User) => a.email.localeCompare(b.email) },
+    { 
+      title: 'Peran', 
+      dataIndex: 'role', 
+      key: 'role', 
+      filters: roles.value
+        .filter(r => {
+          const name = r.name.toLowerCase()
+          if (name === 'superadmin') return false
+          if (name === 'administrator' && userRole.value !== 'superadmin') return false
+          return true
+        })
+        .map(r => ({ text: r.name, value: r.name })), 
+      onFilter: (value: string, record: User) => record.role === value 
+    },
+    { title: 'Perusahaan', dataIndex: 'company_id', key: 'company_id' },
+  ]
+
+  if (showStatusColumn.value) {
+    cols.push({
+      title: 'Status',
+      dataIndex: 'is_active',
+      key: 'is_active',
+      filters: [
+        { text: 'Aktif', value: true },
+        { text: 'Tidak Aktif', value: false }
+      ],
+      onFilter: (value: boolean, record: User) => record.is_active === value
+    })
+  }
+
+  cols.push({ title: 'Aksi', key: 'actions', width: 150 })
+  return cols
+})
+
+const permissionColumns = computed(() => [
   { 
-    title: 'Nama Pengguna', 
-    dataIndex: 'username', 
-    key: 'username', 
-    sorter: (a: User, b: User) => a.username.localeCompare(b.username),
+    title: 'Nama Izin', 
+    dataIndex: 'name', 
+    key: 'name',
+    sorter: (a: Permission, b: Permission) => a.name.localeCompare(b.name),
   },
-  { title: 'Email', dataIndex: 'email', key: 'email', sorter: (a: User, b: User) => a.email.localeCompare(b.email) },
   { 
-    title: 'Peran', 
-    dataIndex: 'role', 
-    key: 'role', 
-    filters: roles.value.filter(r => r.name !== 'superadmin').map(r => ({ text: r.name, value: r.name })), 
-    onFilter: (value: string, record: User) => record.role === value 
+    title: 'Deskripsi', 
+    dataIndex: 'description', 
+    key: 'description',
+    sorter: (a: Permission, b: Permission) => (a.description || '').localeCompare(b.description || ''),
   },
-  { title: 'Perusahaan', dataIndex: 'company_id', key: 'company_id' },
   { 
-    title: 'Status', 
-    dataIndex: 'is_active', 
-    key: 'is_active', 
+    title: 'Resource', 
+    dataIndex: 'resource', 
+    key: 'resource',
+    sorter: (a: Permission, b: Permission) => a.resource.localeCompare(b.resource),
+    filters: Array.from(new Set(permissions.value.map(p => p.resource))).map(r => ({ text: r, value: r })),
+    onFilter: (value: string | number | boolean, record: Permission) => record.resource === value,
+  },
+  { 
+    title: 'Aksi', 
+    dataIndex: 'action', 
+    key: 'action',
+    sorter: (a: Permission, b: Permission) => a.action.localeCompare(b.action),
+    filters: Array.from(new Set(permissions.value.map(p => p.action))).map(a => ({ text: a, value: a })),
+    onFilter: (value: string | number | boolean, record: Permission) => record.action === value,
+  },
+  { 
+    title: 'Cakupan', 
+    dataIndex: 'scope', 
+    key: 'scope',
+    sorter: (a: Permission, b: Permission) => a.scope.localeCompare(b.scope),
     filters: [
-      { text: 'Aktif', value: true },
-      { text: 'Tidak Aktif', value: false }
-    ], 
-    onFilter: (value: boolean, record: User) => record.is_active === value 
+      { text: 'Global', value: 'global' },
+      { text: 'Company', value: 'company' },
+      { text: 'Sub Company', value: 'sub_company' },
+    ],
+    onFilter: (value: string | number | boolean, record: Permission) => record.scope === value,
   },
-  { title: 'Aksi', key: 'actions', width: 150 },
 ])
 
 // Roles
 const roles = ref<Role[]>([])
 const rolesLoading = ref(false)
+
+// Filter roles untuk ditampilkan di tabel (sembunyikan Superadmin)
+const filteredRoles = computed(() => {
+  return roles.value.filter(r => r.name.toLowerCase() !== 'superadmin')
+})
 
 // Permissions
 const permissions = ref<Permission[]>([])
@@ -243,6 +355,12 @@ const loadRoles = async () => {
 }
 
 const loadPermissions = async () => {
+  // Hanya superadmin/administrator yang boleh memuat permissions
+  if (!canViewPermissions.value) {
+    permissions.value = []
+    permissionsLoading.value = false
+    return
+  }
   permissionsLoading.value = true
   try {
     permissions.value = await permissionApi.getAll()
@@ -312,7 +430,14 @@ const handleCreateUser = () => {
 
 const handleEditUser = (user: User) => {
   editingUser.value = user
-  userForm.value = { ...user }
+  // Pastikan role_id terisi: gunakan role_id jika ada, jika tidak cari berdasarkan nama role
+  const userWithRoleId = user as User & { role_id?: string }
+  let resolvedRoleId: string | undefined = userWithRoleId.role_id
+  if (!resolvedRoleId && user.role) {
+    const match = roles.value.find(r => r.name.toLowerCase() === user.role.toLowerCase())
+    if (match) resolvedRoleId = match.id
+  }
+  userForm.value = { ...user, role_id: resolvedRoleId }
   userModalVisible.value = true
 }
 
@@ -410,7 +535,7 @@ onMounted(() => {
   loadCompanies()
   loadUsers()
   loadRoles()
-  loadPermissions()
+  if (canViewPermissions.value) loadPermissions()
 })
 
 const handleLogout = async () => {
@@ -542,32 +667,40 @@ const getScopeColor = (scope: string): string => {
   <div class="user-management-layout">
     <DashboardHeader @logout="handleLogout" />
 
-    <div class="user-management-content">
-      <h1 class="page-title">Manajemen Pengguna</h1>
+    <div class="user-management-wrapper">
+      <!-- Page Header Section -->
+      <div class="page-header-container">
+        <div class="page-header">
+          <div class="header-left">
+            <h1 class="page-title">Manajemen Pengguna</h1>
+            <p class="page-description">
+              Kelola pengguna, peran, dan izin akses dalam sistem.
+            </p>
+          </div>
+        </div>
+      </div>
 
-      <a-tabs v-model:activeKey="activeTab" class="management-tabs">
+      <!-- Main Content -->
+      <div class="mainContentPage">
+        <div class="user-management-content">
+          <a-tabs v-model:activeKey="activeTab" class="management-tabs">
         <!-- Users Tab -->
         <a-tab-pane key="users" tab="Pengguna">
           <div class="table-header">
-            <a-button v-if="canCreateUser" type="primary" @click="handleCreateUser">
-              <template #icon>
-                <span>+</span>
-              </template>
-              Tambah Pengguna
-            </a-button>
-          </div>
-
-          <div style="margin-bottom: 16px;">
             <a-input
               v-model:value="userSearchText"
-              placeholder="Cari pengguna (username, email, role)..."
+              placeholder="Search"
+              class="search-input"
               allow-clear
-              style="width: 300px;"
             >
               <template #prefix>
-                <span>🔍</span>
+                <IconifyIcon icon="mdi:magnify" width="16" />
               </template>
             </a-input>
+            <a-button v-if="canCreateUser" type="primary" @click="handleCreateUser" class="buttonAction">
+              <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
+              Tambah Pengguna
+            </a-button>
           </div>
 
           <a-table
@@ -582,13 +715,14 @@ const getScopeColor = (scope: string): string => {
               showTotal: (total: number) => `Total ${total} user`,
               pageSizeOptions: ['10', '20', '50', '100'],
             }"
-            @change="(pagination: any) => { 
+            @change="(pagination: { current?: number; pageSize?: number }) => { 
               userPagination.current = pagination.current || 1
               userPagination.pageSize = pagination.pageSize || 10
             }"
             row-key="id"
+            class="striped-table"
           >
-            <template #bodyCell="{ column, record }">
+              <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'company_id'">
                 <a-select
                   :value="record.company_id"
@@ -601,21 +735,21 @@ const getScopeColor = (scope: string): string => {
                   :filter-option="(input: string, option: any) => 
                     (option?.label || '').toLowerCase().includes(input.toLowerCase())"
                 >
-                  <a-select-option 
-                    v-for="company in companies" 
-                    :key="company.id" 
-                    :value="company.id"
-                    :label="company.name"
-                  >
-                    {{ company.name }}
-                  </a-select-option>
+                <a-select-option 
+                  v-for="company in companies" 
+                  :key="company.id" 
+                  :value="company.id"
+                  :label="company.name"
+                >
+                  {{ company.name }}
+                </a-select-option>
                 </a-select>
-                <a-tag v-if="isUserSuperadmin(record)" color="purple" style="margin-left: 8px;">Superadmin (Global)</a-tag>
+                <a-tag v-if="isUserSuperadmin(record)" color="purple" style="margin-left: 8px;">Admin Global</a-tag>
               </template>
               <template v-if="column.key === 'is_active'">
                 <a-switch
                   :checked="record.is_active"
-                  :disabled="isCurrentUser(record) && isUserSuperadmin(record)"
+                  :disabled="(userRole === 'admin' && record.role?.toLowerCase() === 'administrator') || (isCurrentUser(record) && isUserSuperadmin(record))"
                   @change="() => handleToggleUserStatus(record)"
                   :checked-children="'Aktif'"
                   :un-checked-children="'Nonaktif'"
@@ -687,9 +821,10 @@ const getScopeColor = (scope: string): string => {
               { title: 'Tingkat', dataIndex: 'level', key: 'level' },
               { title: 'Tipe Peran', dataIndex: 'is_system', key: 'is_system' },
             ]"
-            :data-source="roles"
+            :data-source="filteredRoles"
             :loading="rolesLoading"
             :scroll="{ x: 'max-content' }"
+            class="striped-table"
             :pagination="{
               pageSize: 10,
               showSizeChanger: true,
@@ -723,13 +858,13 @@ const getScopeColor = (scope: string): string => {
                 <div class="info-item">
                   <strong>Tipe Role:</strong>
                   <ul>
-                    <li><strong>Sistem:</strong> Role bawaan sistem yang tidak bisa dihapus atau diubah (superadmin, admin, manager, staff)</li>
+                    <li><strong>Sistem:</strong> Role bawaan sistem yang tidak bisa dihapus atau diubah (superadmin, administrator, admin, manager, staff)</li>
                     <li><strong>Kustom:</strong> Role yang dibuat khusus oleh administrator, bisa diubah atau dihapus</li>
                   </ul>
                 </div>
                 <div class="info-item">
                   <strong>Tingkat Role:</strong>
-                  <p>Angka yang menunjukkan hierarki role. Semakin kecil angkanya, semakin tinggi wewenangnya (0 = superadmin, 1 = admin, dst).</p>
+                  <p>Angka yang menunjukkan hierarki role. Semakin kecil angkanya, semakin tinggi wewenangnya (mis. 0 = superadmin/administrator, 1 = admin, dst).</p>
                 </div>
               </div>
             </a-collapse-panel>
@@ -737,17 +872,25 @@ const getScopeColor = (scope: string): string => {
         </a-tab-pane>
 
         <!-- Permissions Tab -->
-        <a-tab-pane key="permissions" tab="Izin">
+        <a-tab-pane v-if="canViewPermissions" key="permissions" tab="Izin">
+          <div class="table-header">
+            <a-input
+              v-model:value="permissionSearchText"
+              placeholder="Search"
+              class="search-input"
+              allow-clear
+            >
+              <template #prefix>
+                <IconifyIcon icon="mdi:magnify" width="16" />
+              </template>
+            </a-input>
+          </div>
+
           <a-table
-            :columns="[
-              { title: 'Nama Izin', dataIndex: 'name', key: 'name' },
-              { title: 'Deskripsi', dataIndex: 'description', key: 'description' },
-              { title: 'Resource', dataIndex: 'resource', key: 'resource' },
-              { title: 'Aksi', dataIndex: 'action', key: 'action' },
-              { title: 'Cakupan', dataIndex: 'scope', key: 'scope' },
-            ]"
-            :data-source="permissions"
+            :columns="permissionColumns"
+            :data-source="filteredPermissions"
             :loading="permissionsLoading"
+            class="striped-table"
             :scroll="{ x: 'max-content' }"
             :pagination="{
               pageSize: 10,
@@ -834,6 +977,7 @@ const getScopeColor = (scope: string): string => {
       <a-modal
         v-model:open="userModalVisible"
         :title="editingUser ? 'Edit Pengguna' : 'Tambah Pengguna'"
+        :centered="true"
         @ok="handleSaveUser"
       >
         <a-form :model="userForm" layout="vertical">
@@ -875,9 +1019,9 @@ const getScopeColor = (scope: string): string => {
                 {{ role.name }}
               </a-select-option>
             </a-select>
-            <div class="form-help-text">
+            <!-- <div class="form-help-text">
               <small>Role Superadmin tidak tersedia untuk dibuat dari antarmuka ini</small>
-            </div>
+            </div> -->
           </a-form-item>
         </a-form>
       </a-modal>
@@ -915,6 +1059,8 @@ const getScopeColor = (scope: string): string => {
           />
         </a-form>
       </a-modal>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -922,30 +1068,29 @@ const getScopeColor = (scope: string): string => {
 <style scoped>
 .user-management-layout {
   min-height: 100vh;
-  /* background: #b03131; */
+  
+}
+
+.page-header{
+  /* background: orange; */
+  max-width: 1350px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.user-management-wrapper {
+  width: 100%;
 }
 
 .user-management-content {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 16px;
-}
-
-.page-title {
-  font-size: 20px;
-  font-weight: 600;
-  margin-bottom: 16px;
-  color: #333;
+  padding: 24px;
 }
 
 @media (min-width: 768px) {
   .user-management-content {
     padding: 24px;
-  }
-  
-  .page-title {
-    font-size: 24px;
-    margin-bottom: 24px;
   }
 }
 
@@ -965,7 +1110,9 @@ const getScopeColor = (scope: string): string => {
 .table-header {
   margin-bottom: 16px;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .search-container {
@@ -973,7 +1120,7 @@ const getScopeColor = (scope: string): string => {
 }
 
 .search-input {
-  width: 100%;
+  flex: 1;
   max-width: 300px;
 }
 
@@ -1091,5 +1238,27 @@ const getScopeColor = (scope: string): string => {
     max-width: 100%;
   }
 }
-</style>
 
+/* Striped table styles */
+.striped-table :deep(.ant-table-tbody > tr:nth-child(even) > td),
+.striped-table :deep(.ant-table-tbody tr:nth-child(even) td) {
+  background-color: #fafafa !important;
+}
+
+.striped-table :deep(.ant-table-tbody > tr:nth-child(odd) > td),
+.striped-table :deep(.ant-table-tbody tr:nth-child(odd) td) {
+  background-color: #ffffff !important;
+}
+
+.striped-table :deep(.ant-table-tbody > tr:hover > td),
+.striped-table :deep(.ant-table-tbody tr:hover td) {
+  background-color: #e6f7ff !important;
+}
+
+.buttonAction{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 35px;
+}
+</style>

@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 
 const goHome = () => {
-  router.push('/dashboard')
+  router.push('/subsidiaries')
 }
 </script>
 
@@ -15,7 +15,7 @@ const goHome = () => {
       <h2 class="error-title">Halaman Tidak Ditemukan</h2>
       <p class="error-description">Halaman yang Anda cari tidak ditemukan.</p>
       <a-button type="primary" size="large" @click="goHome">
-        Kembali ke Dashboard
+        Kembali ke Subsidiaries
       </a-button>
     </div>
   </div>

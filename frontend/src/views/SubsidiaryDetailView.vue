@@ -3,25 +3,23 @@
     <DashboardHeader @logout="handleLogout" />
 
     <div class="detail-content">
-      <!-- Loading State -->
-      <div v-if="loading" class="loading-container">
+      <!-- Loading State - Full Page Skeleton -->
+      <div v-if="loading && !company" class="loading-container">
         <a-spin size="large" />
       </div>
 
-      <!-- Company Detail -->
-      <div v-else-if="company" class="detail-card">
-        <div class="page-header-container container"
-          style="display:flex; flex-direction: column; flex-wrap: wrap;justify-content: center; align-items: start;">
-          <div>
-            <!-- Back Button -->
-            <a-button type="text" @click="handleBack" class="back-button">
-              <IconifyIcon icon="mdi:arrow-left" width="20" style="margin-right: 8px;" />
-              Kembali ke Daftar Subsidiary
-            </a-button>
-          </div>
+      <!-- Company Detail with Skeleton -->
+      <div v-else class="detail-card">
+        <div class="back-button-container">
+          <a-button type="text" @click="handleBack" class="back-button">
+            <IconifyIcon icon="mdi:arrow-left" width="20" style="margin-right: 8px;" />
+            Kembali ke Daftar Subsidiary
+          </a-button>
+        </div>
 
+        <div class="page-header-container" style="min-height: 350px; width: 100%;">
           <!-- Header Section -->
-          <div class="detail-header">
+          <div class="detail-header" v-if="company">
             <div class="company-icon-large">
               <img v-if="getCompanyLogo(company)" :src="getCompanyLogo(company)" :alt="company.name"
                 class="logo-image-large" />
@@ -41,215 +39,352 @@
                 </a-tag>
                 <span v-if="company.code" class="meta-item">Kode: {{ company.code }}</span>
                 <span v-if="company.nib" class="meta-item">No Reg {{ company.nib }}</span>
+
+                <!-- Company Hierarchy -->
+                <div v-if="companyHierarchy.length > 1" class="company-hierarchy">
+                  <span class="hierarchy-label">Hirarki:</span>
+                  <span class="hierarchy-path">
+                    <template v-for="(hierarchyCompany, index) in companyHierarchy" :key="hierarchyCompany.id">
+                      <span class="hierarchy-item">{{ hierarchyCompany.name }}</span>
+                      <span v-if="index < companyHierarchy.length - 1" class="hierarchy-separator">/</span>
+                    </template>
+                  </span>
+                </div>
+                
               </div>
             </div>
             <div class="header-actions">
               <a-space>
-                <a-button>
+                <a-button @click="handleExportPDF" :loading="exportLoading"  class="btn-icon-label">
                   <IconifyIcon icon="mdi:file-pdf-box" width="16" style="margin-right: 8px;" />
                   PDF
                 </a-button>
-                <a-button>
-                  <IconifyIcon icon="mdi:chart-box" width="16" style="margin-right: 8px;" />
+                <a-button @click="handleExportExcel" :loading="exportLoading"  class="btn-icon-label">
+                  <IconifyIcon icon="mdi:file-excel-box" width="16" style="margin-right: 8px;" />
+                  Excel
                 </a-button>
-                <a-date-picker v-model:value="selectedPeriod" picker="month" placeholder="Select Periode"
-                  style="width: 150px;" />
+                <!-- <a-date-picker v-model:value="selectedPeriod" picker="month" placeholder="Select Periode"
+                  format="YYYY-MM" style="width: 150px;" @change="handlePeriodChange" /> -->
                 <a-dropdown v-if="hasAnyMenuOption">
                   <template #overlay>
                     <a-menu @click="handleMenuClick">
                       <a-menu-item v-if="canEdit" key="edit">
                         <IconifyIcon icon="mdi:pencil" width="16" style="margin-right: 8px;" />
-                        Edit
+                        Edit Profile Perusahaan
                       </a-menu-item>
                       <a-menu-item v-if="canAssignRole" key="assign-role">
                         <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
-                        Assign Role
+                        Assign Role Pengurus
                       </a-menu-item>
                       <a-menu-divider v-if="canDelete && (canEdit || canAssignRole)" />
                       <a-menu-item v-if="canDelete" key="delete" danger>
                         <IconifyIcon icon="mdi:delete" width="16" style="margin-right: 8px;" />
-                        Hapus
+                        Hapus Profile Perusahaan
                       </a-menu-item>
                     </a-menu>
                   </template>
-                  <a-button>
+                  <a-button  style="display: flex; align-items: center;" class="btn-icon-label">
                     <IconifyIcon icon="mdi:dots-vertical" width="16" style="margin-right: 8px;" />
-                    Options
+                    Pengaturan
                   </a-button>
                 </a-dropdown>
               </a-space>
             </div>
           </div>
+          <!-- Skeleton for Header -->
+          <div v-else-if="loadingHeader" class="detail-header">
+            <Skeleton :avatar="{ size: 80 }" :paragraph="{ rows: 3 }" :title="false" active />
+          </div>
         </div>
 
         <!-- Tabs -->
         <div class="tabs-container">
-          <a-tabs v-model:activeKey="activeTab" type="card" size="large">
+          <a-tabs v-model:activeKey="activeTab" type="card" size="large" @change="handleTabChange">
             <a-tab-pane key="performance" tab="Performance">
               <!-- Performance Tab Content -->
               <div class="performance-content">
-                <!-- Financial Trend Cards -->
-                <div class="trend-cards-row">
-                  <!-- RKAP vs Realization Card -->
-                  <a-card class="trend-card" :bordered="false">
+                <!-- Filter Periode dengan RangePicker -->
+                <a-card class="filter-card" :bordered="false" style="margin-bottom: 24px;">
+                  <a-space>
+                    <span style="font-weight: 500;">Periode:</span>
+                    <a-range-picker
+                      v-model:value="periodRange"
+                      picker="month"
+                      format="MMMM YYYY"
+                      :placeholder="['Dari Bulan', 'Sampai Bulan']"
+                      style="width: 400px;"
+                      @change="handleFinancialPeriodChange"
+                    />
+                    <a-button type="primary" @click="handleFinancialPeriodChange" :loading="financialComparisonLoading">
+                      <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
+                      Refresh
+                    </a-button>
+                  </a-space>
+                  <div style="margin-top: 8px; color: #666; font-size: 12px;">
+                    <IconifyIcon icon="mdi:information-outline" width="14" style="margin-right: 4px;" />
+                    <span v-if="periodRange && periodRange[0] && periodRange[1]">
+                      Data ditampilkan apa adanya dari input: RKAP (nilai tahunan) dan Realisasi (nilai bulanan). 
+                      Periode: {{ periodRange[0].format('MMMM YYYY') }} - {{ periodRange[1].format('MMMM YYYY') }}.
+                    </span>
+                    <span v-else>
+                      Silakan pilih periode untuk melihat data.
+                    </span>
+                  </div>
+                </a-card>
+
+                <a-spin :spinning="financialComparisonLoading">
+                  <!-- Neraca (Balance Sheet) -->
+                  <a-card class="financial-table-card" :bordered="false" style="margin-bottom: 24px;">
                     <template #title>
-                      <span class="card-title">RKAP vs Realization</span>
+                      <h3 style="margin: 0; font-size: 18px; font-weight: 600;">
+                        Neraca (Balance Sheet) - Periode {{ periodRange && periodRange[0] && periodRange[1] ? `${periodRange[0].format('MMMM YYYY')} - ${periodRange[1].format('MMMM YYYY')}` : 'Pilih Periode' }}
+                      </h3>
                     </template>
-                    <div class="trend-card-content">
-                      <div class="trend-metric">
-                        <span class="metric-value">{{ formatCurrency(rkapData.value) }}</span>
-                        <div class="trend-meta">
-                          <span class="trend-period">{{ rkapData.year }}</span>
-                          <span class="trend-change positive">+{{ rkapData.change }}%</span>
-                        </div>
-                      </div>
-                      <div class="mini-chart-container">
-                        <svg width="100%" height="60" viewBox="0 0 200 60" class="mini-chart">
-                          <defs>
-                            <linearGradient id="rkapGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                              <stop offset="0%" style="stop-color:#ff9800;stop-opacity:0.3" />
-                              <stop offset="100%" style="stop-color:#ff9800;stop-opacity:0.05" />
-                            </linearGradient>
-                          </defs>
-                          <path :d="rkapChartFillPath" fill="url(#rkapGradient)" class="chart-fill" />
-                          <path :d="rkapChartPath" stroke="#ff9800" stroke-width="2" fill="none" class="chart-line" />
-                        </svg>
-                        <div class="chart-labels">
-                          <span>Jan</span>
-                          <span>Des</span>
-                        </div>
+                    
+                    <!-- Chart Utama: Balance Sheet Overview -->
+                    <div v-if="financialComparisonLoading">
+                      <Skeleton :paragraph="{ rows: 4 }" :title="false" active />
+                      <div style="height: 300px; margin-top: 16px;">
+                        <Skeleton :paragraph="{ rows: 0 }" :title="false" active />
                       </div>
                     </div>
+                    <BalanceSheetOverviewChart
+                      v-else
+                      :data="balanceSheetOverviewChartData"
+                    />
+                    
+                    <!-- Tabel dalam Accordion (default collapsed) -->
+                    <a-collapse v-model:activeKey="balanceSheetTableActiveKey" :bordered="false" style="margin-top: 24px;">
+                      <a-collapse-panel key="balance-sheet-table" header="📊 Lihat Tabel Detail">
+                        <a-table
+                          :columns="balanceSheetColumns"
+                          :data-source="balanceSheetMonthlyData"
+                          :pagination="false"
+                          size="middle"
+                          :loading="financialComparisonLoading"
+                          :bordered="true"
+                          :scroll="{ x: 'max-content' }"
+                        >
+                          <template #bodyCell="{ column, record }">
+                            <template v-if="column.key === 'month'">
+                              <strong>{{ record.month }}</strong>
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_rkap')">
+                              {{ getCellValue(column.key, record, balanceSheetItems, 'rkap') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_realisasi')">
+                              {{ getCellValue(column.key, record, balanceSheetItems, 'realisasi') }}
+                            </template>
+                          </template>
+                        </a-table>
+                      </a-collapse-panel>
+                    </a-collapse>
                   </a-card>
 
-                  <!-- Opex Trend Card -->
-                  <a-card class="trend-card" :bordered="false">
+                  <!-- Laba Rugi (Profit & Loss) -->
+                  <a-card class="financial-table-card" :bordered="false" style="margin-bottom: 24px;">
                     <template #title>
-                      <span class="card-title">Opex Trend</span>
+                      <h3 style="margin: 0; font-size: 18px; font-weight: 600;">
+                        Laba Rugi (Profit & Loss) - Periode {{ periodRange && periodRange[0] && periodRange[1] ? `${periodRange[0].format('MMMM YYYY')} - ${periodRange[1].format('MMMM YYYY')}` : 'Pilih Periode' }}
+                      </h3>
                     </template>
-                    <div class="trend-card-content">
-                      <div class="trend-metric">
-                        <span class="metric-value">{{ formatCurrency(opexData.value) }}</span>
-                        <div class="trend-meta">
-                          <span class="trend-period">{{ opexData.quarter }}</span>
-                          <span class="trend-change negative">-{{ opexData.change }}%</span>
-                        </div>
-                      </div>
-                      <div class="mini-chart-container">
-                        <svg width="100%" height="60" viewBox="0 0 200 60" class="mini-chart">
-                          <defs>
-                            <linearGradient id="opexGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                              <stop offset="0%" style="stop-color:#666;stop-opacity:0.3" />
-                              <stop offset="100%" style="stop-color:#666;stop-opacity:0.05" />
-                            </linearGradient>
-                          </defs>
-                          <path :d="opexChartFillPath" fill="url(#opexGradient)" class="chart-fill" />
-                          <path :d="opexChartPath" stroke="#666" stroke-width="2" fill="none" class="chart-line" />
-                        </svg>
-                        <div class="chart-labels">
-                          <span>Jan</span>
-                          <span>Des</span>
-                        </div>
+                    
+                    <!-- Chart Utama: Profit Loss Overview -->
+                    <div v-if="financialComparisonLoading">
+                      <Skeleton :paragraph="{ rows: 4 }" :title="false" active />
+                      <div style="height: 300px; margin-top: 16px;">
+                        <Skeleton :paragraph="{ rows: 0 }" :title="false" active />
                       </div>
                     </div>
+                    <ProfitLossOverviewChart
+                      v-else
+                      :data="profitLossOverviewChartData"
+                    />
+                    
+                    <!-- Tabel dalam Accordion (default collapsed) -->
+                    <a-collapse v-model:activeKey="profitLossTableActiveKey" :bordered="false" style="margin-top: 24px;">
+                      <a-collapse-panel key="profit-loss-table" header="📊 Lihat Tabel Detail">
+                        <a-table
+                          :columns="profitLossColumns"
+                          :data-source="profitLossMonthlyData"
+                          :pagination="false"
+                          size="middle"
+                          :loading="financialComparisonLoading"
+                          :bordered="true"
+                          :scroll="{ x: 'max-content' }"
+                        >
+                          <template #bodyCell="{ column, record }">
+                            <template v-if="column.key === 'month'">
+                              <strong>{{ record.month }}</strong>
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_rkap')">
+                              {{ getCellValue(column.key, record, profitLossItems, 'rkap') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_realisasi')">
+                              {{ getCellValue(column.key, record, profitLossItems, 'realisasi') }}
+                            </template>
+                          </template>
+                        </a-table>
+                      </a-collapse-panel>
+                    </a-collapse>
                   </a-card>
 
-                  <!-- NPAT Trend Card -->
-                  <a-card class="trend-card" :bordered="false">
+                  <!-- Cashflow -->
+                  <a-card class="financial-table-card" :bordered="false" style="margin-bottom: 24px;">
                     <template #title>
-                      <span class="card-title">NPAT Trend</span>
+                      <h3 style="margin: 0; font-size: 18px; font-weight: 600;">
+                        Cashflow - Periode {{ periodRange && periodRange[0] && periodRange[1] ? `${periodRange[0].format('MMMM YYYY')} - ${periodRange[1].format('MMMM YYYY')}` : 'Pilih Periode' }}
+                      </h3>
                     </template>
-                    <div class="trend-card-content">
-                      <div class="trend-metric">
-                        <span class="metric-value">{{ formatCurrency(npatData.value) }}</span>
-                        <div class="trend-meta">
-                          <span class="trend-period">{{ npatData.quarter }}</span>
-                          <span class="trend-change positive">+{{ npatData.change }}%</span>
-                        </div>
-                      </div>
-                      <div class="mini-chart-container">
-                        <svg width="100%" height="60" viewBox="0 0 200 60" class="mini-chart">
-                          <defs>
-                            <linearGradient id="npatGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                              <stop offset="0%" style="stop-color:#666;stop-opacity:0.3" />
-                              <stop offset="100%" style="stop-color:#666;stop-opacity:0.05" />
-                            </linearGradient>
-                          </defs>
-                          <path :d="npatChartFillPath" fill="url(#npatGradient)" class="chart-fill" />
-                          <path :d="npatChartPath" stroke="#666" stroke-width="2" fill="none" class="chart-line" />
-                        </svg>
-                        <div class="chart-labels">
-                          <span>Jan</span>
-                          <span>Des</span>
-                        </div>
+                    
+                    <!-- Chart Utama: Cashflow Overview -->
+                    <div v-if="financialComparisonLoading">
+                      <Skeleton :paragraph="{ rows: 4 }" :title="false" active />
+                      <div style="height: 300px; margin-top: 16px;">
+                        <Skeleton :paragraph="{ rows: 0 }" :title="false" active />
                       </div>
                     </div>
-                  </a-card>
-                </div>
-
-                <!-- Recent Files and Reports -->
-                <div class="recent-section">
-                  <!-- Recent Files -->
-                  <a-card class="recent-card" :bordered="false">
-                    <template #title>
-                      <div class="card-header-title">
-                        <IconifyIcon icon="mdi:clock-outline" width="20" style="margin-right: 8px;" />
-                        <span>Recently Files</span>
-                      </div>
-                    </template>
-                    <template #extra>
-                      <a-button type="link" @click="handleManageFiles">
-                        Manage file upload
-                        <IconifyIcon icon="mdi:arrow-right" width="16" style="margin-left: 4px;" />
-                      </a-button>
-                    </template>
-                    <a-table :columns="fileColumns" :data-source="recentFiles" :pagination="false" :show-header="true"
-                      size="small">
-                      <template #bodyCell="{ column, record }">
-                        <template v-if="column.key === 'type'">
-                          <a-tag :color="record.type === 'Pdf' ? 'red' : 'green'">{{ record.type }}</a-tag>
-                        </template>
-                        <template v-if="column.key === 'status'">
-                          <a-tag v-if="record.status === 'complete'" color="green">Meta Data ✓</a-tag>
-                          <a-button v-else type="link" size="small">
-                            Lengkapi Meta Data
-                            <IconifyIcon icon="mdi:arrow-right" width="14" style="margin-left: 4px;" />
-                          </a-button>
-                        </template>
-                        <template v-if="column.key === 'action'">
-                          <IconifyIcon icon="mdi:chevron-right" width="20" style="color: #999; cursor: pointer;" />
-                        </template>
-                      </template>
-                    </a-table>
+                    <CashflowOverviewChart
+                      v-else
+                      :data="cashflowOverviewChartData"
+                    />
+                    
+                    <!-- Tabel dalam Accordion (default collapsed) -->
+                    <a-collapse v-model:activeKey="cashflowTableActiveKey" :bordered="false" style="margin-top: 24px;">
+                      <a-collapse-panel key="cashflow-table" header="📊 Lihat Tabel Detail">
+                        <a-table
+                          :columns="cashflowColumns"
+                          :data-source="cashflowMonthlyData"
+                          :pagination="false"
+                          size="middle"
+                          :loading="financialComparisonLoading"
+                          :bordered="true"
+                          :scroll="{ x: 'max-content' }"
+                        >
+                          <template #bodyCell="{ column, record }">
+                            <template v-if="column.key === 'month'">
+                              <strong>{{ record.month }}</strong>
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_rkap')">
+                              {{ getCellValue(column.key, record, cashflowItems, 'rkap') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_realisasi')">
+                              {{ getCellValue(column.key, record, cashflowItems, 'realisasi') }}
+                            </template>
+                          </template>
+                        </a-table>
+                      </a-collapse-panel>
+                    </a-collapse>
                   </a-card>
 
-                  <!-- Recent Reports -->
-                  <a-card class="recent-card" :bordered="false">
+                  <!-- Rasio Keuangan (%) -->
+                  <a-card class="financial-table-card" :bordered="false">
                     <template #title>
-                      <div class="card-header-title">
-                        <IconifyIcon icon="mdi:clock-outline" width="20" style="margin-right: 8px;" />
-                        <span>Recently Reports</span>
+                      <h3 style="margin: 0; font-size: 18px; font-weight: 600;">
+                        Rasio Keuangan (%) - Periode {{ periodRange && periodRange[0] && periodRange[1] ? `${periodRange[0].format('MMMM YYYY')} - ${periodRange[1].format('MMMM YYYY')}` : 'Pilih Periode' }}
+                      </h3>
+                    </template>
+                    
+                    <!-- Chart Utama: Ratio Overview -->
+                    <div v-if="financialComparisonLoading">
+                      <Skeleton :paragraph="{ rows: 4 }" :title="false" active />
+                      <div style="height: 300px; margin-top: 16px;">
+                        <Skeleton :paragraph="{ rows: 0 }" :title="false" active />
                       </div>
-                    </template>
-                    <template #extra>
-                      <a-button type="link" @click="handleManageReports">
-                        Manage Reports
-                        <IconifyIcon icon="mdi:arrow-right" width="16" style="margin-left: 4px;" />
-                      </a-button>
-                    </template>
-                    <a-table :columns="reportColumns" :data-source="recentReports" :pagination="false" :show-header="true"
-                      size="small">
-                      <template #bodyCell="{ column, record }">
-                        <template v-if="column.key === 'rkap_percent'">
-                          {{ record.rkap_percent }}%
-                        </template>
-                        <template v-if="column.key === 'action'">
-                          <IconifyIcon icon="mdi:chevron-right" width="20" style="color: #999; cursor: pointer;" />
-                        </template>
-                      </template>
-                    </a-table>
+                    </div>
+                    <RatioOverviewChart
+                      v-else
+                      :data="ratioOverviewChartData"
+                    />
+                    
+                    <!-- Tabel dalam Accordion (default collapsed) -->
+                    <a-collapse v-model:activeKey="ratioTableActiveKey" :bordered="false" style="margin-top: 24px;">
+                      <a-collapse-panel key="ratio-table" header="📊 Lihat Tabel Detail">
+                        <a-table
+                          :columns="ratioColumns"
+                          :data-source="ratioMonthlyData"
+                          :pagination="false"
+                          size="middle"
+                          :loading="financialComparisonLoading"
+                          :bordered="true"
+                          :scroll="{ x: 'max-content' }"
+                        >
+                          <template #bodyCell="{ column, record }">
+                            <template v-if="column.key === 'month'">
+                              <strong>{{ record.month }}</strong>
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_rkap')">
+                              {{ getCellValue(column.key, record, ratioItems, 'rkap') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_realisasi')">
+                              {{ getCellValue(column.key, record, ratioItems, 'realisasi') }}
+                            </template>
+                          </template>
+                        </a-table>
+                      </a-collapse-panel>
+                    </a-collapse>
                   </a-card>
-                </div>
+                </a-spin>
+              </div>
+            </a-tab-pane>
+
+            <a-tab-pane key="input-laporan" tab="Input Laporan">
+              <!-- Input Laporan Tab Content -->
+              <div class="input-laporan-content">
+                <a-tabs v-model:activeKey="inputLaporanActiveTab" type="line" class="input-laporan-tabs">
+                  <!-- Input RKAP -->
+                  <a-tab-pane key="rkap" tab="Input RKAP (Tahunan)">
+                    <FinancialReportInputForm
+                      :company-id="company?.id || ''"
+                      :is-r-k-a-p="true"
+                      @saved="handleFinancialReportSaved"
+                    />
+                  </a-tab-pane>
+                  
+                  <!-- Input Neraca -->
+                  <a-tab-pane key="neraca" tab="Neraca">
+                    <FinancialCategoryInput
+                      :company-id="company?.id || ''"
+                      category="neraca"
+                      :items="balanceSheetItems"
+                      :can-edit="canEditFinancialData"
+                      @saved="handleFinancialReportSaved"
+                    />
+                  </a-tab-pane>
+                  
+                  <!-- Input Laba Rugi -->
+                  <a-tab-pane key="laba-rugi" tab="Laba Rugi (Profit & Loss)">
+                    <FinancialCategoryInput
+                      :company-id="company?.id || ''"
+                      category="laba-rugi"
+                      :items="profitLossItems"
+                      :can-edit="canEditFinancialData"
+                      @saved="handleFinancialReportSaved"
+                    />
+                  </a-tab-pane>
+                  
+                  <!-- Input Cashflow -->
+                  <a-tab-pane key="cashflow" tab="Cashflow">
+                    <FinancialCategoryInput
+                      :company-id="company?.id || ''"
+                      category="cashflow"
+                      :items="cashflowItems"
+                      :can-edit="canEditFinancialData"
+                      @saved="handleFinancialReportSaved"
+                    />
+                  </a-tab-pane>
+                  
+                  <!-- Input Rasio Keuangan -->
+                  <a-tab-pane key="rasio" tab="Rasio Keuangan (%)">
+                    <FinancialCategoryInput
+                      :company-id="company?.id || ''"
+                      category="rasio"
+                      :items="ratioItems"
+                      :can-edit="canEditFinancialData"
+                      @saved="handleFinancialReportSaved"
+                    />
+                  </a-tab-pane>
+                </a-tabs>
               </div>
             </a-tab-pane>
 
@@ -262,17 +397,46 @@
                     <IconifyIcon icon="mdi:information" width="20" style="margin-right: 8px;" />
                     Informasi Dasar
                   </h2>
-                  <a-descriptions :column="2" bordered>
-                    <a-descriptions-item label="Nama Lengkap">{{ company.name }}</a-descriptions-item>
-                    <a-descriptions-item label="Nama Singkat">{{ company.short_name || '-' }}</a-descriptions-item>
-                    <a-descriptions-item label="Kode Perusahaan">{{ company.code }}</a-descriptions-item>
-                    <a-descriptions-item label="Status">{{ company.status || '-' }}</a-descriptions-item>
-                    <a-descriptions-item label="NPWP">{{ company.npwp || '-' }}</a-descriptions-item>
-                    <a-descriptions-item label="NIB">{{ company.nib || '-' }}</a-descriptions-item>
-                    <a-descriptions-item label="Deskripsi" :span="2">
-                      {{ company.description || '-' }}
-                    </a-descriptions-item>
-                  </a-descriptions>
+                  <div class="info-grid">
+                    <div class="info-item">
+                      <span class="info-label">Nama Lengkap</span>
+                      <span class="info-value">{{ company!.name }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Nama Singkat</span>
+                      <span class="info-value">{{ company!.short_name || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Kode Perusahaan</span>
+                      <span class="info-value">{{ company!.code || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Status</span>
+                      <span class="info-value">
+                        <a-tag :color="company!.status === 'Aktif' ? 'green' : 'red'">{{ company!.status || '-' }}</a-tag>
+                      </span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">NPWP</span>
+                      <span class="info-value">{{ company!.npwp || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">NIB</span>
+                      <span class="info-value">{{ company!.nib || '-' }}</span>
+                    </div>
+                    <div v-if="company!.authorized_capital" class="info-item">
+                      <span class="info-label">Modal Dasar</span>
+                      <span class="info-value">{{ formatCurrency(company!.authorized_capital) }} {{ company!.currency || 'IDR' }}</span>
+                    </div>
+                    <div v-if="company!.paid_up_capital" class="info-item">
+                      <span class="info-label">Modal Disetor</span>
+                      <span class="info-value">{{ formatCurrency(company!.paid_up_capital) }} {{ company!.currency || 'IDR' }}</span>
+                    </div>
+                    <div v-if="company!.description" class="info-item full-width">
+                      <span class="info-label">Deskripsi</span>
+                      <span class="info-value">{{ company!.description }}</span>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Informasi Kontak -->
@@ -281,104 +445,248 @@
                     <IconifyIcon icon="mdi:phone" width="20" style="margin-right: 8px;" />
                     Informasi Kontak
                   </h2>
-                  <a-descriptions :column="2" bordered>
-                    <a-descriptions-item label="Telepon">{{ company.phone || '-' }}</a-descriptions-item>
-                    <a-descriptions-item label="Fax">{{ company.fax || '-' }}</a-descriptions-item>
-                    <a-descriptions-item label="Email">{{ company.email || '-' }}</a-descriptions-item>
-                    <a-descriptions-item label="Website">{{ company.website || '-' }}</a-descriptions-item>
-                    <a-descriptions-item label="Alamat Perusahaan" :span="2">
-                      {{ company.address || '-' }}
-                    </a-descriptions-item>
-                    <a-descriptions-item label="Alamat Operasional" :span="2">
-                      {{ company.operational_address || '-' }}
-                    </a-descriptions-item>
-                  </a-descriptions>
+                  <div class="info-grid">
+                    <div class="info-item">
+                      <span class="info-label">Telepon</span>
+                      <span class="info-value">{{ company!.phone || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Fax</span>
+                      <span class="info-value">{{ company!.fax || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Email</span>
+                      <span class="info-value">
+                        <a v-if="company!.email" :href="`mailto:${company!.email}`">{{ company!.email }}</a>
+                        <span v-else>-</span>
+                      </span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Website</span>
+                      <span class="info-value">
+                        <a v-if="company!.website" :href="company!.website" target="_blank" rel="noopener noreferrer">{{ company!.website }}</a>
+                        <span v-else>-</span>
+                      </span>
+                    </div>
+                    <div v-if="company!.address" class="info-item full-width">
+                      <span class="info-label">Alamat Perusahaan</span>
+                      <span class="info-value">{{ company!.address }}</span>
+                    </div>
+                    <div v-if="company!.operational_address" class="info-item full-width">
+                      <span class="info-label">Alamat Operasional</span>
+                      <span class="info-value">{{ company!.operational_address }}</span>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Struktur Kepemilikan -->
-                <div v-if="company.shareholders && company.shareholders.length > 0" class="detail-section">
+                <div v-if="company!.shareholders && company!.shareholders.length > 0" class="detail-section">
                   <h2 class="section-title">
                     <IconifyIcon icon="mdi:account-group" width="20" style="margin-right: 8px;" />
-                    Struktur Kepemilikan
+                    Struktur Kepemilikan ({{ company!.shareholders.length }})
                   </h2>
-                  <a-table :columns="shareholderColumns" :data-source="company.shareholders" :pagination="false"
-                    row-key="id">
-                    <template #bodyCell="{ column, record }">
-                      <template v-if="column.key === 'ownership_percent'">
-                        {{ record.ownership_percent }}%
-                      </template>
-                      <template v-if="column.key === 'share_count'">
-                        {{ record.share_count?.toLocaleString() || '-' }}
-                      </template>
-                      <template v-if="column.key === 'is_main_parent'">
-                        <a-tag v-if="record.is_main_parent" color="blue">Ya</a-tag>
-                        <span v-else>-</span>
-                      </template>
-                    </template>
-                  </a-table>
+                  <div class="shareholders-list">
+                    <div v-for="(shareholder, index) in company!.shareholders" :key="shareholder.id || index" class="shareholder-card">
+                      <div class="shareholder-header">
+                        <h3 class="shareholder-name">
+                          {{ shareholder.name }}
+                          <a-tag v-if="shareholder.is_main_parent" color="blue" style="margin-left: 8px;">Induk Utama</a-tag>
+                        </h3>
+                        <div class="shareholder-badge">{{ (shareholder.ownership_percent || 0).toFixed(2) }}%</div>
+                      </div>
+                      <div class="shareholder-details">
+                        <div class="info-row">
+                          <span class="info-label">Jenis Pemegang Saham</span>
+                          <span class="info-value">
+                            <a-tag v-for="(type, idx) in (Array.isArray(shareholder.type) ? shareholder.type : [shareholder.type])" 
+                              :key="idx" color="cyan" style="margin-right: 4px;">
+                              {{ type }}
+                            </a-tag>
+                            <span v-if="!shareholder.type || (Array.isArray(shareholder.type) && shareholder.type.length === 0)">-</span>
+                          </span>
+                        </div>
+                        <div class="info-row">
+                          <span class="info-label">Nomor Identitas</span>
+                          <span class="info-value">{{ shareholder.identity_number || '-' }}</span>
+                        </div>
+                        <div v-if="shareholder.shareholder_company_id" class="info-row">
+                          <span class="info-label">Perusahaan dari Sistem</span>
+                          <span class="info-value">
+                            <a-tag color="green" v-if="shareholder.shareholder_company_id">Ya</a-tag>
+                            <span v-else>-</span>
+                          </span>
+                        </div>
+                        <div v-if="shareholder.share_sheet_count" class="info-row">
+                          <span class="info-label">Jumlah Lembar Saham</span>
+                          <span class="info-value">{{ formatNumber(shareholder.share_sheet_count) }} lembar</span>
+                        </div>
+                        <div v-if="shareholder.share_value_per_sheet" class="info-row">
+                          <span class="info-label">Nilai Rupiah per Lembar</span>
+                          <span class="info-value">{{ formatCurrency(shareholder.share_value_per_sheet) }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Bidang Usaha -->
-                <div v-if="company.main_business || (company.business_fields && company.business_fields.length > 0)"
-                  class="detail-section">
+                <div v-if="company!.main_business || (company!.business_fields && company!.business_fields.length > 0)" class="detail-section">
                   <h2 class="section-title">
                     <IconifyIcon icon="mdi:briefcase" width="20" style="margin-right: 8px;" />
                     Bidang Usaha
                   </h2>
-                  <a-descriptions :column="1" bordered>
-                    <a-descriptions-item label="Sektor Industri">
-                      {{ getMainBusiness(company)?.industry_sector || '-' }}
-                    </a-descriptions-item>
-                    <a-descriptions-item label="KBLI">
-                      {{ getMainBusiness(company)?.kbli || '-' }}
-                    </a-descriptions-item>
-                    <a-descriptions-item label="Uraian Kegiatan Usaha Utama">
-                      {{ getMainBusiness(company)?.main_business_activity || '-' }}
-                    </a-descriptions-item>
-                    <a-descriptions-item label="Kegiatan Usaha Tambahan">
-                      {{ getMainBusiness(company)?.additional_activities || '-' }}
-                    </a-descriptions-item>
-                    <a-descriptions-item label="Tanggal Mulai Beroperasi">
-                      {{ formatDate(getMainBusiness(company)?.start_operation_date) }}
-                    </a-descriptions-item>
-                  </a-descriptions>
+                  <div class="info-grid">
+                    <div class="info-item">
+                      <span class="info-label">Sektor Industri</span>
+                      <span class="info-value">{{ getMainBusiness(company!)?.industry_sector || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">KBLI</span>
+                      <span class="info-value">{{ getMainBusiness(company!)?.kbli || '-' }}</span>
+                    </div>
+                    <div v-if="getMainBusiness(company!)?.main_business_activity" class="info-item full-width">
+                      <span class="info-label">Uraian Kegiatan Usaha Utama</span>
+                      <span class="info-value">{{ getMainBusiness(company!)?.main_business_activity }}</span>
+                    </div>
+                    <div v-if="getMainBusiness(company!)?.additional_activities" class="info-item full-width">
+                      <span class="info-label">Kegiatan Usaha Tambahan</span>
+                      <span class="info-value">{{ getMainBusiness(company!)?.additional_activities }}</span>
+                    </div>
+                    <div v-if="getMainBusiness(company!)?.start_operation_date" class="info-item">
+                      <span class="info-label">Tanggal Mulai Beroperasi</span>
+                      <span class="info-value">{{ formatDate(getMainBusiness(company!)?.start_operation_date) }}</span>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Pengurus/Dewan Direksi -->
-                <div v-if="company.directors && company.directors.length > 0" class="detail-section">
+                <div v-if="company!.directors && company!.directors.length > 0" class="detail-section">
                   <h2 class="section-title">
                     <IconifyIcon icon="mdi:account-tie" width="20" style="margin-right: 8px;" />
-                    Pengurus/Dewan Direksi
+                    Pengurus/Dewan Direksi ({{ company!.directors.length }})
                   </h2>
-                  <a-table :columns="directorColumns" :data-source="company.directors" :pagination="false" row-key="id">
-                    <template #bodyCell="{ column, record }">
-                      <template v-if="column.key === 'start_date'">
-                        {{ record.start_date ? formatDate(record.start_date) : '-' }}
-                      </template>
-                    </template>
-                  </a-table>
+                  <div class="directors-list-compact">
+                    <div v-for="(director, index) in company!.directors" :key="director.id || index" class="director-item-compact">
+                      <div class="director-main-info">
+                        <div class="director-name-compact">
+                          <strong>{{ director.full_name }}</strong>
+                          <div class="director-positions-compact">
+                            <a-tag v-for="(pos, posIdx) in (Array.isArray(director.position) ? director.position : [director.position])" 
+                              :key="posIdx" size="small" color="blue" style="margin-right: 4px; margin-top: 4px;">
+                              {{ pos }}
+                            </a-tag>
+                          </div>
+                        </div>
+                        <div class="director-info-compact">
+                          <span class="info-compact"><strong>KTP:</strong> {{ director.ktp || '-' }}</span>
+                          <span class="info-compact"><strong>NPWP:</strong> {{ director.npwp || '-' }}</span>
+                          <span v-if="director.start_date" class="info-compact">
+                            <strong>Tanggal Mulai:</strong> {{ formatDate(director.start_date) }}
+                          </span>
+                          <span v-if="director.end_date" class="info-compact">
+                            <strong>Tanggal Akhir:</strong> {{ formatDate(director.end_date) }}
+                          </span>
+                          <span v-if="director.domicile_address" class="info-compact full-width-compact">
+                            <strong>Alamat:</strong> {{ director.domicile_address }}
+                          </span>
+                        </div>
+                      </div>
+                      <!-- Dokumen Lampiran -->
+                      <div v-if="director.id" class="director-documents-compact">
+                        <div class="documents-header-compact">
+                          <IconifyIcon icon="mdi:attachment" width="14" style="margin-right: 4px;" />
+                          <span class="documents-label-compact">Dokumen ({{ getDirectorDocumentsCount(director.id) }}):</span>
+                        </div>
+                        <div v-if="loadingDirectorDocuments[director.id]" class="documents-loading-compact">
+                          <a-spin size="small" />
+                          <span style="margin-left: 8px; color: #999; font-size: 12px;">Memuat...</span>
+                        </div>
+                        <div v-else-if="getDirectorDocuments(director.id).length > 0" class="documents-list-compact">
+                          <div v-for="doc in getDirectorDocuments(director.id)" :key="doc.id" class="document-item-compact">
+                            <IconifyIcon icon="mdi:file-document" width="14" style="margin-right: 6px; color: #1890ff;" />
+                            <span class="document-name-compact">{{ doc.name || doc.file_name }}</span>
+                            <a-tag size="small" style="margin: 0 8px; font-size: 11px;">
+                              {{ getDocumentCategoryLabel(doc) }}
+                            </a-tag>
+                            <a-space class="document-actions">
+                              <a :href="getDocumentDownloadUrl(doc.file_path)" target="_blank"
+                                class="document-action-btn" title="Download">
+                                <IconifyIcon icon="mdi:download" width="14" />
+                              </a>
+                              <a-popconfirm
+                                title="Hapus dokumen ini?"
+                                description="Dokumen akan dihapus secara permanen dari sistem. Tindakan ini tidak dapat dibatalkan."
+                                ok-text="Ya, Hapus"
+                                cancel-text="Batal"
+                                @confirm="handleDeleteDirectorDocument(doc.id, director.id)"
+                              >
+                                <a class="document-action-btn delete-btn" title="Hapus" @click.prevent>
+                                  <IconifyIcon icon="mdi:delete" width="14" />
+                                </a>
+                              </a-popconfirm>
+                            </a-space>
+                          </div>
+                        </div>
+                        <div v-else class="documents-empty-compact">
+                          <span class="text-muted" style="font-size: 12px;">Belum ada dokumen</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+              </div>
+            </a-tab-pane>
+
+            <a-tab-pane key="history" tab="History Perubahan Data">
+              <!-- History Tab Content -->
+              <div class="history-content">
+                <a-table
+                  :columns="historyColumns"
+                  :data-source="changeHistory"
+                  :loading="historyLoading"
+                  :pagination="historyPagination"
+                  row-key="id"
+                  @change="handleHistoryTableChange"
+                >
+                  <template #bodyCell="{ column, record }">
+                    <template v-if="column.key === 'change_description'">
+                      <div class="change-description">
+                        <div class="change-header">
+                          <strong>{{ record.username || 'User' }}</strong> telah melakukan perubahan data:
+                        </div>
+                        <ul class="change-list">
+                          <li v-for="(change, index) in formatChangeDescription(record)" :key="index">
+                            {{ change }}
+                          </li>
+                        </ul>
+                      </div>
+                    </template>
+                    <template v-if="column.key === 'username'">
+                      {{ record.username || '-' }}
+                    </template>
+                    <template v-if="column.key === 'created_at'">
+                      {{ formatDateTime(record.created_at) }}
+                    </template>
+                  </template>
+                </a-table>
               </div>
             </a-tab-pane>
           </a-tabs>
         </div>
+
+
       </div>
 
       <!-- Not Found -->
-      <div v-else class="not-found">
+      <div v-if="!loading && !company" class="not-found">
         <IconifyIcon icon="mdi:alert-circle-outline" width="64" style="color: #ccc; margin-bottom: 16px;" />
         <p>Subsidiary tidak ditemukan</p>
         <a-button type="primary" @click="handleBack">Kembali ke Daftar</a-button>
       </div>
 
       <!-- Assign Role Modal -->
-      <a-modal
-        v-model:open="assignRoleModalVisible"
-        title="Assign Role - Kelola Pengurus"
-        :confirm-loading="assignRoleLoading"
-        width="900px"
-        :footer="null"
-      >
+      <a-modal v-model:open="assignRoleModalVisible" title="Assign Role - Kelola Pengurus"
+        :confirm-loading="assignRoleLoading" width="900px" :footer="null">
         <div class="assign-role-container">
           <!-- Form Assign Role Baru -->
           <div class="assign-new-section">
@@ -390,24 +698,14 @@
               <a-row :gutter="16">
                 <a-col :span="12">
                   <a-form-item label="Cari User" required>
-                    <a-select
-                      v-model:value="assignRoleForm.userId"
-                      show-search
-                      placeholder="Cari user berdasarkan nama atau email"
-                      :filter-option="filterUserOption"
-                      :loading="usersLoading"
-                      @search="handleUserSearch"
-                      allow-clear
-                      :disabled="usersLoading"
-                    >
-                      <a-select-option
-                        v-for="user in filteredUsers"
-                        :key="user.id"
-                        :value="user.id"
-                        :disabled="companyUsers.some(u => u.id === user.id)"
-                      >
+                    <a-select v-model:value="assignRoleForm.userId" show-search
+                      placeholder="Cari user berdasarkan nama atau email" :filter-option="filterUserOption"
+                      :loading="usersLoading" @search="handleUserSearch" allow-clear :disabled="usersLoading">
+                      <a-select-option v-for="user in filteredUsers" :key="user.id" :value="user.id"
+                        :disabled="companyUsers.some(u => u.id === user.id)">
                         {{ user.username }} ({{ user.email }})
-                        <span v-if="companyUsers.some(u => u.id === user.id)" class="text-muted"> - Sudah menjadi pengurus</span>
+                        <span v-if="companyUsers.some(u => u.id === user.id)" class="text-muted"> - Sudah menjadi
+                          pengurus</span>
                       </a-select-option>
                     </a-select>
                     <small v-if="usersLoading" class="text-muted">Memuat daftar user...</small>
@@ -418,21 +716,10 @@
                 </a-col>
                 <a-col :span="12">
                   <a-form-item label="Pilih Role" required>
-                    <a-select
-                      v-model:value="assignRoleForm.roleId"
-                      show-search
-                      placeholder="Cari role"
-                      :filter-option="filterRoleOption"
-                      :loading="rolesLoading"
-                      @search="handleRoleSearch"
-                      allow-clear
-                      :disabled="rolesLoading"
-                    >
-                      <a-select-option
-                        v-for="role in filteredRoles"
-                        :key="role.id"
-                        :value="role.id"
-                      >
+                    <a-select v-model:value="assignRoleForm.roleId" show-search placeholder="Cari role"
+                      :filter-option="filterRoleOption" :loading="rolesLoading" @search="handleRoleSearch" allow-clear
+                      :disabled="rolesLoading">
+                      <a-select-option v-for="role in filteredRoles" :key="role.id" :value="role.id">
                         {{ role.name }}
                       </a-select-option>
                     </a-select>
@@ -440,14 +727,10 @@
                   </a-form-item>
                 </a-col>
               </a-row>
-              
+
               <a-form-item>
-                <a-button 
-                  type="primary" 
-                  :loading="assignRoleLoading" 
-                  @click="handleAssignRole" 
-                  :disabled="!assignRoleForm.userId || !assignRoleForm.roleId"
-                >
+                <a-button type="primary" :loading="assignRoleLoading" @click="handleAssignRole"
+                  :disabled="!assignRoleForm.userId || !assignRoleForm.roleId">
                   <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
                   Assign Role
                 </a-button>
@@ -463,14 +746,8 @@
               <IconifyIcon icon="mdi:account-group" width="20" style="margin-right: 8px;" />
               Pengurus Saat Ini
             </h3>
-            <a-table
-              :columns="userColumns"
-              :data-source="companyUsers"
-              :loading="usersLoading"
-              :pagination="{ pageSize: 10 }"
-              row-key="id"
-              size="middle"
-            >
+            <a-table :columns="userColumns" :data-source="companyUsers" :loading="usersLoading"
+              :pagination="{ pageSize: 10 }" row-key="id" size="middle">
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'role'">
                   <a-tag v-if="record.role" :color="getRoleColor(record.role)">
@@ -502,32 +779,16 @@
       </a-modal>
 
       <!-- Edit User Role Modal -->
-      <a-modal
-        v-model:open="editingUserRoleModalVisible"
-        title="Ubah Role Pengurus"
-        :confirm-loading="editingRoleLoading"
-        @ok="handleSaveUserRole"
-        @cancel="handleCancelEditUserRole"
-        width="500px"
-      >
+      <a-modal v-model:open="editingUserRoleModalVisible" title="Ubah Role Pengurus"
+        :confirm-loading="editingRoleLoading" @ok="handleSaveUserRole" @cancel="handleCancelEditUserRole" width="500px">
         <a-form layout="vertical" v-if="editingUserRole">
           <a-form-item label="User">
             <a-input :value="getUserById(editingUserRole.userId)?.username" disabled />
           </a-form-item>
           <a-form-item label="Pilih Role Baru" required>
-            <a-select
-              v-model:value="editingUserRole.roleId"
-              show-search
-              placeholder="Cari role"
-              :filter-option="filterRoleOption"
-              :loading="rolesLoading"
-              @search="handleRoleSearch"
-            >
-              <a-select-option
-                v-for="role in filteredRoles"
-                :key="role.id"
-                :value="role.id"
-              >
+            <a-select v-model:value="editingUserRole.roleId" show-search placeholder="Cari role"
+              :filter-option="filterRoleOption" :loading="rolesLoading" @search="handleRoleSearch">
+              <a-select-option v-for="role in filteredRoles" :key="role.id" :value="role.id">
                 {{ role.name }}
               </a-select-option>
             </a-select>
@@ -541,12 +802,44 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { message, Modal, Skeleton } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
+import FinancialReportInputForm from '../components/FinancialReportInputForm.vue'
+import FinancialCategoryInput from '../components/FinancialCategoryInput.vue'
+import BalanceSheetOverviewChart from '../components/BalanceSheetOverviewChart.vue'
+import ProfitLossOverviewChart from '../components/ProfitLossOverviewChart.vue'
+import CashflowOverviewChart from '../components/CashflowOverviewChart.vue'
+import RatioOverviewChart from '../components/RatioOverviewChart.vue'
 import { companyApi, userApi, roleApi, type Company, type BusinessField, type User, type Role } from '../api/userManagement'
+import reportsApi, { type Report } from '../api/reports'
+import { financialReportsApi, type FinancialReport, type FinancialReportComparison } from '../api/financialReports'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
-import dayjs from 'dayjs'
+import dayjs, { type Dayjs } from 'dayjs'
+import { auditApi, type UserActivityLog } from '../api/audit'
+import documentsApi, { type DocumentItem } from '../api/documents'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+
+// Type definitions for change data structures
+interface DirectorChangeData {
+  action: 'added' | 'removed'
+  position?: string
+  full_name?: string
+}
+
+interface ShareholderChangeData {
+  action: 'added' | 'removed'
+  name?: string
+  type?: string
+}
+
+interface FieldChangeData {
+  old: unknown
+  new: unknown
+}
+
+type ChangeData = DirectorChangeData | ShareholderChangeData | FieldChangeData | Record<string, unknown>
 
 const router = useRouter()
 const route = useRoute()
@@ -554,8 +847,46 @@ const authStore = useAuthStore()
 
 const company = ref<Company | null>(null)
 const loading = ref(false)
+const loadingHeader = ref(false)
+const loadingReports = ref(false)
+const loadingHierarchy = ref(false)
 const activeTab = ref('performance')
-const selectedPeriod = ref<string | null>(null)
+// selectedPeriod removed - using periodRange instead
+const exportLoading = ref(false)
+const companyHierarchy = ref<Company[]>([])
+const allCompanies = ref<Company[]>([])
+
+// Financial Report state
+const financialComparison = ref<FinancialReportComparison | null>(null)
+const financialComparisonLoading = ref(false)
+// RangePicker untuk periode (default: Januari sampai bulan saat ini)
+const periodRange = ref<[Dayjs, Dayjs] | null>([
+  dayjs().startOf('year'), // Januari tahun ini
+  dayjs(), // Bulan saat ini
+])
+// Computed untuk backward compatibility dengan fungsi yang masih menggunakan selectedYear, startMonth, endMonth
+const selectedYear = computed(() => {
+  if (!periodRange.value || !periodRange.value[0]) return dayjs().format('YYYY')
+  return periodRange.value[0].format('YYYY')
+})
+const startMonth = computed(() => {
+  if (!periodRange.value || !periodRange.value[0]) return '01'
+  return periodRange.value[0].format('MM')
+})
+const endMonth = computed(() => {
+  if (!periodRange.value || !periodRange.value[1]) return dayjs().format('MM')
+  return periodRange.value[1].format('MM')
+})
+const financialReports = ref<FinancialReport[]>([])
+const financialReportsLoading = ref(false)
+const inputLaporanActiveTab = ref('rkap')
+
+// Accordion state untuk tabel (default collapsed - empty array)
+const balanceSheetTableActiveKey = ref<string[]>([])
+const profitLossTableActiveKey = ref<string[]>([])
+const cashflowTableActiveKey = ref<string[]>([])
+const ratioTableActiveKey = ref<string[]>([])
+
 
 // Assign Role Modal
 const assignRoleModalVisible = ref(false)
@@ -579,6 +910,20 @@ const editingUserRole = ref<{ userId: string; roleId: string | undefined } | nul
 const editingUserRoleModalVisible = ref(false)
 const editingRoleLoading = ref(false)
 
+// Director documents state
+const directorDocumentsMap = ref<Map<string, DocumentItem[]>>(new Map())
+const loadingDirectorDocuments = ref<Record<string, boolean>>({})
+
+// Document categories
+const documentCategories = [
+  { label: 'KTP', value: 'ktp' },
+  { label: 'NPWP', value: 'npwp' },
+  { label: 'Sertifikat', value: 'certificate' },
+  { label: 'Ijazah', value: 'diploma' },
+  { label: 'SK Pengangkatan', value: 'appointment_letter' },
+  { label: 'Lainnya', value: 'other' },
+]
+
 // User columns for table
 const userColumns = [
   { title: 'Username', dataIndex: 'username', key: 'username' },
@@ -588,24 +933,58 @@ const userColumns = [
   { title: 'Aksi', key: 'action', width: 200 },
 ]
 
+// History columns for table
+const historyColumns = [
+  { title: 'Perubahan', key: 'change_description', width: '60%' },
+  { title: 'Diubah Oleh', key: 'username', width: '20%' },
+  { title: 'Waktu', key: 'created_at', width: '20%' },
+]
+
+// Change history state
+const changeHistory = ref<UserActivityLog[]>([])
+const historyLoading = ref(false)
+const historyPagination = ref({
+  current: 1,
+  pageSize: 20,
+  total: 0,
+  showSizeChanger: true,
+  showTotal: (total: number) => `Total ${total} perubahan`,
+})
+
 // Computed: Check user roles
 const userRole = computed(() => {
   return authStore.user?.role?.toLowerCase() || ''
 })
 
 const isSuperAdmin = computed(() => userRole.value === 'superadmin')
+const isAdministrator = computed(() => userRole.value === 'administrator')
 const isAdmin = computed(() => userRole.value === 'admin')
 const isManager = computed(() => userRole.value === 'manager')
 const isStaff = computed(() => userRole.value === 'staff')
 
-// RBAC: Assign Role hanya untuk admin
-const canAssignRole = computed(() => isAdmin.value || isSuperAdmin.value)
+// RBAC: Assign Role untuk admin/superadmin/administrator
+const canAssignRole = computed(() => isAdmin.value || isSuperAdmin.value || isAdministrator.value)
 
-// RBAC: Delete hanya untuk admin
-const canDelete = computed(() => isAdmin.value || isSuperAdmin.value)
+// RBAC: Edit Financial Data
+// Superadmin & Administrator: bisa edit semua data
+// Admin: hanya bisa edit data perusahaan sendiri
+const canEditFinancialData = computed(() => {
+  if (isSuperAdmin.value || isAdministrator.value) {
+    return true // Bisa edit semua
+  }
+  if (isAdmin.value) {
+    // Admin hanya bisa edit data perusahaan sendiri
+    // Check jika company yang sedang dilihat adalah milik user
+    return authStore.user?.company_id === company.value?.id
+  }
+  return false
+})
 
-// RBAC: Edit untuk semua role (staff, manager, admin, superadmin)
-const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value)
+// RBAC: Delete untuk admin/superadmin/administrator
+const canDelete = computed(() => isAdmin.value || isSuperAdmin.value || isAdministrator.value)
+
+// RBAC: Edit untuk semua role (staff, manager, admin, superadmin, administrator)
+const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value || isAdministrator.value)
 
 // Check if any menu item is available (to show/hide Options dropdown)
 const hasAnyMenuOption = computed(() => canEdit.value || canAssignRole.value || canDelete.value)
@@ -616,13 +995,13 @@ const filteredUsers = computed(() => {
   const availableUsers = allUsers.value.filter(
     user => !companyUsers.value.some(cu => cu.id === user.id)
   )
-  
+
   if (!userSearchText.value) {
     return availableUsers.slice(0, 20) // Limit to 20 for performance
   }
   const search = userSearchText.value.toLowerCase()
   return availableUsers.filter(
-    user => 
+    user =>
       user.username.toLowerCase().includes(search) ||
       user.email.toLowerCase().includes(search)
   ).slice(0, 20)
@@ -631,7 +1010,7 @@ const filteredUsers = computed(() => {
 const filteredRoles = computed(() => {
   // Filter out superadmin role - hanya untuk developer, bukan untuk user pengguna
   const nonSuperadminRoles = allRoles.value.filter(role => role.name.toLowerCase() !== 'superadmin')
-  
+
   if (!roleSearchText.value) {
     return nonSuperadminRoles
   }
@@ -641,184 +1020,15 @@ const filteredRoles = computed(() => {
   )
 })
 
-// Dummy data untuk charts
-const rkapData = ref({
-  value: 120000000,
-  year: '2025',
-  change: 15
-})
+// Chart data computed from filtered reports (removed unused computed properties and functions)
 
-const opexData = ref({
-  value: 80000000,
-  quarter: 'Q1 2024',
-  change: 5
-})
+// Reports data
+const companyReports = ref<Report[]>([])
+const reportsLoading = ref(false)
 
-const npatData = ref({
-  value: 25000000,
-  quarter: 'Q1 2024',
-  change: 15
-})
+// filteredReports removed (unused)
 
-// Generate chart data
-const generateChartData = (baseValue: number, variance: number = 0.2) => {
-  const points = 12
-  const data: number[] = []
-  for (let i = 0; i < points; i++) {
-    const random = (Math.random() - 0.5) * variance
-    data.push(baseValue * (1 + random))
-  }
-  return data
-}
-
-const rkapChartData = computed(() => generateChartData(100, 0.3))
-const opexChartData = computed(() => generateChartData(80, 0.2))
-const npatChartData = computed(() => generateChartData(25, 0.25))
-
-// Generate SVG path untuk chart
-const generateChartPath = (data: number[], width: number = 200, height: number = 60) => {
-  if (!data || data.length === 0) return ''
-  const max = Math.max(...data)
-  const min = Math.min(...data)
-  const range = max - min || 1
-  const stepX = width / (data.length - 1)
-  
-  const firstValue = data[0] ?? 0
-  let path = `M 0 ${height - ((firstValue - min) / range) * height}`
-  for (let i = 1; i < data.length; i++) {
-    const value = data[i] ?? 0
-    const x = i * stepX
-    const y = height - ((value - min) / range) * height
-    path += ` L ${x} ${y}`
-  }
-  return path
-}
-
-const generateChartFillPath = (data: number[], width: number = 200, height: number = 60) => {
-  if (!data || data.length === 0) return ''
-  const max = Math.max(...data)
-  const min = Math.min(...data)
-  const range = max - min || 1
-  const stepX = width / (data.length - 1)
-  
-  let path = `M 0 ${height}`
-  const firstValue = data[0] ?? 0
-  path += ` L 0 ${height - ((firstValue - min) / range) * height}`
-  for (let i = 1; i < data.length; i++) {
-    const value = data[i] ?? 0
-    const x = i * stepX
-    const y = height - ((value - min) / range) * height
-    path += ` L ${x} ${y}`
-  }
-  path += ` L ${width} ${height} Z`
-  return path
-}
-
-const rkapChartPath = computed(() => generateChartPath(rkapChartData.value))
-const rkapChartFillPath = computed(() => generateChartFillPath(rkapChartData.value))
-const opexChartPath = computed(() => generateChartPath(opexChartData.value))
-const opexChartFillPath = computed(() => generateChartFillPath(opexChartData.value))
-const npatChartPath = computed(() => generateChartPath(npatChartData.value))
-const npatChartFillPath = computed(() => generateChartFillPath(npatChartData.value))
-
-// Dummy data untuk recent files
-const recentFiles = ref([
-  {
-    key: '1',
-    name: 'RUPS_Tahunan_2025',
-    type: 'Pdf',
-    lastModified: '2 hours ago',
-    status: 'complete'
-  },
-  {
-    key: '2',
-    name: 'Laporan_Keuangan_Q1_2024',
-    type: 'Excel',
-    lastModified: '1 day ago',
-    status: 'incomplete'
-  },
-  {
-    key: '3',
-    name: 'Dokumen_Legal_2024',
-    type: 'Pdf',
-    lastModified: '3 days ago',
-    status: 'complete'
-  }
-])
-
-// Dummy data untuk recent reports
-const recentReports = ref([
-  {
-    key: '1',
-    name: 'Laporan September',
-    rkap_percent: 85,
-    revenue: '$120M',
-    npat: '$25M',
-    opex: '$80M'
-  },
-  {
-    key: '2',
-    name: 'Laporan Agustus',
-    rkap_percent: 82,
-    revenue: '$115M',
-    npat: '$23M',
-    opex: '$78M'
-  },
-  {
-    key: '3',
-    name: 'Laporan Juli',
-    rkap_percent: 88,
-    revenue: '$125M',
-    npat: '$27M',
-    opex: '$82M'
-  }
-])
-
-const fileColumns = [
-  { title: 'Name', dataIndex: 'name', key: 'name' },
-  { title: 'Type', key: 'type' },
-  { title: 'Last modified', dataIndex: 'lastModified', key: 'lastModified' },
-  { title: '', key: 'status' },
-  { title: '', key: 'action', width: 30 }
-]
-
-const reportColumns = [
-  { title: 'Name', dataIndex: 'name', key: 'name' },
-  { title: 'RKAP (%)', key: 'rkap_percent' },
-  { title: 'Revenue', dataIndex: 'revenue', key: 'revenue' },
-  { title: 'NPAT', dataIndex: 'npat', key: 'npat' },
-  { title: 'Opex', dataIndex: 'opex', key: 'opex' },
-  { title: '', key: 'action', width: 30 }
-]
-
-const shareholderColumns = [
-  { title: 'Jenis', dataIndex: 'type', key: 'type' },
-  { title: 'Nama', dataIndex: 'name', key: 'name' },
-  { title: 'Nomor Identitas', dataIndex: 'identity_number', key: 'identity_number' },
-  { title: 'Persentase', key: 'ownership_percent' },
-  { title: 'Jumlah Saham', key: 'share_count' },
-  { title: 'Induk Utama', key: 'is_main_parent' },
-]
-
-const directorColumns = [
-  { title: 'Jabatan', dataIndex: 'position', key: 'position' },
-  { title: 'Nama Lengkap', dataIndex: 'full_name', key: 'full_name' },
-  { title: 'KTP', dataIndex: 'ktp', key: 'ktp' },
-  { title: 'NPWP', dataIndex: 'npwp', key: 'npwp' },
-  { title: 'Tanggal Mulai', key: 'start_date' },
-  { title: 'Alamat Domisili', dataIndex: 'domicile_address', key: 'domicile_address' },
-]
-
-const formatCurrency = (value: number): string => {
-  if (value >= 1000000000) {
-    return `$${(value / 1000000000).toFixed(0)}B`
-  } else if (value >= 1000000) {
-    return `${(value / 1000000).toFixed(0)}M`
-  } else if (value >= 1000) {
-    return `${(value / 1000).toFixed(0)}K`
-  }
-  return `$${value.toFixed(0)}`
-}
+// Recent reports and reportColumns removed (unused)
 
 const loadCompany = async () => {
   const id = route.params.id as string
@@ -828,23 +1038,126 @@ const loadCompany = async () => {
   }
 
   loading.value = true
+  loadingHeader.value = true
   try {
+    // Load company first (required for other operations)
     company.value = await companyApi.getById(id)
-    // Generate financial data berdasarkan company ID
+    loadingHeader.value = false
+    
+    // Load reports after company is loaded
     if (company.value) {
-      const hash = company.value.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-      rkapData.value.value = (100 + (hash % 100)) * 1000000
-      rkapData.value.change = 10 + (hash % 10)
-      opexData.value.value = (50 + (hash % 50)) * 1000000
-      opexData.value.change = 3 + (hash % 5)
-      npatData.value.value = (20 + (hash % 30)) * 1000000
-      npatData.value.change = 10 + (hash % 10)
+      // Run independent API calls in parallel for better performance
+      loadingReports.value = true
+      loadingHierarchy.value = true
+      
+      await Promise.all([
+        loadCompanyReports(id),
+        loadCompanyHierarchy(id),
+        loadChangeHistory(),
+        loadFinancialReports(id),
+      ])
+      
+      loadingReports.value = false
+      loadingHierarchy.value = false
+      
+      // Load financial comparison (depends on financial reports and selected period)
+      await loadFinancialComparison(id)
+      
+      // Load director documents (can be done in parallel with other operations)
+      if (company.value.directors && company.value.directors.length > 0) {
+        // Don't await this - let it load in background
+        loadAllDirectorDocuments(company.value.directors).catch(err => {
+          console.error('Error loading director documents:', err)
+        })
+      }
     }
   } catch (error: unknown) {
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     message.error('Gagal memuat data perusahaan: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
+    loadingHeader.value = false
+    loadingReports.value = false
+    loadingHierarchy.value = false
   } finally {
     loading.value = false
+  }
+}
+
+const loadCompanyHierarchy = async (companyId: string) => {
+  try {
+    // Try to get ancestors from API first
+    try {
+      const ancestors = await companyApi.getAncestors(companyId)
+      // Ancestors API returns from parent to root (excluding current company)
+      // We need to reverse to get from root to parent, then add current company
+      companyHierarchy.value = [...ancestors].reverse()
+      // Add current company at the end
+      if (company.value) {
+        companyHierarchy.value.push(company.value)
+      }
+      loadingHierarchy.value = false
+      return
+    } catch (apiError) {
+      // If API endpoint doesn't exist (404 or other error), build hierarchy manually
+      // Don't log as error if it's just 404 (endpoint not implemented yet)
+      if ((apiError as { response?: { status?: number } })?.response?.status !== 404) {
+        console.warn('Ancestors API error, building hierarchy manually:', apiError)
+      }
+    }
+
+      // Fallback: Build hierarchy manually by loading all companies
+      loadingHierarchy.value = false
+    if (allCompanies.value.length === 0) {
+      allCompanies.value = await companyApi.getAll()
+    }
+
+    // Build hierarchy from current company to root
+    const hierarchy: Company[] = []
+    let currentCompany: Company | undefined = company.value || undefined
+
+    // If company not found in allCompanies, try to find it
+    if (!currentCompany) {
+      currentCompany = allCompanies.value.find(c => c.id === companyId)
+    }
+
+    if (!currentCompany) {
+      companyHierarchy.value = []
+      return
+    }
+
+    // Build hierarchy by traversing parent_id
+    const companyMap = new Map<string, Company>()
+    allCompanies.value.forEach(c => companyMap.set(c.id, c))
+
+    let current: Company | undefined = currentCompany
+    while (current) {
+      hierarchy.unshift(current) // Add to beginning to get root -> current order
+      
+      if (current.parent_id) {
+        current = companyMap.get(current.parent_id)
+      } else {
+        break
+      }
+    }
+
+    companyHierarchy.value = hierarchy
+  } catch (error) {
+    console.error('Error loading company hierarchy:', error)
+    companyHierarchy.value = []
+  }
+}
+
+const loadCompanyReports = async (companyId: string) => {
+  reportsLoading.value = true
+  try {
+    const reports = await reportsApi.getByCompanyId(companyId)
+    companyReports.value = reports
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    console.error('Gagal memuat data reports:', axiosError.response?.data?.message || axiosError.message || 'Unknown error')
+    // Don't show error message to user, just log it
+    companyReports.value = []
+  } finally {
+    reportsLoading.value = false
   }
 }
 
@@ -866,9 +1179,113 @@ const formatDate = (date: string | undefined): string => {
   return dayjs(date).format('DD MMMM YYYY')
 }
 
+const formatCurrency = (value: number | string | undefined): string => {
+  if (value === undefined || value === null) return '-'
+  const numValue = typeof value === 'string' ? parseFloat(value) : value
+  if (isNaN(numValue)) return '-'
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(numValue)
+}
+
+const formatNumber = (value: number | string | undefined): string => {
+  if (value === undefined || value === null) return '-'
+  const numValue = typeof value === 'string' ? parseFloat(value) : value
+  if (isNaN(numValue)) return '-'
+  return new Intl.NumberFormat('id-ID').format(numValue)
+}
+
+// Load all director documents
+const loadAllDirectorDocuments = async (directors: Array<{ id?: string }>) => {
+  const directorsWithId = directors.filter(d => d.id)
+  if (directorsWithId.length === 0) {
+    console.log('No directors with ID found, skipping document load')
+    return
+  }
+  
+  console.log(`Loading documents for ${directorsWithId.length} directors`, directorsWithId.map(d => ({ id: d.id })))
+  
+  const loadPromises = directorsWithId.map(async (director) => {
+    if (!director.id) return
+    loadingDirectorDocuments.value[director.id] = true
+    try {
+      console.log(`Fetching documents for director ${director.id}`)
+      const response = await documentsApi.listDocumentsPaginated({
+        director_id: director.id,
+        page: 1,
+        page_size: 100,
+      })
+      console.log(`Loaded ${response.data.length} documents for director ${director.id}`, response.data)
+      directorDocumentsMap.value.set(director.id, response.data)
+    } catch (error) {
+      console.error(`Failed to load documents for director ${director.id}:`, error)
+      directorDocumentsMap.value.set(director.id, [])
+    } finally {
+      loadingDirectorDocuments.value[director.id] = false
+    }
+  })
+  
+  await Promise.all(loadPromises)
+  console.log('Finished loading director documents', Array.from(directorDocumentsMap.value.entries()))
+}
+
+// Get director documents
+const getDirectorDocuments = (directorId: string): DocumentItem[] => {
+  return directorDocumentsMap.value.get(directorId) || []
+}
+
+// Get director documents count
+const getDirectorDocumentsCount = (directorId: string): number => {
+  return getDirectorDocuments(directorId).length
+}
+
+// Get document category label
+const getDocumentCategoryLabel = (doc: DocumentItem): string => {
+  const meta = doc.metadata as { category?: string } | undefined
+  const categoryValue = meta?.category || '-'
+  const categoryLabel = documentCategories.find(cat => cat.value === categoryValue)?.label || categoryValue
+  return categoryLabel
+}
+
+// Get document download URL
+const getDocumentDownloadUrl = (filePath: string): string => {
+  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+    return filePath
+  }
+  const apiURL = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:8080'
+  return `${apiURL}${filePath}`
+}
+
+// Delete director document
+const handleDeleteDirectorDocument = async (documentId: string, directorId: string) => {
+  try {
+    await documentsApi.deleteDocument(documentId)
+    
+    // Remove dari map
+    const docs = directorDocumentsMap.value.get(directorId) || []
+    directorDocumentsMap.value.set(
+      directorId,
+      docs.filter(d => d.id !== documentId)
+    )
+    
+    message.success('Dokumen berhasil dihapus')
+    
+    // Reload company untuk refresh data
+    if (company.value) {
+      await loadCompany()
+    }
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(axiosError.response?.data?.message || 'Gagal menghapus dokumen')
+  }
+}
+
 const getCompanyLogo = (company: Company): string | undefined => {
   if (company.logo) {
-    const apiURL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+    const apiURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-pedeve-dev.aretaamany.com')
     const baseURL = apiURL.replace(/\/api\/v1$/, '')
     return company.logo.startsWith('http') ? company.logo : `${baseURL}${company.logo}`
   }
@@ -902,18 +1319,8 @@ const getIconColor = (name: string): string => {
 }
 
 const getLevelLabel = (level: number): string => {
-  switch (level) {
-    case 0:
-      return 'Holding (Induk)'
-    case 1:
-      return 'Anak Perusahaan'
-    case 2:
-      return 'Cucu Perusahaan'
-    case 3:
-      return 'Cicit Perusahaan'
-    default:
-      return `Level ${String(level)}`
-  }
+  if (level === 0) return 'Holding'
+  return `Level ${String(level)}`
 }
 
 const getLevelColor = (level: number): string => {
@@ -943,7 +1350,7 @@ const handleEdit = () => {
 
 const handleDelete = async () => {
   if (!company.value) return
-  
+
   try {
     await companyApi.delete(company.value.id)
     message.success('Subsidiary berhasil dihapus')
@@ -960,9 +1367,18 @@ const handleMenuClick = ({ key }: { key: string }) => {
   } else if (key === 'assign-role') {
     openAssignRoleModal()
   } else if (key === 'delete') {
-    // Show confirmation before delete
-    if (company.value && confirm(`Apakah Anda yakin ingin menghapus ${company.value.name}?`)) {
-      handleDelete()
+    // Show Ant Design confirmation modal before delete
+    if (company.value) {
+      Modal.confirm({
+        title: 'Hapus Profile Perusahaan',
+        content: `Apakah Anda yakin ingin menghapus "${company.value.name}"? Tindakan ini tidak dapat dibatalkan.`,
+        okText: 'Hapus',
+        okType: 'danger',
+        cancelText: 'Batal',
+        onOk: () => {
+          handleDelete()
+        },
+      })
     }
   }
 }
@@ -972,13 +1388,13 @@ const openAssignRoleModal = async () => {
     message.error('Company tidak ditemukan')
     return
   }
-  
+
   assignRoleModalVisible.value = true
   assignRoleForm.value = {
     userId: undefined,
     roleId: undefined,
   }
-  
+
   // Load users and roles
   // Note: For non-superadmin, users endpoint might return limited results
   // but we still try to load - error will be handled gracefully
@@ -990,13 +1406,13 @@ const openAssignRoleModal = async () => {
 
 const loadUsers = async () => {
   if (!company.value) return
-  
+
   usersLoading.value = true
   try {
     // Load all users (backend will filter based on access) - for dropdown selection
     const allUsersData = await userApi.getAll()
     allUsers.value = allUsersData
-    
+
     // Load company users from junction table (supports multiple company assignments)
     try {
       const companyUsersData = await companyApi.getUsers(company.value.id)
@@ -1008,10 +1424,10 @@ const loadUsers = async () => {
     }
   } catch (error: unknown) {
     // Better error handling - check for axios error structure
-    const axiosError = error as { 
-      response?: { 
+    const axiosError = error as {
+      response?: {
         status?: number
-        data?: { 
+        data?: {
           message?: string
           error?: string
         }
@@ -1019,13 +1435,13 @@ const loadUsers = async () => {
       message?: string
       code?: string
     }
-    
+
     const statusCode = axiosError.response?.status
-    const errorMessage = axiosError.response?.data?.message || 
-                        axiosError.response?.data?.error || 
-                        axiosError.message || 
-                        'Unknown error'
-    
+    const errorMessage = axiosError.response?.data?.message ||
+      axiosError.response?.data?.error ||
+      axiosError.message ||
+      'Unknown error'
+
     // Handle different error scenarios
     if (statusCode === 403 || statusCode === 401) {
       // Permission denied - silently handle, don't show error to user
@@ -1072,7 +1488,7 @@ const loadRoles = async () => {
   rolesLoading.value = true
   try {
     allRoles.value = await roleApi.getAll()
-    } catch {
+  } catch {
     message.error('Gagal memuat daftar role')
   } finally {
     rolesLoading.value = false
@@ -1092,8 +1508,8 @@ const filterUserOption = (input: string, option: unknown) => {
   const user = allUsers.value.find(u => u.id === opt.value)
   if (!user) return false
   const search = input.toLowerCase()
-  return user.username.toLowerCase().includes(search) || 
-         user.email.toLowerCase().includes(search)
+  return user.username.toLowerCase().includes(search) ||
+    user.email.toLowerCase().includes(search)
 }
 
 const filterRoleOption = (input: string, option: unknown) => {
@@ -1108,7 +1524,7 @@ const handleAssignRole = async () => {
     message.error('Harap pilih user dan role')
     return
   }
-  
+
   assignRoleLoading.value = true
   try {
     await userApi.assignToCompany(
@@ -1153,7 +1569,7 @@ const handleSaveUserRole = async () => {
     message.error('Harap pilih role')
     return
   }
-  
+
   editingRoleLoading.value = true
   try {
     await userApi.update(editingUserRole.value.userId, {
@@ -1177,11 +1593,11 @@ const handleSaveUserRole = async () => {
 // Remove User
 const handleRemoveUser = async (user: User) => {
   if (!company.value) return
-  
+
   // Show confirmation
   const confirmed = confirm(`Apakah Anda yakin ingin menghapus ${user.username} dari pengurus?`)
   if (!confirmed) return
-  
+
   try {
     // Remove user from company using unassign endpoint (supports multiple company assignments)
     await userApi.unassignFromCompany(user.id, company.value.id)
@@ -1208,18 +1624,1198 @@ const getRoleColor = (role: string): string => {
   return 'default'
 }
 
-const handleManageFiles = () => {
-  message.info('Manage files feature coming soon')
+// handleManageReports removed (unused)
+
+// Handle period change - removed (unused)
+// const handlePeriodChange = () => {
+//   // Filter is automatically applied via computed property
+//   // No need to reload data, just let computed properties react
+// }
+
+// Export PDF dengan data dari Performance Table
+const handleExportPDF = async () => {
+  if (!company.value) {
+    message.error('Company tidak ditemukan')
+    return
+  }
+
+  // Validasi periode
+  if (!periodRange.value || !periodRange.value[0] || !periodRange.value[1]) {
+    message.warning('Silakan pilih periode terlebih dahulu')
+    return
+  }
+
+  try {
+    exportLoading.value = true
+
+    // Create PDF document
+    const doc = new jsPDF('landscape', 'mm', 'a4')
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+    let yPosition = 20
+
+    // Helper function untuk menambahkan header section
+    const addHeader = (title: string) => {
+      if (yPosition > pageHeight - 40) {
+        doc.addPage()
+        yPosition = 20
+      }
+      doc.setFontSize(16)
+      doc.setFont('helvetica', 'bold')
+      doc.text(title, 14, yPosition)
+      yPosition += 10
+    }
+
+    // Helper function untuk menambahkan tabel dengan merged headers
+    const addTable = (title: string, items: Array<{ key: string; label: string; field: string; isRatio: boolean }>, data: Array<Record<string, unknown>>) => {
+      if (data.length === 0) return
+
+      addHeader(title)
+
+      // Prepare table data dengan struktur merged headers (2 level headers)
+      // Level 1: Bulan + item labels (merged untuk RKAP dan Realisasi)
+      interface HeaderCell {
+        content: string
+        rowSpan?: number
+        colSpan?: number
+      }
+      const topHeaders: HeaderCell[] = [{ content: 'Bulan', rowSpan: 2 }]
+      items.forEach((item) => {
+        topHeaders.push({ content: item.label, colSpan: 2 })
+      })
+
+      // Level 2: RKAP dan Realisasi untuk setiap item
+      const subHeaders: string[] = []
+      items.forEach(() => {
+        subHeaders.push('RKAP', 'Realisasi')
+      })
+
+      const tableData: (string | number)[][] = []
+      data.forEach((row) => {
+        const rowData: (string | number)[] = [row.month as string]
+        items.forEach((item) => {
+          const rkapValue = getCellValue(`${item.key}_rkap`, row, items, 'rkap')
+          const realisasiValue = getCellValue(`${item.key}_realisasi`, row, items, 'realisasi')
+          rowData.push(rkapValue, realisasiValue)
+        })
+        tableData.push(rowData)
+      })
+
+      // Add table dengan autoTable (mendukung merged headers)
+      autoTable(doc, {
+        head: [topHeaders, subHeaders],
+        body: tableData,
+        startY: yPosition,
+        theme: 'striped',
+        headStyles: {
+          fillColor: [66, 139, 202],
+          textColor: 255,
+          fontStyle: 'bold',
+          fontSize: 9,
+          halign: 'center',
+          valign: 'middle',
+        },
+        bodyStyles: {
+          fontSize: 8,
+          textColor: [0, 0, 0],
+          halign: 'right',
+          valign: 'middle',
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245],
+        },
+        columnStyles: {
+          0: { cellWidth: 40, halign: 'left', fontStyle: 'bold' },
+        },
+        margin: { left: 14, right: 14, top: 10 },
+        styles: {
+          cellPadding: 4,
+          overflow: 'linebreak',
+          cellWidth: 'auto',
+          lineWidth: 0.1,
+          lineColor: [200, 200, 200],
+        },
+        didDrawPage: (data) => {
+          if (data && data.cursor) {
+            yPosition = data.cursor.y + 10
+          }
+        },
+      })
+
+      // Get final Y position from autoTable
+      interface AutoTableResult {
+        lastAutoTable?: {
+          finalY?: number
+        }
+      }
+      const docWithAutoTable = doc as unknown as AutoTableResult
+      const finalY = docWithAutoTable.lastAutoTable?.finalY
+      if (finalY) {
+        yPosition = finalY + 15
+      } else {
+        yPosition += 50 // Fallback jika finalY tidak tersedia
+      }
+    }
+
+    // Cover page
+    doc.setFontSize(20)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Laporan Keuangan', pageWidth / 2, 50, { align: 'center' })
+    
+    doc.setFontSize(16)
+    doc.setFont('helvetica', 'normal')
+    doc.text(company.value.name, pageWidth / 2, 60, { align: 'center' })
+    
+    doc.setFontSize(12)
+    const periodText = `${periodRange.value[0].format('MMMM YYYY')} - ${periodRange.value[1].format('MMMM YYYY')}`
+    doc.text(`Periode: ${periodText}`, pageWidth / 2, 70, { align: 'center' })
+    
+    doc.setFontSize(10)
+    const exportDate = dayjs().format('DD MMMM YYYY HH:mm')
+    doc.text(`Dicetak pada: ${exportDate}`, pageWidth / 2, 80, { align: 'center' })
+
+    // Start tables on new page for better layout
+    doc.addPage()
+    yPosition = 20
+
+    // Add tables untuk setiap kategori
+    addTable(
+      'Neraca (Balance Sheet)',
+      balanceSheetItems,
+      balanceSheetMonthlyData.value
+    )
+
+    addTable(
+      'Laba Rugi (Profit & Loss)',
+      profitLossItems,
+      profitLossMonthlyData.value
+    )
+
+    addTable(
+      'Cashflow',
+      cashflowItems,
+      cashflowMonthlyData.value
+    )
+
+    addTable(
+      'Rasio Keuangan (%)',
+      ratioItems,
+      ratioMonthlyData.value
+    )
+
+    // Generate filename
+    let filename = `Laporan_Keuangan_${company.value.name.replace(/\s+/g, '_')}`
+    if (periodRange.value && periodRange.value[0] && periodRange.value[1]) {
+      filename += `_${periodRange.value[0].format('YYYY-MM')}_${periodRange.value[1].format('YYYY-MM')}`
+    }
+    filename += '.pdf'
+
+    // Save PDF
+    doc.save(filename)
+
+    message.success('Export PDF berhasil')
+  } catch (error: unknown) {
+    console.error('Export PDF error:', error)
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal export PDF: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
+  } finally {
+    exportLoading.value = false
+  }
 }
 
-const handleManageReports = () => {
-  message.info('Manage reports feature coming soon')
+// Export Excel
+const handleExportExcel = async () => {
+  if (!company.value) {
+    message.error('Company tidak ditemukan')
+    return
+  }
+
+  // Check if period range is selected
+  if (!periodRange.value || !periodRange.value[0] || !periodRange.value[1]) {
+    message.warning('Silakan pilih periode terlebih dahulu di tab Performance')
+    return
+  }
+
+  try {
+    exportLoading.value = true
+    
+    const startPeriod = periodRange.value[0].format('YYYY-MM')
+    const endPeriod = periodRange.value[1].format('YYYY-MM')
+
+    const blob = await financialReportsApi.exportPerformanceExcel(
+      company.value.id,
+      startPeriod,
+      endPeriod
+    )
+    
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    // Generate filename dengan filter info
+    const filename = `Performance_${company.value.name.replace(/\s+/g, '_')}_${startPeriod}_${endPeriod}.xlsx`
+
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
+    message.success('Export Excel berhasil')
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error('Gagal export Excel: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
+  } finally {
+    exportLoading.value = false
+  }
 }
 
 const handleLogout = async () => {
   await authStore.logout()
   router.push('/login')
 }
+
+// Load change history for company - include company and financial_report resources
+const loadChangeHistory = async () => {
+  if (!company.value) return
+
+  historyLoading.value = true
+  try {
+    // Load company, financial_report, and document changes
+    // Note: financial_report and document logs need to be filtered by company_id in details JSON
+    const [companyResponse, financialResponse, documentResponse] = await Promise.all([
+      auditApi.getUserActivityLogs({
+        resource: 'company',
+        resource_id: company.value.id,
+        page: 1, // Load all for filtering
+        pageSize: 1000, // Large page size to get all company logs
+      }),
+      auditApi.getUserActivityLogs({
+        resource: 'financial_report',
+        // Don't filter by resource_id - we'll filter by company_id in details
+        page: 1,
+        pageSize: 1000, // Large page size to get all financial logs
+      }),
+      auditApi.getUserActivityLogs({
+        resource: 'document',
+        // Don't filter by resource_id - we'll filter by company_id in details
+        page: 1,
+        pageSize: 1000, // Large page size to get all document logs
+      }),
+    ])
+    
+    // Filter financial_report and document logs by company_id in details
+    const companyId = company.value.id
+    const filteredFinancialLogs = financialResponse.data.filter((log) => {
+      if (!log.details) return false
+      try {
+        const details = JSON.parse(log.details)
+        return details.company_id === companyId
+      } catch {
+        return false
+      }
+    })
+    
+    const filteredDocumentLogs = documentResponse.data.filter((log) => {
+      if (!log.details) return false
+      try {
+        const details = JSON.parse(log.details)
+        // Include documents that have company_id matching this company
+        // This includes director attachments which have company_id in details
+        return details.company_id === companyId
+      } catch {
+        return false
+      }
+    })
+    
+    // Merge and sort by created_at (newest first)
+    const allLogs = [...companyResponse.data, ...filteredFinancialLogs, ...filteredDocumentLogs].sort((a, b) => {
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+    
+    // Apply pagination to merged results
+    const startIndex = (historyPagination.value.current - 1) * historyPagination.value.pageSize
+    const endIndex = startIndex + historyPagination.value.pageSize
+    const paginatedLogs = allLogs.slice(startIndex, endIndex)
+    
+    changeHistory.value = paginatedLogs
+    historyPagination.value.total = allLogs.length
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || 'Gagal memuat history perubahan')
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+// Handle history table change (pagination)
+const handleHistoryTableChange = (pagination: { current: number; pageSize: number }) => {
+  historyPagination.value.current = pagination.current
+  historyPagination.value.pageSize = pagination.pageSize
+  loadChangeHistory()
+}
+
+// Format change description from audit log details - returns array of change strings
+const formatChangeDescription = (log: UserActivityLog): string[] => {
+  if (!log.details) {
+    if (log.resource === 'financial_report') {
+      return [`${getActionLabel(log.action)} pada laporan keuangan`]
+    }
+    if (log.resource === 'document') {
+      return [`${getActionLabel(log.action)} dokumen`]
+    }
+    return [`${getActionLabel(log.action)} pada data perusahaan`]
+  }
+
+  try {
+    const details = JSON.parse(log.details)
+    const changes: string[] = []
+
+    // Handle financial_report resource
+    if (log.resource === 'financial_report') {
+      const reportType = details.type || 'Laporan Keuangan'
+      const period = details.period || details.year || 'tidak diketahui'
+      const year = details.year || 'tidak diketahui'
+      
+      if (log.action === 'create') {
+        changes.push(`membuat ${reportType} baru untuk periode ${period} (${year})`)
+        // Show all initial values if available
+        if (details.changes && typeof details.changes === 'object') {
+          for (const [field, changeData] of Object.entries(details.changes)) {
+            if (changeData && typeof changeData === 'object' && 'new' in changeData) {
+              const fieldData = changeData as FieldChangeData
+              const fieldLabel = getFieldLabel(field, 'financial_report')
+              const newValue = formatFieldValue(fieldData.new)
+              if (newValue && newValue !== '0' && newValue !== '0.00') {
+                changes.push(`  - ${fieldLabel}: ${newValue}`)
+              }
+            }
+          }
+        }
+      } else if (log.action === 'update') {
+        changes.push(`mengubah ${reportType} untuk periode ${period} (${year}):`)
+        // Show all field changes
+        if (details.changes && typeof details.changes === 'object') {
+          for (const [field, changeData] of Object.entries(details.changes)) {
+            if (changeData && typeof changeData === 'object' && 'old' in changeData && 'new' in changeData) {
+              const fieldData = changeData as FieldChangeData
+              const fieldLabel = getFieldLabel(field, 'financial_report')
+              const oldValue = formatFieldValue(fieldData.old)
+              const newValue = formatFieldValue(fieldData.new)
+              changes.push(`  - ${fieldLabel}: dari "${oldValue}" menjadi "${newValue}"`)
+            }
+          }
+        }
+        if (changes.length === 1) {
+          // No field changes detected, show generic message
+          changes.push('  - Data telah diubah')
+        }
+      } else if (log.action === 'delete') {
+        changes.push(`menghapus ${reportType} untuk periode ${period} (${year})`)
+      }
+    }
+    // Handle different action types for company
+    else if (log.action === 'update' || log.action === 'update_company') {
+      // Extract changes from details
+      if (details.changes && typeof details.changes === 'object') {
+        for (const [field, changeData] of Object.entries(details.changes)) {
+          if (changeData && typeof changeData === 'object') {
+            const data = changeData as ChangeData
+            // Handle added directors/shareholders
+            if (field.startsWith('director_added_') && 'action' in data && data.action === 'added') {
+              const directorData = data as DirectorChangeData
+              const position = directorData.position || 'tidak diketahui'
+              const fullName = directorData.full_name || 'tidak diketahui'
+              changes.push(`menambahkan pengurus baru: ${position} - ${fullName}`)
+            } else if (field.startsWith('director_removed_') && 'action' in data && data.action === 'removed') {
+              const directorData = data as DirectorChangeData
+              const position = directorData.position || 'tidak diketahui'
+              const fullName = directorData.full_name || 'tidak diketahui'
+              changes.push(`menghapus pengurus: ${position} - ${fullName}`)
+            } else if (field.startsWith('shareholder_added_') && 'action' in data && data.action === 'added') {
+              const shareholderData = data as ShareholderChangeData
+              const name = shareholderData.name || 'tidak diketahui'
+              const type = shareholderData.type ? ` (${shareholderData.type})` : ''
+              changes.push(`menambahkan pemegang saham baru: ${name}${type}`)
+            } else if (field.startsWith('shareholder_removed_') && 'action' in data && data.action === 'removed') {
+              const shareholderData = data as ShareholderChangeData
+              const name = shareholderData.name || 'tidak diketahui'
+              const type = shareholderData.type ? ` (${shareholderData.type})` : ''
+              changes.push(`menghapus pemegang saham: ${name}${type}`)
+            } else if ('old' in data && 'new' in data) {
+              // Regular field change
+              const fieldData = data as FieldChangeData
+              const fieldLabel = getFieldLabel(field)
+              const oldValue = formatFieldValue(fieldData.old)
+              const newValue = formatFieldValue(fieldData.new)
+              changes.push(`${fieldLabel} dari sebelumnya "${oldValue}" menjadi "${newValue}"`)
+            }
+          }
+        }
+      } else if (details.field && details.old_value !== undefined && details.new_value !== undefined) {
+        // Single field change format
+        const fieldLabel = getFieldLabel(details.field)
+        const oldValue = formatFieldValue(details.old_value)
+        const newValue = formatFieldValue(details.new_value)
+        changes.push(`${fieldLabel} dari sebelumnya "${oldValue}" menjadi "${newValue}"`)
+      }
+    } else if (log.action === 'create' || log.action === 'create_company') {
+      changes.push('membuat data perusahaan baru')
+    } else if (log.action === 'delete' || log.action === 'delete_company') {
+      changes.push('menghapus data perusahaan')
+    }
+    // Handle document resource
+    else if (log.resource === 'document') {
+      const fileName = details.file_name || details.document_name || 'dokumen'
+      const documentName = details.document_name || fileName
+      
+      if (log.action === 'delete' || log.action === 'delete_document') {
+        if (details.document_type === 'director_attachment') {
+          changes.push(`menghapus dokumen attachment pengurus: ${documentName}`)
+          if (details.director_id) {
+            changes.push(`  - ID Pengurus: ${details.director_id}`)
+          }
+        } else {
+          changes.push(`menghapus dokumen: ${documentName}`)
+        }
+        if (details.folder_id) {
+          changes.push(`  - Folder ID: ${details.folder_id}`)
+        }
+      } else if (log.action === 'create' || log.action === 'create_document') {
+        if (details.document_type === 'director_attachment') {
+          changes.push(`mengunggah dokumen attachment pengurus: ${documentName}`)
+          if (details.director_id) {
+            changes.push(`  - ID Pengurus: ${details.director_id}`)
+          }
+        } else {
+          changes.push(`mengunggah dokumen: ${documentName}`)
+        }
+      } else if (log.action === 'update' || log.action === 'update_document') {
+        if (details.document_type === 'director_attachment') {
+          changes.push(`memperbarui dokumen attachment pengurus: ${documentName}`)
+          if (details.director_id) {
+            changes.push(`  - ID Pengurus: ${details.director_id}`)
+          }
+        } else {
+          changes.push(`memperbarui dokumen: ${documentName}`)
+        }
+      }
+    }
+
+    if (changes.length > 0) {
+      return changes
+    }
+  } catch (error) {
+    console.error('Error parsing change details:', error)
+  }
+
+  // Fallback based on resource type
+  if (log.resource === 'financial_report') {
+    return [`${getActionLabel(log.action)} pada laporan keuangan`]
+  }
+  if (log.resource === 'document') {
+    return [`${getActionLabel(log.action)} dokumen`]
+  }
+  return [`${getActionLabel(log.action)} pada data perusahaan`]
+}
+
+// Get field label in Indonesian
+const getFieldLabel = (field: string, resource?: string): string => {
+  // Handle financial_report fields
+  if (resource === 'financial_report') {
+    const financialFieldLabels: Record<string, string> = {
+      // Neraca
+      current_assets: 'Aset Lancar',
+      non_current_assets: 'Aset Tidak Lancar',
+      short_term_liabilities: 'Liabilitas Jangka Pendek',
+      long_term_liabilities: 'Liabilitas Jangka Panjang',
+      equity: 'Ekuitas',
+      // Laba Rugi
+      revenue: 'Revenue',
+      operating_expenses: 'Beban Usaha',
+      operating_profit: 'Laba Usaha',
+      other_income: 'Pendapatan Lain-Lain',
+      tax: 'Tax',
+      net_profit: 'Laba Bersih',
+      // Cashflow
+      operating_cashflow: 'Arus kas bersih dari operasi',
+      investing_cashflow: 'Arus kas bersih dari investasi',
+      financing_cashflow: 'Arus kas bersih dari pendanaan',
+      ending_balance: 'Saldo Akhir',
+      // Rasio
+      roe: 'ROE (Return on Equity)',
+      roi: 'ROI (Return on Investment)',
+      current_ratio: 'Rasio Lancar',
+      cash_ratio: 'Rasio Kas',
+      ebitda: 'EBITDA',
+      ebitda_margin: 'EBITDA Margin',
+      net_profit_margin: 'Net Profit Margin',
+      operating_profit_margin: 'Operating Profit Margin',
+      debt_to_equity: 'Debt to Equity',
+      // Metadata
+      year: 'Tahun',
+      period: 'Periode',
+      is_rkap: 'Jenis Laporan',
+      remark: 'Keterangan',
+    }
+    return financialFieldLabels[field] || field
+  }
+  
+  // Handle company fields (existing logic)
+  // Handle director fields with index pattern: director_{index}_{field}
+  const directorMatch = field.match(/^director_(\d+)_(.+)$/)
+  if (directorMatch && directorMatch[1] && directorMatch[2]) {
+    const index = parseInt(directorMatch[1], 10) + 1 // Convert to 1-based for display
+    const subField = directorMatch[2]
+    const subFieldLabels: Record<string, string> = {
+      position: 'jabatan',
+      full_name: 'nama lengkap',
+      ktp: 'nomor KTP',
+      npwp: 'nomor NPWP',
+      start_date: 'tanggal awal jabatan',
+      domicile_address: 'alamat domisili',
+    }
+    const subFieldLabel = subFieldLabels[subField] || subField
+    return `pengurus ${index} - ${subFieldLabel}`
+  }
+
+  // Handle shareholder fields with index pattern: shareholder_{index}_{field}
+  const shareholderMatch = field.match(/^shareholder_(\d+)_(.+)$/)
+  if (shareholderMatch && shareholderMatch[1] && shareholderMatch[2]) {
+    const index = parseInt(shareholderMatch[1], 10) + 1 // Convert to 1-based for display
+    const subField = shareholderMatch[2]
+    const subFieldLabels: Record<string, string> = {
+      name: 'nama',
+      type: 'jenis pemegang saham',
+      identity_number: 'nomor identitas',
+      ownership_percent: 'persentase kepemilikan',
+      share_sheet_count: 'jumlah lembar saham',
+      share_value_per_sheet: 'nilai rupiah per lembar',
+    }
+    const subFieldLabel = subFieldLabels[subField] || subField
+    return `pemegang saham ${index} - ${subFieldLabel}`
+  }
+
+  const fieldLabels: Record<string, string> = {
+    name: 'nama perusahaan',
+    short_name: 'nama singkat',
+    description: 'deskripsi',
+    npwp: 'NPWP',
+    nib: 'NIB',
+    status: 'status',
+    phone: 'telepon',
+    fax: 'fax',
+    email: 'email',
+    website: 'website',
+    address: 'alamat perusahaan',
+    operational_address: 'alamat operasional',
+    code: 'kode perusahaan',
+    parent_id: 'perusahaan induk',
+    authorized_capital: 'modal dasar',
+    paid_up_capital: 'modal disetor',
+    // Shareholder fields (without index)
+    shareholder_name: 'nama pemegang saham',
+    shareholder_type: 'jenis pemegang saham',
+    shareholder_identity_number: 'nomor identitas pemegang saham',
+    shareholder_ownership_percent: 'persentase kepemilikan',
+    shareholder_share_sheet_count: 'jumlah lembar saham',
+    shareholder_share_value_per_sheet: 'nilai rupiah per lembar',
+    // Director fields (without index)
+    director_position: 'jabatan pengurus',
+    director_full_name: 'nama lengkap pengurus',
+    director_ktp: 'nomor KTP pengurus',
+    director_npwp: 'nomor NPWP pengurus',
+    director_start_date: 'tanggal awal jabatan pengurus',
+    director_domicile_address: 'alamat domisili pengurus',
+    // Business field
+    business_industry_sector: 'sektor industri',
+    business_kbli: 'KBLI',
+    business_main_activity: 'uraian kegiatan usaha utama',
+    business_additional_activities: 'kegiatan usaha tambahan',
+    business_start_operation_date: 'tanggal mulai beroperasi',
+  }
+  return fieldLabels[field] || field
+}
+
+// Format field value for display
+const formatFieldValue = (value: unknown): string => {
+  if (value === null || value === undefined || value === '') {
+    return '(kosong)'
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'Ya' : 'Tidak'
+  }
+  // Format large numbers (financial values)
+  if (typeof value === 'number') {
+    if (value >= 1000000000) {
+      return `Rp ${(value / 1000000000).toFixed(2)}M`
+    } else if (value >= 1000000) {
+      return `Rp ${(value / 1000000).toFixed(2)}Jt`
+    } else if (value >= 1000) {
+      return `Rp ${(value / 1000).toFixed(2)}Rb`
+    } else if (value < 100 && value > 0) {
+      // Likely a ratio/percentage
+      return `${value.toFixed(2)}%`
+    }
+    return value.toLocaleString('id-ID')
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value)
+  }
+  return String(value)
+}
+
+// Get action label in Indonesian
+const getActionLabel = (action: string): string => {
+  const actionLabels: Record<string, string> = {
+    create: 'pembuatan',
+    update: 'perubahan',
+    delete: 'penghapusan',
+    create_company: 'pembuatan',
+    update_company: 'perubahan',
+    delete_company: 'penghapusan',
+  }
+  return actionLabels[action] || action
+}
+
+// Format date and time
+const formatDateTime = (dateString: string): string => {
+  if (!dateString) return '-'
+  return dayjs(dateString).format('DD MMM YYYY, HH:mm:ss')
+}
+
+// Load financial reports for company
+const loadFinancialReports = async (companyId: string) => {
+  financialReportsLoading.value = true
+  try {
+    financialReports.value = await financialReportsApi.getByCompanyId(companyId)
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    console.error('Failed to load financial reports:', err.response?.data?.message || err.message)
+    financialReports.value = []
+  } finally {
+    financialReportsLoading.value = false
+  }
+}
+
+// Load financial comparison (RKAP vs Realisasi YTD)
+const loadFinancialComparison = async (companyId: string) => {
+  if (!selectedYear.value || !startMonth.value || !endMonth.value) return
+  
+  // Use endMonth for comparison (YTD up to end month)
+  financialComparisonLoading.value = true
+  try {
+    financialComparison.value = await financialReportsApi.getComparison(companyId, selectedYear.value, endMonth.value)
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    // Don't show error if no data found (RKAP or Realisasi might not exist yet)
+    if (err.response?.data?.message && !err.response.data.message.includes('not found')) {
+      console.error('Failed to load financial comparison:', err.response.data.message)
+    }
+    financialComparison.value = null
+  } finally {
+    financialComparisonLoading.value = false
+  }
+}
+
+
+// Handle period change for financial comparison
+const handleFinancialPeriodChange = async () => {
+  // Validate date range
+  if (!periodRange.value || !periodRange.value[0] || !periodRange.value[1]) {
+    message.warning('Silakan pilih periode yang valid')
+    return
+  }
+  
+  // Validate that start month is before or equal to end month
+  if (periodRange.value[0].isAfter(periodRange.value[1])) {
+    message.warning('Bulan awal harus lebih kecil atau sama dengan bulan akhir')
+    return
+  }
+  
+  // Validate that both months are in the same year
+  if (periodRange.value[0].format('YYYY') !== periodRange.value[1].format('YYYY')) {
+    message.warning('Periode harus dalam tahun yang sama')
+    // Auto-correct: set end month to same year as start month
+    periodRange.value = [periodRange.value[0], periodRange.value[0].endOf('year')]
+  }
+  
+  if (company.value) {
+    // Reload financial reports to get monthly data for the selected year
+    await loadFinancialReports(company.value.id)
+    await loadFinancialComparison(company.value.id)
+  }
+}
+
+// Format currency helper - uses company currency setting
+const formatCurrencyValue = (value: number | string | undefined): string => {
+  if (value === undefined || value === null) return '-'
+  const numValue = typeof value === 'string' ? parseFloat(value) : value
+  if (isNaN(numValue)) return '-'
+  
+  // Get currency from company, default to IDR (Rupiah)
+  const currency = company.value?.currency || 'IDR'
+  const absValue = Math.abs(numValue)
+  const sign = numValue < 0 ? '-' : ''
+  
+  // Format based on currency
+  if (currency === 'USD') {
+    // USD format: $32B, $129M, $5K
+    if (absValue >= 1000000000) {
+      return `${sign}$${(absValue / 1000000000).toFixed(2)}B`
+    } else if (absValue >= 1000000) {
+      return `${sign}$${(absValue / 1000000).toFixed(2)}M`
+    } else if (absValue >= 1000) {
+      return `${sign}$${(absValue / 1000).toFixed(2)}K`
+    }
+    return `${sign}$${absValue.toLocaleString('en-US')}`
+  } else {
+    // IDR format: Rp 129M, Rp 32B, Rp 5K
+    if (absValue >= 1000000000) {
+      return `${sign}Rp ${(absValue / 1000000000).toFixed(2)}B`
+    } else if (absValue >= 1000000) {
+      return `${sign}Rp ${(absValue / 1000000).toFixed(2)}Jt`
+    } else if (absValue >= 1000) {
+      return `${sign}Rp ${(absValue / 1000).toFixed(2)}Rb`
+    }
+    return `${sign}Rp ${absValue.toLocaleString('id-ID')}`
+  }
+}
+
+
+// Format ratio helper (for ratios like current_ratio, debt_to_equity)
+const formatRatioValue = (value: number | string | undefined): string => {
+  if (value === undefined || value === null) return '-'
+  const numValue = typeof value === 'string' ? parseFloat(value) : value
+  if (isNaN(numValue)) return '-'
+  return numValue.toFixed(2)
+}
+
+// Handle tab change - load data when tab is selected
+const handleTabChange = (activeKey: string) => {
+  if (activeKey === 'history' && company.value) {
+    loadChangeHistory()
+  } else if (activeKey === 'performance' && company.value) {
+    loadFinancialComparison(company.value.id)
+  } else if (activeKey === 'input-laporan' && company.value) {
+    loadFinancialReports(company.value.id)
+  }
+}
+
+// Handle financial report saved
+const handleFinancialReportSaved = async () => {
+  if (company.value) {
+    await loadFinancialReports(company.value.id)
+    await loadFinancialComparison(company.value.id)
+    message.success('Laporan keuangan berhasil disimpan')
+  }
+}
+
+
+
+// Helper function to get formatted cell value
+const getCellValue = (
+  columnKey: string | undefined,
+  record: Record<string, unknown>,
+  items: Array<{ key: string; isRatio: boolean }>,
+  valueType: 'rkap' | 'realisasi' | 'difference'
+): string => {
+  if (!columnKey) return '-'
+  
+  // Extract item key from column key (e.g., "current_assets_rkap" -> "current_assets")
+  const itemKey = columnKey.replace(`_${valueType}`, '')
+  const item = items.find(i => i.key === itemKey)
+  
+  if (!item) return '-'
+  
+  const value = record[columnKey]
+  
+  if (value === undefined || value === null) return '-'
+  
+  // Convert to number safely
+  if (typeof value !== 'number' && typeof value !== 'string') {
+    return '-'
+  }
+  
+  const numValue = typeof value === 'number' ? value : parseFloat(value)
+  
+  if (isNaN(numValue)) return '-'
+  
+  if (item.isRatio) {
+    return formatRatioValue(numValue)
+  } else {
+    return formatCurrencyValue(numValue)
+  }
+}
+
+// Generate columns with merged headers for financial items
+const generateMergedColumns = (items: Array<{ key: string; label: string; field: string; isRatio: boolean }>) => {
+  const baseColumns = [
+    {
+      title: 'Bulan',
+      key: 'month',
+      dataIndex: 'month',
+      width: 120,
+      fixed: 'left' as const,
+      align: 'left' as const,
+    },
+  ]
+
+  const itemColumns = items.map((item) => ({
+    title: item.label,
+    key: item.key,
+    align: 'center' as const,
+    children: [
+      {
+        title: 'RKAP',
+        key: `${item.key}_rkap`,
+        dataIndex: `${item.key}_rkap`,
+        align: 'right' as const,
+        width: 120,
+      },
+      {
+        title: 'Realisasi',
+        key: `${item.key}_realisasi`,
+        dataIndex: `${item.key}_realisasi`,
+        align: 'right' as const,
+        width: 120,
+      },
+    ],
+  }))
+
+  return [...baseColumns, ...itemColumns]
+}
+
+// Table columns sudah di-generate secara dinamis dengan merged headers
+
+// Generate monthly data with all items in one row
+const generateMonthlyDataWithAllItems = (items: Array<{ key: string; label: string; field: string; isRatio: boolean }>) => {
+  if (!financialReports.value || !selectedYear.value || !startMonth.value || !endMonth.value) return []
+  
+  const allMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
+  const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+  
+  const startIndex = allMonths.indexOf(startMonth.value)
+  const endIndex = allMonths.indexOf(endMonth.value)
+  
+  if (startIndex === -1 || endIndex === -1 || startIndex > endIndex) return []
+  
+  const filteredMonths = allMonths.slice(startIndex, endIndex + 1)
+  
+  // Get RKAP for the year
+  const rkap = financialReports.value.find(r => r.is_rkap && r.year === selectedYear.value)
+  const rkapRecord = rkap ? (rkap as unknown as Record<string, unknown>) : undefined
+  
+  // Generate data for each month
+  return filteredMonths.map((month) => {
+    const period = `${selectedYear.value}-${month}`
+    const realisasi = financialReports.value.find(r => !r.is_rkap && r.period === period)
+    const realisasiRecord = realisasi ? (realisasi as unknown as Record<string, unknown>) : undefined
+    
+    const monthIndex = allMonths.indexOf(month)
+    const rowData: Record<string, unknown> = {
+      key: month,
+      month: monthNames[monthIndex] || month,
+    }
+    
+    // Add data for each item - tampilkan data apa adanya tanpa perhitungan
+    items.forEach((item) => {
+      // RKAP: tampilkan nilai tahunan langsung (tidak dibagi 12)
+      const rkapAnnualValue = rkapRecord ? ((rkapRecord[item.field] as number | undefined) ?? 0) : 0
+      
+      // Realisasi: tampilkan nilai bulanan apa adanya
+      const realisasiValue = realisasiRecord ? ((realisasiRecord[item.field] as number | undefined) ?? 0) : 0
+      
+      // Tampilkan data apa adanya - tidak ada perhitungan otomatis
+      rowData[`${item.key}_rkap`] = rkapAnnualValue
+      rowData[`${item.key}_realisasi`] = realisasiValue
+    })
+    
+    return rowData
+  })
+}
+
+// Define items for each category
+const balanceSheetItems = [
+  { key: 'current_assets', label: 'A. Aset Lancar', field: 'current_assets', isRatio: false },
+  { key: 'non_current_assets', label: 'B. Aset Tidak Lancar', field: 'non_current_assets', isRatio: false },
+  { key: 'short_term_liabilities', label: 'C. Liabilitas Jangka Pendek', field: 'short_term_liabilities', isRatio: false },
+  { key: 'long_term_liabilities', label: 'D. Liabilitas Jangka Panjang', field: 'long_term_liabilities', isRatio: false },
+  { key: 'equity', label: 'E. Ekuitas', field: 'equity', isRatio: false },
+]
+
+const profitLossItems = [
+  { key: 'revenue', label: 'A. Revenue', field: 'revenue', isRatio: false },
+  { key: 'operating_expenses', label: 'B. Beban Usaha', field: 'operating_expenses', isRatio: false },
+  { key: 'operating_profit', label: 'C. Laba Usaha', field: 'operating_profit', isRatio: false },
+  { key: 'other_income', label: 'D. Pendapatan Lain-Lain', field: 'other_income', isRatio: false },
+  { key: 'tax', label: 'E. Tax', field: 'tax', isRatio: false },
+  { key: 'net_profit', label: 'F. Laba Bersih', field: 'net_profit', isRatio: false },
+]
+
+const cashflowItems = [
+  { key: 'operating_cashflow', label: 'A. Arus kas bersih dari operasi', field: 'operating_cashflow', isRatio: false },
+  { key: 'investing_cashflow', label: 'B. Arus kas bersih dari investasi', field: 'investing_cashflow', isRatio: false },
+  { key: 'financing_cashflow', label: 'C. Arus kas bersih dari pendanaan', field: 'financing_cashflow', isRatio: false },
+  { key: 'ending_balance', label: 'D. Saldo Akhir', field: 'ending_balance', isRatio: false },
+]
+
+const ratioItems = [
+  { key: 'roe', label: 'ROE (Return on Equity)', field: 'roe', isRatio: true },
+  { key: 'roi', label: 'ROI (Return on Investment)', field: 'roi', isRatio: true },
+  { key: 'current_ratio', label: 'Rasio Lancar', field: 'current_ratio', isRatio: true },
+  { key: 'cash_ratio', label: 'Rasio Kas', field: 'cash_ratio', isRatio: true },
+  { key: 'ebitda', label: 'EBITDA', field: 'ebitda', isRatio: false },
+  { key: 'ebitda_margin', label: 'EBITDA Margin', field: 'ebitda_margin', isRatio: true },
+  { key: 'net_profit_margin', label: 'Net Profit Margin', field: 'net_profit_margin', isRatio: true },
+  { key: 'operating_profit_margin', label: 'Operating Profit Margin', field: 'operating_profit_margin', isRatio: true },
+  { key: 'debt_to_equity', label: 'Debt to Equity', field: 'debt_to_equity', isRatio: true },
+]
+
+// Computed columns and data for merged table structure
+const balanceSheetColumns = computed(() => generateMergedColumns(balanceSheetItems))
+const balanceSheetMonthlyData = computed(() => generateMonthlyDataWithAllItems(balanceSheetItems))
+
+const profitLossColumns = computed(() => generateMergedColumns(profitLossItems))
+const profitLossMonthlyData = computed(() => generateMonthlyDataWithAllItems(profitLossItems))
+
+const cashflowColumns = computed(() => generateMergedColumns(cashflowItems))
+const cashflowMonthlyData = computed(() => generateMonthlyDataWithAllItems(cashflowItems))
+
+const ratioColumns = computed(() => generateMergedColumns(ratioItems))
+const ratioMonthlyData = computed(() => generateMonthlyDataWithAllItems(ratioItems))
+
+// Chart data for Balance Sheet Overview (main chart)
+const balanceSheetOverviewChartData = computed(() => {
+  if (!financialReports.value || !selectedYear.value || !startMonth.value || !endMonth.value) return []
+  
+  const allMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+  
+  const startIndex = allMonths.indexOf(startMonth.value)
+  const endIndex = allMonths.indexOf(endMonth.value)
+  
+  if (startIndex === -1 || endIndex === -1 || startIndex > endIndex) return []
+  
+  const filteredMonths = allMonths.slice(startIndex, endIndex + 1)
+  
+  // Get RKAP for the year
+  const rkap = financialReports.value.find(r => r.is_rkap && r.year === selectedYear.value)
+  const rkapRecord = rkap ? (rkap as unknown as Record<string, unknown>) : undefined
+  
+  // Calculate monthly values for Total Assets, Total Liabilities, and Equity
+  return filteredMonths.map((month) => {
+    const period = `${selectedYear.value}-${month}`
+    const realisasi = financialReports.value.find(r => !r.is_rkap && r.period === period)
+    const realisasiRecord = realisasi ? (realisasi as unknown as Record<string, unknown>) : undefined
+    
+    const monthIndex = allMonths.indexOf(month)
+    
+    // Calculate Total Assets = current_assets + non_current_assets
+    // RKAP: tampilkan nilai tahunan langsung (tidak dibagi 12)
+    const rkapTotalAssets = rkapRecord 
+      ? ((rkapRecord['current_assets'] as number | undefined) ?? 0) + ((rkapRecord['non_current_assets'] as number | undefined) ?? 0)
+      : 0
+    
+    const realisasiTotalAssets = realisasiRecord
+      ? ((realisasiRecord['current_assets'] as number | undefined) ?? 0) + ((realisasiRecord['non_current_assets'] as number | undefined) ?? 0)
+      : 0
+    
+    // Calculate Total Liabilities = short_term_liabilities + long_term_liabilities
+    const rkapTotalLiabilities = rkapRecord
+      ? ((rkapRecord['short_term_liabilities'] as number | undefined) ?? 0) + ((rkapRecord['long_term_liabilities'] as number | undefined) ?? 0)
+      : 0
+    
+    const realisasiTotalLiabilities = realisasiRecord
+      ? ((realisasiRecord['short_term_liabilities'] as number | undefined) ?? 0) + ((realisasiRecord['long_term_liabilities'] as number | undefined) ?? 0)
+      : 0
+    
+    // Equity
+    const rkapEquity = rkapRecord ? ((rkapRecord['equity'] as number | undefined) ?? 0) : 0
+    const realisasiEquity = realisasiRecord ? ((realisasiRecord['equity'] as number | undefined) ?? 0) : 0
+    
+    return {
+      label: monthNames[monthIndex] || month,
+      totalAssets: {
+        rkap: rkapTotalAssets, // Nilai tahunan langsung
+        realisasi: realisasiTotalAssets,
+      },
+      totalLiabilities: {
+        rkap: rkapTotalLiabilities, // Nilai tahunan langsung
+        realisasi: realisasiTotalLiabilities,
+      },
+      equity: {
+        rkap: rkapEquity, // Nilai tahunan langsung
+        realisasi: realisasiEquity,
+      },
+    }
+  })
+})
+
+// Chart data for Profit Loss Overview (Revenue vs Net Profit)
+const profitLossOverviewChartData = computed(() => {
+  if (!financialReports.value || !selectedYear.value || !startMonth.value || !endMonth.value) return []
+  
+  const allMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+  
+  const startIndex = allMonths.indexOf(startMonth.value)
+  const endIndex = allMonths.indexOf(endMonth.value)
+  
+  if (startIndex === -1 || endIndex === -1 || startIndex > endIndex) return []
+  
+  const filteredMonths = allMonths.slice(startIndex, endIndex + 1)
+  
+  // Get RKAP for the year
+  const rkap = financialReports.value.find(r => r.is_rkap && r.year === selectedYear.value)
+  const rkapRecord = rkap ? (rkap as unknown as Record<string, unknown>) : undefined
+  
+  return filteredMonths.map((month) => {
+    const period = `${selectedYear.value}-${month}`
+    const realisasi = financialReports.value.find(r => !r.is_rkap && r.period === period)
+    const realisasiRecord = realisasi ? (realisasi as unknown as Record<string, unknown>) : undefined
+    
+    const monthIndex = allMonths.indexOf(month)
+    
+    // Revenue - RKAP: nilai tahunan langsung
+    const rkapRevenue = rkapRecord ? ((rkapRecord['revenue'] as number | undefined) ?? 0) : 0
+    const realisasiRevenue = realisasiRecord ? ((realisasiRecord['revenue'] as number | undefined) ?? 0) : 0
+    
+    // Net Profit - RKAP: nilai tahunan langsung
+    const rkapNetProfit = rkapRecord ? ((rkapRecord['net_profit'] as number | undefined) ?? 0) : 0
+    const realisasiNetProfit = realisasiRecord ? ((realisasiRecord['net_profit'] as number | undefined) ?? 0) : 0
+    
+    return {
+      label: monthNames[monthIndex] || month,
+      revenue: {
+        rkap: rkapRevenue, // Nilai tahunan langsung
+        realisasi: realisasiRevenue,
+      },
+      netProfit: {
+        rkap: rkapNetProfit, // Nilai tahunan langsung
+        realisasi: realisasiNetProfit,
+      },
+    }
+  })
+})
+
+// Chart data for Cashflow Overview (Net Cashflow vs Ending Balance)
+const cashflowOverviewChartData = computed(() => {
+  if (!financialReports.value || !selectedYear.value || !startMonth.value || !endMonth.value) return []
+  
+  const allMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+  
+  const startIndex = allMonths.indexOf(startMonth.value)
+  const endIndex = allMonths.indexOf(endMonth.value)
+  
+  if (startIndex === -1 || endIndex === -1 || startIndex > endIndex) return []
+  
+  const filteredMonths = allMonths.slice(startIndex, endIndex + 1)
+  
+  // Get RKAP for the year
+  const rkap = financialReports.value.find(r => r.is_rkap && r.year === selectedYear.value)
+  const rkapRecord = rkap ? (rkap as unknown as Record<string, unknown>) : undefined
+  
+  return filteredMonths.map((month) => {
+    const period = `${selectedYear.value}-${month}`
+    const realisasi = financialReports.value.find(r => !r.is_rkap && r.period === period)
+    const realisasiRecord = realisasi ? (realisasi as unknown as Record<string, unknown>) : undefined
+    
+    const monthIndex = allMonths.indexOf(month)
+    
+    // Net Cashflow = Operating + Investing + Financing
+    // RKAP: nilai tahunan langsung
+    const rkapOperating = rkapRecord ? ((rkapRecord['operating_cashflow'] as number | undefined) ?? 0) : 0
+    const rkapInvesting = rkapRecord ? ((rkapRecord['investing_cashflow'] as number | undefined) ?? 0) : 0
+    const rkapFinancing = rkapRecord ? ((rkapRecord['financing_cashflow'] as number | undefined) ?? 0) : 0
+    const rkapNetCashflow = rkapOperating + rkapInvesting + rkapFinancing
+    
+    const realisasiOperating = realisasiRecord ? ((realisasiRecord['operating_cashflow'] as number | undefined) ?? 0) : 0
+    const realisasiInvesting = realisasiRecord ? ((realisasiRecord['investing_cashflow'] as number | undefined) ?? 0) : 0
+    const realisasiFinancing = realisasiRecord ? ((realisasiRecord['financing_cashflow'] as number | undefined) ?? 0) : 0
+    const realisasiNetCashflow = realisasiOperating + realisasiInvesting + realisasiFinancing
+    
+    // Ending Balance - RKAP: nilai tahunan langsung
+    const rkapEndingBalance = rkapRecord ? ((rkapRecord['ending_balance'] as number | undefined) ?? 0) : 0
+    const realisasiEndingBalance = realisasiRecord ? ((realisasiRecord['ending_balance'] as number | undefined) ?? 0) : 0
+    
+    return {
+      label: monthNames[monthIndex] || month,
+      netCashflow: {
+        rkap: rkapNetCashflow, // Nilai tahunan langsung
+        realisasi: realisasiNetCashflow,
+      },
+      endingBalance: {
+        rkap: rkapEndingBalance, // Nilai tahunan langsung
+        realisasi: realisasiEndingBalance,
+      },
+    }
+  })
+})
+
+// Chart data for Ratio Overview (ROE, ROI, Current Ratio, Debt-to-Equity)
+const ratioOverviewChartData = computed(() => {
+  if (!financialReports.value || !selectedYear.value || !startMonth.value || !endMonth.value) return []
+  
+  const allMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+  
+  const startIndex = allMonths.indexOf(startMonth.value)
+  const endIndex = allMonths.indexOf(endMonth.value)
+  
+  if (startIndex === -1 || endIndex === -1 || startIndex > endIndex) return []
+  
+  const filteredMonths = allMonths.slice(startIndex, endIndex + 1)
+  
+  // Get RKAP for the year
+  const rkap = financialReports.value.find(r => r.is_rkap && r.year === selectedYear.value)
+  const rkapRecord = rkap ? (rkap as unknown as Record<string, unknown>) : undefined
+  
+  return filteredMonths.map((month) => {
+    const period = `${selectedYear.value}-${month}`
+    const realisasi = financialReports.value.find(r => !r.is_rkap && r.period === period)
+    const realisasiRecord = realisasi ? (realisasi as unknown as Record<string, unknown>) : undefined
+    
+    const monthIndex = allMonths.indexOf(month)
+    
+    // ROE
+    const rkapROE = rkapRecord ? ((rkapRecord['roe'] as number | undefined) ?? 0) : 0
+    const realisasiROE = realisasiRecord ? ((realisasiRecord['roe'] as number | undefined) ?? 0) : 0
+    
+    // ROI
+    const rkapROI = rkapRecord ? ((rkapRecord['roi'] as number | undefined) ?? 0) : 0
+    const realisasiROI = realisasiRecord ? ((realisasiRecord['roi'] as number | undefined) ?? 0) : 0
+    
+    // Current Ratio
+    const rkapCurrentRatio = rkapRecord ? ((rkapRecord['current_ratio'] as number | undefined) ?? 0) : 0
+    const realisasiCurrentRatio = realisasiRecord ? ((realisasiRecord['current_ratio'] as number | undefined) ?? 0) : 0
+    
+    // Debt to Equity
+    const rkapDebtToEquity = rkapRecord ? ((rkapRecord['debt_to_equity'] as number | undefined) ?? 0) : 0
+    const realisasiDebtToEquity = realisasiRecord ? ((realisasiRecord['debt_to_equity'] as number | undefined) ?? 0) : 0
+    
+    return {
+      label: monthNames[monthIndex] || month,
+      roe: {
+        rkap: rkapROE,
+        realisasi: realisasiROE,
+      },
+      roi: {
+        rkap: rkapROI,
+        realisasi: realisasiROI,
+      },
+      currentRatio: {
+        rkap: rkapCurrentRatio,
+        realisasi: realisasiCurrentRatio,
+      },
+      debtToEquity: {
+        rkap: rkapDebtToEquity,
+        realisasi: realisasiDebtToEquity,
+      },
+    }
+  })
+})
 
 onMounted(() => {
   loadCompany()
@@ -1229,6 +2825,21 @@ onMounted(() => {
 <style scoped>
 .subsidiary-detail-layout {
   min-height: 100vh;
+}
+
+.back-button-container {
+  margin-top: 100px;
+  margin-bottom: -100px;
+}
+
+.back-button-container .back-button {
+  margin-bottom: 24px;
+  padding: 0;
+  height: auto;
+  display: flex;
+  align-items: center;
+  padding: 5px 8px;
+  margin: 24px;
 }
 
 .detail-content {
@@ -1308,9 +2919,9 @@ onMounted(() => {
 }
 
 .company-subtitle {
-  font-size: 18px;
+  font-size: 16px;
   color: #666;
-  margin: 0 0 16px 0;
+  margin: -14px 0 16px 0;
 }
 
 .company-meta {
@@ -1318,6 +2929,8 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  /* background: orange; */
+  margin-top: -15px;
 }
 
 .meta-item {
@@ -1325,17 +2938,82 @@ onMounted(() => {
   color: #666;
 }
 
+.company-hierarchy {
+  /* background: red; */
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: -10px;
+  padding-top: 0px;
+  /* border-top: 1px solid #f0f0f0; */
+}
+
+.hierarchy-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+}
+
+.hierarchy-path {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.hierarchy-item {
+  font-size: 12px;
+  color: #333;
+}
+
+.hierarchy-separator {
+  font-size: 14px;
+  color: #999;
+  margin: 0 2px;
+}
+
 .header-actions {
   flex-shrink: 0;
 }
 
+/* Ensure all buttons and date picker in header-actions have consistent height */
+.header-actions :deep(.ant-btn) {
+  height: 40px !important;
+  min-height: 40px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.header-actions :deep(.ant-picker) {
+  height: 40px !important;
+}
+
+.header-actions :deep(.ant-picker-input) {
+  height: 40px !important;
+}
+
+.header-actions :deep(.ant-picker-input > input) {
+  height: 38px !important;
+  line-height: 38px !important;
+}
+
 /* Tabs Container */
 .tabs-container {
-  margin-top: 24px;
+  margin-top: 50px;
+  padding: 24px;
+  /* background: red; */
 }
 
 .tabs-container :deep(.ant-tabs-card) {
   background: transparent;
+  background: white;
+  margin-top: -50px;
+  padding: 24px;
+  border-radius: 
+  15px;
 }
 
 .tabs-container :deep(.ant-tabs-tab) {
@@ -1348,9 +3026,103 @@ onMounted(() => {
 
 /* Performance Content */
 .performance-content {
+  padding: 0px 0 24px 0;
+  /* background: orange; */
+  border-radius: 0 8px 8px 8px;
+}
+
+/* Financial Table Card - untuk table dengan banyak kolom */
+.financial-table-card {
+  overflow-x: auto;
+}
+
+.financial-table-card :deep(.ant-table-wrapper) {
+  overflow-x: auto;
+}
+
+.financial-table-card :deep(.ant-table) {
+  min-width: 100%;
+}
+
+.financial-table-card :deep(.ant-table-thead > tr > th) {
+  white-space: nowrap;
+  text-align: center;
+  font-weight: 600;
+  background: #fafafa;
+}
+
+.financial-table-card :deep(.ant-table-thead > tr > th[colspan]) {
+  text-align: center;
+  background: #e6f7ff;
+  font-weight: 600;
+}
+
+.financial-table-card :deep(.ant-table-tbody > tr > td) {
+  white-space: nowrap;
+}
+
+/* Mini Charts Grid */
+.mini-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.mini-chart-card {
+  background: white;
+  border-radius: 8px;
+}
+
+.mini-chart-card :deep(.ant-card-body) {
+  padding: 16px;
+}
+
+.mini-chart-card :deep(.ant-card-head) {
+  padding: 12px 16px;
+  min-height: auto;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.mini-chart-card :deep(.ant-card-head-title) {
+  padding: 0;
+}
+
+/* Responsive untuk mini charts */
+@media (max-width: 1200px) {
+  .mini-charts-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .mini-charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Input Laporan Content */
+.input-laporan-content {
   padding: 24px;
   background: white;
   border-radius: 0 8px 8px 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.input-laporan-tabs {
+  position: relative;
+  z-index: 1;
+}
+
+.input-laporan-tabs :deep(.ant-tabs-card) {
+  background: transparent;
+  margin-top: 0;
+  padding: 0;
+}
+
+.input-laporan-tabs :deep(.ant-tabs-nav) {
+  margin-bottom: 16px;
 }
 
 .trend-cards-row {
@@ -1369,6 +3141,11 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 100%;
+}
+
+.trend-card-content :deep(.ant-card-body) {
+  padding: 24px;
 }
 
 .trend-metric {
@@ -1415,11 +3192,19 @@ onMounted(() => {
 .mini-chart-container {
   position: relative;
   width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  display: block;
 }
 
 .mini-chart {
-  width: 100%;
+  width: 100% !important;
   height: 60px;
+  display: block;
+  margin: 0;
+  padding: 0;
+  max-width: 100%;
 }
 
 .chart-fill {
@@ -1441,14 +3226,18 @@ onMounted(() => {
 
 /* Recent Section */
 .recent-section {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 24px;
 }
 
 .recent-card {
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.full-width {
+  width: 100%;
 }
 
 .card-header-title {
@@ -1461,6 +3250,330 @@ onMounted(() => {
   padding: 24px;
   background: white;
   border-radius: 0 8px 8px 8px;
+}
+
+/* Info Grid Layout */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-top: 16px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.info-item.full-width {
+  grid-column: 1 / -1;
+}
+
+.info-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.info-value {
+  font-size: 15px;
+  color: #1a1a1a;
+  word-break: break-word;
+}
+
+.info-value a {
+  color: #1890ff;
+  text-decoration: none;
+}
+
+.info-value a:hover {
+  text-decoration: underline;
+}
+
+/* Shareholders List */
+.shareholders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.shareholder-card {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  transition: all 0.3s ease;
+}
+
+.shareholder-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: #1890ff;
+}
+
+.shareholder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.shareholder-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shareholder-badge {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.shareholder-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 8px 0;
+}
+
+.info-row.full-width {
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Directors List - Compact Style */
+.directors-list-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.director-item-compact {
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  padding: 12px 16px;
+  transition: all 0.2s ease;
+}
+
+.director-item-compact:hover {
+  background: #f5f5f5;
+  border-color: #d9d9d9;
+}
+
+.director-main-info {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.director-name-compact {
+  flex: 0 0 200px;
+  min-width: 200px;
+}
+
+.director-name-compact strong {
+  font-size: 15px;
+  color: #1a1a1a;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.director-positions-compact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.director-info-compact {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  font-size: 13px;
+  color: #666;
+}
+
+.info-compact {
+  white-space: nowrap;
+}
+
+.info-compact.full-width-compact {
+  width: 100%;
+  white-space: normal;
+  margin-top: 4px;
+}
+
+.info-compact strong {
+  color: #333;
+  margin-right: 4px;
+}
+
+/* Director Documents - Compact */
+.director-documents-compact {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e8e8e8;
+}
+
+.documents-header-compact {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+}
+
+.documents-label-compact {
+  color: #666;
+}
+
+.documents-loading-compact {
+  padding: 8px;
+  text-align: center;
+}
+
+.documents-list-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.document-item-compact {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  font-size: 13px;
+}
+
+.document-item-compact:hover {
+  background: #f5f5f5;
+  border-color: #d9d9d9;
+}
+
+.document-name-compact {
+  flex: 1;
+  color: #1a1a1a;
+  margin-right: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.document-action-btn {
+  color: #1890ff;
+  cursor: pointer;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+}
+
+.document-action-btn:hover {
+  background: #e6f7ff;
+  color: #40a9ff;
+}
+
+.document-action-btn.delete-btn {
+  color: #ff4d4f;
+}
+
+.document-action-btn.delete-btn:hover {
+  background: #fff1f0;
+  color: #ff7875;
+}
+
+.documents-empty-compact {
+  padding: 8px;
+  text-align: center;
+  color: #999;
+  font-size: 12px;
+}
+
+.text-muted {
+  color: #999;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .shareholder-header,
+  .director-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .info-row {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  /* Compact directors responsive */
+  .director-main-info {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .director-name-compact {
+    flex: 1;
+    min-width: auto;
+  }
+  
+  .director-info-compact {
+    width: 100%;
+  }
+  
+  .document-item-compact {
+    flex-wrap: wrap;
+  }
+  
+  .document-name-compact {
+    min-width: 150px;
+  }
+  
+  .document-actions {
+    margin-left: 0;
+    margin-top: 4px;
+  }
 }
 
 .detail-sections {
@@ -1488,7 +3601,7 @@ onMounted(() => {
   }
 
   .recent-section {
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 }
 
@@ -1536,5 +3649,26 @@ onMounted(() => {
 .text-muted {
   color: #999;
   font-size: 12px;
+}
+
+.change-description {
+  max-width: 100%;
+}
+
+.change-header {
+  margin-bottom: 8px;
+  color: #1a1a1a;
+}
+
+.change-list {
+  margin: 0;
+  padding-left: 20px;
+  list-style-type: disc;
+}
+
+.change-list li {
+  margin-bottom: 4px;
+  line-height: 1.6;
+  color: #666;
 }
 </style>

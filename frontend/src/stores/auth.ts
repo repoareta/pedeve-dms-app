@@ -3,9 +3,8 @@ import { ref, computed } from 'vue'
 import { authApi, type User } from '../api/auth'
 
 export const useAuthStore = defineStore('auth', () => {
-  // Token sekarang di httpOnly cookie, jadi tidak disimpan di localStorage
-  // Pertahankan token ref untuk kompatibilitas ke belakang (tapi tidak digunakan untuk API calls)
-  const token = ref<string | null>(null)
+  // Token disimpan di httpOnly cookie + fallback di localStorage (untuk Authorization header)
+  const token = ref<string | null>(localStorage.getItem('auth_token'))
   
   // Initialize user from localStorage
   const getInitialUser = (): User | null => {
@@ -38,10 +37,10 @@ export const useAuthStore = defineStore('auth', () => {
       
       // Hanya simpan info user untuk UI state (token sekarang di httpOnly cookie)
       if (response.token && response.user) {
-        token.value = response.token // Simpan untuk UI state, tapi tidak digunakan untuk API calls
+        token.value = response.token
         user.value = response.user
-        // Jangan simpan token di localStorage lagi (sudah di httpOnly cookie)
         localStorage.setItem('auth_user', JSON.stringify(response.user))
+        localStorage.setItem('auth_token', response.token)
       }
       
       return response
@@ -61,10 +60,10 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await authApi.register({ username, email, password })
       // Token disimpan di httpOnly cookie oleh backend, frontend hanya simpan info user
-      token.value = response.token // Simpan untuk UI state, tapi tidak digunakan untuk API calls
+      token.value = response.token
       user.value = response.user
-      // Jangan simpan token di localStorage lagi (sudah di httpOnly cookie)
       localStorage.setItem('auth_user', JSON.stringify(response.user))
+      localStorage.setItem('auth_token', response.token)
       return response
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { message?: string } } }
@@ -100,6 +99,7 @@ export const useAuthStore = defineStore('auth', () => {
       token.value = null
       user.value = null
       localStorage.removeItem('auth_user')
+      localStorage.removeItem('auth_token')
       // Reset flag setelah logout selesai
       isLoggingOut.value = false
     }
@@ -145,6 +145,7 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = null
     user.value = null
     localStorage.removeItem('auth_user')
+    localStorage.removeItem('auth_token')
   }
 
   // Login with 2FA code
@@ -247,4 +248,3 @@ export const useAuthStore = defineStore('auth', () => {
     disable2FA,
   }
 })
-

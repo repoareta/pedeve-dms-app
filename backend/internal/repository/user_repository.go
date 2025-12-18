@@ -28,11 +28,16 @@ type userRepository struct {
 	db *gorm.DB
 }
 
-// NewUserRepository creates a new user repository
-func NewUserRepository() UserRepository {
+// NewUserRepositoryWithDB creates a new user repository with injected DB (for testing)
+func NewUserRepositoryWithDB(db *gorm.DB) UserRepository {
 	return &userRepository{
-		db: database.GetDB(),
+		db: db,
 	}
+}
+
+// NewUserRepository creates a new user repository with default DB (backward compatibility)
+func NewUserRepository() UserRepository {
+	return NewUserRepositoryWithDB(database.GetDB())
 }
 
 func (r *userRepository) Create(user *domain.UserModel) error {

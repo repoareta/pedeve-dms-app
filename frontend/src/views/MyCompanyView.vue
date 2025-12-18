@@ -3,6 +3,10 @@
     <DashboardHeader @logout="handleLogout" />
 
     <div class="detail-content">
+     
+
+      
+
       <!-- Loading State -->
       <div v-if="loading || loadingCompanies" class="loading-container">
         <a-spin size="large" />
@@ -473,6 +477,9 @@
                       <template v-if="column.key === 'start_date'">
                         {{ record.start_date ? formatDate(record.start_date) : '-' }}
                       </template>
+                      <template v-else-if="column.key === 'end_date'">
+                        {{ record.end_date ? formatDate(record.end_date) : '-' }}
+                      </template>
                     </template>
                   </a-table>
                 </div>
@@ -486,7 +493,7 @@
       <div v-else class="not-found">
         <IconifyIcon icon="mdi:alert-circle-outline" width="64" style="color: #ccc; margin-bottom: 16px;" />
         <p>Perusahaan tidak ditemukan atau Anda belum di-assign ke perusahaan</p>
-        <a-button type="primary" @click="router.push('/dashboard')">Kembali ke Dashboard</a-button>
+        <a-button type="primary" @click="router.push('/subsidiaries')">Kembali ke Subsidiaries</a-button>
       </div>
 
       <!-- Assign Role Modal -->
@@ -737,6 +744,7 @@ const directorColumns = [
   { title: 'KTP', dataIndex: 'ktp', key: 'ktp' },
   { title: 'NPWP', dataIndex: 'npwp', key: 'npwp' },
   { title: 'Tanggal Mulai', key: 'start_date' },
+  { title: 'Tanggal Akhir', key: 'end_date' },
   { title: 'Alamat Domisili', dataIndex: 'domicile_address', key: 'domicile_address' },
 ]
 
@@ -977,10 +985,9 @@ const loadCompanyDetail = async (companyId: string) => {
   }
 }
 
-// Select company from selector
+// Select company from selector -> redirect to subsidiary detail
 const selectCompany = async (companyId: string) => {
-  await loadCompanyDetail(companyId)
-  showCompanySelector.value = false
+  router.push(`/subsidiaries/${companyId}`)
 }
 
 // Show selector again
@@ -1013,7 +1020,7 @@ const formatDate = (date: string | undefined): string => {
 
 const getCompanyLogo = (company: Company): string | undefined => {
   if (company.logo) {
-    const apiURL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+    const apiURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-pedeve-dev.aretaamany.com')
     const baseURL = apiURL.replace(/\/api\/v1$/, '')
     return company.logo.startsWith('http') ? company.logo : `${baseURL}${company.logo}`
   }
@@ -1047,18 +1054,8 @@ const getIconColor = (name: string): string => {
 }
 
 const getLevelLabel = (level: number): string => {
-  switch (level) {
-    case 0:
-      return 'Holding (Induk)'
-    case 1:
-      return 'Anak Perusahaan'
-    case 2:
-      return 'Cucu Perusahaan'
-    case 3:
-      return 'Cicit Perusahaan'
-    default:
-      return `Level ${level}`
-  }
+  if (level === 0) return 'Holding'
+  return `Level ${level}`
 }
 
 const getLevelColor = (level: number): string => {
@@ -1472,14 +1469,38 @@ onMounted(() => {
   margin-bottom: 16px;
 }
 
+.page-header-container{
+  margin-bottom: 0 !important;
+}
+
 /* Page Header Container */
-.page-header-container {
+/* .page-header-container {
   padding: 24px;
   background: white;
   border-radius: 8px;
   margin-bottom: 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.page-title {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f1f1f;
+}
+
+.page-description {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+} */
 
 /* Detail Header */
 .detail-header {
@@ -1822,6 +1843,7 @@ onMounted(() => {
 .selector-header {
   text-align: center;
   margin-bottom: 32px;
+  margin-top: 50px;
 }
 
 .selector-title {

@@ -6,10 +6,10 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/uuid"
-	"github.com/gofiber/fiber/v2"
 )
 
 const (
@@ -17,9 +17,44 @@ const (
 	LogTypeTechnicalError = "technical_error"
 )
 
+// isSuspiciousPath mengecek apakah path adalah request mencurigakan (bot/scanner)
+// Request ini biasanya tidak perlu di-log sebagai technical error untuk mengurangi noise
+func isSuspiciousPath(path string) bool {
+	suspiciousPatterns := []string{
+		"/boaform/",       // Router/device admin panels
+		"/wp-admin/",      // WordPress admin
+		"/wp-login.php",   // WordPress login
+		"/.env",           // Environment file access
+		"/.git/",          // Git directory access
+		"/phpmyadmin/",    // phpMyAdmin
+		"/admin.php",      // Generic admin panels
+		"/administrator/", // Joomla admin
+		"/manager/",       // Tomcat manager
+		"/solr/",          // Apache Solr
+		"/actuator/",      // Spring Boot actuator
+		"/.well-known/",   // Well-known paths (some are legit, but many bots scan this)
+		"/phpinfo",        // PHP info
+		"/config.php",     // Config files
+		"/web.config",     // IIS config
+	}
+
+	for _, pattern := range suspiciousPatterns {
+		if len(path) >= len(pattern) && path[:len(pattern)] == pattern {
+			return true
+		}
+	}
+
+	return false
+}
+
 // LogTechnicalError mencatat error teknis ke audit log (untuk Fiber)
 func LogTechnicalError(err error, c *fiber.Ctx, details map[string]interface{}) {
 	if err == nil {
+		return
+	}
+
+	// Jika path mencurigakan, abaikan seluruh logging (apapun status code-nya)
+	if isSuspiciousPath(c.Path()) {
 		return
 	}
 
@@ -105,6 +140,11 @@ func ErrorHandlerMiddleware(c *fiber.Ctx) error {
 	// Log error setelah handler selesai (jika ada error atau status code >= 400)
 	statusCode := c.Response().StatusCode()
 	if statusCode >= 400 {
+		// Skip error logging untuk path mencurigakan (bot/scanner) agar audit log tidak penuh noise
+		if isSuspiciousPath(c.Path()) {
+			return err
+		}
+
 		// Ekstrak pesan error dari response body jika memungkinkan
 		details := map[string]interface{}{
 			"status_code": statusCode,
@@ -150,4 +190,3 @@ func RecoverMiddleware(c *fiber.Ctx) error {
 func LogAction(userID, username, action, resource, resourceID, ipAddress, userAgent, status string, details map[string]interface{}) {
 	LogActionAsync(userID, username, action, resource, resourceID, ipAddress, userAgent, status, details)
 }
-

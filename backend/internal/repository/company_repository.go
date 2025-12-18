@@ -15,11 +15,11 @@ type CompanyRepository interface {
 	GetByParentID(parentID string) ([]domain.CompanyModel, error)
 	GetChildren(companyID string) ([]domain.CompanyModel, error)
 	GetDescendants(companyID string) ([]domain.CompanyModel, error) // Get all descendants (children, grandchildren, etc)
-	GetAncestors(companyID string) ([]domain.CompanyModel, error)  // Get all ancestors (parent, grandparent, etc)
+	GetAncestors(companyID string) ([]domain.CompanyModel, error)   // Get all ancestors (parent, grandparent, etc)
 	Update(company *domain.CompanyModel) error
 	Delete(id string) error
 	IsDescendantOf(childID, parentID string) (bool, error) // Check if childID is descendant of parentID
-	GetRootHolding() (*domain.CompanyModel, error)        // Get the root holding company (parent_id = NULL)
+	GetRootHolding() (*domain.CompanyModel, error)         // Get the root holding company (parent_id = NULL)
 	CountRootHoldings() (int64, error)                     // Count companies with parent_id = NULL
 }
 
@@ -27,11 +27,16 @@ type companyRepository struct {
 	db *gorm.DB
 }
 
-// NewCompanyRepository creates a new company repository
-func NewCompanyRepository() CompanyRepository {
+// NewCompanyRepositoryWithDB creates a new company repository with injected DB (for testing)
+func NewCompanyRepositoryWithDB(db *gorm.DB) CompanyRepository {
 	return &companyRepository{
-		db: database.GetDB(),
+		db: db,
 	}
+}
+
+// NewCompanyRepository creates a new company repository with default DB (backward compatibility)
+func NewCompanyRepository() CompanyRepository {
+	return NewCompanyRepositoryWithDB(database.GetDB())
 }
 
 func (r *companyRepository) Create(company *domain.CompanyModel) error {
@@ -40,7 +45,7 @@ func (r *companyRepository) Create(company *domain.CompanyModel) error {
 
 func (r *companyRepository) GetByID(id string) (*domain.CompanyModel, error) {
 	var company domain.CompanyModel
-	err := r.db.Preload("Shareholders").Preload("BusinessFields").Preload("Directors").Where("id = ?", id).First(&company).Error
+	err := r.db.Preload("Shareholders.ShareholderCompany").Preload("BusinessFields").Preload("Directors").Where("id = ?", id).First(&company).Error
 	if err != nil {
 		return nil, err
 	}
@@ -73,28 +78,43 @@ func (r *companyRepository) GetChildren(companyID string) ([]domain.CompanyModel
 }
 
 // GetDescendants menggunakan recursive CTE untuk mendapatkan semua descendants
+// Optimized dengan limit untuk mencegah temp_file_limit error pada hierarki yang sangat dalam
 func (r *companyRepository) GetDescendants(companyID string) ([]domain.CompanyModel, error) {
 	var descendants []domain.CompanyModel
-	
+
 	// PostgreSQL recursive CTE untuk mendapatkan semua descendants (children, grandchildren, etc)
+	// Optimized dengan depth limit dan result limit untuk mencegah temp_file_limit error
+	// CRITICAL: Gunakan DISTINCT untuk prevent duplicate jika ada bug di data hierarchy
 	query := `
 		WITH RECURSIVE descendants AS (
 			-- Base case: direct children
-			SELECT * FROM companies WHERE parent_id = ? AND is_active = true
-			UNION ALL
-			-- Recursive case: children of children
-			SELECT c.* FROM companies c
+			SELECT DISTINCT id, name, short_name, code, description, npwp, nib, status, logo, phone, fax, email, website,
+			       address, operational_address, authorized_capital, paid_up_capital, currency, parent_id, main_parent_company_id, level, is_active, created_at, updated_at,
+			       1 as depth
+			FROM companies 
+			WHERE parent_id = ? AND is_active = true
+			UNION
+			-- Recursive case: children of children (max depth 10 levels untuk prevent infinite recursion dan reduce temp file usage)
+			-- CRITICAL: Gunakan UNION (bukan UNION ALL) untuk prevent duplicate rows
+			SELECT DISTINCT c.id, c.name, c.short_name, c.code, c.description, c.npwp, c.nib, c.status, c.logo, c.phone, c.fax, c.email, c.website,
+			       c.address, c.operational_address, c.authorized_capital, c.paid_up_capital, c.currency, c.parent_id, c.main_parent_company_id, c.level, c.is_active, c.created_at, c.updated_at,
+			       d.depth + 1 as depth
+			FROM companies c
 			INNER JOIN descendants d ON c.parent_id = d.id
-			WHERE c.is_active = true
+			WHERE c.is_active = true AND d.depth < 10
 		)
-		SELECT * FROM descendants ORDER BY level, name
+		SELECT DISTINCT id, name, short_name, code, description, npwp, nib, status, logo, phone, fax, email, website, 
+		       address, operational_address, authorized_capital, paid_up_capital, currency, parent_id, main_parent_company_id, level, is_active, created_at, updated_at
+		FROM descendants 
+		ORDER BY level, name
+		LIMIT 10000
 	`
-	
+
 	err := r.db.Raw(query, companyID).Scan(&descendants).Error
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Ensure we return all descendants including direct children
 	return descendants, nil
 }
@@ -102,7 +122,7 @@ func (r *companyRepository) GetDescendants(companyID string) ([]domain.CompanyMo
 // GetAncestors menggunakan recursive CTE untuk mendapatkan semua ancestors
 func (r *companyRepository) GetAncestors(companyID string) ([]domain.CompanyModel, error) {
 	var ancestors []domain.CompanyModel
-	
+
 	// PostgreSQL recursive CTE
 	query := `
 		WITH RECURSIVE ancestors AS (
@@ -115,7 +135,7 @@ func (r *companyRepository) GetAncestors(companyID string) ([]domain.CompanyMode
 		)
 		SELECT * FROM ancestors WHERE id != ?
 	`
-	
+
 	err := r.db.Raw(query, companyID, companyID).Scan(&ancestors).Error
 	return ancestors, err
 }
@@ -135,13 +155,13 @@ func (r *companyRepository) IsDescendantOf(childID, parentID string) (bool, erro
 	if err != nil {
 		return false, err
 	}
-	
+
 	for _, desc := range descendants {
 		if desc.ID == childID {
 			return true, nil
 		}
 	}
-	
+
 	return false, nil
 }
 
@@ -161,4 +181,3 @@ func (r *companyRepository) CountRootHoldings() (int64, error) {
 	err := r.db.Model(&domain.CompanyModel{}).Where("parent_id IS NULL AND is_active = ?", true).Count(&count).Error
 	return count, err
 }
-

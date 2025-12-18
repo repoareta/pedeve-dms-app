@@ -24,11 +24,16 @@ type userCompanyAssignmentRepository struct {
 	db *gorm.DB
 }
 
-// NewUserCompanyAssignmentRepository creates a new user-company assignment repository
-func NewUserCompanyAssignmentRepository() UserCompanyAssignmentRepository {
+// NewUserCompanyAssignmentRepositoryWithDB creates a new user-company assignment repository with injected DB (for testing)
+func NewUserCompanyAssignmentRepositoryWithDB(db *gorm.DB) UserCompanyAssignmentRepository {
 	return &userCompanyAssignmentRepository{
-		db: database.GetDB(),
+		db: db,
 	}
+}
+
+// NewUserCompanyAssignmentRepository creates a new user-company assignment repository with default DB (backward compatibility)
+func NewUserCompanyAssignmentRepository() UserCompanyAssignmentRepository {
+	return NewUserCompanyAssignmentRepositoryWithDB(database.GetDB())
 }
 
 func (r *userCompanyAssignmentRepository) Create(assignment *domain.UserCompanyAssignmentModel) error {

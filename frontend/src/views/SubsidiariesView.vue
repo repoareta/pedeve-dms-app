@@ -14,30 +14,23 @@
             </p>
           </div>
           <div class="header-right">
-            <a-input v-model:value="searchText" placeholder="Search" allow-clear class="search-input" size="large">
+            <a-input v-if="viewMode === 'grid'" v-model:value="searchText" placeholder="Search" class="search-input"
+              allow-clear>
               <template #prefix>
-                <IconifyIcon icon="mdi:magnify" width="20" />
+                <IconifyIcon icon="mdi:account" width="16" />
               </template>
             </a-input>
             <div class="view-mode-buttons">
-              <a-button 
-                :type="viewMode === 'grid' ? 'primary' : 'default'"
-                size="large"
-                @click="handleViewModeChange('grid')"
-                class="view-mode-btn"
-              >
+              <a-button :type="viewMode === 'grid' ? 'primary' : 'default'" @click="handleViewModeChange('grid')"
+                class="view-mode-btn">
                 <IconifyIcon icon="mdi:view-grid" width="20" />
               </a-button>
-              <a-button 
-                :type="viewMode === 'list' ? 'primary' : 'default'"
-                size="large"
-                @click="handleViewModeChange('list')"
-                class="view-mode-btn"
-              >
+              <a-button :type="viewMode === 'list' ? 'primary' : 'default'" @click="handleViewModeChange('list')"
+                class="view-mode-btn">
                 <IconifyIcon icon="mdi:view-list" width="20" />
               </a-button>
             </div>
-            <a-button type="primary" size="large" @click="handleCreateCompany" class="add-button">
+            <a-button v-if="isSuperAdmin || isAdministrator || isAdmin" type="primary" @click="handleCreateCompany" style="display: flex; align-items: center;">
               <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
               Add new Subsidiary
             </a-button>
@@ -47,9 +40,9 @@
 
       <div class="mainContentPage">
         <!-- Subsidiary Cards Grid -->
-        <div class="subsidiary-cards-grid" v-if="viewMode === 'grid' && !companiesLoading && filteredCompanies.length > 0">
-          <div v-for="company in paginatedCompanies" :key="company.id" class="subsidiary-card"
-            @click="handleViewDetail(company.id)">
+        <a-row :gutter="[24, 24]" v-if="viewMode === 'grid' && !companiesLoading && filteredCompanies.length > 0">
+          <a-col v-for="company in paginatedCompanies" :key="company.id" :xs="24" :sm="12" :md="12" :lg="8" :xl="6">
+            <div class="subsidiary-card" @click="handleViewDetail(company.id)">
             <!-- Card Header -->
             <div class="card-header">
               <div class="company-icon">
@@ -71,29 +64,42 @@
             <!-- Card Content -->
             <div class="card-content">
               <div class="latest-month-header">
-                <IconifyIcon icon="mdi:information-outline" width="16" style="margin-right: 4px;" />
-                <span>Latest Month</span>
+                <a-popover :title="getPopoverTitle(company.id)" placement="top" trigger="hover">
+                  <template #content>
+                    <div style="max-width: 350px;">
+                      <div v-html="getPopoverContent(company.id)"></div>
+                    </div>
+                  </template>
+                  <div style="display: flex; align-items: center; cursor: help;">
+                    <IconifyIcon icon="mdi:information-outline" width="16" style="margin-right: 4px;" />
+                    <span>Latest Month</span>
+                  </div>
+                </a-popover>
               </div>
 
               <div class="metrics-row">
-                <!-- RKAP vs Realization -->
+                <!-- Net Profit (NPAT) -->
                 <div class="metric-item">
-                  <div class="metric-value">{{ formatCurrency(getRKAPData(company.id)) }}</div>
+                  <div class="metric-value">{{ formatCurrency(getNetProfitData(company.id), company.id) }}</div>
                   <div class="metric-meta">
-                    <span class="metric-year">{{ getRKAPYear(company.id) }}</span>
-                    <span class="metric-change positive">+{{ getRKAPChange(company.id) }}%</span>
+                    <span class="metric-year">{{ getNetProfitPeriod(company.id) }}</span>
+                    <span class="metric-change" :class="getNetProfitChange(company.id) >= 0 ? 'positive' : 'negative'">
+                      {{ getNetProfitChange(company.id) >= 0 ? '+' : '' }}{{ getNetProfitChange(company.id) }}%
+                    </span>
                   </div>
-                  <div class="metric-label">RKAP vs Realization</div>
+                  <div class="metric-label">Net Profit</div>
                 </div>
 
-                <!-- Opex Trend -->
+                <!-- Financial Health Score -->
                 <div class="metric-item">
-                  <div class="metric-value">{{ formatCurrency(getOpexData(company.id)) }}</div>
+                  <div class="metric-value">{{ getFinancialHealthScore(company.id) }}</div>
                   <div class="metric-meta">
-                    <span class="metric-quarter">{{ getOpexQuarter(company.id) }}</span>
-                    <span class="metric-change negative">-{{ getOpexChange(company.id) }}%</span>
+                    <span class="metric-quarter">{{ getFinancialHealthPeriod(company.id) }}</span>
+                    <span class="metric-change" :class="getFinancialHealthStatus(company.id).color">
+                      {{ getFinancialHealthStatus(company.id).label }}
+                    </span>
                   </div>
-                  <div class="metric-label">Opex Trend</div>
+                  <div class="metric-label">Financial Health</div>
                 </div>
               </div>
             </div>
@@ -105,77 +111,94 @@
                 <IconifyIcon icon="mdi:arrow-right" width="16" style="margin-left: 4px;" />
               </a-button>
             </div>
-          </div>
-        </div>
+            </div>
+          </a-col>
+        </a-row>
 
         <!-- Subsidiary Table View -->
         <div v-if="viewMode === 'list'">
-          <a-table
-            :columns="tableColumns"
-            :data-source="tableData"
-            :loading="companiesLoading || tableDataLoading"
-            :pagination="{
-              current: tablePagination.current,
-              pageSize: tablePagination.pageSize,
-              total: tablePagination.total,
-              showSizeChanger: true,
-              showTotal: (total: number) => `Total ${total} subsidiaries`,
-              pageSizeOptions: ['10', '20', '50', '100'],
-            }"
-            @change="handleTableChange"
-            row-key="id"
-            :scroll="{ x: 'max-content' }"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'logo'">
-                <div class="table-logo-cell">
-                  <img v-if="getCompanyLogo(record)" :src="getCompanyLogo(record)" :alt="record.name" class="table-logo" />
-                  <div v-else class="table-logo-placeholder" :style="{ backgroundColor: getIconColor(record.name) }">
-                    {{ getCompanyInitial(record.name) }}
-                  </div>
+          <a-card class="subsidiaries-table-card" :bordered="false">
+            <!-- Table Filters and Actions -->
+            <div class="table-filters-container">
+              <a-input v-model:value="searchText" placeholder="Search" class="search-input" allow-clear>
+                <template #prefix>
+                  <IconifyIcon icon="mdi:magnify" width="16" />
+                </template>
+              </a-input>
+            </div>
+
+            <a-table :columns="tableColumns" :data-source="tableData" :loading="companiesLoading || tableDataLoading"
+              :pagination="{
+                current: tablePagination.current,
+                pageSize: tablePagination.pageSize,
+                total: tablePagination.total,
+                showSizeChanger: true,
+                showTotal: (total: number) => `Total ${total} subsidiaries`,
+                pageSizeOptions: ['10', '20', '50', '100'],
+              }" @change="handleTableChange" row-key="id" :scroll="{ x: 'max-content' }" class="striped-table">
+              <template #emptyText>
+                <div class="empty-state" style="padding: 40px 20px;">
+                  <IconifyIcon icon="mdi:office-building-outline" width="64" style="color: #ccc; margin-bottom: 16px;" />
+                  <p v-if="isSuperAdmin || isAdministrator">Belum ada data subsidiary</p>
+                  <p v-else>Anda belum di-assign ke perusahaan manapun. Silakan hubungi administrator untuk mendapatkan akses.</p>
+                  <a-button v-if="isSuperAdmin || isAdministrator" type="primary" @click="handleCreateCompany" style="margin-top: 16px;">
+                    <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
+                    Tambah Subsidiary Pertama
+                  </a-button>
                 </div>
               </template>
-              <template v-if="column.key === 'level'">
-                <a-tag :color="getLevelColor(record.level)">
-                  {{ getLevelLabel(record.level) }}
-                </a-tag>
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'logo'">
+                  <div class="table-logo-cell">
+                    <img v-if="getCompanyLogo(record)" :src="getCompanyLogo(record)" :alt="record.name"
+                      class="table-logo" />
+                    <div v-else class="table-logo-placeholder" :style="{ backgroundColor: getIconColor(record.name) }">
+                      {{ getCompanyInitial(record.name) }}
+                    </div>
+                  </div>
+                </template>
+                <template v-if="column.key === 'level'">
+                  <a-tag :color="getLevelColor(record.level)">
+                    {{ getLevelLabel(record.level) }}
+                  </a-tag>
+                </template>
+                <template v-if="column.key === 'status'">
+                  <a-tag :color="record.is_active ? 'green' : 'red'">
+                    {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
+                  </a-tag>
+                </template>
+                <template v-if="column.key === 'actions'">
+                  <a-dropdown>
+                    <a-button type="link" size="small">
+                      Aksi
+                      <IconifyIcon icon="mdi:chevron-down" width="16" style="margin-left: 4px;" />
+                    </a-button>
+                    <template #overlay>
+                      <a-menu>
+                        <a-menu-item key="view" @click="handleViewDetail(record.id)">
+                          <IconifyIcon icon="mdi:eye" width="16" style="margin-right: 8px;" />
+                          Lihat Detail
+                        </a-menu-item>
+                        <a-menu-item v-if="canEdit" key="edit" @click="handleEditCompany(record.id)">
+                          <IconifyIcon icon="mdi:pencil" width="16" style="margin-right: 8px;" />
+                          Edit
+                        </a-menu-item>
+                        <a-menu-item v-if="canAssignRole" key="assign-role" @click="handleAssignRole(record.id)">
+                          <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
+                          Assign Role
+                        </a-menu-item>
+                        <a-menu-divider v-if="canDelete && (canEdit || canAssignRole)" />
+                        <a-menu-item v-if="canDelete" key="delete" danger @click="handleDeleteCompany(record.id)">
+                          <IconifyIcon icon="mdi:delete" width="16" style="margin-right: 8px;" />
+                          Hapus
+                        </a-menu-item>
+                      </a-menu>
+                    </template>
+                  </a-dropdown>
+                </template>
               </template>
-              <template v-if="column.key === 'status'">
-                <a-tag :color="record.is_active ? 'green' : 'red'">
-                  {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
-                </a-tag>
-              </template>
-              <template v-if="column.key === 'actions'">
-                <a-dropdown>
-                  <a-button type="link" size="small">
-                    Aksi
-                    <IconifyIcon icon="mdi:chevron-down" width="16" style="margin-left: 4px;" />
-                  </a-button>
-                  <template #overlay>
-                    <a-menu>
-                      <a-menu-item key="view" @click="handleViewDetail(record.id)">
-                        <IconifyIcon icon="mdi:eye" width="16" style="margin-right: 8px;" />
-                        Lihat Detail
-                      </a-menu-item>
-                      <a-menu-item v-if="canEdit" key="edit" @click="handleEditCompany(record.id)">
-                        <IconifyIcon icon="mdi:pencil" width="16" style="margin-right: 8px;" />
-                        Edit
-                      </a-menu-item>
-                      <a-menu-item v-if="canAssignRole" key="assign-role" @click="handleAssignRole(record.id)">
-                        <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
-                        Assign Role
-                      </a-menu-item>
-                      <a-menu-divider v-if="canDelete && (canEdit || canAssignRole)" />
-                      <a-menu-item v-if="canDelete" key="delete" danger @click="handleDeleteCompany(record.id)">
-                        <IconifyIcon icon="mdi:delete" width="16" style="margin-right: 8px;" />
-                        Hapus
-                      </a-menu-item>
-                    </a-menu>
-                  </template>
-                </a-dropdown>
-              </template>
-            </template>
-          </a-table>
+            </a-table>
+          </a-card>
         </div>
 
         <!-- Loading State -->
@@ -186,15 +209,17 @@
         <!-- Empty State -->
         <div v-if="viewMode === 'grid' && !companiesLoading && companies.length === 0" class="empty-state">
           <IconifyIcon icon="mdi:office-building-outline" width="64" style="color: #ccc; margin-bottom: 16px;" />
-          <p>Belum ada data subsidiary</p>
-          <a-button type="primary" @click="handleCreateCompany">
+          <p v-if="isSuperAdmin || isAdministrator">Belum ada data subsidiary</p>
+          <p v-else>Anda belum di-assign ke perusahaan manapun. Silakan hubungi administrator untuk mendapatkan akses.</p>
+          <a-button v-if="isSuperAdmin || isAdministrator" type="primary" @click="handleCreateCompany">
             <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
             Tambah Subsidiary Pertama
           </a-button>
         </div>
 
         <!-- No Search Results -->
-        <div v-if="viewMode === 'grid' && !companiesLoading && companies.length > 0 && filteredCompanies.length === 0" class="empty-state">
+        <div v-if="viewMode === 'grid' && !companiesLoading && companies.length > 0 && filteredCompanies.length === 0"
+          class="empty-state">
           <IconifyIcon icon="mdi:magnify" width="64" style="color: #ccc; margin-bottom: 16px;" />
           <p>Tidak ada hasil untuk "{{ searchText }}"</p>
           <a-button type="default" @click="searchText = ''">Hapus Filter</a-button>
@@ -209,13 +234,8 @@
       </div>
 
       <!-- Assign Role Modal -->
-      <a-modal
-        v-model:open="assignRoleModalVisible"
-        title="Assign Role - Kelola Pengurus"
-        :confirm-loading="assignRoleLoading"
-        width="900px"
-        :footer="null"
-      >
+      <a-modal v-model:open="assignRoleModalVisible" title="Assign Role - Kelola Pengurus"
+        :confirm-loading="assignRoleLoading" width="900px" :footer="null">
         <div class="assign-role-container">
           <!-- Form Assign Role Baru -->
           <div class="assign-new-section">
@@ -227,24 +247,14 @@
               <a-row :gutter="16">
                 <a-col :span="12">
                   <a-form-item label="Cari User" required>
-                    <a-select
-                      v-model:value="assignRoleForm.userId"
-                      show-search
-                      placeholder="Cari user berdasarkan nama atau email"
-                      :filter-option="filterUserOption"
-                      :loading="usersLoading"
-                      @search="handleUserSearch"
-                      allow-clear
-                      :disabled="usersLoading"
-                    >
-                      <a-select-option
-                        v-for="user in filteredUsers"
-                        :key="user.id"
-                        :value="user.id"
-                        :disabled="companyUsers.some(u => u.id === user.id)"
-                      >
+                    <a-select v-model:value="assignRoleForm.userId" show-search
+                      placeholder="Cari user berdasarkan nama atau email" :filter-option="filterUserOption"
+                      :loading="usersLoading" @search="handleUserSearch" allow-clear :disabled="usersLoading">
+                      <a-select-option v-for="user in filteredUsers" :key="user.id" :value="user.id"
+                        :disabled="companyUsers.some(u => u.id === user.id)">
                         {{ user.username }} ({{ user.email }})
-                        <span v-if="companyUsers.some(u => u.id === user.id)" class="text-muted"> - Sudah menjadi pengurus</span>
+                        <span v-if="companyUsers.some(u => u.id === user.id)" class="text-muted"> - Sudah menjadi
+                          pengurus</span>
                       </a-select-option>
                     </a-select>
                     <small v-if="usersLoading" class="text-muted">Memuat daftar user...</small>
@@ -255,21 +265,10 @@
                 </a-col>
                 <a-col :span="12">
                   <a-form-item label="Pilih Role" required>
-                    <a-select
-                      v-model:value="assignRoleForm.roleId"
-                      show-search
-                      placeholder="Cari role"
-                      :filter-option="filterRoleOption"
-                      :loading="rolesLoading"
-                      @search="handleRoleSearch"
-                      allow-clear
-                      :disabled="rolesLoading"
-                    >
-                      <a-select-option
-                        v-for="role in filteredRoles"
-                        :key="role.id"
-                        :value="role.id"
-                      >
+                    <a-select v-model:value="assignRoleForm.roleId" show-search placeholder="Cari role"
+                      :filter-option="filterRoleOption" :loading="rolesLoading" @search="handleRoleSearch" allow-clear
+                      :disabled="rolesLoading">
+                      <a-select-option v-for="role in filteredRoles" :key="role.id" :value="role.id">
                         {{ role.name }}
                       </a-select-option>
                     </a-select>
@@ -277,14 +276,10 @@
                   </a-form-item>
                 </a-col>
               </a-row>
-              
+
               <a-form-item>
-                <a-button 
-                  type="primary" 
-                  :loading="assignRoleLoading" 
-                  @click="handleAssignRoleSubmit" 
-                  :disabled="!assignRoleForm.userId || !assignRoleForm.roleId"
-                >
+                <a-button type="primary" :loading="assignRoleLoading" @click="handleAssignRoleSubmit"
+                  :disabled="!assignRoleForm.userId || !assignRoleForm.roleId">
                   <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
                   Assign Role
                 </a-button>
@@ -300,14 +295,8 @@
               <IconifyIcon icon="mdi:account-group" width="20" style="margin-right: 8px;" />
               Pengurus Saat Ini
             </h3>
-            <a-table
-              :columns="userColumns"
-              :data-source="companyUsers"
-              :loading="usersLoading"
-              :pagination="{ pageSize: 10 }"
-              row-key="id"
-              size="middle"
-            >
+            <a-table :columns="userColumns" :data-source="companyUsers" :loading="usersLoading"
+              :pagination="{ pageSize: 10 }" row-key="id" size="middle" class="striped-table">
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'role'">
                   <a-tag v-if="record.role" :color="getRoleColor(record.role)">
@@ -339,32 +328,16 @@
       </a-modal>
 
       <!-- Edit User Role Modal -->
-      <a-modal
-        v-model:open="editingUserRoleModalVisible"
-        title="Ubah Role Pengurus"
-        :confirm-loading="editingRoleLoading"
-        @ok="handleSaveUserRole"
-        @cancel="handleCancelEditUserRole"
-        width="500px"
-      >
+      <a-modal v-model:open="editingUserRoleModalVisible" title="Ubah Role Pengurus"
+        :confirm-loading="editingRoleLoading" @ok="handleSaveUserRole" @cancel="handleCancelEditUserRole" width="500px">
         <a-form layout="vertical" v-if="editingUserRole">
           <a-form-item label="User">
             <a-input :value="getUserById(editingUserRole.userId)?.username" disabled />
           </a-form-item>
           <a-form-item label="Pilih Role Baru" required>
-            <a-select
-              v-model:value="editingUserRole.roleId"
-              show-search
-              placeholder="Cari role"
-              :filter-option="filterRoleOption"
-              :loading="rolesLoading"
-              @search="handleRoleSearch"
-            >
-              <a-select-option
-                v-for="role in filteredRoles"
-                :key="role.id"
-                :value="role.id"
-              >
+            <a-select v-model:value="editingUserRole.roleId" show-search placeholder="Cari role"
+              :filter-option="filterRoleOption" :loading="rolesLoading" @search="handleRoleSearch">
+              <a-select-option v-for="role in filteredRoles" :key="role.id" :value="role.id">
                 {{ role.name }}
               </a-select-option>
             </a-select>
@@ -376,11 +349,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import DashboardHeader from '../components/DashboardHeader.vue'
 import { companyApi, userApi, roleApi, type Company, type User, type Role } from '../api/userManagement'
+// NOTE: reportsApi (old Reports module) is NOT used anymore - only use financialReportsApi (Input Laporan)
+import { financialReportsApi, type FinancialReport } from '../api/financialReports'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
@@ -394,18 +369,19 @@ const userRole = computed(() => {
 })
 
 const isSuperAdmin = computed(() => userRole.value === 'superadmin')
+const isAdministrator = computed(() => userRole.value === 'administrator')
 const isAdmin = computed(() => userRole.value === 'admin')
 const isManager = computed(() => userRole.value === 'manager')
 const isStaff = computed(() => userRole.value === 'staff')
 
-// RBAC: Assign Role hanya untuk admin
-const canAssignRole = computed(() => isAdmin.value || isSuperAdmin.value)
+// RBAC: Assign Role untuk admin/superadmin/administrator
+const canAssignRole = computed(() => isAdmin.value || isSuperAdmin.value || isAdministrator.value)
 
-// RBAC: Delete hanya untuk admin
-const canDelete = computed(() => isAdmin.value || isSuperAdmin.value)
+// RBAC: Delete untuk admin/superadmin/administrator
+const canDelete = computed(() => isAdmin.value || isSuperAdmin.value || isAdministrator.value)
 
-// RBAC: Edit untuk semua role (staff, manager, admin, superadmin)
-const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value)
+// RBAC: Edit untuk semua role (staff, manager, admin, superadmin, administrator)
+const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value || isAdministrator.value)
 
 // Note: Actions dropdown always shown because "Lihat Detail" menu is always available
 
@@ -436,11 +412,35 @@ const tablePagination = ref({
   total: 0,
 })
 
-// Sample financial data (RKAP & Opex) - akan diganti dengan data real jika ada
-const financialData = ref<Record<string, {
-  rkap: { value: number; year: string; change: number }
-  opex: { value: number; quarter: string; change: number }
-}>>({})
+// Financial reports data per company (from Input Laporan feature)
+// NOTE: companyReportsMap (old Reports module) is NOT used anymore
+const companyFinancialReportsMap = ref<Record<string, FinancialReport[]>>({})
+const financialReportsLoading = ref(false)
+
+// Format period helper
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _formatPeriod = (period: string | undefined): string => {
+  if (!period) return 'Unknown'
+  const [year, month] = period.split('-')
+  if (!year || !month) return period
+  const months = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ]
+  const monthIndex = parseInt(month, 10) - 1
+  if (monthIndex < 0 || monthIndex >= months.length) return period
+  return `${months[monthIndex]} ${year}`
+}
+
+// Get quarter from period
+const getQuarterFromPeriod = (period: string | undefined): string => {
+  if (!period) return 'Q1 2025'
+  const [year, month] = period.split('-')
+  if (!year || !month) return 'Q1 2025'
+  const monthNum = parseInt(month, 10)
+  const quarter = Math.floor((monthNum - 1) / 3) + 1
+  return `Q${quarter} ${year}`
+}
 
 // Computed untuk filtered companies berdasarkan search, diurutkan berdasarkan waktu (paling baru di atas)
 const filteredCompanies = computed(() => {
@@ -448,14 +448,14 @@ const filteredCompanies = computed(() => {
 
   // Apply search filter
   if (searchText.value.trim()) {
-  const search = searchText.value.toLowerCase().trim()
+    const search = searchText.value.toLowerCase().trim()
     filtered = companies.value.filter(company =>
-    company.name.toLowerCase().includes(search) ||
-    company.code.toLowerCase().includes(search) ||
-    (company.short_name && company.short_name.toLowerCase().includes(search)) ||
-    (company.nib && company.nib.toLowerCase().includes(search)) ||
-    (company.description && company.description.toLowerCase().includes(search))
-  )
+      company.name.toLowerCase().includes(search) ||
+      company.code.toLowerCase().includes(search) ||
+      (company.short_name && company.short_name.toLowerCase().includes(search)) ||
+      (company.nib && company.nib.toLowerCase().includes(search)) ||
+      (company.description && company.description.toLowerCase().includes(search))
+    )
   }
 
   // Sort by updated_at (most recent first), fallback to created_at
@@ -478,70 +478,642 @@ watch(searchText, () => {
   currentPage.value = 1
 })
 
-// Generate financial data untuk company
-const generateFinancialData = (companyId: string) => {
-  if (!financialData.value[companyId]) {
-    // Generate random but consistent data berdasarkan company ID
-    const hash = companyId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-    const baseValue = 100 + (hash % 100)
-    const baseOpex = 50 + (hash % 50)
+// Get financial data from financial reports (detailed with ratios)
+// Net Profit (NPAT) functions - using Financial Reports (Realisasi from Input Laporan tab)
+// CRITICAL: Only use data from Input Laporan (Financial Reports), NOT from old Reports module
+const getNetProfitData = (companyId: string): number => {
+  // ONLY use financial reports (Realisasi) from Input Laporan tab
+  // These are the data entered in: Input Laporan > Realisasi (Bulanan) tabs
+  const financialReports = companyFinancialReportsMap.value[companyId] || []
+  if (financialReports.length > 0) {
+    // Filter only Realisasi (monthly reports), exclude RKAP (yearly)
+    // Realisasi has is_rkap = false and period format: YYYY-MM
+    const realisasiReports = financialReports.filter(r => !r.is_rkap && r.period && r.period.includes('-'))
+    if (realisasiReports.length > 0) {
+      // Get latest Realisasi by period (newest first)
+      const latest = [...realisasiReports].sort((a, b) => {
+        if (!a.period || !b.period) return 0
+        return b.period.localeCompare(a.period)
+      })[0]
+      
+      // Debug log untuk verifikasi
+      if (import.meta.env.DEV && latest) {
+        console.log(`[Net Profit] Company ${companyId}:`, {
+          period: latest.period,
+          net_profit: latest.net_profit,
+          is_rkap: latest.is_rkap,
+          source: 'Financial Reports (Realisasi) - Input Laporan'
+        })
+      }
+      
+      return latest?.net_profit || 0
+    }
+  }
+  
+  // NO FALLBACK to old Reports module - return 0 if no data from Input Laporan
+  return 0
+}
 
-    financialData.value[companyId] = {
-      rkap: {
-        value: baseValue * 1000000, // dalam juta
-        year: '2025',
-        change: 10 + (hash % 10)
-      },
-      opex: {
-        value: baseOpex * 1000000,
-        quarter: `Q${1 + (hash % 4)} 2024`,
-        change: 3 + (hash % 5)
+const getNetProfitPeriod = (companyId: string): string => {
+  // ONLY use financial reports (Realisasi) from Input Laporan
+  const financialReports = companyFinancialReportsMap.value[companyId] || []
+  if (financialReports.length > 0) {
+    const realisasiReports = financialReports.filter(r => !r.is_rkap && r.period && r.period.includes('-'))
+    if (realisasiReports.length > 0) {
+      const latest = [...realisasiReports].sort((a, b) => {
+        if (!a.period || !b.period) return 0
+        return b.period.localeCompare(a.period)
+      })[0]
+      
+      if (latest?.period) {
+        const [year, month] = latest.period.split('-')
+        if (year && month) {
+          const months = [
+            'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+            'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+          ]
+          const monthIndex = parseInt(month, 10) - 1
+          if (monthIndex >= 0 && monthIndex < months.length) {
+            return `${months[monthIndex]} ${year}`
+          }
+        }
+        return year || '2025'
       }
     }
   }
-  return financialData.value[companyId]
+  
+  // NO FALLBACK - return default if no data
+  return '2025'
 }
 
-const getRKAPData = (companyId: string): number => {
-  return generateFinancialData(companyId).rkap.value
-}
+const getNetProfitChange = (companyId: string): number => {
+  // ONLY use financial reports (Realisasi) from Input Laporan
+  const financialReports = companyFinancialReportsMap.value[companyId] || []
+  if (financialReports.length > 0) {
+    const realisasiReports = financialReports.filter(r => !r.is_rkap && r.period && r.period.includes('-'))
+    if (realisasiReports.length >= 2) {
+      const sorted = [...realisasiReports].sort((a, b) => {
+        if (!a.period || !b.period) return 0
+        return a.period.localeCompare(b.period)
+      })
 
-const getRKAPYear = (companyId: string): string => {
-  return generateFinancialData(companyId).rkap.year
-}
+      const latest = sorted[sorted.length - 1]
+      const previous = sorted[sorted.length - 2]
 
-const getRKAPChange = (companyId: string): number => {
-  return generateFinancialData(companyId).rkap.change
-}
+      if (latest && previous) {
+        const latestNPAT = latest.net_profit || 0
+        const prevNPAT = previous.net_profit || 0
 
-const getOpexData = (companyId: string): number => {
-  return generateFinancialData(companyId).opex.value
-}
+        // Handle edge cases
+        if (prevNPAT === 0) {
+          if (latestNPAT > 0) return 100
+          if (latestNPAT < 0) return -100
+          return 0
+        }
 
-const getOpexQuarter = (companyId: string): string => {
-  return generateFinancialData(companyId).opex.quarter
-}
-
-const getOpexChange = (companyId: string): number => {
-  return generateFinancialData(companyId).opex.change
-}
-
-// Format currency
-const formatCurrency = (value: number): string => {
-  if (value >= 1000000000) {
-    return `$${(value / 1000000000).toFixed(0)}B`
-  } else if (value >= 1000000) {
-    return `${(value / 1000000).toFixed(0)}M`
-  } else if (value >= 1000) {
-    return `${(value / 1000).toFixed(0)}K`
+        // Cap the change percentage to reasonable values (±1000%)
+        const change = ((latestNPAT - prevNPAT) / Math.abs(prevNPAT)) * 100
+        const cappedChange = Math.max(-1000, Math.min(1000, change))
+        return Math.round(cappedChange * 10) / 10
+      }
+    }
   }
-  return `$${value.toFixed(0)}`
+  
+  // NO FALLBACK - return 0 if no data or less than 2 periods
+  return 0
+}
+
+// Financial Health Score functions - using Financial Reports with full ratio data from Input Laporan
+// CRITICAL: Only use data from Input Laporan (Financial Reports), NOT from old Reports module
+const getFinancialHealthScore = (companyId: string): string => {
+  // ONLY use financial reports (Realisasi) from Input Laporan tab
+  // These contain full ratio data: ROE, ROI, Current Ratio, Net Profit Margin, etc.
+  // Data is entered in: Input Laporan > Realisasi (Bulanan) > Rasio Keuangan tab
+  const financialReports = companyFinancialReportsMap.value[companyId] || []
+  if (financialReports.length > 0) {
+    // Filter only Realisasi (monthly reports with ratio data)
+    const realisasiReports = financialReports.filter(r => !r.is_rkap && r.period && r.period.includes('-'))
+    if (realisasiReports.length > 0) {
+      const latest = [...realisasiReports].sort((a, b) => {
+        if (!a.period || !b.period) return 0
+        return b.period.localeCompare(a.period)
+      })[0]
+
+      if (latest) {
+        // Debug log untuk verifikasi
+        if (import.meta.env.DEV) {
+          console.log(`[Financial Health] Company ${companyId}:`, {
+            period: latest.period,
+            roe: latest.roe,
+            current_ratio: latest.current_ratio,
+            net_profit_margin: latest.net_profit_margin,
+            net_profit: latest.net_profit,
+            source: 'Financial Reports (Realisasi with Ratios) - Input Laporan'
+          })
+        }
+        
+        const score = calculateFinancialHealthScoreFromFinancialReport(latest)
+        return score.grade
+      }
+    }
+  }
+  
+  // NO FALLBACK to old Reports module - return 'N/A' if no data from Input Laporan
+  return 'N/A'
+}
+
+const getFinancialHealthPeriod = (companyId: string): string => {
+  // ONLY use financial reports (Realisasi) from Input Laporan
+  const financialReports = companyFinancialReportsMap.value[companyId] || []
+  if (financialReports.length > 0) {
+    const realisasiReports = financialReports.filter(r => !r.is_rkap && r.period && r.period.includes('-'))
+    if (realisasiReports.length > 0) {
+      const latest = [...realisasiReports].sort((a, b) => {
+        if (!a.period || !b.period) return 0
+        return b.period.localeCompare(a.period)
+      })[0]
+      return getQuarterFromPeriod(latest?.period)
+    }
+  }
+  
+  // NO FALLBACK - return default if no data
+  return 'Q1 2025'
+}
+
+const getFinancialHealthStatus = (companyId: string): { label: string; color: string } => {
+  // ONLY use financial reports (Realisasi) from Input Laporan
+  const financialReports = companyFinancialReportsMap.value[companyId] || []
+  if (financialReports.length > 0) {
+    const realisasiReports = financialReports.filter(r => !r.is_rkap && r.period && r.period.includes('-'))
+    if (realisasiReports.length > 0) {
+      const latest = [...realisasiReports].sort((a, b) => {
+        if (!a.period || !b.period) return 0
+        return b.period.localeCompare(a.period)
+      })[0]
+
+      if (latest) {
+        const score = calculateFinancialHealthScoreFromFinancialReport(latest)
+        return { label: score.status, color: score.color }
+      }
+    }
+  }
+  
+  // NO FALLBACK - return 'No Data' if no data from Input Laporan
+  return { label: 'No Data', color: 'neutral' }
+}
+
+// Calculate Financial Health Score from Financial Report (with full ratio data)
+const calculateFinancialHealthScoreFromFinancialReport = (report: FinancialReport): { grade: string; status: string; color: string } => {
+  let score = 0
+
+  // Factor 1: Profitability (Net Profit) - 30%
+  const netProfit = report.net_profit || 0
+  if (netProfit > 0) {
+    score += 30
+  } else if (netProfit === 0) {
+    score += 10
+  }
+
+  // Factor 2: Revenue Growth - 20%
+  const revenue = report.revenue || 0
+  if (revenue > 0) {
+    score += 20
+  }
+
+  // Factor 3: Financial Ratios - 30% (using actual ratio data)
+  let ratioScore = 0
+  
+  // ROE (Return on Equity) - 10%
+  const roe = report.roe || 0
+  if (roe >= 15) {
+    ratioScore += 10
+  } else if (roe >= 10) {
+    ratioScore += 7
+  } else if (roe >= 5) {
+    ratioScore += 5
+  } else if (roe > 0) {
+    ratioScore += 2
+  }
+  
+  // Current Ratio (Liquidity) - 10%
+  const currentRatio = report.current_ratio || 0
+  if (currentRatio >= 2) {
+    ratioScore += 10
+  } else if (currentRatio >= 1.5) {
+    ratioScore += 7
+  } else if (currentRatio >= 1) {
+    ratioScore += 5
+  } else if (currentRatio > 0) {
+    ratioScore += 2
+  }
+  
+  // Net Profit Margin - 10%
+  const netProfitMargin = report.net_profit_margin || 0
+  if (netProfitMargin >= 20) {
+    ratioScore += 10
+  } else if (netProfitMargin >= 10) {
+    ratioScore += 7
+  } else if (netProfitMargin >= 5) {
+    ratioScore += 5
+  } else if (netProfitMargin > 0) {
+    ratioScore += 2
+  }
+  
+  score += ratioScore
+
+  // Factor 4: Operating Efficiency - 20%
+  const operatingExpenses = report.operating_expenses || 0
+  if (revenue > 0 && operatingExpenses > 0) {
+    const efficiency = ((revenue - operatingExpenses) / revenue) * 100
+    if (efficiency >= 20) {
+      score += 20
+    } else if (efficiency >= 10) {
+      score += 15
+    } else if (efficiency >= 0) {
+      score += 10
+    } else {
+      score += 5
+    }
+  } else {
+    score += 5
+  }
+
+  // Determine grade and status
+  let grade: string
+  let status: string
+  let color: string
+
+  if (score >= 80) {
+    grade = 'A'
+    status = 'Excellent'
+    color = 'positive'
+  } else if (score >= 65) {
+    grade = 'B'
+    status = 'Good'
+    color = 'positive'
+  } else if (score >= 50) {
+    grade = 'C'
+    status = 'Fair'
+    color = 'neutral'
+  } else if (score >= 35) {
+    grade = 'D'
+    status = 'Poor'
+    color = 'negative'
+  } else {
+    grade = 'F'
+    status = 'Critical'
+    color = 'negative'
+  }
+
+  return { grade, status, color }
+}
+
+// Get detailed breakdown for Financial Health Score calculation
+const getFinancialHealthBreakdown = (companyId: string): {
+  netProfit: number
+  revenue: number
+  roe: number
+  currentRatio: number
+  netProfitMargin: number
+  operatingEfficiency: number
+  score: number
+  grade: string
+  breakdown: Array<{ factor: string; points: number; maxPoints: number; details: string }>
+} | null => {
+  const financialReports = companyFinancialReportsMap.value[companyId] || []
+  if (financialReports.length === 0) return null
+  
+  const realisasiReports = financialReports.filter(r => !r.is_rkap && r.period && r.period.includes('-'))
+  if (realisasiReports.length === 0) return null
+  
+  const latest = [...realisasiReports].sort((a, b) => {
+    if (!a.period || !b.period) return 0
+    return b.period.localeCompare(a.period)
+  })[0]
+  
+  if (!latest) return null
+  
+  const netProfit = latest.net_profit || 0
+  const revenue = latest.revenue || 0
+  const roe = latest.roe || 0
+  const currentRatio = latest.current_ratio || 0
+  const netProfitMargin = latest.net_profit_margin || 0
+  const operatingExpenses = latest.operating_expenses || 0
+  
+  let score = 0
+  const breakdown: Array<{ factor: string; points: number; maxPoints: number; details: string }> = []
+  
+  // Factor 1: Profitability
+  let profitPoints = 0
+  let profitDetails = ''
+  if (netProfit > 0) {
+    profitPoints = 30
+    profitDetails = `Profit: ${formatCurrency(netProfit, companyId)}`
+  } else if (netProfit === 0) {
+    profitPoints = 10
+    profitDetails = 'Break-even (tidak untung tidak rugi)'
+  } else {
+    profitPoints = 0
+    profitDetails = `Rugi: ${formatCurrency(Math.abs(netProfit), companyId)}`
+  }
+  score += profitPoints
+  breakdown.push({ factor: 'Profitabilitas (Net Profit)', points: profitPoints, maxPoints: 30, details: profitDetails })
+  
+  // Factor 2: Revenue
+  const revenuePoints = revenue > 0 ? 20 : 0
+  score += revenuePoints
+  breakdown.push({ 
+    factor: 'Revenue', 
+    points: revenuePoints, 
+    maxPoints: 20, 
+    details: revenue > 0 ? `Revenue: ${formatCurrency(revenue, companyId)}` : 'Tidak ada revenue' 
+  })
+  
+  // Factor 3: Ratios
+  let ratioScore = 0
+  let roePoints = 0
+  if (roe >= 15) roePoints = 10
+  else if (roe >= 10) roePoints = 7
+  else if (roe >= 5) roePoints = 5
+  else if (roe > 0) roePoints = 2
+  ratioScore += roePoints
+  
+  let currentRatioPoints = 0
+  if (currentRatio >= 2) currentRatioPoints = 10
+  else if (currentRatio >= 1.5) currentRatioPoints = 7
+  else if (currentRatio >= 1) currentRatioPoints = 5
+  else if (currentRatio > 0) currentRatioPoints = 2
+  ratioScore += currentRatioPoints
+  
+  let marginPoints = 0
+  if (netProfitMargin >= 20) marginPoints = 10
+  else if (netProfitMargin >= 10) marginPoints = 7
+  else if (netProfitMargin >= 5) marginPoints = 5
+  else if (netProfitMargin > 0) marginPoints = 2
+  ratioScore += marginPoints
+  
+  score += ratioScore
+  breakdown.push({ 
+    factor: 'Rasio Keuangan', 
+    points: ratioScore, 
+    maxPoints: 30, 
+    details: `ROE: ${roe.toFixed(1)}% (${roePoints}p) | Current Ratio: ${currentRatio.toFixed(2)} (${currentRatioPoints}p) | Margin: ${netProfitMargin.toFixed(1)}% (${marginPoints}p)` 
+  })
+  
+  // Factor 4: Efficiency
+  let efficiencyPoints = 5
+  let efficiencyDetails = 'Tidak ada data'
+  if (revenue > 0 && operatingExpenses > 0) {
+    const efficiency = ((revenue - operatingExpenses) / revenue) * 100
+    if (efficiency >= 20) {
+      efficiencyPoints = 20
+      efficiencyDetails = `Efisiensi tinggi: ${efficiency.toFixed(1)}%`
+    } else if (efficiency >= 10) {
+      efficiencyPoints = 15
+      efficiencyDetails = `Efisiensi sedang: ${efficiency.toFixed(1)}%`
+    } else if (efficiency >= 0) {
+      efficiencyPoints = 10
+      efficiencyDetails = `Efisiensi rendah: ${efficiency.toFixed(1)}%`
+    } else {
+      efficiencyPoints = 5
+      efficiencyDetails = `Tidak efisien: ${efficiency.toFixed(1)}%`
+    }
+  }
+  score += efficiencyPoints
+  breakdown.push({ 
+    factor: 'Efisiensi Operasional', 
+    points: efficiencyPoints, 
+    maxPoints: 20, 
+    details: efficiencyDetails 
+  })
+  
+  const result = calculateFinancialHealthScoreFromFinancialReport(latest)
+  
+  return {
+    netProfit,
+    revenue,
+    roe,
+    currentRatio,
+    netProfitMargin,
+    operatingEfficiency: revenue > 0 && operatingExpenses > 0 ? ((revenue - operatingExpenses) / revenue) * 100 : 0,
+    score,
+    grade: result.grade,
+    breakdown
+  }
+}
+
+// Get popover title
+const getPopoverTitle = (companyId: string): string => {
+  const breakdown = getFinancialHealthBreakdown(companyId)
+  if (breakdown) {
+    return `Penjelasan Metrik - Grade ${breakdown.grade} (Skor: ${breakdown.score}/100)`
+  }
+  return 'Penjelasan Metrik'
+}
+
+// Get popover content with dynamic explanation
+const getPopoverContent = (companyId: string): string => {
+  const breakdown = getFinancialHealthBreakdown(companyId)
+  const netProfit = getNetProfitData(companyId)
+  const netProfitPeriod = getNetProfitPeriod(companyId)
+  const netProfitChange = getNetProfitChange(companyId)
+  
+  if (!breakdown) {
+    return `
+      <div style="font-size: 12px; color: #666;">
+        <p>Data belum tersedia. Silakan input data di tab <strong>Input Laporan > Realisasi (Bulanan)</strong>.</p>
+      </div>
+    `
+  }
+  
+  let html = `
+    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+      <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #eee;">
+        <strong style="color: #1890ff; display: block; margin-bottom: 4px;">Net Profit (NPAT)</strong>
+        <div style="font-size: 11px;">
+          <div>Nilai: <strong>${formatCurrency(netProfit, companyId)}</strong></div>
+          <div>Periode: ${netProfitPeriod}</div>
+          <div>Perubahan: <span style="color: ${netProfitChange >= 0 ? '#52c41a' : '#ff4d4f'}">${netProfitChange >= 0 ? '+' : ''}${netProfitChange}%</span></div>
+        </div>
+      </div>
+      
+      <div style="margin-bottom: 8px;">
+        <strong style="color: #52c41a; display: block; margin-bottom: 6px;">Financial Health Score: ${breakdown.grade}</strong>
+        <div style="font-size: 11px; margin-bottom: 8px;">
+          <div>Total Skor: <strong>${breakdown.score}/100</strong></div>
+          <div style="margin-top: 4px; color: #999;">Grade ${breakdown.grade} = Skor ${breakdown.score >= 80 ? '80-100' : breakdown.score >= 65 ? '65-79' : breakdown.score >= 50 ? '50-64' : breakdown.score >= 35 ? '35-49' : '0-34'}</div>
+        </div>
+      </div>
+      
+      <div style="font-size: 11px;">
+        <strong style="display: block; margin-bottom: 6px; color: #333;">Breakdown Perhitungan:</strong>
+  `
+  
+  breakdown.breakdown.forEach((item) => {
+    const percentage = Math.round((item.points / item.maxPoints) * 100)
+    const color = percentage >= 80 ? '#52c41a' : percentage >= 50 ? '#faad14' : '#ff4d4f'
+    html += `
+        <div style="margin-bottom: 8px; padding: 6px; background: #f5f5f5; border-radius: 4px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span><strong>${item.factor}</strong></span>
+            <span style="color: ${color}; font-weight: 600;">${item.points}/${item.maxPoints}</span>
+          </div>
+          <div style="font-size: 10px; color: #666; margin-top: 2px;">${item.details}</div>
+        </div>
+    `
+  })
+  
+  html += `
+      </div>
+    </div>
+  `
+  
+  return html
+}
+
+// NOTE: This function is DEPRECATED - no longer used
+// We only use calculateFinancialHealthScoreFromFinancialReport which uses data from Input Laporan
+// Keeping this for reference but it should never be called
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _calculateFinancialHealthScore_DEPRECATED = (_report: unknown): { grade: string; status: string; color: string } => {
+  let score = 0
+  const factors: string[] = []
+  
+  // Type assertion untuk deprecated function
+  const report = _report as { npat?: number; revenue?: number; financial_ratio?: number; opex?: number }
+
+  // Factor 1: Profitability (NPAT) - 30%
+  const npat = report.npat || 0
+  if (npat > 0) {
+    score += 30
+    factors.push('Profitable')
+  } else if (npat === 0) {
+    score += 10
+    factors.push('Break-even')
+  } else {
+    factors.push('Loss')
+  }
+
+  // Factor 2: Revenue Growth - 25%
+  // We'll use financial_ratio as a proxy if available, or calculate from revenue
+  const revenue = report.revenue || 0
+  if (revenue > 0) {
+    score += 20
+    factors.push('Revenue')
+  }
+
+  // Factor 3: Financial Ratio (if available) - 25%
+  const financialRatio = report.financial_ratio || 0
+  if (financialRatio > 0) {
+    if (financialRatio >= 80) {
+      score += 25
+      factors.push('Excellent Ratio')
+    } else if (financialRatio >= 60) {
+      score += 20
+      factors.push('Good Ratio')
+    } else if (financialRatio >= 40) {
+      score += 15
+      factors.push('Fair Ratio')
+    } else {
+      score += 5
+      factors.push('Poor Ratio')
+    }
+  } else {
+    score += 10 // Default if no ratio data
+  }
+
+  // Factor 4: Operating Efficiency (Revenue vs Opex) - 20%
+  const opex = report.opex || 0
+  if (revenue > 0 && opex > 0) {
+    const efficiency = ((revenue - opex) / revenue) * 100
+    if (efficiency >= 20) {
+      score += 20
+      factors.push('High Efficiency')
+    } else if (efficiency >= 10) {
+      score += 15
+      factors.push('Moderate Efficiency')
+    } else if (efficiency >= 0) {
+      score += 10
+      factors.push('Low Efficiency')
+    } else {
+      score += 5
+      factors.push('Inefficient')
+    }
+  } else {
+    score += 5 // Default if no data
+  }
+
+  // Determine grade and status
+  let grade: string
+  let status: string
+  let color: string
+
+  if (score >= 80) {
+    grade = 'A'
+    status = 'Excellent'
+    color = 'positive'
+  } else if (score >= 65) {
+    grade = 'B'
+    status = 'Good'
+    color = 'positive'
+  } else if (score >= 50) {
+    grade = 'C'
+    status = 'Fair'
+    color = 'neutral'
+  } else if (score >= 35) {
+    grade = 'D'
+    status = 'Poor'
+    color = 'negative'
+  } else {
+    grade = 'F'
+    status = 'Critical'
+    color = 'negative'
+  }
+
+  return { grade, status, color }
+}
+
+// Format currency (handles negative values) - uses company currency setting
+const formatCurrency = (value: number, companyId?: string): string => {
+  const absValue = Math.abs(value)
+  const sign = value < 0 ? '-' : ''
+  
+  // Get currency from company, default to IDR (Rupiah)
+  let currency = 'IDR'
+  if (companyId) {
+    const company = companies.value.find(c => c.id === companyId)
+    currency = company?.currency || 'IDR'
+  }
+  
+  // Format based on currency
+  if (currency === 'USD') {
+    // USD format: $32B, $129M, $5K
+    if (absValue >= 1000000000) {
+      return `${sign}$${(absValue / 1000000000).toFixed(0)}B`
+    } else if (absValue >= 1000000) {
+      return `${sign}$${(absValue / 1000000).toFixed(0)}M`
+    } else if (absValue >= 1000) {
+      return `${sign}$${(absValue / 1000).toFixed(0)}K`
+    }
+    return `${sign}$${absValue.toFixed(0)}`
+  } else {
+    // IDR format: 129M, 32B, 5K (no currency symbol prefix, just number with suffix)
+    if (absValue >= 1000000000) {
+      return `${sign}${(absValue / 1000000000).toFixed(0)}B`
+    } else if (absValue >= 1000000) {
+      return `${sign}${(absValue / 1000000).toFixed(0)}M`
+    } else if (absValue >= 1000) {
+      return `${sign}${(absValue / 1000).toFixed(0)}K`
+    }
+    // For values less than 1000, show full number with Rp prefix
+    return `${sign}Rp ${absValue.toLocaleString('id-ID')}`
+  }
 }
 
 // Get company logo atau generate icon
 const getCompanyLogo = (company: Company): string | undefined => {
   if (company.logo) {
-    const apiURL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+    const apiURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-pedeve-dev.aretaamany.com')
     const baseURL = apiURL.replace(/\/api\/v1$/, '')
     return company.logo.startsWith('http') ? company.logo : `${baseURL}${company.logo}`
   }
@@ -579,16 +1151,72 @@ const getIconColor = (name: string): string => {
 const loadCompanies = async () => {
   companiesLoading.value = true
   try {
-    companies.value = await companyApi.getAll()
-    // Generate financial data untuk semua companies
-    companies.value.forEach(company => {
-      generateFinancialData(company.id)
-    })
+    // Superadmin/Administrator melihat semua companies
+    // User lain hanya melihat companies yang di-assign ke mereka
+    if (isSuperAdmin.value || isAdministrator.value) {
+      companies.value = await companyApi.getAll()
+    } else {
+      // Get companies assigned to current user
+      const userCompanies = await userApi.getMyCompanies()
+      // Convert UserCompanyResponse[] to Company[]
+      companies.value = userCompanies.map(uc => uc.company)
+    }
+    // ONLY load financial reports from Input Laporan (new feature)
+    // DO NOT load old Reports module data
+    await loadAllCompanyFinancialReports()
   } catch (error: unknown) {
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     message.error('Gagal memuat perusahaan: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
   } finally {
     companiesLoading.value = false
+  }
+}
+
+// Load financial reports for all companies (with full ratio data)
+const loadAllCompanyFinancialReports = async () => {
+  if (companies.value.length === 0) return
+
+  financialReportsLoading.value = true
+  try {
+    // Load financial reports for all companies in parallel
+    const financialReportPromises = companies.value.map(async (company) => {
+      try {
+        const financialReports = await financialReportsApi.getByCompanyId(company.id)
+        // Filter and sort: prioritize Realisasi (monthly) over RKAP (yearly)
+        // Sort by period descending to get latest first
+        const sortedReports = [...financialReports].sort((a, b) => {
+          if (!a.period || !b.period) return 0
+          return b.period.localeCompare(a.period)
+        })
+        companyFinancialReportsMap.value[company.id] = sortedReports
+        
+        // Debug: log data untuk memastikan data terambil dengan benar
+        const realisasiReports = sortedReports.filter(r => !r.is_rkap)
+        if (realisasiReports.length > 0) {
+          const latest = realisasiReports[0]
+          if (latest) {
+            console.log(`[${company.name}] Latest Realisasi:`, {
+              period: latest.period,
+              net_profit: latest.net_profit,
+              revenue: latest.revenue,
+              roe: latest.roe,
+              current_ratio: latest.current_ratio,
+              net_profit_margin: latest.net_profit_margin
+            })
+          }
+        }
+      } catch (error) {
+        // Silently fail for individual companies - just log it
+        console.warn(`Failed to load financial reports for company ${company.id}:`, error)
+        companyFinancialReportsMap.value[company.id] = []
+      }
+    })
+
+    await Promise.all(financialReportPromises)
+  } catch (error) {
+    console.error('Error loading company financial reports:', error)
+  } finally {
+    financialReportsLoading.value = false
   }
 }
 
@@ -615,7 +1243,7 @@ const handleViewModeChange = async (mode: 'grid' | 'list') => {
   viewMode.value = mode
   // Save to localStorage
   localStorage.setItem('subsidiaries-view-mode', mode)
-  
+
   // Lazy load table data only when switching to list view
   // Check if companies are already loaded, if not load them
   if (mode === 'list' && companies.value.length === 0) {
@@ -639,7 +1267,7 @@ const loadTableData = async () => {
   if (companies.value.length === 0) {
     await loadCompanies()
   }
-  
+
   tableDataLoading.value = true
   try {
     // Update pagination total
@@ -701,10 +1329,10 @@ const tableColumns: TableColumnsType = [
     sorter: (a: Company, b: Company) => a.level - b.level,
     width: 150,
     filters: [
-      { text: 'Holding (Induk)', value: 0 },
-      { text: 'Anak Perusahaan', value: 1 },
-      { text: 'Cucu Perusahaan', value: 2 },
-      { text: 'Cicit Perusahaan', value: 3 },
+      { text: 'Holding', value: 0 },
+      { text: 'Level 1', value: 1 },
+      { text: 'Level 2', value: 2 },
+      { text: 'Level 3', value: 3 },
     ],
     onFilter: (value: string | number | boolean, record: Company) => {
       if (typeof value === 'number') {
@@ -767,18 +1395,8 @@ const handleTableChange: TableProps['onChange'] = (pagination) => {
 
 // Get Level Label
 const getLevelLabel = (level: number): string => {
-  switch (level) {
-    case 0:
-      return 'Holding (Induk)'
-    case 1:
-      return 'Anak Perusahaan'
-    case 2:
-      return 'Cucu Perusahaan'
-    case 3:
-      return 'Cicit Perusahaan'
-    default:
-      return `Level ${level}`
-  }
+  if (level === 0) return 'Holding'
+  return `Level ${level}`
 }
 
 // Get Level Color
@@ -840,13 +1458,13 @@ const filteredUsers = computed(() => {
   const availableUsers = allUsers.value.filter(
     user => !companyUsers.value.some(cu => cu.id === user.id)
   )
-  
+
   if (!userSearchText.value) {
     return availableUsers.slice(0, 20) // Limit to 20 for performance
   }
   const search = userSearchText.value.toLowerCase()
   return availableUsers.filter(
-    user => 
+    user =>
       user.username.toLowerCase().includes(search) ||
       user.email.toLowerCase().includes(search)
   ).slice(0, 20)
@@ -855,7 +1473,7 @@ const filteredUsers = computed(() => {
 const filteredRoles = computed(() => {
   // Filter out superadmin role - hanya untuk developer, bukan untuk user pengguna
   const nonSuperadminRoles = allRoles.value.filter(role => role.name.toLowerCase() !== 'superadmin')
-  
+
   if (!roleSearchText.value) {
     return nonSuperadminRoles
   }
@@ -899,14 +1517,14 @@ const openAssignRoleModal = async (companyId: string) => {
     message.error('Company ID tidak ditemukan')
     return
   }
-  
+
   selectedCompanyId.value = companyId
   assignRoleModalVisible.value = true
   assignRoleForm.value = {
     userId: undefined,
     roleId: undefined,
   }
-  
+
   // Load users and roles
   await Promise.all([
     loadUsers(companyId),
@@ -916,13 +1534,13 @@ const openAssignRoleModal = async (companyId: string) => {
 
 const loadUsers = async (companyId: string) => {
   if (!companyId) return
-  
+
   usersLoading.value = true
   try {
     // Load all users (backend will filter based on access) - for dropdown selection
     const allUsersData = await userApi.getAll()
     allUsers.value = allUsersData
-    
+
     // Load company users from junction table (supports multiple company assignments)
     try {
       const companyUsersData = await companyApi.getUsers(companyId)
@@ -933,10 +1551,10 @@ const loadUsers = async (companyId: string) => {
       companyUsers.value = allUsersData.filter(user => user.company_id === companyId)
     }
   } catch (error: unknown) {
-    const axiosError = error as { 
-      response?: { 
+    const axiosError = error as {
+      response?: {
         status?: number
-        data?: { 
+        data?: {
           message?: string
           error?: string
         }
@@ -944,13 +1562,13 @@ const loadUsers = async (companyId: string) => {
       message?: string
       code?: string
     }
-    
+
     const statusCode = axiosError.response?.status
-    const errorMessage = axiosError.response?.data?.message || 
-                        axiosError.response?.data?.error || 
-                        axiosError.message || 
-                        'Unknown error'
-    
+    const errorMessage = axiosError.response?.data?.message ||
+      axiosError.response?.data?.error ||
+      axiosError.message ||
+      'Unknown error'
+
     // Handle different error scenarios
     if (statusCode === 403 || statusCode === 401) {
       console.warn('Access denied to users endpoint (status:', statusCode, '):', errorMessage)
@@ -1007,8 +1625,8 @@ const filterUserOption = (input: string, option: unknown) => {
   const user = allUsers.value.find(u => u.id === opt.value)
   if (!user) return false
   const search = input.toLowerCase()
-  return user.username.toLowerCase().includes(search) || 
-         user.email.toLowerCase().includes(search)
+  return user.username.toLowerCase().includes(search) ||
+    user.email.toLowerCase().includes(search)
 }
 
 const filterRoleOption = (input: string, option: unknown) => {
@@ -1023,7 +1641,7 @@ const handleAssignRoleSubmit = async () => {
     message.error('Harap pilih user dan role')
     return
   }
-  
+
   assignRoleLoading.value = true
   try {
     await userApi.assignToCompany(
@@ -1066,7 +1684,7 @@ const handleSaveUserRole = async () => {
     message.error('Harap pilih role')
     return
   }
-  
+
   editingRoleLoading.value = true
   try {
     await userApi.assignToCompany(
@@ -1090,7 +1708,7 @@ const handleSaveUserRole = async () => {
 // Remove User
 const handleRemoveUser = async (user: User) => {
   if (!selectedCompanyId.value) return
-  
+
   // Show confirmation
   Modal.confirm({
     title: 'Hapus Pengurus',
@@ -1127,10 +1745,17 @@ const getRoleColor = (role: string): string => {
 
 onMounted(async () => {
   await loadCompanies()
-  
+
   // If view mode is 'list', load table data
   if (viewMode.value === 'list') {
     await loadTableData()
+  }
+})
+
+// Refresh financial reports when component is activated (e.g., returning from detail page)
+onActivated(async () => {
+  if (companies.value.length > 0) {
+    await loadAllCompanyFinancialReports()
   }
 })
 </script>
@@ -1191,41 +1816,58 @@ onMounted(async () => {
   width: 300px;
 }
 
-.search-input :deep(.ant-input) {
-  border-radius: 8px;
-}
-
 .view-mode-buttons {
   display: flex;
   gap: 8px;
-  border: 1px solid #d9d9d9;
+  /* border: 1px solid #d9d9d9; */
   border-radius: 8px;
   padding: 4px;
-  background: #fafafa;
+  /* background: #fafafa; */
+  height: 40px;
+  align-items: center;
 }
 
 .view-mode-btn {
-  height: 36px;
+  height: 32px;
   padding: 0 12px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.add-button {
-  height: 44px;
-  padding: 0 24px;
-  font-weight: 500;
-  box-shadow: 0 2px 8px rgba(3, 92, 171, 0.2);
+/* Semua button di header-right harus sama tinggi (40px default) */
+.header-right :deep(.ant-btn) {
+  height: 40px !important;
+  min-height: 40px !important;
 }
 
-/* Cards Grid */
-.subsidiary-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 24px;
-  margin-bottom: 32px;
+/* Subsidiaries Table Card */
+.subsidiaries-table-card {
+  border-radius: 12px;
+  overflow: hidden;
+  background: white;
 }
+
+.subsidiaries-table-card :deep(.ant-card-body) {
+  padding: 24px;
+}
+
+/* Table Filters Container */
+.table-filters-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.table-filters-container .search-input {
+  flex: 1;
+  min-width: 200px;
+  max-width: 300px;
+}
+
+/* Cards Grid - Now using Ant Design Row/Col */
 
 .subsidiary-card {
   background: white;
@@ -1372,6 +2014,11 @@ onMounted(async () => {
   background: rgba(255, 77, 79, 0.1);
 }
 
+.metric-change.neutral {
+  color: #faad14;
+  background: rgba(250, 173, 20, 0.1);
+}
+
 .metric-label {
   font-size: 12px;
   color: #999;
@@ -1425,10 +2072,6 @@ onMounted(async () => {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .subsidiary-cards-grid {
-    grid-template-columns: 1fr;
-  }
-
   .page-header {
     flex-direction: column;
   }
@@ -1440,24 +2083,6 @@ onMounted(async () => {
   .metrics-row {
     grid-template-columns: 1fr;
     gap: 12px;
-  }
-}
-
-@media (min-width: 769px) and (max-width: 1024px) {
-  .subsidiary-cards-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1025px) and (max-width: 1440px) {
-  .subsidiary-cards-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (min-width: 1441px) {
-  .subsidiary-cards-grid {
-    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -1510,5 +2135,21 @@ onMounted(async () => {
 .text-muted {
   color: #999;
   font-size: 12px;
+}
+
+/* Striped table styles */
+.striped-table :deep(.ant-table-tbody > tr:nth-child(even) > td),
+.striped-table :deep(.ant-table-tbody tr:nth-child(even) td) {
+  background-color: #fafafa !important;
+}
+
+.striped-table :deep(.ant-table-tbody > tr:nth-child(odd) > td),
+.striped-table :deep(.ant-table-tbody tr:nth-child(odd) td) {
+  background-color: #ffffff !important;
+}
+
+.striped-table :deep(.ant-table-tbody > tr:hover > td),
+.striped-table :deep(.ant-table-tbody tr:hover td) {
+  background-color: #e6f7ff !important;
 }
 </style>

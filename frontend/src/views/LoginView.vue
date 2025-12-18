@@ -37,7 +37,7 @@ const handleLogin = async () => {
     // Login sukses normal
     message.success('Login berhasil!')
     setTimeout(() => {
-      router.push('/dashboard')
+      router.push('/subsidiaries')
     }, 100)
   } catch (error: unknown) {
     console.error('Login error:', error)
@@ -78,7 +78,7 @@ const handleVerify2FA = async () => {
     await authStore.loginWith2FA(email.value, password.value, twoFACode.value)
     message.success('Login berhasil!')
     setTimeout(() => {
-      router.push('/dashboard')
+      router.push('/subsidiaries')
     }, 100)
   } catch (error: unknown) {
     console.error('2FA verification error:', error)

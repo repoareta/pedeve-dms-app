@@ -6,12 +6,16 @@ const props = defineProps<{
   title: string
   value: string
   change: string
-  changeType: 'increase' | 'decrease'
+  changeType?: 'increase' | 'decrease' // Optional: jika tidak ada data untuk dibandingkan
   icon?: string
+  chartData?: number[]
 }>()
 
-// Generate random mini chart data for demonstration
-const chartData = computed(() => {
+// Use provided chart data; fallback to small random series if missing
+const effectiveChartData = computed(() => {
+  if (props.chartData && props.chartData.length > 0) {
+    return props.chartData
+  }
   const points = 10
   const data: number[] = []
   for (let i = 0; i < points; i++) {
@@ -21,7 +25,7 @@ const chartData = computed(() => {
 })
 
 const chartPath = computed(() => {
-  const data = chartData.value
+  const data = effectiveChartData.value
   if (!data || data.length === 0) return ''
   
   const width = 60
@@ -44,7 +48,7 @@ const chartPath = computed(() => {
 })
 
 const chartFillPath = computed(() => {
-  const data = chartData.value
+  const data = effectiveChartData.value
   if (!data || data.length === 0) return ''
   
   const width = 60
@@ -68,6 +72,7 @@ const chartFillPath = computed(() => {
 })
 
 const chartColor = computed(() => {
+  if (!props.changeType) return '#1890ff' // Default color jika tidak ada change type
   return props.changeType === 'increase' ? '#52c41a' : '#ff4d4f'
 })
 </script>
@@ -82,7 +87,7 @@ const chartColor = computed(() => {
       <div class="kpi-main">
         <div class="kpi-left">
           <div class="kpi-value">{{ value }}</div>
-          <div class="kpi-change" :class="changeType">
+          <div v-if="change && changeType" class="kpi-change" :class="changeType">
             <IconifyIcon 
               :icon="changeType === 'increase' ? 'mdi:trending-up' : 'mdi:trending-down'" 
               width="16" 
@@ -116,4 +121,3 @@ const chartColor = computed(() => {
     </div>
   </a-card>
 </template>
-

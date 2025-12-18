@@ -20,17 +20,25 @@ import (
 // ServeFile serves a file from GCP Storage or local storage as a proxy
 // This allows frontend to access files without requiring public access to the bucket
 // @Summary      Serve File
-// @Description  Serve file dari storage (GCP Storage atau local) sebagai proxy. Endpoint ini public untuk memungkinkan frontend mengakses file.
+// @Description  Serve file dari storage (GCP Storage atau local) sebagai proxy. Endpoint ini protected dan memerlukan authentication untuk keamanan file documents.
 // @Tags         Files
 // @Accept       json
-// @Produce      image/png,image/jpeg,image/jpg,application/octet-stream
-// @Param        path  path      string  true  "File path (e.g., logos/filename.png)"
+// @Produce      image/png,image/jpeg,image/jpg,application/octet-stream,application/pdf
+// @Security     BearerAuth
+// @Param        path  path      string  true  "File path (e.g., logos/filename.png atau documents/filename.pdf)"
 // @Success      200   {file}    file    "File content"
-// @Failure      400   {object}  ErrorResponse
-// @Failure      404   {object}  ErrorResponse
+// @Failure      400   {object}  domain.ErrorResponse
+// @Failure      401   {object}  domain.ErrorResponse  "Unauthorized"
+// @Failure      404   {object}  domain.ErrorResponse
 // @Router       /api/v1/files/{path} [get]
 func ServeFile(c *fiber.Ctx) error {
 	zapLog := logger.GetLogger()
+
+	// CRITICAL: Set headers to allow embedding in iframe
+	// Use CSP frame-ancestors instead of X-Frame-Options for better flexibility
+	// This allows the file to be embedded in iframe from same origin
+	c.Set("X-Frame-Options", "SAMEORIGIN")
+	c.Set("Content-Security-Policy", "frame-ancestors 'self'")
 
 	// Get file path from URL parameter (wildcard route captures everything after /files/)
 	// For route /api/v1/files/*, use c.Params("*") to get the wildcard value
@@ -40,11 +48,24 @@ func ServeFile(c *fiber.Ctx) error {
 		filePath = c.Params("path")
 	}
 	
+	// Log request details for debugging
+	zapLog.Info("ServeFile handler called",
+		zap.String("original_url", c.OriginalURL()),
+		zap.String("path", c.Path()),
+		zap.String("method", c.Method()),
+		zap.String("file_path_param", filePath),
+		zap.String("user_agent", c.Get("User-Agent")),
+	)
+	
 	if filePath == "" {
 		zapLog.Warn("File path is empty in request",
 			zap.String("url", c.OriginalURL()),
 			zap.String("path", c.Path()),
+			zap.String("all_params", fmt.Sprintf("%+v", c.AllParams())),
 		)
+		// Still set headers even for error
+		c.Set("X-Frame-Options", "SAMEORIGIN")
+		c.Set("Content-Security-Policy", "frame-ancestors 'self'")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "invalid_request",
 			"message": "File path tidak ditemukan dalam URL",
@@ -93,6 +114,9 @@ func ServeFile(c *fiber.Ctx) error {
 			zap.String("file_path", decodedPath),
 			zap.Error(err),
 		)
+		// Still set headers even for error
+		c.Set("X-Frame-Options", "SAMEORIGIN")
+		c.Set("Content-Security-Policy", "frame-ancestors 'self'")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":   "internal_error",
 			"message": "Gagal menginisialisasi storage manager",
@@ -107,6 +131,9 @@ func ServeFile(c *fiber.Ctx) error {
 			zap.String("file_path", decodedPath),
 			zap.String("expected_format", "bucketPath/filename"),
 		)
+		// Still set headers even for error
+		c.Set("X-Frame-Options", "SAMEORIGIN")
+		c.Set("Content-Security-Policy", "frame-ancestors 'self'")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "invalid_request",
 			"message": fmt.Sprintf("File path harus dalam format: bucketPath/filename. Diterima: %s", decodedPath),
@@ -122,6 +149,9 @@ func ServeFile(c *fiber.Ctx) error {
 			zap.String("filename", filename),
 			zap.String("decoded_path", decodedPath),
 		)
+		// Still set headers even for error
+		c.Set("X-Frame-Options", "SAMEORIGIN")
+		c.Set("Content-Security-Policy", "frame-ancestors 'self'")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "invalid_request",
 			"message": "Bucket path dan filename tidak boleh kosong",
@@ -263,6 +293,8 @@ func serveFromGCPStorage(c *fiber.Ctx, gcpStorage interface {
 	c.Set("Content-Type", contentType)
 	c.Set("Cache-Control", "public, max-age=3600")
 	c.Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
+	// Explicitly set X-Frame-Options to SAMEORIGIN to allow embedding in iframe
+	c.Set("X-Frame-Options", "SAMEORIGIN")
 
 	// Stream file content to response
 	bytesWritten, err := io.Copy(c.Response().BodyWriter(), reader)
@@ -329,27 +361,18 @@ func serveFromLocalStorage(c *fiber.Ctx, storageManager storage.StorageManager, 
 	
 	localStorage, ok := storageManager.(LocalStorageGetter)
 	if !ok {
-		// Fallback: try to read file using GetFileURL and read from filesystem
-		// This is less efficient but works as fallback
-		fileURL, err := storageManager.GetFileURL(bucketPath, filename)
-		if err != nil {
-			zapLog.Error("Failed to get file URL from local storage",
-				zap.String("bucket_path", bucketPath),
-				zap.String("filename", filename),
-				zap.Error(err),
-			)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":   "internal_error",
-				"message": "Gagal mendapatkan URL file",
-			})
-		}
-		
-		// Redirect to static file server (fallback)
-		// Note: This requires static file server to be configured correctly
-		zapLog.Info("Redirecting to static file server (fallback)",
-			zap.String("file_url", fileURL),
+		// LocalStorageGetter interface not available
+		zapLog.Warn("LocalStorageGetter interface not available, cannot serve file directly",
+			zap.String("bucket_path", bucketPath),
+			zap.String("filename", filename),
 		)
-		return c.Redirect(fileURL, fiber.StatusTemporaryRedirect)
+		// Still set headers even for error
+		c.Set("X-Frame-Options", "SAMEORIGIN")
+		c.Set("Content-Security-Policy", "frame-ancestors 'self'")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "internal_error",
+			"message": "Gagal membaca file dari storage",
+		})
 	}
 
 	// Read file directly from filesystem and serve
@@ -409,6 +432,8 @@ func serveFromLocalStorage(c *fiber.Ctx, storageManager storage.StorageManager, 
 	c.Set("Content-Type", contentType)
 	c.Set("Cache-Control", "public, max-age=3600")
 	c.Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
+	// Explicitly set X-Frame-Options to SAMEORIGIN to allow embedding in iframe
+	c.Set("X-Frame-Options", "SAMEORIGIN")
 
 	// Send file content
 	return c.Send(fileData)

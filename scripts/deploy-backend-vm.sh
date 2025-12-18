@@ -2,10 +2,25 @@
 set -euo pipefail
 
 # Script untuk deploy backend di VM
-# Usage: ./deploy-backend-vm.sh <PROJECT_ID> <BACKEND_IMAGE>
+# Usage: ./deploy-backend-vm.sh <PROJECT_ID> <BACKEND_IMAGE> [OPTIONS]
+# Options (via environment variables):
+#   - DB_SECRET_SUFFIX: suffix untuk secret names (default: "", untuk dev: "", untuk prod: "_prod")
+#   - DB_NAME: database name (default: "db_dev_pedeve")
+#   - DB_USER: database user (default: "pedeve_user_db")
+#   - STORAGE_BUCKET: storage bucket name (default: "pedeve-dev-bucket")
+#   - CORS_ORIGIN: CORS origin (default: dev domain)
+#   - DISABLE_RATE_LIMIT: disable rate limit (default: "true" untuk dev)
 
 PROJECT_ID=$1
 BACKEND_IMAGE=$2
+
+# Set defaults untuk development
+DB_SECRET_SUFFIX=${DB_SECRET_SUFFIX:-""}
+DB_NAME=${DB_NAME:-"db_dev_pedeve"}
+DB_USER=${DB_USER:-"pedeve_user_db"}
+STORAGE_BUCKET=${STORAGE_BUCKET:-"pedeve-dev-bucket"}
+CORS_ORIGIN=${CORS_ORIGIN:-"https://pedeve-dev.aretaamany.com,http://34.128.123.1,http://pedeve-dev.aretaamany.com"}
+DISABLE_RATE_LIMIT=${DISABLE_RATE_LIMIT:-"true"}
 
 echo "🚀 Starting backend deployment on VM..."
 
@@ -18,6 +33,24 @@ if ! command -v docker &> /dev/null; then
   rm -f get-docker.sh
 fi
 
+# Check if Cloud SQL Proxy is running (required for database connection)
+echo "🔍 Checking Cloud SQL Proxy..."
+if ! ps aux | grep -q "[c]loud-sql-proxy"; then
+  echo "⚠️  WARNING: Cloud SQL Proxy is not running!"
+  echo "   Attempting to start Cloud SQL Proxy service..."
+  
+  # Try to start Cloud SQL Proxy service if it exists
+  if sudo systemctl list-units --type=service | grep -q cloud-sql-proxy; then
+    sudo systemctl start cloud-sql-proxy || echo "⚠️  Failed to start Cloud SQL Proxy service"
+    sleep 5
+  else
+    echo "⚠️  Cloud SQL Proxy service not found. Please ensure it's installed and configured."
+    echo "   Container will start, but database connection may fail if Cloud SQL Proxy is not running."
+  fi
+else
+  echo "✅ Cloud SQL Proxy is running"
+fi
+
 # Load Docker image
 echo "🐳 Loading Docker image..."
 sudo docker load -i ~/backend-image.tar
@@ -27,11 +60,12 @@ echo "🛑 Stopping old container..."
 sudo docker stop dms-backend-prod 2>/dev/null || true
 sudo docker rm dms-backend-prod 2>/dev/null || true
 
-# Get secrets from GCP Secret Manager
+# Get secrets from GCP Secret Manager (dengan suffix jika ada)
 echo "🔑 Getting secrets from GCP Secret Manager..."
-DB_PASSWORD=$(gcloud secrets versions access latest --secret=db_password --project=${PROJECT_ID} 2>/dev/null || echo '')
-JWT_SECRET=$(gcloud secrets versions access latest --secret=jwt_secret --project=${PROJECT_ID} 2>/dev/null || echo '')
-ENCRYPTION_KEY=$(gcloud secrets versions access latest --secret=encryption_key --project=${PROJECT_ID} 2>/dev/null || echo '')
+echo "   Using secret suffix: '${DB_SECRET_SUFFIX}'"
+DB_PASSWORD=$(gcloud secrets versions access latest --secret=db_password${DB_SECRET_SUFFIX} --project=${PROJECT_ID} 2>/dev/null || echo '')
+JWT_SECRET=$(gcloud secrets versions access latest --secret=jwt_secret${DB_SECRET_SUFFIX} --project=${PROJECT_ID} 2>/dev/null || echo '')
+ENCRYPTION_KEY=$(gcloud secrets versions access latest --secret=encryption_key${DB_SECRET_SUFFIX} --project=${PROJECT_ID} 2>/dev/null || echo '')
 
 # Verify secrets were retrieved
 if [ -z "${DB_PASSWORD}" ]; then
@@ -48,7 +82,11 @@ echo "✅ Password retrieved: ${#DB_PASSWORD} characters"
 DB_PASSWORD_ENCODED=$(echo -n "${DB_PASSWORD}" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=''))")
 
 # Construct DATABASE_URL dengan password yang sudah di-encode
-DATABASE_URL="postgres://pedeve_user_db:${DB_PASSWORD_ENCODED}@127.0.0.1:5432/db_dev_pedeve?sslmode=disable"
+# IMPORTANT: Cloud SQL Proxy tidak memerlukan TLS, jadi gunakan sslmode=disable
+# Untuk production dengan Private IP atau direct connection, mungkin perlu sslmode=require
+# Tapi karena kita pakai Cloud SQL Proxy, selalu gunakan sslmode=disable
+SSL_MODE=${SSL_MODE:-"disable"}
+DATABASE_URL="postgres://${DB_USER}:${DB_PASSWORD_ENCODED}@127.0.0.1:5432/${DB_NAME}?sslmode=${SSL_MODE}"
 
 # Debug: Verify DATABASE_URL format (without showing password)
 echo "✅ DATABASE_URL length: ${#DATABASE_URL} characters"
@@ -68,14 +106,14 @@ sudo docker run -d \
   -e GCP_PROJECT_ID=${PROJECT_ID} \
   -e GCP_SECRET_MANAGER_ENABLED=false \
   -e GCP_STORAGE_ENABLED=true \
-  -e GCP_STORAGE_BUCKET=pedeve-dev-bucket \
+  -e GCP_STORAGE_BUCKET=${STORAGE_BUCKET} \
   -e DATABASE_URL="${DATABASE_URL}" \
   -e JWT_SECRET="${JWT_SECRET}" \
   -e ENCRYPTION_KEY="${ENCRYPTION_KEY}" \
   -e PORT=8080 \
   -e ENV=production \
-  -e DISABLE_RATE_LIMIT=true \
-  -e CORS_ORIGIN=https://pedeve-dev.aretaamany.com,http://34.128.123.1,http://pedeve-dev.aretaamany.com \
+  -e DISABLE_RATE_LIMIT=${DISABLE_RATE_LIMIT} \
+  -e CORS_ORIGIN="${CORS_ORIGIN}" \
   -e BACKEND_DIR=/app/backend \
   ${BACKEND_IMAGE}
 

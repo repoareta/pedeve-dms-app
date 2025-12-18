@@ -60,7 +60,7 @@ gcloud compute ssh ${SSH_USER}@${VM_NAME} \
       -e GCP_SECRET_MANAGER_ENABLED=true \
       -e GCP_STORAGE_ENABLED=true \
       -e GCP_STORAGE_BUCKET=pedeve-dev-bucket \
-      -e DATABASE_URL=postgres://pedeve_user_db:\${DB_PASSWORD}@127.0.0.1:5432/db_dev_pedeve?sslmode=require \
+      -e DATABASE_URL=postgres://pedeve_user_db:\${DB_PASSWORD}@127.0.0.1:5432/db_dev_pedeve?sslmode=disable \
       -e PORT=8080 \
       -e ENV=production \
       -e CORS_ORIGIN=https://pedeve-dev.aretaamany.com \

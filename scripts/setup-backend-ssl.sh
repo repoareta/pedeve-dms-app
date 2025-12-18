@@ -2,10 +2,12 @@
 set -euo pipefail
 
 # Script untuk setup SSL certificate untuk backend API
-# Usage: ./setup-backend-ssl.sh
+# Usage: ./setup-backend-ssl.sh [DOMAIN]
 # Script ini idempotent - aman dipanggil berkali-kali
+# 
+# Jika DOMAIN tidak diberikan, akan menggunakan default untuk development
 
-DOMAIN="api-pedeve-dev.aretaamany.com"
+DOMAIN=${1:-"api-pedeve-dev.aretaamany.com"}
 EMAIL="info@aretaamany.com"  # Email untuk Let's Encrypt
 
 echo "🔒 Setting up SSL certificate for ${DOMAIN}..."
@@ -48,11 +50,13 @@ fi
 # Update Nginx config untuk HTTP-only (Certbot will add HTTPS block automatically)
 echo "📝 Updating Nginx config for HTTP (Certbot will add HTTPS automatically)..."
 
-sudo tee /etc/nginx/sites-available/backend-api > /dev/null <<'EOF'
+# Temporarily disable unbound variable check for heredoc (Nginx variables will be evaluated by Nginx, not bash)
+set +u
+sudo tee /etc/nginx/sites-available/backend-api > /dev/null <<EOF
 server {
     listen 80;
     listen [::]:80;
-    server_name api-pedeve-dev.aretaamany.com;
+    server_name ${DOMAIN};
 
     # Security headers
     add_header X-Frame-Options "SAMEORIGIN" always;
@@ -64,10 +68,10 @@ server {
     error_log /var/log/nginx/backend-api-error.log;
 
     # Proxy settings
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
 
     # Timeout settings
     proxy_connect_timeout 60s;
@@ -78,11 +82,16 @@ server {
     location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
     }
 }
 EOF
+set -u
+
+# Enable the config (create symlink to sites-enabled)
+echo "🔗 Enabling Nginx config..."
+sudo ln -sf /etc/nginx/sites-available/backend-api /etc/nginx/sites-enabled/backend-api
 
 # Test Nginx config before reloading
 echo "🧪 Testing Nginx configuration..."

@@ -2,10 +2,12 @@
 set -euo pipefail
 
 # Script untuk setup SSL certificate untuk frontend
-# Usage: ./setup-frontend-ssl.sh
+# Usage: ./setup-frontend-ssl.sh [DOMAIN]
 # Script ini idempotent - aman dipanggil berkali-kali
+# 
+# Jika DOMAIN tidak diberikan, akan menggunakan default untuk development
 
-DOMAIN="pedeve-dev.aretaamany.com"
+DOMAIN=${1:-"pedeve-dev.aretaamany.com"}
 EMAIL="info@aretaamany.com"  # Email untuk Let's Encrypt
 
 echo "🔒 Setting up SSL certificate for ${DOMAIN}..."
@@ -48,6 +50,8 @@ fi
 # Update Nginx config untuk HTTP-only (Certbot will add HTTPS block automatically)
 echo "📝 Updating Nginx config for HTTP (Certbot will add HTTPS automatically)..."
 
+# Temporarily disable unbound variable check for heredoc (Nginx variables will be evaluated by Nginx, not bash)
+set +u
 sudo tee /etc/nginx/sites-available/default > /dev/null <<EOF
 server {
     listen 80;
@@ -87,6 +91,7 @@ server {
     }
 }
 EOF
+set -u
 
 # Test Nginx config before reloading
 echo "🧪 Testing Nginx configuration..."

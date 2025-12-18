@@ -57,14 +57,15 @@ jobs:
       - name: Build frontend static files
         working-directory: frontend
         env:
-          VITE_API_URL: https://api-pedeve-dev.aretaamany.com/api/v1
+          # Set VITE_API_URL berdasarkan branch
+          VITE_API_URL: ${{ github.ref == 'refs/heads/main' && 'https://api-reports.pertamina-pedeve.co.id/api/v1' || 'https://api-pedeve-dev.aretaamany.com/api/v1' }}
         run: |
           # Clear cache untuk memastikan build fresh tanpa cache lama
           rm -rf node_modules/.vite
           rm -rf dist
           npm run build
           echo "Frontend build completed. Files in ./dist"
-          echo "API URL configured: https://api-pedeve-dev.aretaamany.com/api/v1"
+          echo "API URL configured: $VITE_API_URL"
           
       - name: Prepare frontend for deployment
         run: |
@@ -117,16 +118,38 @@ jobs:
           fi
           echo "✅ All tests passed!"
 
+      - name: Compute image metadata
+        id: meta
+        run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          
+          # Default (development) tetap pakai image lama
+          IMAGE_REPO="ghcr.io/${REPO_OWNER}/dms-backend"
+          
+          # Production (main) pakai image baru
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            IMAGE_REPO="ghcr.io/${REPO_OWNER}/pedeve-dms-backend"
+          fi
+          
+          echo "repo_owner=${REPO_OWNER}" >> $GITHUB_OUTPUT
+          echo "backend_image_repo=${IMAGE_REPO}" >> $GITHUB_OUTPUT
+          echo "backend_image_latest=${IMAGE_REPO}:latest" >> $GITHUB_OUTPUT
+          echo "backend_image_versioned=${IMAGE_REPO}:${{ steps.version.outputs.version }}" >> $GITHUB_OUTPUT
+          
+          echo "Using IMAGE_REPO=${IMAGE_REPO}"
+
       - name: Build backend Docker image
         id: build-backend
         run: |
-          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          BACKEND_IMAGE="ghcr.io/${REPO_OWNER}/dms-backend:${{ steps.version.outputs.version }}"
+          echo "Building backend image..."
           docker build \
-            -t ${BACKEND_IMAGE} \
-            -t ghcr.io/${REPO_OWNER}/dms-backend:latest \
+            -t "${{ steps.meta.outputs.backend_image_versioned }}" \
+            -t "${{ steps.meta.outputs.backend_image_latest }}" \
             ./backend
-          echo "image=${BACKEND_IMAGE}" >> $GITHUB_OUTPUT
+          
+          echo "image=${{ steps.meta.outputs.backend_image_versioned }}" >> $GITHUB_OUTPUT
+          echo "Built: ${{ steps.meta.outputs.backend_image_latest }}"
+          echo "Built: ${{ steps.meta.outputs.backend_image_versioned }}"
 
       # ===== SECURITY SCAN =====
       # Note: Frontend tidak lagi menggunakan Docker image, hanya static files
@@ -166,10 +189,37 @@ jobs:
 
       - name: Push Docker images
         run: |
-          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          # Note: Frontend tidak lagi menggunakan Docker image, hanya backend
-          docker push ghcr.io/${REPO_OWNER}/dms-backend:${{ steps.version.outputs.version }}
-          docker push ghcr.io/${REPO_OWNER}/dms-backend:latest
+          # Function to push with retry
+          push_with_retry() {
+            local image=$1
+            local max_attempts=3
+            local attempt=1
+            local delay=10
+            
+            while [ $attempt -le $max_attempts ]; do
+              echo "🔄 Pushing $image (attempt $attempt/$max_attempts)..."
+              if docker push "$image"; then
+                echo "✅ Successfully pushed $image"
+                return 0
+              else
+                if [ $attempt -lt $max_attempts ]; then
+                  echo "⚠️  Push failed, retrying in ${delay}s..."
+                  sleep $delay
+                  delay=$((delay * 2))  # Exponential backoff
+                  attempt=$((attempt + 1))
+                else
+                  echo "❌ Failed to push $image after $max_attempts attempts"
+                  return 1
+                fi
+              fi
+            done
+          }
+          
+          # Push versioned image first
+          push_with_retry "${{ steps.meta.outputs.backend_image_versioned }}"
+          
+          # Push latest tag
+          push_with_retry "${{ steps.meta.outputs.backend_image_latest }}"
 
       # ===== GENERATE CHANGELOG & CREATE RELEASE =====
       - name: Generate changelog
@@ -613,6 +663,386 @@ jobs:
           gcloud compute ssh frontend-dev \
             --zone=asia-southeast2-a \
             --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="
+              echo '=== Nginx Status ==='
+              sudo systemctl is-active nginx && echo '✅ Nginx is active' || echo '❌ Nginx is not active'
+              sudo systemctl is-enabled nginx && echo '✅ Nginx is enabled' || echo '❌ Nginx is not enabled'
+              
+              echo ''
+              echo '=== Frontend Files ==='
+              ls -la /var/www/html/ | head -5 || echo '❌ Files not found!'
+              
+              echo ''
+              echo '=== Port 80 Status ==='
+              sudo ss -tlnp | grep ':80 ' || echo '❌ Port 80 not listening!'
+            "
+          
+          echo "✅ Final verification completed!"
+
+  # ===== DEPLOY TO GCP (Production Branch) =====
+  deploy-gcp-prod:
+    if: github.ref == 'refs/heads/main'
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for Workload Identity Federation
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download frontend static files artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: .
+
+      - name: Authenticate to Google Cloud using WIF (PROD)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_PROD }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker to use gcloud as a credential helper
+        run: gcloud auth configure-docker --quiet
+
+      - name: Pull Docker image for backend (PROD - new repo name)
+        run: |
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          docker pull "ghcr.io/${REPO_OWNER}/pedeve-dms-backend:latest"
+
+      - name: Setup Backend Firewall Rules (PROD)
+        run: |
+          echo "🔥 Setting up firewall rules for backend production..."
+          
+          # Allow Backend API (port 8080)
+          gcloud compute firewall-rules create allow-backend-api-prod \
+            --allow tcp:8080 \
+            --source-ranges 0.0.0.0/0 \
+            --target-tags backend-api-server \
+            --description "Allow Backend API traffic on port 8080 (Production)" \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} 2>/dev/null || echo "⚠️  Firewall rule 'allow-backend-api-prod' already exists"
+          
+          # Allow HTTPS (port 443)
+          gcloud compute firewall-rules create allow-https-prod \
+            --allow tcp:443 \
+            --source-ranges 0.0.0.0/0 \
+            --target-tags https-server \
+            --description "Allow HTTPS traffic (Production)" \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} 2>/dev/null || echo "⚠️  Firewall rule 'allow-https-prod' already exists"
+          
+          # Allow HTTP (port 80)
+          gcloud compute firewall-rules create allow-http-prod \
+            --allow tcp:80 \
+            --source-ranges 0.0.0.0/0 \
+            --target-tags http-server \
+            --description "Allow HTTP traffic (Production)" \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} 2>/dev/null || echo "⚠️  Firewall rule 'allow-http-prod' already exists"
+          
+          # Apply tags to backend VM
+          gcloud compute instances add-tags backend-prod-1 \
+            --tags backend-api-server,https-server,http-server \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} 2>/dev/null || echo "⚠️  Tags already applied"
+          
+          echo "✅ Firewall rules setup completed"
+
+      - name: Deploy Backend to GCP VM (PROD)
+        run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          BACKEND_IMAGE="ghcr.io/${REPO_OWNER}/pedeve-dms-backend:latest"
+
+          docker save ${BACKEND_IMAGE} -o backend-image.tar
+
+          gcloud compute scp \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
+            backend-image.tar \
+            backend-prod-1:~/backend-image.tar
+
+          gcloud compute scp \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
+            scripts/deploy-backend-vm.sh \
+            scripts/setup-backend-nginx.sh \
+            scripts/setup-backend-ssl.sh \
+            scripts/verify-backend-deployment.sh \
+            scripts/ensure-services-running.sh \
+            backend-prod-1:~/
+
+          gcloud compute ssh backend-prod-1 \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
+            --command="
+              chmod +x ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/setup-backend-ssl.sh ~/verify-backend-deployment.sh ~/ensure-services-running.sh
+              
+              # Set environment variables untuk production
+              export DB_SECRET_SUFFIX='_prod'
+              export DB_NAME='db_prod_pedeve'
+              export DB_USER='pedeve_user_db_prod'
+              export STORAGE_BUCKET='pedeve-prod-bucket'
+              export CORS_ORIGIN='https://reports.pertamina-pedeve.co.id'
+              export DISABLE_RATE_LIMIT='false'
+              
+              if ! ~/deploy-backend-vm.sh ${{ secrets.GCP_PROJECT_ID_PROD }} ${BACKEND_IMAGE}; then
+                echo '❌ ERROR: deploy-backend-vm.sh failed!'
+                exit 1
+              fi
+              
+              echo '🔒 Checking SSL certificate...'
+              export DOMAIN='api-reports.pertamina-pedeve.co.id'
+              if ! ~/setup-backend-ssl.sh ${DOMAIN}; then
+                echo '⚠️  WARNING: SSL setup may have failed, but continuing...'
+              fi
+              
+              if ! ~/setup-backend-nginx.sh ${DOMAIN}; then
+                echo '❌ ERROR: setup-backend-nginx.sh failed!'
+                exit 1
+              fi
+              
+              if ! ~/ensure-services-running.sh backend; then
+                echo '❌ ERROR: ensure-services-running.sh failed!'
+                exit 1
+              fi
+              
+              if ! ~/verify-backend-deployment.sh; then
+                echo '❌ ERROR: verify-backend-deployment.sh failed!'
+                exit 1
+              fi
+              
+              rm -f ~/backend-image.tar ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/setup-backend-ssl.sh ~/verify-backend-deployment.sh ~/ensure-services-running.sh
+            "
+
+      - name: Setup Frontend Firewall Rules (PROD)
+        run: |
+          echo "🔥 Setting up firewall rules for frontend production..."
+          
+          # Allow HTTPS (port 443)
+          gcloud compute firewall-rules create allow-https-prod \
+            --allow tcp:443 \
+            --source-ranges 0.0.0.0/0 \
+            --target-tags https-server \
+            --description "Allow HTTPS traffic (Production)" \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} 2>/dev/null || echo "⚠️  Firewall rule 'allow-https-prod' already exists"
+          
+          # Allow HTTP (port 80) - untuk redirect ke HTTPS
+          gcloud compute firewall-rules create allow-http-prod \
+            --allow tcp:80 \
+            --source-ranges 0.0.0.0/0 \
+            --target-tags http-server \
+            --description "Allow HTTP traffic (Production)" \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} 2>/dev/null || echo "⚠️  Firewall rule 'allow-http-prod' already exists"
+          
+          # Apply tags to frontend VM
+          gcloud compute instances add-tags frontend-prod-2 \
+            --tags https-server,http-server \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} 2>/dev/null || echo "⚠️  Tags already applied"
+          
+          echo "✅ Firewall rules setup completed"
+
+      - name: Deploy Frontend to GCP VM (PROD)
+        run: |
+          gcloud compute scp \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
+            frontend-dist.tar.gz \
+            frontend-prod-2:~/frontend-dist.tar.gz
+
+          gcloud compute scp \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
+            scripts/setup-nginx-frontend.sh \
+            scripts/setup-frontend-ssl.sh \
+            scripts/verify-frontend-deployment.sh \
+            scripts/ensure-services-running.sh \
+            frontend-prod-2:~/
+
+          gcloud compute ssh frontend-prod-2 \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
+            --command="
+              if ! command -v nginx &> /dev/null; then
+                sudo apt-get update
+                sudo apt-get install -y nginx
+                sudo systemctl enable nginx
+              fi
+
+              sudo rm -rf /var/www/html/*
+              sudo tar -xzf ~/frontend-dist.tar.gz -C /tmp/
+              sudo cp -r /tmp/dist/* /var/www/html/
+              sudo chown -R www-data:www-data /var/www/html
+              sudo chmod -R 755 /var/www/html
+
+              chmod +x ~/setup-nginx-frontend.sh ~/setup-frontend-ssl.sh ~/verify-frontend-deployment.sh ~/ensure-services-running.sh
+              export DOMAIN='reports.pertamina-pedeve.co.id'
+              ~/setup-frontend-ssl.sh ${DOMAIN} || true
+              ~/setup-nginx-frontend.sh ${DOMAIN}
+              ~/ensure-services-running.sh frontend
+              ~/verify-frontend-deployment.sh
+
+              rm -f ~/frontend-dist.tar.gz ~/setup-nginx-frontend.sh ~/setup-frontend-ssl.sh ~/verify-frontend-deployment.sh ~/ensure-services-running.sh
+              sudo rm -rf /tmp/dist
+            "
+
+      - name: Verify Backend Container (PROD)
+        run: |
+          echo "Verifying backend container status..."
+          gcloud compute ssh backend-prod-1 \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
+            --command="
+              echo 'Checking Docker container status...'
+              sudo docker ps -a | grep dms-backend-prod || echo 'Container not found'
+              sudo docker logs --tail 20 dms-backend-prod || echo 'Cannot get logs'
+            "
+
+      - name: Health Check Backend (PROD)
+        run: |
+          echo "Waiting for backend to be ready..."
+          sleep 30
+          
+          MAX_RETRIES=10
+          RETRY_DELAY=10
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Health check attempt $i/$MAX_RETRIES..."
+            
+            HEALTH_RESULT=$(gcloud compute ssh backend-prod-1 \
+              --zone=asia-southeast2-a \
+              --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
+              --command="
+                if ! sudo docker ps | grep -q dms-backend-prod; then
+                  echo 'CONTAINER_NOT_RUNNING'
+                  exit 1
+                fi
+                
+                HTTP_CODE=\$(curl -s -o /dev/null -w '%{http_code}' -m 10 http://127.0.0.1:8080/health 2>/dev/null || echo '000')
+                
+                if [ \"\$HTTP_CODE\" = '200' ]; then
+                  RESPONSE=\$(curl -s -m 10 http://127.0.0.1:8080/health 2>/dev/null || echo '')
+                  echo \"SUCCESS:\$HTTP_CODE:\$RESPONSE\"
+                  exit 0
+                else
+                  echo \"FAILED:\$HTTP_CODE\"
+                  exit 1
+                fi
+              " 2>&1 || echo "SSH_FAILED")
+            
+            if echo "$HEALTH_RESULT" | grep -q "SUCCESS:"; then
+              HTTP_CODE=$(echo "$HEALTH_RESULT" | grep "SUCCESS:" | cut -d: -f2)
+              RESPONSE=$(echo "$HEALTH_RESULT" | grep "SUCCESS:" | cut -d: -f3-)
+              echo "✅ Backend health check passed! (HTTP $HTTP_CODE)"
+              echo "Response: $RESPONSE"
+              exit 0
+            elif echo "$HEALTH_RESULT" | grep -q "CONTAINER_NOT_RUNNING"; then
+              echo "❌ Container not running!"
+              exit 1
+            else
+              HTTP_CODE=$(echo "$HEALTH_RESULT" | grep "FAILED:" | cut -d: -f2 || echo "000")
+              echo "⏳ Backend not ready yet (HTTP $HTTP_CODE), waiting ${RETRY_DELAY}s before retry..."
+            fi
+            
+            if [ $i -lt $MAX_RETRIES ]; then
+              sleep $RETRY_DELAY
+            fi
+          done
+          
+          echo "❌ Backend health check failed after $MAX_RETRIES attempts"
+          gcloud compute ssh backend-prod-1 \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
+            --command="sudo docker logs --tail 100 dms-backend-prod" || true
+          exit 1
+
+      - name: Health Check Frontend (PROD)
+        run: |
+          echo "Waiting for frontend to be ready..."
+          sleep 10
+          
+          MAX_RETRIES=5
+          RETRY_DELAY=5
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Frontend health check attempt $i/$MAX_RETRIES..."
+            
+            HEALTH_RESULT=$(gcloud compute ssh frontend-prod-2 \
+              --zone=asia-southeast2-a \
+              --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
+              --command="
+                if ! sudo systemctl is-active --quiet nginx; then
+                  echo 'NGINX_NOT_RUNNING'
+                  exit 1
+                fi
+                
+                HTTP_CODE=\$(curl -s -o /dev/null -w '%{http_code}' -m 10 http://127.0.0.1/health 2>/dev/null || echo '000')
+                
+                if [ \"\$HTTP_CODE\" = '200' ]; then
+                  echo \"SUCCESS:\$HTTP_CODE\"
+                  exit 0
+                else
+                  echo \"FAILED:\$HTTP_CODE\"
+                  exit 1
+                fi
+              " 2>&1 || echo "SSH_FAILED")
+            
+            if echo "$HEALTH_RESULT" | grep -q "SUCCESS:"; then
+              HTTP_CODE=$(echo "$HEALTH_RESULT" | grep "SUCCESS:" | cut -d: -f2)
+              echo "✅ Frontend health check passed! (HTTP $HTTP_CODE)"
+              exit 0
+            elif echo "$HEALTH_RESULT" | grep -q "NGINX_NOT_RUNNING"; then
+              echo "❌ Nginx is not running on frontend VM!"
+              exit 1
+            else
+              HTTP_CODE=$(echo "$HEALTH_RESULT" | grep "FAILED:" | cut -d: -f2 || echo "000")
+              echo "⏳ Frontend not ready yet (HTTP $HTTP_CODE), waiting ${RETRY_DELAY}s before retry..."
+            fi
+            
+            if [ $i -lt $MAX_RETRIES ]; then
+              sleep $RETRY_DELAY
+            fi
+          done
+          
+          echo "❌ Frontend health check failed after $MAX_RETRIES attempts"
+          gcloud compute ssh frontend-prod-2 \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
+            --command="sudo systemctl status nginx --no-pager -l" || true
+          exit 1
+
+      - name: Final Service Verification (PROD)
+        run: |
+          echo "🔍 Final verification: Ensuring all services are running..."
+          
+          # Verify Backend
+          echo "Checking backend services..."
+          gcloud compute ssh backend-prod-1 \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
+            --command="
+              echo '=== Backend Container Status ==='
+              sudo docker ps | grep dms-backend-prod || echo '❌ Container not running!'
+              
+              echo ''
+              echo '=== Backend Port Status ==='
+              sudo ss -tlnp | grep 8080 || echo '❌ Port 8080 not listening!'
+              
+              echo ''
+              echo '=== Nginx Status ==='
+              sudo systemctl is-active nginx && echo '✅ Nginx is active' || echo '❌ Nginx is not active'
+              sudo systemctl is-enabled nginx && echo '✅ Nginx is enabled' || echo '❌ Nginx is not enabled'
+            "
+          
+          # Verify Frontend
+          echo "Checking frontend services..."
+          gcloud compute ssh frontend-prod-2 \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
             --command="
               echo '=== Nginx Status ==='
               sudo systemctl is-active nginx && echo '✅ Nginx is active' || echo '❌ Nginx is not active'

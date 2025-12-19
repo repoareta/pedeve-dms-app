@@ -57,29 +57,73 @@ sudo docker load -i ~/backend-image.tar
 
 # Stop and remove old container
 echo "🛑 Stopping and removing old container..."
-# Force stop and remove (ignore errors if container doesn't exist)
-sudo docker stop dms-backend-prod 2>/dev/null || true
-sudo docker rm -f dms-backend-prod 2>/dev/null || true
 
-# Wait a moment to ensure container is fully removed
-sleep 2
-
-# Verify container is removed
-if sudo docker ps -a | grep -q dms-backend-prod; then
-  echo "⚠️  WARNING: Container still exists, forcing removal..."
-  sudo docker rm -f dms-backend-prod 2>/dev/null || true
-  sleep 1
+# Check if container exists (running or stopped)
+if sudo docker ps -a --format '{{.Names}}' | grep -q '^dms-backend-prod$'; then
+  echo "   Found existing container, stopping..."
+  # Force stop first (ignore errors)
+  sudo docker stop dms-backend-prod 2>/dev/null || true
+  sleep 2
   
-  # Final check
-  if sudo docker ps -a | grep -q dms-backend-prod; then
-    echo "❌ ERROR: Failed to remove existing container dms-backend-prod"
+  # Force remove (ignore errors)
+  echo "   Removing container..."
+  sudo docker rm -f dms-backend-prod 2>/dev/null || true
+  sleep 2
+  
+  # Verify removal with multiple attempts
+  MAX_REMOVE_ATTEMPTS=5
+  REMOVE_ATTEMPT=0
+  while [ $REMOVE_ATTEMPT -lt $MAX_REMOVE_ATTEMPTS ]; do
+    if sudo docker ps -a --format '{{.Names}}' | grep -q '^dms-backend-prod$'; then
+      REMOVE_ATTEMPT=$((REMOVE_ATTEMPT + 1))
+      echo "   ⚠️  Container still exists, attempt $REMOVE_ATTEMPT/$MAX_REMOVE_ATTEMPTS..."
+      
+      # Get container ID for more aggressive removal
+      CONTAINER_ID=$(sudo docker ps -a --filter "name=dms-backend-prod" --format "{{.ID}}" | head -1)
+      if [ -n "${CONTAINER_ID}" ]; then
+        echo "   Force removing container ID: ${CONTAINER_ID}"
+        sudo docker kill "${CONTAINER_ID}" 2>/dev/null || true
+        sudo docker rm -f "${CONTAINER_ID}" 2>/dev/null || true
+      else
+        sudo docker rm -f dms-backend-prod 2>/dev/null || true
+      fi
+      
+      sleep 2
+    else
+      echo "✅ Container removed successfully"
+      break
+    fi
+  done
+  
+  # Final verification
+  if sudo docker ps -a --format '{{.Names}}' | grep -q '^dms-backend-prod$'; then
+    echo "❌ ERROR: Failed to remove existing container dms-backend-prod after $MAX_REMOVE_ATTEMPTS attempts"
     echo "   Container status:"
     sudo docker ps -a | grep dms-backend-prod
     echo ""
-    echo "   Please manually remove the container:"
-    echo "   sudo docker rm -f dms-backend-prod"
-    exit 1
+    echo "   Container details:"
+    sudo docker inspect dms-backend-prod 2>/dev/null | grep -E '"Id"|"State"|"Status"' || true
+    echo ""
+    echo "   Attempting manual cleanup..."
+    CONTAINER_ID=$(sudo docker ps -a --filter "name=dms-backend-prod" --format "{{.ID}}" | head -1)
+    if [ -n "${CONTAINER_ID}" ]; then
+      echo "   Killing container ${CONTAINER_ID}..."
+      sudo docker kill "${CONTAINER_ID}" 2>/dev/null || true
+      sleep 1
+      echo "   Removing container ${CONTAINER_ID}..."
+      sudo docker rm -f "${CONTAINER_ID}" 2>/dev/null || true
+      sleep 1
+      
+      # Check again
+      if sudo docker ps -a --format '{{.Names}}' | grep -q '^dms-backend-prod$'; then
+        echo "   ❌ Still cannot remove container. Please check Docker daemon status."
+        sudo docker ps -a | grep dms-backend-prod
+        exit 1
+      fi
+    fi
   fi
+else
+  echo "✅ No existing container found"
 fi
 
 echo "✅ Old container removed successfully"
@@ -290,6 +334,18 @@ DATABASE_URL="postgres://${DB_USER}:${DB_PASSWORD_ENCODED}@127.0.0.1:5432/${DB_N
 # Debug: Verify DATABASE_URL format (without showing password)
 echo "✅ DATABASE_URL length: ${#DATABASE_URL} characters"
 echo "✅ Password encoded successfully"
+
+# Final check before starting new container
+echo "🔍 Final verification: ensuring container name is available..."
+if sudo docker ps -a --format '{{.Names}}' | grep -q '^dms-backend-prod$'; then
+  echo "❌ ERROR: Container dms-backend-prod still exists! Cannot proceed."
+  echo "   Container details:"
+  sudo docker ps -a | grep dms-backend-prod
+  echo ""
+  echo "   Please manually remove the container:"
+  echo "   sudo docker rm -f dms-backend-prod"
+  exit 1
+fi
 
 # Start new container with all environment variables
 # IMPORTANT: Use --network host so container can access Cloud SQL Proxy on 127.0.0.1:5432

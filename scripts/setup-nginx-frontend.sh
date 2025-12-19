@@ -5,7 +5,7 @@ set -euo pipefail
 # Usage: ./setup-nginx-frontend.sh [DOMAIN]
 # 
 # Jika DOMAIN tidak diberikan, akan menggunakan default untuk development
-# Atau bisa set via environment variable: DOMAIN=reports.pertamina-pedeve.co.id
+# Atau bisa set via environment variable: DOMAIN=dms.pertamina-pedeve.co.id
 
 DOMAIN=${1:-${DOMAIN:-"pedeve-dev.aretaamany.com"}}
 

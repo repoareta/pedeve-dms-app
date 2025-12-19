@@ -185,7 +185,11 @@ jobs:
 
       # ===== PUSH DOCKER IMAGES =====
       - name: Log in to GitHub Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push Docker images
         run: |
@@ -274,6 +278,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: read  # Required for pulling Docker images from GHCR
       id-token: write  # Required for Workload Identity Federation
 
     steps:
@@ -301,9 +306,15 @@ jobs:
         run: |
           gcloud auth configure-docker --quiet
 
+      - name: Log in to GitHub Container Registry (for pull)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Pull Docker image for backend
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           docker pull ghcr.io/${REPO_OWNER}/dms-backend:latest
 
@@ -686,6 +697,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: read  # Required for pulling Docker images from GHCR
       id-token: write  # Required for Workload Identity Federation
 
     steps:
@@ -710,9 +722,15 @@ jobs:
       - name: Configure Docker to use gcloud as a credential helper
         run: gcloud auth configure-docker --quiet
 
+      - name: Log in to GitHub Container Registry (for pull - PROD)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Pull Docker image for backend (PROD - new repo name)
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           docker pull "ghcr.io/${REPO_OWNER}/pedeve-dms-backend:latest"
 

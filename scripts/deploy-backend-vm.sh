@@ -69,30 +69,75 @@ echo "   Project: ${PROJECT_ID}"
 get_secret() {
   local secret_name=$1
   local secret_name_with_suffix="${secret_name}${DB_SECRET_SUFFIX}"
+  local value=""
   
-  # Try with suffix first
-  echo "   Trying secret: ${secret_name_with_suffix}"
-  local value=$(gcloud secrets versions access latest --secret=${secret_name_with_suffix} --project=${PROJECT_ID} 2>/dev/null || echo '')
+  # Try with suffix first (if suffix is not empty)
+  if [ -n "${DB_SECRET_SUFFIX}" ]; then
+    echo "   Trying secret: ${secret_name_with_suffix}" >&2
+    # Try to get secret, capture both stdout and stderr
+    local temp_output=$(mktemp)
+    local temp_error=$(mktemp)
+    
+    if gcloud secrets versions access latest --secret=${secret_name_with_suffix} --project=${PROJECT_ID} >"${temp_output}" 2>"${temp_error}"; then
+      if [ -s "${temp_output}" ]; then
+        value=$(cat "${temp_output}")
+        rm -f "${temp_output}" "${temp_error}"
+      else
+        rm -f "${temp_output}" "${temp_error}"
+        value=""
+      fi
+    else
+      local error_content=$(cat "${temp_error}")
+      rm -f "${temp_output}" "${temp_error}"
+      value=""
+      if echo "${error_content}" | grep -q "was not found\|NOT_FOUND"; then
+        echo "   ⚠️  Secret ${secret_name_with_suffix} not found, trying without suffix: ${secret_name}" >&2
+      else
+        echo "   ⚠️  Error accessing ${secret_name_with_suffix}: ${error_content}" >&2
+        echo "   Trying without suffix: ${secret_name}" >&2
+      fi
+    fi
+  fi
   
   # If not found and suffix is not empty, try without suffix as fallback
-  if [ -z "${value}" ] && [ -n "${DB_SECRET_SUFFIX}" ]; then
-    echo "   ⚠️  Secret ${secret_name_with_suffix} not found, trying without suffix: ${secret_name}"
-    value=$(gcloud secrets versions access latest --secret=${secret_name} --project=${PROJECT_ID} 2>/dev/null || echo '')
-  fi
-  
+  # OR if suffix is empty, try without suffix directly
   if [ -z "${value}" ]; then
-    echo "   ❌ Secret ${secret_name_with_suffix} (or ${secret_name}) not found!"
-    return 1
+    echo "   Trying secret: ${secret_name}" >&2
+    local temp_output=$(mktemp)
+    local temp_error=$(mktemp)
+    
+    if gcloud secrets versions access latest --secret=${secret_name} --project=${PROJECT_ID} >"${temp_output}" 2>"${temp_error}"; then
+      if [ -s "${temp_output}" ]; then
+        value=$(cat "${temp_output}")
+        rm -f "${temp_output}" "${temp_error}"
+      else
+        rm -f "${temp_output}" "${temp_error}"
+        value=""
+      fi
+    else
+      local error_content=$(cat "${temp_error}")
+      rm -f "${temp_output}" "${temp_error}"
+      echo "   ❌ Secret ${secret_name_with_suffix} (or ${secret_name}) not found!" >&2
+      if [ -n "${error_content}" ]; then
+        echo "   Error: ${error_content}" >&2
+      fi
+      return 1
+    fi
   fi
   
-  echo "   ✅ Secret retrieved successfully"
+  echo "   ✅ Secret retrieved successfully" >&2
   echo "${value}"
   return 0
 }
 
 # Get secrets
+# Temporarily disable exit on error for command substitution
+set +e
 DB_PASSWORD=$(get_secret "db_password")
-if [ $? -ne 0 ]; then
+SECRET_EXIT_CODE=$?
+set -e
+
+if [ $SECRET_EXIT_CODE -ne 0 ] || [ -z "${DB_PASSWORD}" ]; then
   echo ""
   echo "❌ ERROR: Failed to retrieve db_password from Secret Manager"
   echo ""
@@ -101,23 +146,42 @@ if [ $? -ne 0 ]; then
   echo "      gcloud secrets list --project=${PROJECT_ID}"
   echo ""
   echo "   2. If using suffix '${DB_SECRET_SUFFIX}', verify secret name is:"
-  echo "      - db_password${DB_SECRET_SUFFIX}"
-  echo "      OR (without suffix): db_password"
+  if [ -n "${DB_SECRET_SUFFIX}" ]; then
+    echo "      - db_password${DB_SECRET_SUFFIX} (with suffix)"
+    echo "      - db_password (without suffix - fallback)"
+  else
+    echo "      - db_password (no suffix)"
+  fi
   echo ""
   echo "   3. Verify VM Service Account has Secret Manager Secret Accessor role:"
   echo "      gcloud projects get-iam-policy ${PROJECT_ID} --flatten='bindings[].members' --filter='bindings.members:*@${PROJECT_ID}.iam.gserviceaccount.com'"
   echo ""
+  echo "   4. Test secret access manually:"
+  if [ -n "${DB_SECRET_SUFFIX}" ]; then
+    echo "      gcloud secrets versions access latest --secret=db_password${DB_SECRET_SUFFIX} --project=${PROJECT_ID}"
+    echo "      OR:"
+  fi
+  echo "      gcloud secrets versions access latest --secret=db_password --project=${PROJECT_ID}"
+  echo ""
   exit 1
 fi
 
+set +e
 JWT_SECRET=$(get_secret "jwt_secret")
-if [ $? -ne 0 ]; then
+JWT_EXIT_CODE=$?
+set -e
+
+if [ $JWT_EXIT_CODE -ne 0 ] || [ -z "${JWT_SECRET}" ]; then
   echo "⚠️  WARNING: jwt_secret not found, container may fail to start"
   JWT_SECRET=""
 fi
 
+set +e
 ENCRYPTION_KEY=$(get_secret "encryption_key")
-if [ $? -ne 0 ]; then
+ENCRYPTION_EXIT_CODE=$?
+set -e
+
+if [ $ENCRYPTION_EXIT_CODE -ne 0 ] || [ -z "${ENCRYPTION_KEY}" ]; then
   echo "⚠️  WARNING: encryption_key not found, container may fail to start"
   ENCRYPTION_KEY=""
 fi

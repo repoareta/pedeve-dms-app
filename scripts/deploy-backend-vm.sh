@@ -63,14 +63,63 @@ sudo docker rm dms-backend-prod 2>/dev/null || true
 # Get secrets from GCP Secret Manager (dengan suffix jika ada)
 echo "🔑 Getting secrets from GCP Secret Manager..."
 echo "   Using secret suffix: '${DB_SECRET_SUFFIX}'"
-DB_PASSWORD=$(gcloud secrets versions access latest --secret=db_password${DB_SECRET_SUFFIX} --project=${PROJECT_ID} 2>/dev/null || echo '')
-JWT_SECRET=$(gcloud secrets versions access latest --secret=jwt_secret${DB_SECRET_SUFFIX} --project=${PROJECT_ID} 2>/dev/null || echo '')
-ENCRYPTION_KEY=$(gcloud secrets versions access latest --secret=encryption_key${DB_SECRET_SUFFIX} --project=${PROJECT_ID} 2>/dev/null || echo '')
+echo "   Project: ${PROJECT_ID}"
 
-# Verify secrets were retrieved
-if [ -z "${DB_PASSWORD}" ]; then
+# Function to get secret with fallback
+get_secret() {
+  local secret_name=$1
+  local secret_name_with_suffix="${secret_name}${DB_SECRET_SUFFIX}"
+  
+  # Try with suffix first
+  echo "   Trying secret: ${secret_name_with_suffix}"
+  local value=$(gcloud secrets versions access latest --secret=${secret_name_with_suffix} --project=${PROJECT_ID} 2>/dev/null || echo '')
+  
+  # If not found and suffix is not empty, try without suffix as fallback
+  if [ -z "${value}" ] && [ -n "${DB_SECRET_SUFFIX}" ]; then
+    echo "   ⚠️  Secret ${secret_name_with_suffix} not found, trying without suffix: ${secret_name}"
+    value=$(gcloud secrets versions access latest --secret=${secret_name} --project=${PROJECT_ID} 2>/dev/null || echo '')
+  fi
+  
+  if [ -z "${value}" ]; then
+    echo "   ❌ Secret ${secret_name_with_suffix} (or ${secret_name}) not found!"
+    return 1
+  fi
+  
+  echo "   ✅ Secret retrieved successfully"
+  echo "${value}"
+  return 0
+}
+
+# Get secrets
+DB_PASSWORD=$(get_secret "db_password")
+if [ $? -ne 0 ]; then
+  echo ""
   echo "❌ ERROR: Failed to retrieve db_password from Secret Manager"
+  echo ""
+  echo "📋 Troubleshooting steps:"
+  echo "   1. Verify secret exists in GCP Secret Manager:"
+  echo "      gcloud secrets list --project=${PROJECT_ID}"
+  echo ""
+  echo "   2. If using suffix '${DB_SECRET_SUFFIX}', verify secret name is:"
+  echo "      - db_password${DB_SECRET_SUFFIX}"
+  echo "      OR (without suffix): db_password"
+  echo ""
+  echo "   3. Verify VM Service Account has Secret Manager Secret Accessor role:"
+  echo "      gcloud projects get-iam-policy ${PROJECT_ID} --flatten='bindings[].members' --filter='bindings.members:*@${PROJECT_ID}.iam.gserviceaccount.com'"
+  echo ""
   exit 1
+fi
+
+JWT_SECRET=$(get_secret "jwt_secret")
+if [ $? -ne 0 ]; then
+  echo "⚠️  WARNING: jwt_secret not found, container may fail to start"
+  JWT_SECRET=""
+fi
+
+ENCRYPTION_KEY=$(get_secret "encryption_key")
+if [ $? -ne 0 ]; then
+  echo "⚠️  WARNING: encryption_key not found, container may fail to start"
+  ENCRYPTION_KEY=""
 fi
 
 # Debug: Check password length (without showing actual password)

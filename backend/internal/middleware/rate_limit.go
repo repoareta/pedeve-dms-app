@@ -5,10 +5,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/config"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
-	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -115,28 +115,31 @@ func InitRateLimiters() {
 // RateLimitMiddleware applies rate limiting based on client IP (untuk Fiber)
 func RateLimitMiddleware(limiter *RateLimiter) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Disable rate limiting sepenuhnya untuk development
+		// Rate limiting aktif di semua environment (development & production) untuk testing
+		// Bisa di-disable sepenuhnya dengan DISABLE_RATE_LIMIT=true jika diperlukan
 		env := os.Getenv("ENV")
 		disableRateLimit := os.Getenv("DISABLE_RATE_LIMIT") == "true"
 
-		// Bypass rate limiting jika:
-		// 1. ENV tidak "production" (development/staging)
-		// 2. DISABLE_RATE_LIMIT=true
-		if env != "production" || disableRateLimit {
-			// Development: bypass rate limiting sepenuhnya
-			// Log hanya sekali untuk menghindari spam log
-			if disableRateLimit {
-				zapLog := logger.GetLogger()
-				zapLog.Debug("Rate limit bypassed",
-					zap.String("reason", "DISABLE_RATE_LIMIT=true"),
-					zap.String("path", c.Path()),
-					zap.String("method", c.Method()),
-				)
-			}
+		// Bypass rate limiting hanya jika DISABLE_RATE_LIMIT=true
+		if disableRateLimit {
+			zapLog := logger.GetLogger()
+			zapLog.Debug("Rate limit bypassed",
+				zap.String("reason", "DISABLE_RATE_LIMIT=true"),
+				zap.String("path", c.Path()),
+				zap.String("method", c.Method()),
+			)
 			return c.Next()
 		}
 
-		// Production: apply rate limiting
+		// Apply rate limiting (aktif di development & production)
+		// IMPORTANT: GET requests untuk browsing/navigasi tidak perlu rate limit
+		// Rate limit hanya untuk operasi yang berpotensi abuse (POST, PUT, DELETE, PATCH)
+		method := c.Method()
+		if method == "GET" || method == "OPTIONS" || method == "HEAD" {
+			// GET, OPTIONS, HEAD requests tidak perlu rate limit untuk browsing/navigasi
+			return c.Next()
+		}
+
 		ip := getClientIP(c)
 		visitorLimiter := limiter.GetVisitor(ip)
 

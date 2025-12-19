@@ -9,7 +9,7 @@ set -euo pipefail
 #   - DB_USER: database user (default: "pedeve_user_db")
 #   - STORAGE_BUCKET: storage bucket name (default: "pedeve-dev-bucket")
 #   - CORS_ORIGIN: CORS origin (default: dev domain)
-#   - DISABLE_RATE_LIMIT: disable rate limit (default: "true" untuk dev)
+#   - DISABLE_RATE_LIMIT: disable rate limit (default: "false" - rate limit aktif untuk testing)
 
 PROJECT_ID=$1
 BACKEND_IMAGE=$2
@@ -20,7 +20,7 @@ DB_NAME=${DB_NAME:-"db_dev_pedeve"}
 DB_USER=${DB_USER:-"pedeve_user_db"}
 STORAGE_BUCKET=${STORAGE_BUCKET:-"pedeve-dev-bucket"}
 CORS_ORIGIN=${CORS_ORIGIN:-"https://pedeve-dev.aretaamany.com,http://34.128.123.1,http://pedeve-dev.aretaamany.com"}
-DISABLE_RATE_LIMIT=${DISABLE_RATE_LIMIT:-"true"}
+DISABLE_RATE_LIMIT=${DISABLE_RATE_LIMIT:-"false"}
 
 echo "🚀 Starting backend deployment on VM..."
 
@@ -55,10 +55,34 @@ fi
 echo "🐳 Loading Docker image..."
 sudo docker load -i ~/backend-image.tar
 
-# Stop old container
-echo "🛑 Stopping old container..."
+# Stop and remove old container
+echo "🛑 Stopping and removing old container..."
+# Force stop and remove (ignore errors if container doesn't exist)
 sudo docker stop dms-backend-prod 2>/dev/null || true
-sudo docker rm dms-backend-prod 2>/dev/null || true
+sudo docker rm -f dms-backend-prod 2>/dev/null || true
+
+# Wait a moment to ensure container is fully removed
+sleep 2
+
+# Verify container is removed
+if sudo docker ps -a | grep -q dms-backend-prod; then
+  echo "⚠️  WARNING: Container still exists, forcing removal..."
+  sudo docker rm -f dms-backend-prod 2>/dev/null || true
+  sleep 1
+  
+  # Final check
+  if sudo docker ps -a | grep -q dms-backend-prod; then
+    echo "❌ ERROR: Failed to remove existing container dms-backend-prod"
+    echo "   Container status:"
+    sudo docker ps -a | grep dms-backend-prod
+    echo ""
+    echo "   Please manually remove the container:"
+    echo "   sudo docker rm -f dms-backend-prod"
+    exit 1
+  fi
+fi
+
+echo "✅ Old container removed successfully"
 
 # Get secrets from GCP Secret Manager (dengan suffix jika ada)
 echo "🔑 Getting secrets from GCP Secret Manager..."
@@ -184,6 +208,68 @@ set -e
 if [ $ENCRYPTION_EXIT_CODE -ne 0 ] || [ -z "${ENCRYPTION_KEY}" ]; then
   echo "⚠️  WARNING: encryption_key not found, container may fail to start"
   ENCRYPTION_KEY=""
+else
+  # Store original length for debugging
+  ORIGINAL_LENGTH=${#ENCRYPTION_KEY}
+  
+  # Trim whitespace and newlines from encryption key
+  # Remove all whitespace characters: newline, carriage return, tab, space
+  ENCRYPTION_KEY=$(echo -n "${ENCRYPTION_KEY}" | tr -d '\n\r\t ')
+  
+  # Validate encryption key length (must be exactly 32 bytes for AES-256)
+  ENCRYPTION_KEY_LENGTH=${#ENCRYPTION_KEY}
+  
+  if [ $ENCRYPTION_KEY_LENGTH -ne 32 ]; then
+    echo ""
+    echo "❌ ERROR: encryption_key must be exactly 32 bytes (256 bits) for AES-256"
+    echo "   Original length: ${ORIGINAL_LENGTH} bytes"
+    echo "   After trimming whitespace: ${ENCRYPTION_KEY_LENGTH} bytes"
+    echo ""
+    if [ $ORIGINAL_LENGTH -gt 32 ]; then
+      echo "   ⚠️  Key has ${((ORIGINAL_LENGTH - 32))} extra bytes (likely newline/whitespace)"
+      echo "   Attempted to trim, but still not 32 bytes after trimming."
+    fi
+    echo ""
+    echo "📋 Troubleshooting steps:"
+    echo "   1. Check the encryption_key in GCP Secret Manager:"
+    if [ -n "${DB_SECRET_SUFFIX}" ]; then
+      echo "      gcloud secrets versions access latest --secret=encryption_key${DB_SECRET_SUFFIX} --project=${PROJECT_ID}"
+    else
+      echo "      gcloud secrets versions access latest --secret=encryption_key --project=${PROJECT_ID}"
+    fi
+    echo ""
+    echo "   2. The key must be exactly 32 bytes. Common issues:"
+    echo "      - Key has trailing newline or whitespace"
+    echo "      - Key is too short or too long"
+    echo "      - Key contains invalid characters"
+    echo ""
+    echo "   3. To generate a new 32-byte key:"
+    echo "      # Option 1: Generate random 32 bytes as hex (64 hex characters = 32 bytes)"
+    echo "      openssl rand -hex 32"
+    echo ""
+    echo "      # Option 2: Generate random 32 bytes as base64 (44 base64 chars = 32 bytes)"
+    echo "      openssl rand 32 | base64"
+    echo ""
+    echo "      # Option 3: Generate random 32-byte key as printable ASCII (32 chars)"
+    echo "      openssl rand -base64 24 | head -c 32"
+    echo "      # Note: This generates 24 random bytes, encodes to base64 (~32 chars), takes first 32"
+    echo ""
+    echo "   4. Update the secret in GCP Secret Manager (use -n flag to avoid newline):"
+    if [ -n "${DB_SECRET_SUFFIX}" ]; then
+      echo "      echo -n '<32-byte-key>' | gcloud secrets versions add encryption_key${DB_SECRET_SUFFIX} --data-file=- --project=${PROJECT_ID}"
+    else
+      echo "      echo -n '<32-byte-key>' | gcloud secrets versions add encryption_key --data-file=- --project=${PROJECT_ID}"
+    fi
+    echo ""
+    echo "   ⚠️  IMPORTANT: Use 'echo -n' to avoid adding newline character!"
+    echo ""
+    exit 1
+  fi
+  
+  if [ $ORIGINAL_LENGTH -ne 32 ]; then
+    echo "⚠️  WARNING: Encryption key had ${ORIGINAL_LENGTH} bytes, trimmed to 32 bytes (removed whitespace/newline)"
+  fi
+  echo "✅ Encryption key validated: ${ENCRYPTION_KEY_LENGTH} bytes (correct length for AES-256)"
 fi
 
 # Debug: Check password length (without showing actual password)

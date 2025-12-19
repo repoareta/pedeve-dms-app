@@ -1070,8 +1070,8 @@ onMounted(async () => {
             </div>
             <template v-else>
               <div class="storage-header">
-                <div class="title">My Storage</div>
-                <a-dropdown :trigger="['click']">
+                <div class="title">Storage this Apps</div>
+                <!-- <a-dropdown :trigger="['click']">
                   <IconifyIcon icon="mdi:dots-vertical" width="20" class="storage-menu-icon" />
                   <template #overlay>
                     <a-menu>
@@ -1079,7 +1079,7 @@ onMounted(async () => {
                       <a-menu-item key="settings">Storage Settings</a-menu-item>
                     </a-menu>
                   </template>
-                </a-dropdown>
+                </a-dropdown> -->
               </div>
               <div v-if="storageUsage.isAlmostFull" class="storage-warning">
                 <IconifyIcon icon="mdi:alert-circle" width="20" style="color: #ff4d4f; margin-right: 8px;" />

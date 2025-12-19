@@ -209,12 +209,13 @@ func (NotificationModel) TableName() string {
 
 // NotificationSettingsModel menyimpan pengaturan notifikasi per user
 type NotificationSettingsModel struct {
-	ID           string    `gorm:"primaryKey" json:"id"`
-	UserID       string    `gorm:"uniqueIndex;not null" json:"user_id"`
-	EmailEnabled bool      `gorm:"default:true" json:"email_enabled"`
-	InAppEnabled bool      `gorm:"default:true" json:"in_app_enabled"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID                  string    `gorm:"primaryKey" json:"id"`
+	UserID              string    `gorm:"uniqueIndex;not null" json:"user_id"`
+	EmailEnabled        bool      `gorm:"default:true" json:"email_enabled"`
+	InAppEnabled        bool      `gorm:"default:true" json:"in_app_enabled"`
+	ExpiryThresholdDays int       `gorm:"default:14" json:"expiry_threshold_days"` // Jumlah hari sebelum expired untuk membuat notifikasi pertama kali (default: 14 hari)
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 func (NotificationSettingsModel) TableName() string {

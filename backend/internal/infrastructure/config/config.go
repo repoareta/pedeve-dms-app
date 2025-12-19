@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"github.com/hashicorp/vault/api"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -78,17 +78,17 @@ func loadConfigFromVault() (*AppConfig, error) {
 		return nil, fmt.Errorf("failed to create Vault client: %w", err)
 	}
 	client.SetToken(vaultToken)
-	
+
 	// Read secret from Vault
 	secret, err := client.Logical().Read(vaultPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read secret from Vault: %w", err)
 	}
-	
+
 	if secret == nil {
 		return nil, fmt.Errorf("secret not found at path: %s", vaultPath)
 	}
-	
+
 	// Handle KV v2 format
 	var data map[string]interface{}
 	if secret.Data["data"] != nil {
@@ -103,10 +103,10 @@ func loadConfigFromVault() (*AppConfig, error) {
 	// 2. rate_limit_config as JSON string
 	// 3. rate_limit as map
 	// 4. Direct rate_limit structure in data
-	
+
 	var rateLimitData interface{}
 	var found bool
-	
+
 	// Try different possible keys
 	possibleKeys := []string{"rate_limit", "rate_limit_config", "app_config"}
 	for _, key := range possibleKeys {
@@ -116,7 +116,7 @@ func loadConfigFromVault() (*AppConfig, error) {
 			break
 		}
 	}
-	
+
 	if !found {
 		// If no rate_limit key found, check if data itself is the config
 		if _, ok := data["general"]; ok {
@@ -124,14 +124,14 @@ func loadConfigFromVault() (*AppConfig, error) {
 			found = true
 		}
 	}
-	
+
 	if !found {
 		return nil, fmt.Errorf("rate_limit config not found in Vault secret")
 	}
-	
+
 	// Parse rate_limit data
 	config := &AppConfig{}
-	
+
 	switch v := rateLimitData.(type) {
 	case string:
 		// JSON string - parse it
@@ -161,13 +161,13 @@ func loadConfigFromVault() (*AppConfig, error) {
 	default:
 		return nil, fmt.Errorf("unexpected rate_limit type: %T", rateLimitData)
 	}
-	
+
 	zapLog.Info("Configuration loaded from Vault",
 		zap.String("path", vaultPath),
 		zap.Float64("general_rps", config.RateLimit.General.RPS),
 		zap.Int("auth_rpm", config.RateLimit.Auth.RPM),
 	)
-	
+
 	return config, nil
 }
 
@@ -182,7 +182,7 @@ func parseRateLimitConfig(rateLimitMap map[string]interface{}, config *AppConfig
 			config.RateLimit.General.Burst = int(burst)
 		}
 	}
-	
+
 	// Parse auth
 	if auth, ok := rateLimitMap["auth"].(map[string]interface{}); ok {
 		if rpm, ok := auth["rpm"].(float64); ok {
@@ -192,7 +192,7 @@ func parseRateLimitConfig(rateLimitMap map[string]interface{}, config *AppConfig
 			config.RateLimit.Auth.Burst = int(burst)
 		}
 	}
-	
+
 	// Parse strict
 	if strict, ok := rateLimitMap["strict"].(map[string]interface{}); ok {
 		if rpm, ok := strict["rpm"].(float64); ok {
@@ -214,15 +214,24 @@ func loadConfigFromEnv() *AppConfig {
 	config.RateLimit.General.RPS = generalRPS
 	config.RateLimit.General.Burst = generalBurst
 
-	// Auth rate limit
-	authRPM := getEnvInt("RATE_LIMIT_AUTH_RPM", 5)
-	authBurst := getEnvInt("RATE_LIMIT_AUTH_BURST", 5)
+	// Auth rate limit (untuk prevent brute force)
+	// Default: 20 requests per minute dengan burst 10 (ditingkatkan untuk usability)
+	// Note: Login biasanya tidak sering, tapi perlu cukup untuk retry jika ada typo
+	authRPM := getEnvInt("RATE_LIMIT_AUTH_RPM", 20)
+	authBurst := getEnvInt("RATE_LIMIT_AUTH_BURST", 10)
 	config.RateLimit.Auth.RPM = authRPM
 	config.RateLimit.Auth.Burst = authBurst
 
-	// Strict rate limit
-	strictRPM := getEnvInt("RATE_LIMIT_STRICT_RPM", 50)
-	strictBurst := getEnvInt("RATE_LIMIT_STRICT_BURST", 50)
+	// Strict rate limit (untuk upload, delete, dll)
+	// Default: 500 requests per minute dengan burst 250 (ditingkatkan untuk file management system)
+	// Aplikasi ini adalah file management system dengan usecase:
+	// - User bisa upload 15-20 file sekaligus (batch upload)
+	// - Banyak aktivitas upload dan delete file
+	// - Rate limit harus cukup longgar untuk operasi normal tanpa mengganggu user
+	// Note: GET requests sudah di-bypass di middleware, jadi ini hanya untuk POST/PUT/DELETE
+	// Burst 250 memungkinkan batch upload 15-20 file + buffer untuk operasi lain
+	strictRPM := getEnvInt("RATE_LIMIT_STRICT_RPM", 500)
+	strictBurst := getEnvInt("RATE_LIMIT_STRICT_BURST", 250)
 	config.RateLimit.Strict.RPM = strictRPM
 	config.RateLimit.Strict.Burst = strictBurst
 
@@ -281,4 +290,3 @@ func getEnvFloat(key string, defaultValue float64) float64 {
 	}
 	return floatValue
 }
-

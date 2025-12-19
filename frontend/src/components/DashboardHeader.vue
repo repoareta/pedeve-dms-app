@@ -4,7 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import { userApi } from '../api/userManagement'
-import { notificationApi, type Notification } from '../api/notifications'
+import { notificationApi, notificationSettingsApi, type Notification } from '../api/notifications'
 import { notification } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
@@ -35,6 +35,7 @@ const notificationPollingInterval = ref<ReturnType<typeof setInterval> | null>(n
 const shownNotificationIds = ref<Set<string>>(new Set()) // Track notifikasi yang sudah ditampilkan
 const isFirstLoad = ref(true) // Flag untuk menandai load pertama
 const hasShownInitialNotifications = ref(false) // Flag untuk track apakah sudah menampilkan notifikasi saat login
+const inAppNotificationsEnabled = ref(true) // Default: enabled, akan di-load dari settings
 
 // Stack configuration untuk notification
 // Ant Design Vue automatically stacks notifications when there are multiple
@@ -275,54 +276,80 @@ const loadNotifications = async () => {
     
     unreadCount.value = count
     
-    // PENTING: Saat first load setelah login (session baru), tampilkan SEMUA notifikasi unread sebagai push notification
-    if (isFirstLoad.value && !hasShownInitialNotifications.value) {
-      // Tampilkan semua notifikasi unread sebagai push notification (PENTING untuk reminder expired document)
-      if (unreadNotifs.length > 0) {
-        // Tampilkan maksimal 5 notifikasi unread (untuk menghindari spam berlebihan)
-        const notificationsToShow = unreadNotifs.slice(0, 5)
+    // PENTING: Tampilkan push notification hanya jika in-app notifications enabled
+    // Icon, dropdown, dan halaman notifikasi tetap berjalan normal meskipun in-app disabled
+    if (inAppNotificationsEnabled.value) {
+      // PENTING: Saat first load setelah login (session baru), tampilkan SEMUA notifikasi unread sebagai push notification
+      if (isFirstLoad.value && !hasShownInitialNotifications.value) {
+        // Tampilkan semua notifikasi unread sebagai push notification (PENTING untuk reminder expired document)
+        if (unreadNotifs.length > 0) {
+          // Tampilkan maksimal 5 notifikasi unread (untuk menghindari spam berlebihan)
+          const notificationsToShow = unreadNotifs.slice(0, 5)
+          notificationsToShow.forEach((notif, index) => {
+            // Jangan tambahkan ke shownNotificationIds - biarkan muncul berulang sampai ditindak lanjuti
+            
+            // Tampilkan dengan delay berurutan (setiap 1000ms untuk visibility yang baik)
+            setTimeout(() => {
+              showPushNotification(notif)
+            }, index * 1000) // 1 detik delay
+          })
+          
+          // Tandai bahwa sudah menampilkan notifikasi awal
+          hasShownInitialNotifications.value = true
+        }
+        
+        // Reset isFirstLoad setelah beberapa detik
+        setTimeout(() => {
+          isFirstLoad.value = false
+        }, 3000)
+        return
+      }
+      
+      // PENTING: Tampilkan push notification untuk notifikasi yang BELUM ditindak lanjuti (is_read = false)
+      // Push notification akan muncul berulang-ulang sampai user klik "Sudah ditindak lanjuti"
+      // Bahkan setelah expired date lewat, push notification tetap muncul sampai ditindak lanjuti
+      const unresolvedNotifications = notifs.filter(notif => !notif.is_read)
+      
+      // Tampilkan push notification untuk notifikasi yang belum ditindak lanjuti
+      // Jangan skip notifikasi yang sudah pernah ditampilkan - tampilkan lagi jika masih belum ditindak lanjuti
+      if (unresolvedNotifications.length > 0) {
+        const notificationsToShow = unresolvedNotifications.slice(0, 3) // Maksimal 3 notifikasi
         notificationsToShow.forEach((notif, index) => {
           // Jangan tambahkan ke shownNotificationIds - biarkan muncul berulang sampai ditindak lanjuti
           
-          // Tampilkan dengan delay berurutan (setiap 1000ms untuk visibility yang baik)
+          // Tampilkan dengan delay berurutan (setiap 800ms untuk balance antara visibility dan performance)
           setTimeout(() => {
             showPushNotification(notif)
-          }, index * 1000) // 1 detik delay
+          }, index * 800) // 800ms delay
         })
-        
-        // Tandai bahwa sudah menampilkan notifikasi awal
-        hasShownInitialNotifications.value = true
       }
-      
-      // Reset isFirstLoad setelah beberapa detik
-      setTimeout(() => {
-        isFirstLoad.value = false
-      }, 3000)
-      return
-    }
-    
-    // PENTING: Tampilkan push notification untuk notifikasi yang BELUM ditindak lanjuti (is_read = false)
-    // Push notification akan muncul berulang-ulang sampai user klik "Sudah ditindak lanjuti"
-    // Bahkan setelah expired date lewat, push notification tetap muncul sampai ditindak lanjuti
-    const unresolvedNotifications = notifs.filter(notif => !notif.is_read)
-    
-    // Tampilkan push notification untuk notifikasi yang belum ditindak lanjuti
-    // Jangan skip notifikasi yang sudah pernah ditampilkan - tampilkan lagi jika masih belum ditindak lanjuti
-    if (unresolvedNotifications.length > 0) {
-      const notificationsToShow = unresolvedNotifications.slice(0, 3) // Maksimal 3 notifikasi
-      notificationsToShow.forEach((notif, index) => {
-        // Jangan tambahkan ke shownNotificationIds - biarkan muncul berulang sampai ditindak lanjuti
-        
-        // Tampilkan dengan delay berurutan (setiap 800ms untuk balance antara visibility dan performance)
+    } else {
+      // Jika in-app notifications disabled, skip push notifications tapi tetap update icon dan dropdown
+      // Reset isFirstLoad flag meskipun tidak menampilkan push notification
+      if (isFirstLoad.value) {
+        hasShownInitialNotifications.value = true
         setTimeout(() => {
-          showPushNotification(notif)
-        }, index * 800) // 800ms delay
-      })
+          isFirstLoad.value = false
+        }, 1000)
+      }
     }
   } catch (error) {
     logger.error('❌ [Notifications] Failed to load notifications:', error)
   } finally {
     loadingNotifications.value = false
+  }
+}
+
+// Load notification settings untuk cek in-app notifications enabled
+const loadNotificationSettings = async (): Promise<void> => {
+  try {
+    const settings = await notificationSettingsApi.getSettings()
+    inAppNotificationsEnabled.value = settings.in_app_enabled
+    logger.info('✅ [Notifications] Settings loaded', { in_app_enabled: settings.in_app_enabled })
+  } catch (error) {
+    logger.error('❌ [Notifications] Failed to load notification settings:', error)
+    // Default to enabled jika gagal load
+    inAppNotificationsEnabled.value = true
   }
 }
 
@@ -333,11 +360,19 @@ const startNotificationPolling = () => {
     return // Already running
   }
   
-  // Load immediately - akan menampilkan semua unread notifications jika first load
-  loadNotifications()
+  // Load notification settings first (async, tidak blocking)
+  loadNotificationSettings().then(() => {
+    // Load notifications setelah settings loaded
+    loadNotifications()
+  }).catch(() => {
+    // Jika gagal load settings, tetap load notifications dengan default (enabled)
+    loadNotifications()
+  })
   
   // Poll every 30 seconds (reduced frequency untuk mengurangi load)
   notificationPollingInterval.value = setInterval(() => {
+    // Reload settings setiap polling untuk memastikan perubahan settings langsung terdeteksi
+    loadNotificationSettings()
     loadNotifications()
   }, 30000) // 30 detik
 }
@@ -428,8 +463,12 @@ watch(() => authStore.isAuthenticated, (isAuthenticated) => {
     if (!notificationPollingInterval.value) {
       startNotificationPolling()
     } else {
-      // Jika polling sudah berjalan, load notifications untuk menampilkan push notification
-      loadNotifications()
+      // Jika polling sudah berjalan, reload settings dan load notifications
+      loadNotificationSettings().then(() => {
+        loadNotifications()
+      }).catch(() => {
+        loadNotifications()
+      })
     }
   }
   // Update previous state
@@ -580,7 +619,7 @@ onUnmounted(() => {
           :z-index="1001"
           :trigger="['click']"
         >
-          <a-badge :count="unreadCount" :offset="[10, 0]">
+          <a-badge :count="unreadCount > 99 ? '99+' : unreadCount" :offset="[10, 0]">
             <a-button type="text" class="icon-btn desktop-icon">
               <IconifyIcon icon="mdi:bell-outline" width="20" height="20" />
             </a-button>

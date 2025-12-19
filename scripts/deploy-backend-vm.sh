@@ -362,56 +362,79 @@ echo "✅ Password encoded successfully"
 echo "🔍 Final verification: ensuring container name is available..."
 sleep 5  # Give Docker more time to fully process removals
 
-# Check by exact name match multiple times (container might auto-restart)
-FINAL_ATTEMPTS=5
-FINAL_ATTEMPT=0
-while [ $FINAL_ATTEMPT -lt $FINAL_ATTEMPTS ]; do
-  EXISTING_CONTAINERS=$(sudo docker ps -a --filter "name=^dms-backend-prod$" --format "{{.ID}}" 2>/dev/null || true)
+# Function to aggressively remove all containers with name
+remove_all_containers_by_name() {
+  local container_name=$1
+  local max_attempts=10
+  local attempt=0
   
-  if [ -z "${EXISTING_CONTAINERS}" ]; then
-    echo "✅ Container name is available"
-    break
-  fi
-  
-  FINAL_ATTEMPT=$((FINAL_ATTEMPT + 1))
-  echo "⚠️  Found containers (attempt $FINAL_ATTEMPT/$FINAL_ATTEMPTS), removing..."
-  
-  for CONTAINER_ID in ${EXISTING_CONTAINERS}; do
-    # Disable restart policy first
-    sudo docker update --restart=no "${CONTAINER_ID}" 2>/dev/null || true
-    # Kill and remove
-    sudo docker kill "${CONTAINER_ID}" 2>/dev/null || true
-    sleep 1
-    sudo docker stop "${CONTAINER_ID}" 2>/dev/null || true
-    sleep 1
-    sudo docker rm -f "${CONTAINER_ID}" 2>/dev/null || true
+  while [ $attempt -lt $max_attempts ]; do
+    # Get ALL containers (running, stopped, any state) with this name
+    ALL_CONTAINERS=$(sudo docker ps -a --filter "name=^${container_name}$" --format "{{.ID}}" 2>/dev/null || true)
+    
+    if [ -z "${ALL_CONTAINERS}" ]; then
+      return 0  # Success - no containers found
+    fi
+    
+    attempt=$((attempt + 1))
+    echo "   Removing containers (attempt $attempt/$max_attempts)..."
+    
+    for CONTAINER_ID in ${ALL_CONTAINERS}; do
+      # Disable restart policy
+      sudo docker update --restart=no "${CONTAINER_ID}" 2>/dev/null || true
+      # Kill
+      sudo docker kill "${CONTAINER_ID}" 2>/dev/null || true
+      # Stop
+      sudo docker stop "${CONTAINER_ID}" 2>/dev/null || true
+      # Remove
+      sudo docker rm -f "${CONTAINER_ID}" 2>/dev/null || true
+    done
+    
+    sleep 2
   done
   
-  sleep 3
-done
+  # Final check
+  REMAINING=$(sudo docker ps -a --filter "name=^${container_name}$" --format "{{.ID}}" 2>/dev/null | wc -l)
+  if [ "${REMAINING}" -gt 0 ]; then
+    return 1  # Failed
+  fi
+  
+  return 0  # Success
+}
 
-# Final check one more time
-FINAL_CHECK=$(sudo docker ps -a --filter "name=^dms-backend-prod$" --format "{{.ID}}" 2>/dev/null | wc -l)
-if [ "${FINAL_CHECK}" -gt 0 ]; then
-  echo "❌ ERROR: Container dms-backend-prod still exists after $FINAL_ATTEMPTS attempts! Cannot proceed."
-  echo "   Container details:"
-  sudo docker ps -a | grep dms-backend-prod
-  echo ""
-  echo "   Container IDs:"
+# Remove all containers with name dms-backend-prod
+if ! remove_all_containers_by_name "dms-backend-prod"; then
+  echo "❌ ERROR: Failed to remove all containers after multiple attempts!"
+  echo "   Remaining containers:"
   sudo docker ps -a --filter "name=dms-backend-prod" --format "{{.ID}} {{.Names}} {{.Status}}"
-  echo ""
-  echo "   This might be caused by:"
-  echo "   - Docker auto-restart policy"
-  echo "   - Another process creating the container"
-  echo "   - Docker daemon issue"
-  echo ""
-  echo "   Please manually remove:"
-  echo "   sudo docker update --restart=no \$(sudo docker ps -a --filter 'name=dms-backend-prod' --format '{{.ID}}')"
-  echo "   sudo docker rm -f \$(sudo docker ps -a --filter 'name=dms-backend-prod' --format '{{.ID}}')"
+  exit 1
+fi
+
+# Wait a bit more and verify one final time
+sleep 3
+FINAL_VERIFY=$(sudo docker ps -a --filter "name=^dms-backend-prod$" --format "{{.ID}}" 2>/dev/null | wc -l)
+if [ "${FINAL_VERIFY}" -gt 0 ]; then
+  echo "❌ ERROR: Container still exists after final cleanup!"
+  sudo docker ps -a --filter "name=dms-backend-prod"
   exit 1
 fi
 
 echo "✅ Container name is available"
+
+# Last check immediately before docker run (race condition protection)
+echo "🔍 Last check before starting container..."
+sleep 2
+LAST_CHECK=$(sudo docker ps -a --filter "name=^dms-backend-prod$" --format "{{.ID}}" 2>/dev/null || true)
+if [ -n "${LAST_CHECK}" ]; then
+  echo "⚠️  Found container at last moment, removing..."
+  for CONTAINER_ID in ${LAST_CHECK}; do
+    sudo docker update --restart=no "${CONTAINER_ID}" 2>/dev/null || true
+    sudo docker kill "${CONTAINER_ID}" 2>/dev/null || true
+    sudo docker stop "${CONTAINER_ID}" 2>/dev/null || true
+    sudo docker rm -f "${CONTAINER_ID}" 2>/dev/null || true
+  done
+  sleep 2
+fi
 
 # Start new container with all environment variables
 # IMPORTANT: Use --network host so container can access Cloud SQL Proxy on 127.0.0.1:5432
@@ -420,7 +443,9 @@ echo "🚀 Starting new container..."
 echo "   - Network mode: host (required for Cloud SQL Proxy)"
 echo "   - Container name: dms-backend-prod"
 echo "   - Restart policy: unless-stopped"
-sudo docker run -d \
+
+# Use --rm flag is not needed since we want container to persist, but ensure no conflict
+if ! sudo docker run -d \
   --name dms-backend-prod \
   --restart unless-stopped \
   --network host \
@@ -436,7 +461,40 @@ sudo docker run -d \
   -e DISABLE_RATE_LIMIT=${DISABLE_RATE_LIMIT} \
   -e CORS_ORIGIN="${CORS_ORIGIN}" \
   -e BACKEND_DIR=/app/backend \
-  ${BACKEND_IMAGE}
+  ${BACKEND_IMAGE}; then
+  
+  # If docker run failed, check if it's because container name conflict
+  if sudo docker ps -a --filter "name=^dms-backend-prod$" --format "{{.ID}}" | grep -q .; then
+    echo "❌ ERROR: Container name conflict detected after docker run failed!"
+    echo "   Removing conflicting container..."
+    CONFLICT_ID=$(sudo docker ps -a --filter "name=^dms-backend-prod$" --format "{{.ID}}" | head -1)
+    sudo docker rm -f "${CONFLICT_ID}" 2>/dev/null || true
+    sleep 2
+    
+    # Retry docker run
+    echo "🔄 Retrying docker run..."
+    sudo docker run -d \
+      --name dms-backend-prod \
+      --restart unless-stopped \
+      --network host \
+      -e GCP_PROJECT_ID=${PROJECT_ID} \
+      -e GCP_SECRET_MANAGER_ENABLED=false \
+      -e GCP_STORAGE_ENABLED=true \
+      -e GCP_STORAGE_BUCKET=${STORAGE_BUCKET} \
+      -e DATABASE_URL="${DATABASE_URL}" \
+      -e JWT_SECRET="${JWT_SECRET}" \
+      -e ENCRYPTION_KEY="${ENCRYPTION_KEY}" \
+      -e PORT=8080 \
+      -e ENV=production \
+      -e DISABLE_RATE_LIMIT=${DISABLE_RATE_LIMIT} \
+      -e CORS_ORIGIN="${CORS_ORIGIN}" \
+      -e BACKEND_DIR=/app/backend \
+      ${BACKEND_IMAGE}
+  else
+    echo "❌ ERROR: docker run failed for unknown reason"
+    exit 1
+  fi
+fi
 
 # Wait a moment for container to start
 echo "⏳ Waiting for container to start..."

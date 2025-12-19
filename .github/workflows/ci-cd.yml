@@ -806,7 +806,7 @@ jobs:
               export DB_NAME='db_prod_pedeve'
               export DB_USER='pedeve_user_db_prod'
               export STORAGE_BUCKET='pedeve-prod-bucket'
-              export CORS_ORIGIN='https://reports.pertamina-pedeve.co.id'
+              export CORS_ORIGIN='https://dms.pertamina-pedeve.co.id'
               export DISABLE_RATE_LIMIT='false'
               
               if ! ~/deploy-backend-vm.sh ${{ secrets.GCP_PROJECT_ID_PROD }} ${BACKEND_IMAGE}; then
@@ -900,7 +900,7 @@ jobs:
               sudo chmod -R 755 /var/www/html
 
               chmod +x ~/setup-nginx-frontend.sh ~/setup-frontend-ssl.sh ~/verify-frontend-deployment.sh ~/ensure-services-running.sh
-              export DOMAIN='reports.pertamina-pedeve.co.id'
+              export DOMAIN='dms.pertamina-pedeve.co.id'
               ~/setup-frontend-ssl.sh ${DOMAIN} || true
               ~/setup-nginx-frontend.sh ${DOMAIN}
               ~/ensure-services-running.sh frontend

@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -46,12 +47,12 @@ type NotificationUseCase interface {
 }
 
 type notificationUseCase struct {
-	notifRepo   repository.NotificationRepository
-	docRepo     repository.DocumentRepository
-	userRepo    repository.UserRepository
-	companyRepo repository.CompanyRepository
+	notifRepo    repository.NotificationRepository
+	docRepo      repository.DocumentRepository
+	userRepo     repository.UserRepository
+	companyRepo  repository.CompanyRepository
 	directorRepo repository.DirectorRepository
-	db          *gorm.DB // For direct queries in CheckExpiringDocuments and CheckExpiringDirectorTerms
+	db           *gorm.DB // For direct queries in CheckExpiringDocuments and CheckExpiringDirectorTerms
 }
 
 // NewNotificationUseCase creates a new notification use case
@@ -391,26 +392,183 @@ func (uc *notificationUseCase) DeleteAllWithRBAC(userID, roleName string, compan
 // CheckExpiringDocuments adalah helper function untuk check dan create notifications untuk expiring documents
 // Breakdown per folder: dokumen akan di-group berdasarkan folder untuk notifikasi yang lebih terorganisir
 // Ini akan dipanggil oleh scheduler/cron job
+// thresholdDays: jumlah hari sebelum expired untuk membuat notifikasi pertama kali (default: 14 hari)
+// Dokumen yang kurang dari thresholdDays tapi belum ada notifikasinya akan langsung dibuat notifikasinya
 func (uc *notificationUseCase) CheckExpiringDocuments(thresholdDays int) (notificationsCreated int, documentsFound int, err error) {
 	zapLog := logger.GetLogger()
 
-	thresholdDate := time.Now().AddDate(0, 0, thresholdDays)
+	// Gunakan start of day untuk perbandingan tanggal yang konsisten
+	now := time.Now()
+	// Truncate ke start of day untuk memastikan perbandingan hanya berdasarkan tanggal
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	thresholdDate := todayStart.AddDate(0, 0, thresholdDays)
 
-	// Query documents yang akan expired dalam threshold atau sudah expired, dengan join folder untuk breakdown per folder
-	// Include documents yang sudah expired (untuk reminder) dan yang akan expired dalam threshold
+	// Query documents yang akan expired dalam threshold atau sudah expired (termasuk hari ini)
+	// PENTING: Ambil dokumen yang sudah expired juga (untuk reminder sampai ditindaklanjuti)
+	// Cek apakah sudah ada notifikasi yang belum dibaca untuk dokumen tersebut
+	// Jika belum ada notifikasi unread, buat notifikasi baru
 	var documents []domain.DocumentModel
 	db := uc.db
 	if db == nil {
 		db = database.GetDB() // Fallback to default DB if not injected
 	}
+
+	// Query dokumen yang expired (termasuk hari ini) atau akan expired dalam threshold
+	// Gunakan end of day untuk thresholdDate agar semua dokumen yang expired pada hari threshold juga terambil
+	// Ini memastikan dokumen yang expired hari ini tetap terambil meskipun ada perbedaan timezone
+	thresholdDateEnd := thresholdDate.AddDate(0, 0, 1).Add(-time.Nanosecond) // End of threshold day (23:59:59.999999999)
+
+	// Log query parameters untuk debugging
+	zapLog.Info("Querying expiring documents",
+		zap.Int("threshold_days", thresholdDays),
+		zap.Time("today_start", todayStart),
+		zap.Time("threshold_date", thresholdDate),
+		zap.Time("threshold_date_end", thresholdDateEnd),
+		zap.String("threshold_date_end_formatted", thresholdDateEnd.Format("2006-01-02 15:04:05")),
+	)
+
+	// PENTING: expiry_date mungkin disimpan di metadata, bukan di kolom expiry_date
+	// Query semua dokumen yang memiliki metadata (karena expiry_date mungkin ada di metadata)
+	// Kemudian filter di Go untuk membaca expiry_date dari metadata jika kolom expiry_date NULL
+
+	// Coba query sederhana dulu untuk memastikan data ada
+	var totalDocsWithExpiry int64
+	db.Model(&domain.DocumentModel{}).
+		Where("expiry_date IS NOT NULL").
+		Count(&totalDocsWithExpiry)
+
+	var totalDocsWithMetadata int64
+	db.Model(&domain.DocumentModel{}).
+		Where("metadata IS NOT NULL").
+		Count(&totalDocsWithMetadata)
+
+	zapLog.Info("Total documents",
+		zap.Int64("with_expiry_date_column", totalDocsWithExpiry),
+		zap.Int64("with_metadata", totalDocsWithMetadata),
+	)
+
+	// Query semua dokumen yang memiliki expiry_date di kolom ATAU di metadata
+	// Kita akan filter di Go untuk membaca dari metadata jika perlu
+	var allDocs []domain.DocumentModel
 	err = db.
 		Preload("Folder").
-		Where("expiry_date IS NOT NULL AND expiry_date <= ? AND expiry_notified = ?",
-			thresholdDate, false).
-		Find(&documents).Error
+		Where("expiry_date IS NOT NULL OR metadata IS NOT NULL").
+		Find(&allDocs).Error
 	if err != nil {
-		zapLog.Error("Failed to query expiring documents", zap.Error(err))
+		zapLog.Error("Failed to query documents", zap.Error(err))
 		return 0, 0, err
+	}
+
+	// Filter dokumen yang expired atau akan expired
+	// Baca expiry_date dari kolom expiry_date atau dari metadata
+	documents = []domain.DocumentModel{}
+	for _, doc := range allDocs {
+		var expiryDate *time.Time
+
+		// Cek kolom expiry_date dulu
+		if doc.ExpiryDate != nil {
+			expiryDate = doc.ExpiryDate
+		} else if doc.Metadata != nil {
+			// Jika kolom expiry_date NULL, coba baca dari metadata
+			var metadata map[string]interface{}
+			if err := json.Unmarshal(doc.Metadata, &metadata); err == nil {
+				// Cek berbagai kemungkinan key untuk expiry_date di metadata
+				if expiredDateStr, ok := metadata["expired_date"].(string); ok && expiredDateStr != "" {
+					// Parse expired_date dari metadata (format: "2025-12-20" atau "2025-12-20T00:00:00Z")
+					if parsedDate, err := time.Parse("2006-01-02", expiredDateStr); err == nil {
+						expiryDate = &parsedDate
+					} else if parsedDate, err := time.Parse(time.RFC3339, expiredDateStr); err == nil {
+						expiryDate = &parsedDate
+					} else if parsedDate, err := time.Parse("2006-01-02T15:04:05Z07:00", expiredDateStr); err == nil {
+						expiryDate = &parsedDate
+					}
+				} else if expiryDateStr, ok := metadata["expiry_date"].(string); ok && expiryDateStr != "" {
+					// Coba key "expiry_date" juga
+					if parsedDate, err := time.Parse("2006-01-02", expiryDateStr); err == nil {
+						expiryDate = &parsedDate
+					} else if parsedDate, err := time.Parse(time.RFC3339, expiryDateStr); err == nil {
+						expiryDate = &parsedDate
+					}
+				}
+			}
+		}
+
+		// Jika ada expiry_date (dari kolom atau metadata), cek apakah expired atau akan expired
+		if expiryDate != nil {
+			// Truncate ke start of day untuk perbandingan yang konsisten
+			expiryDateStart := time.Date(expiryDate.Year(), expiryDate.Month(), expiryDate.Day(), 0, 0, 0, 0, expiryDate.Location())
+			if expiryDateStart.Before(thresholdDate) || expiryDateStart.Equal(thresholdDate) || expiryDateStart.Before(thresholdDateEnd) {
+				// Set ExpiryDate di doc untuk digunakan di logika selanjutnya
+				doc.ExpiryDate = expiryDate
+				documents = append(documents, doc)
+			}
+		}
+	}
+
+	zapLog.Info("Filtered documents with expiry_date (from column or metadata)",
+		zap.Int("total_docs_checked", len(allDocs)),
+		zap.Int("docs_with_valid_expiry", len(documents)),
+	)
+
+	// Log hasil query dengan detail
+	zapLog.Info("Query expiring documents completed",
+		zap.Int("threshold_days", thresholdDays),
+		zap.Time("threshold_date", thresholdDate),
+		zap.Time("threshold_date_end", thresholdDateEnd),
+		zap.Time("today_start", todayStart),
+		zap.Int("documents_found", len(documents)),
+		zap.Int64("total_docs_with_expiry", totalDocsWithExpiry),
+	)
+
+	// Log detail dokumen yang ditemukan untuk debugging
+	if len(documents) > 0 {
+		for i, doc := range documents {
+			if i < 10 { // Log 10 pertama untuk debugging
+				expiryStr := "NULL"
+				daysUntil := 0
+				if doc.ExpiryDate != nil {
+					expiryStr = doc.ExpiryDate.Format("2006-01-02 15:04:05")
+					docExpiryDate := time.Date(doc.ExpiryDate.Year(), doc.ExpiryDate.Month(), doc.ExpiryDate.Day(), 0, 0, 0, 0, doc.ExpiryDate.Location())
+					daysUntil = int(docExpiryDate.Sub(todayStart).Hours() / 24)
+				}
+				zapLog.Info("Found expiring document",
+					zap.String("document_id", doc.ID),
+					zap.String("document_name", doc.Name),
+					zap.String("expiry_date", expiryStr),
+					zap.Int("days_until_expiry", daysUntil),
+					zap.String("uploader_id", doc.UploaderID),
+				)
+			}
+		}
+		if len(documents) > 10 {
+			zapLog.Info("... and more documents", zap.Int("total", len(documents)))
+		}
+	} else {
+		zapLog.Warn("No expiring documents found",
+			zap.Int64("total_docs_with_expiry", totalDocsWithExpiry),
+			zap.Time("threshold_date_end", thresholdDateEnd),
+			zap.String("threshold_date_end_str", thresholdDateEnd.Format("2006-01-02 15:04:05")),
+		)
+		// Coba query alternatif untuk debugging
+		var sampleDocs []domain.DocumentModel
+		db.Where("expiry_date IS NOT NULL").
+			Order("expiry_date ASC").
+			Limit(5).
+			Find(&sampleDocs)
+		if len(sampleDocs) > 0 {
+			zapLog.Info("Sample documents with expiry_date (first 5):")
+			for _, doc := range sampleDocs {
+				expiryStr := "NULL"
+				if doc.ExpiryDate != nil {
+					expiryStr = doc.ExpiryDate.Format("2006-01-02 15:04:05")
+				}
+				zapLog.Info("Sample document",
+					zap.String("id", doc.ID),
+					zap.String("name", doc.Name),
+					zap.String("expiry_date", expiryStr),
+				)
+			}
+		}
 	}
 
 	documentsFound = len(documents)
@@ -440,15 +598,71 @@ func (uc *notificationUseCase) CheckExpiringDocuments(thresholdDays int) (notifi
 	// Create notifications per folder and uploader
 	for folderName, uploaderGroups := range folderGroups {
 		for uploaderID, docs := range uploaderGroups {
+			// Cek apakah sudah ada notifikasi unread untuk dokumen-dokumen ini
+			// PENTING: Untuk dokumen yang sudah expired (termasuk hari ini), selalu buat notifikasi baru
+			// meskipun sudah ada notifikasi yang sudah dibaca, karena ini adalah reminder penting
+			hasUnreadNotification := false
+			hasExpiredDoc := false
+
+			for _, doc := range docs {
+				// Cek apakah dokumen sudah expired (termasuk hari ini)
+				if doc.ExpiryDate != nil {
+					docExpiryDate := time.Date(doc.ExpiryDate.Year(), doc.ExpiryDate.Month(), doc.ExpiryDate.Day(), 0, 0, 0, 0, doc.ExpiryDate.Location())
+					if docExpiryDate.Before(todayStart) || docExpiryDate.Equal(todayStart) {
+						hasExpiredDoc = true
+					}
+				}
+
+				// Cek apakah ada notifikasi unread untuk dokumen ini
+				existingNotifs, err := uc.notifRepo.GetByUserID(uploaderID, true, 100)
+				if err == nil {
+					for _, notif := range existingNotifs {
+						if notif.ResourceType == "document" && notif.ResourceID != nil && *notif.ResourceID == doc.ID {
+							hasUnreadNotification = true
+							break
+						}
+					}
+				}
+				if hasUnreadNotification {
+					break
+				}
+			}
+
+			// Jika sudah ada notifikasi unread, skip (kecuali jika ada dokumen yang sudah expired)
+			// Untuk dokumen expired, selalu buat notifikasi baru sebagai reminder
+			if hasUnreadNotification && !hasExpiredDoc {
+				continue
+			}
+
 			// Jika ada multiple dokumen di folder yang sama, buat satu notifikasi dengan list
 			if len(docs) > 1 {
 				docNames := make([]string, len(docs))
 				for i, doc := range docs {
 					docNames[i] = doc.Name
 				}
-				title := fmt.Sprintf("%d Dokumen di Folder '%s' Akan Expired", len(docs), folderName)
-				message := fmt.Sprintf("Ada %d dokumen di folder '%s' yang akan expired dalam %d hari: %s. Silakan perbarui atau perpanjang dokumen-dokumen tersebut.",
-					len(docs), folderName, thresholdDays, strings.Join(docNames, ", "))
+
+				// Cek apakah ada dokumen yang sudah expired (termasuk hari ini)
+				hasExpired := false
+				for _, doc := range docs {
+					if doc.ExpiryDate != nil {
+						docExpiryDate := time.Date(doc.ExpiryDate.Year(), doc.ExpiryDate.Month(), doc.ExpiryDate.Day(), 0, 0, 0, 0, doc.ExpiryDate.Location())
+						if docExpiryDate.Before(todayStart) || docExpiryDate.Equal(todayStart) {
+							hasExpired = true
+							break
+						}
+					}
+				}
+
+				var title, message string
+				if hasExpired {
+					title = fmt.Sprintf("%d Dokumen di Folder '%s' Sudah Expired", len(docs), folderName)
+					message = fmt.Sprintf("Ada %d dokumen di folder '%s' yang sudah expired: %s. Silakan perbarui atau perpanjang dokumen-dokumen tersebut.",
+						len(docs), folderName, strings.Join(docNames, ", "))
+				} else {
+					title = fmt.Sprintf("%d Dokumen di Folder '%s' Akan Expired", len(docs), folderName)
+					message = fmt.Sprintf("Ada %d dokumen di folder '%s' yang akan expired dalam %d hari: %s. Silakan perbarui atau perpanjang dokumen-dokumen tersebut.",
+						len(docs), folderName, thresholdDays, strings.Join(docNames, ", "))
+				}
 
 				// Buat notifikasi untuk dokumen pertama (resource_id = ID dokumen pertama)
 				_, err := uc.CreateNotification(
@@ -464,24 +678,46 @@ func (uc *notificationUseCase) CheckExpiringDocuments(thresholdDays int) (notifi
 				} else {
 					notificationsCreated++
 				}
-
-				// Mark all documents as notified
-				for _, doc := range docs {
-					err = db.Model(&doc).Update("expiry_notified", true).Error
-					if err != nil {
-						zapLog.Error("Failed to mark document as notified", zap.Error(err), zap.String("document_id", doc.ID))
-					}
-				}
 			} else {
 				// Single document notification
 				doc := docs[0]
-				daysUntilExpiry := int(time.Until(*doc.ExpiryDate).Hours() / 24)
+				// Hitung hari dengan perbandingan tanggal yang konsisten
+				var daysUntilExpiry int
+				var isExpired bool
+				if doc.ExpiryDate != nil {
+					docExpiryDate := time.Date(doc.ExpiryDate.Year(), doc.ExpiryDate.Month(), doc.ExpiryDate.Day(), 0, 0, 0, 0, doc.ExpiryDate.Location())
+					daysUntilExpiry = int(docExpiryDate.Sub(todayStart).Hours() / 24)
+					isExpired = docExpiryDate.Before(todayStart) || docExpiryDate.Equal(todayStart)
+				} else {
+					daysUntilExpiry = 0
+					isExpired = false
+				}
 
-				title := fmt.Sprintf("Dokumen '%s' Akan Expired", doc.Name)
-				var message string
+				// Cek apakah sudah ada notifikasi unread untuk dokumen ini
+				// PENTING: Untuk dokumen yang sudah expired (termasuk hari ini), selalu buat notifikasi baru
+				// meskipun sudah ada notifikasi yang sudah dibaca
+				hasUnreadNotif := false
+				if !isExpired {
+					existingNotifs, err := uc.notifRepo.GetByUserID(uploaderID, true, 100)
+					if err == nil {
+						for _, notif := range existingNotifs {
+							if notif.ResourceType == "document" && notif.ResourceID != nil && *notif.ResourceID == doc.ID {
+								hasUnreadNotif = true
+								break
+							}
+						}
+					}
+					// Jika sudah ada notifikasi unread dan dokumen belum expired, skip
+					if hasUnreadNotif {
+						continue
+					}
+				}
+
+				var title, message string
 				if daysUntilExpiry < 0 {
 					// Sudah expired
 					daysAgo := -daysUntilExpiry
+					title = fmt.Sprintf("Dokumen '%s' Sudah Expired", doc.Name)
 					if daysAgo == 0 {
 						message = fmt.Sprintf("Dokumen '%s' di folder '%s' sudah expired hari ini. Silakan perbarui atau perpanjang dokumen tersebut.",
 							doc.Name, folderName)
@@ -490,9 +726,11 @@ func (uc *notificationUseCase) CheckExpiringDocuments(thresholdDays int) (notifi
 							doc.Name, folderName, daysAgo)
 					}
 				} else if daysUntilExpiry == 0 {
+					title = fmt.Sprintf("Dokumen '%s' Akan Expired", doc.Name)
 					message = fmt.Sprintf("Dokumen '%s' di folder '%s' akan expired hari ini. Silakan perbarui atau perpanjang dokumen tersebut.",
 						doc.Name, folderName)
 				} else {
+					title = fmt.Sprintf("Dokumen '%s' Akan Expired", doc.Name)
 					message = fmt.Sprintf("Dokumen '%s' di folder '%s' akan expired dalam %d hari. Silakan perbarui atau perpanjang dokumen tersebut.",
 						doc.Name, folderName, daysUntilExpiry)
 				}
@@ -510,12 +748,12 @@ func (uc *notificationUseCase) CheckExpiringDocuments(thresholdDays int) (notifi
 					continue
 				} else {
 					notificationsCreated++
-				}
-
-				// Mark document as notified
-				err = db.Model(&doc).Update("expiry_notified", true).Error
-				if err != nil {
-					zapLog.Error("Failed to mark document as notified", zap.Error(err), zap.String("document_id", doc.ID))
+					zapLog.Info("Created notification for document",
+						zap.String("document_id", doc.ID),
+						zap.String("document_name", doc.Name),
+						zap.Int("days_until_expiry", daysUntilExpiry),
+						zap.Bool("is_expired", isExpired),
+					)
 				}
 			}
 		}
@@ -527,6 +765,8 @@ func (uc *notificationUseCase) CheckExpiringDocuments(thresholdDays int) (notifi
 // CheckExpiringDirectorTerms adalah helper function untuk check dan create notifications untuk masa jabatan pengurus yang akan berakhir
 // Hanya akan check directors yang memiliki EndDate (tidak null)
 // Ini akan dipanggil oleh scheduler/cron job
+// thresholdDays: jumlah hari sebelum expired untuk membuat notifikasi pertama kali (default: 14 hari)
+// Masa jabatan yang kurang dari thresholdDays tapi belum ada notifikasinya akan langsung dibuat notifikasinya
 func (uc *notificationUseCase) CheckExpiringDirectorTerms(thresholdDays int) (notificationsCreated int, directorsFound int, err error) {
 	zapLog := logger.GetLogger()
 
@@ -569,12 +809,32 @@ func (uc *notificationUseCase) CheckExpiringDirectorTerms(thresholdDays int) (no
 		}
 
 		// Create notification for each user in the company
+		// PENTING: Cek apakah sudah ada notifikasi unread untuk director ini
+		// Jika sudah ada, skip (notifikasi akan tetap muncul sampai ditindaklanjuti)
+		directorID := director.ID
 		for _, user := range users {
-			title := fmt.Sprintf("Masa Jabatan '%s' Akan Berakhir", director.FullName)
-			var message string
+			// Cek apakah sudah ada notifikasi unread untuk director ini
+			hasUnreadNotification := false
+			existingNotifs, err := uc.notifRepo.GetByUserID(user.ID, true, 100)
+			if err == nil {
+				for _, notif := range existingNotifs {
+					if notif.ResourceType == "director" && notif.ResourceID != nil && *notif.ResourceID == directorID {
+						hasUnreadNotification = true
+						break
+					}
+				}
+			}
+
+			// Jika sudah ada notifikasi unread, skip (notifikasi akan tetap muncul sampai ditindaklanjuti)
+			if hasUnreadNotification {
+				continue
+			}
+
+			var title, message string
 			if daysUntilExpiry < 0 {
 				// Sudah expired
 				daysAgo := -daysUntilExpiry
+				title = fmt.Sprintf("Masa Jabatan '%s' Sudah Berakhir", director.FullName)
 				if daysAgo == 0 {
 					message = fmt.Sprintf("Masa jabatan %s sebagai %s di %s sudah berakhir hari ini. Silakan perpanjang atau ganti pengurus tersebut.",
 						director.FullName, director.Position, companyName)
@@ -583,16 +843,17 @@ func (uc *notificationUseCase) CheckExpiringDirectorTerms(thresholdDays int) (no
 						director.FullName, director.Position, companyName, daysAgo)
 				}
 			} else if daysUntilExpiry == 0 {
+				title = fmt.Sprintf("Masa Jabatan '%s' Akan Berakhir", director.FullName)
 				message = fmt.Sprintf("Masa jabatan %s sebagai %s di %s akan berakhir hari ini. Silakan perpanjang atau ganti pengurus tersebut.",
 					director.FullName, director.Position, companyName)
 			} else {
+				title = fmt.Sprintf("Masa Jabatan '%s' Akan Berakhir", director.FullName)
 				message = fmt.Sprintf("Masa jabatan %s sebagai %s di %s akan berakhir dalam %d hari. Silakan perpanjang atau ganti pengurus tersebut.",
 					director.FullName, director.Position, companyName, daysUntilExpiry)
 			}
 
-			// Use director ID as resource ID (no resource_type for now, or use "director" if we add it)
-			directorID := director.ID
-			_, err := uc.CreateNotification(
+			// Use director ID as resource ID
+			_, err = uc.CreateNotification(
 				user.ID,
 				"director_term_expiry",
 				title,

@@ -123,23 +123,25 @@ func main() {
 	app.Use(middleware.SecurityHeadersMiddleware)   // Header keamanan
 	app.Use(middleware.ErrorHandlerMiddleware)      // Log error teknis ke audit log
 
-	// Rate limiting: hanya aktif di production
-	// Di development (ENV != "production"), rate limiting otomatis di-bypass di middleware (lihat rate_limit.go)
-	// Atau bisa disable sepenuhnya dengan DISABLE_RATE_LIMIT=true
+	// Rate limiting: Hanya diterapkan di endpoint tertentu, bukan global
+	// - Auth endpoints: AuthRateLimitMiddleware (20 req/min untuk prevent brute force)
+	// - Sensitive operations: StrictRateLimitMiddleware (500 req/min, burst 250 untuk file management)
+	//   * Mendukung batch upload 15-20 file sekaligus
+	//   * Cukup longgar untuk aktivitas upload/delete yang intensif
+	// - GET endpoints: Tidak perlu rate limit (atau sangat longgar jika diperlukan)
+	//
+	// Rate limiting aktif di semua environment (development & production) untuk testing
+	// Bisa disable sepenuhnya dengan DISABLE_RATE_LIMIT=true jika diperlukan
 	env := os.Getenv("ENV")
 	disableRateLimit := os.Getenv("DISABLE_RATE_LIMIT") == "true"
 
 	if disableRateLimit {
 		zapLog.Info("Rate limiting completely disabled (DISABLE_RATE_LIMIT=true)")
-	} else if env != "production" {
-		zapLog.Info("Rate limiting will be bypassed in development mode",
-			zap.String("env", env),
-		)
-		// Tetap tambahkan middleware, tapi akan di-bypass di dalamnya
-		app.Use(middleware.RateLimitMiddleware(middleware.GeneralRateLimiter))
 	} else {
-		// Production: aktifkan rate limiting
-		app.Use(middleware.RateLimitMiddleware(middleware.GeneralRateLimiter))
+		zapLog.Info("Rate limiting enabled (applied only to specific endpoints)",
+			zap.String("env", env),
+			zap.String("note", "Active in all environments for testing"),
+		)
 	}
 
 	// CORS dengan peningkatan keamanan
@@ -186,6 +188,10 @@ func main() {
 	// Route yang dilindungi (memerlukan JWT)
 	protected := api.Group("", middleware.JWTAuthMiddleware, middleware.CSRFMiddleware)
 
+	// Route untuk operasi sensitif (upload, delete) dengan rate limiting lebih ketat
+	// Rate limit hanya diterapkan di production (lihat rate_limit.go)
+	sensitiveOps := api.Group("", middleware.JWTAuthMiddleware, middleware.CSRFMiddleware, middleware.StrictRateLimitMiddleware)
+
 	// Endpoint profil dan logout user
 	protected.Get("/auth/profile", http.GetProfile)
 	protected.Put("/auth/profile/email", http.UpdateProfileEmail)
@@ -209,34 +215,36 @@ func main() {
 	protected.Get("/documents/folders", documentHandler.ListFolders)
 	protected.Post("/documents/folders", documentHandler.CreateFolder)
 	protected.Put("/documents/folders/:id", documentHandler.UpdateFolder)
-	protected.Delete("/documents/folders/:id", documentHandler.DeleteFolder)
-	protected.Post("/documents/upload", documentHandler.UploadDocument)
+	// Delete operations - sensitive, use strict rate limit
+	sensitiveOps.Delete("/documents/folders/:id", documentHandler.DeleteFolder)
+	// Upload documents - sensitive operation, use strict rate limit
+	sensitiveOps.Post("/documents/upload", documentHandler.UploadDocument)
 	protected.Get("/documents", documentHandler.ListDocuments)
 	protected.Get("/documents/summary", documentHandler.DocumentSummary) // ringkasan storage, pastikan sebelum :id
 	protected.Get("/documents/:id", documentHandler.GetDocument)
 	protected.Put("/documents/:id", documentHandler.UpdateDocument)
-	protected.Delete("/documents/:id", documentHandler.DeleteDocument)
+	sensitiveOps.Delete("/documents/:id", documentHandler.DeleteDocument)
 
 	// Route document types (dilindungi)
 	documentTypeHandler := http.NewDocumentTypeHandler(usecase.NewDocumentTypeUseCase())
 	protected.Get("/document-types", documentTypeHandler.GetAllDocumentTypes)
 	protected.Post("/document-types", documentTypeHandler.CreateDocumentType)
 	protected.Put("/document-types/:id", documentTypeHandler.UpdateDocumentType)
-	protected.Delete("/document-types/:id", documentTypeHandler.DeleteDocumentType)
+	sensitiveOps.Delete("/document-types/:id", documentTypeHandler.DeleteDocumentType)
 
 	// Shareholder Types routes
 	shareholderTypeHandler := http.NewShareholderTypeHandler(usecase.NewShareholderTypeUseCase())
 	protected.Get("/shareholder-types", shareholderTypeHandler.GetAllShareholderTypes)
 	protected.Post("/shareholder-types", shareholderTypeHandler.CreateShareholderType)
 	protected.Put("/shareholder-types/:id", shareholderTypeHandler.UpdateShareholderType)
-	protected.Delete("/shareholder-types/:id", shareholderTypeHandler.DeleteShareholderType)
+	sensitiveOps.Delete("/shareholder-types/:id", shareholderTypeHandler.DeleteShareholderType)
 
 	// Director Positions routes
 	directorPositionHandler := http.NewDirectorPositionHandler(usecase.NewDirectorPositionUseCase())
 	protected.Get("/director-positions", directorPositionHandler.GetAllDirectorPositions)
 	protected.Post("/director-positions", directorPositionHandler.CreateDirectorPosition)
 	protected.Put("/director-positions/:id", directorPositionHandler.UpdateDirectorPosition)
-	protected.Delete("/director-positions/:id", directorPositionHandler.DeleteDirectorPosition)
+	sensitiveOps.Delete("/director-positions/:id", directorPositionHandler.DeleteDirectorPosition)
 
 	// Route Notifications (dilindungi)
 	notificationHandler := http.NewNotificationHandler(usecase.NewNotificationUseCase())
@@ -246,10 +254,15 @@ func main() {
 	protected.Get("/notifications/unread-count", notificationHandler.GetUnreadCount)
 	protected.Put("/notifications/:id/read", notificationHandler.MarkAsRead)
 	protected.Put("/notifications/read-all", notificationHandler.MarkAllAsRead)
-	protected.Delete("/notifications/delete-all", notificationHandler.DeleteAllNotifications)
+	sensitiveOps.Delete("/notifications/delete-all", notificationHandler.DeleteAllNotifications)
 
-	// Route Upload (dilindungi)
-	protected.Post("/upload/logo", http.UploadLogo)
+	// Route Notification Settings (dilindungi)
+	notificationSettingsHandler := http.NewNotificationSettingsHandler(usecase.NewNotificationSettingsUseCase())
+	protected.Get("/notification-settings", notificationSettingsHandler.GetSettings)
+	protected.Put("/notification-settings", notificationSettingsHandler.UpdateSettings)
+
+	// Route Upload (dilindungi) - sensitive operation
+	sensitiveOps.Post("/upload/logo", http.UploadLogo)
 
 	// Route File Serving (DILINDUNGI - memerlukan authentication)
 	// Format: /api/v1/files/logos/filename.png atau /api/v1/files/documents/filename.pdf
@@ -268,7 +281,7 @@ func main() {
 	protected.Get("/companies/:id", companyHandler.GetCompany)
 	protected.Put("/companies/:id", companyHandler.UpdateCompany)
 	protected.Put("/companies/:id/full", companyHandler.UpdateCompanyFull)
-	protected.Delete("/companies/:id", companyHandler.DeleteCompany)
+	sensitiveOps.Delete("/companies/:id", companyHandler.DeleteCompany)
 
 	// Route User Management (dilindungi)
 	userManagementHandler := http.NewUserManagementHandler(usecase.NewUserManagementUseCase())
@@ -282,7 +295,7 @@ func main() {
 	protected.Get("/users/me/companies", userManagementHandler.GetMyCompanies) // Get all companies assigned to current user
 	protected.Get("/users/:id", userManagementHandler.GetUser)
 	protected.Put("/users/:id", userManagementHandler.UpdateUser)
-	protected.Delete("/users/:id", userManagementHandler.DeleteUser)
+	sensitiveOps.Delete("/users/:id", userManagementHandler.DeleteUser)
 
 	// Route Role Management (dilindungi)
 	roleManagementHandler := http.NewRoleManagementHandler(usecase.NewRoleManagementUseCase())
@@ -290,7 +303,7 @@ func main() {
 	protected.Get("/roles", roleManagementHandler.GetAllRoles)
 	protected.Get("/roles/:id", roleManagementHandler.GetRole)
 	protected.Put("/roles/:id", roleManagementHandler.UpdateRole)
-	protected.Delete("/roles/:id", roleManagementHandler.DeleteRole)
+	sensitiveOps.Delete("/roles/:id", roleManagementHandler.DeleteRole)
 	// Route Role Permissions (dilindungi)
 	protected.Get("/roles/:id/permissions", roleManagementHandler.GetRolePermissions)
 	protected.Post("/roles/:id/permissions", roleManagementHandler.AssignPermissionToRole)
@@ -302,7 +315,7 @@ func main() {
 	// Route spesifik harus didefinisikan sebelum route generic
 	protected.Get("/reports/template", reportHandler.DownloadTemplate)
 	protected.Post("/reports/validate", reportHandler.ValidateExcelFile)
-	protected.Post("/reports/upload", reportHandler.UploadReports)
+	sensitiveOps.Post("/reports/upload", reportHandler.UploadReports)
 	protected.Get("/reports/export/excel", reportHandler.ExportReportsExcel)
 	protected.Get("/reports/export/pdf", reportHandler.ExportReportsPDF)
 	protected.Get("/reports/company/:company_id", reportHandler.GetReportsByCompany)
@@ -311,28 +324,28 @@ func main() {
 	protected.Get("/reports", reportHandler.GetAllReports)
 	protected.Get("/reports/:id", reportHandler.GetReport)
 	protected.Put("/reports/:id", reportHandler.UpdateReport)
-	protected.Delete("/reports/:id", reportHandler.DeleteReport)
+	sensitiveOps.Delete("/reports/:id", reportHandler.DeleteReport)
 
 	// Financial Report routes (RKAP & Realisasi)
 	// NOTE: Routes yang lebih spesifik harus diletakkan SEBELUM routes yang lebih umum (dengan :param)
 	financialReportHandler := http.NewFinancialReportHandler(usecase.NewFinancialReportUseCase())
-	
+
 	// Bulk upload endpoints (harus sebelum /financial-reports/:id karena lebih spesifik)
-	protected.Get("/financial-reports/bulk-upload/template", financialReportHandler.GenerateBulkUploadTemplate)    // Download bulk upload template
-	protected.Post("/financial-reports/bulk-upload/validate", financialReportHandler.ValidateBulkExcelFile)        // Validate bulk upload Excel file
-	protected.Post("/financial-reports/bulk-upload", financialReportHandler.UploadBulkFinancialReports)             // Upload bulk financial reports
-	
+	protected.Get("/financial-reports/bulk-upload/template", financialReportHandler.GenerateBulkUploadTemplate) // Download bulk upload template
+	sensitiveOps.Post("/financial-reports/bulk-upload/validate", financialReportHandler.ValidateBulkExcelFile)  // Validate bulk upload Excel file
+	sensitiveOps.Post("/financial-reports/bulk-upload", financialReportHandler.UploadBulkFinancialReports)      // Upload bulk financial reports
+
 	// Other specific routes (harus sebelum /financial-reports/:id)
 	protected.Get("/financial-reports/company/:company_id", financialReportHandler.GetFinancialReportsByCompanyID) // Get all financial reports for a company
-	protected.Get("/financial-reports/compare", financialReportHandler.GetComparison)                            // Get comparison RKAP vs Realisasi YTD
-	protected.Get("/financial-reports/rkap-years/:company_id", financialReportHandler.GetRKAPYearsByCompanyID) // Get RKAP years for a company
-	
+	protected.Get("/financial-reports/compare", financialReportHandler.GetComparison)                              // Get comparison RKAP vs Realisasi YTD
+	protected.Get("/financial-reports/rkap-years/:company_id", financialReportHandler.GetRKAPYearsByCompanyID)     // Get RKAP years for a company
+
 	// General CRUD routes (dengan :id parameter - harus di akhir)
-	protected.Post("/financial-reports", financialReportHandler.CreateFinancialReport)                           // Create financial report
-	protected.Get("/financial-reports/:id", financialReportHandler.GetFinancialReportByID)                      // Get financial report by ID
-	protected.Put("/financial-reports/:id", financialReportHandler.UpdateFinancialReport)                       // Update financial report
-	protected.Delete("/financial-reports/:id", financialReportHandler.DeleteFinancialReport)                    // Delete financial report
-	
+	protected.Post("/financial-reports", financialReportHandler.CreateFinancialReport)          // Create financial report
+	protected.Get("/financial-reports/:id", financialReportHandler.GetFinancialReportByID)      // Get financial report by ID
+	protected.Put("/financial-reports/:id", financialReportHandler.UpdateFinancialReport)       // Update financial report
+	sensitiveOps.Delete("/financial-reports/:id", financialReportHandler.DeleteFinancialReport) // Delete financial report
+
 	protected.Get("/companies/:company_id/performance/export/excel", financialReportHandler.ExportPerformanceExcel) // Export performance Excel
 
 	// Route Permission Management (dilindungi)
@@ -341,7 +354,7 @@ func main() {
 	protected.Get("/permissions", permissionManagementHandler.GetAllPermissions)
 	protected.Get("/permissions/:id", permissionManagementHandler.GetPermission)
 	protected.Put("/permissions/:id", permissionManagementHandler.UpdatePermission)
-	protected.Delete("/permissions/:id", permissionManagementHandler.DeletePermission)
+	sensitiveOps.Delete("/permissions/:id", permissionManagementHandler.DeletePermission)
 
 	// Route Development (hanya superadmin)
 	developmentHandler := http.NewDevelopmentHandler(usecase.NewDevelopmentUseCase())

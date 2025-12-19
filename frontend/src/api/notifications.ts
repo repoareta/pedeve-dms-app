@@ -105,3 +105,33 @@ export const notificationApi = {
   },
 }
 
+export interface NotificationSettings {
+  id: string
+  user_id: string
+  email_enabled: boolean
+  in_app_enabled: boolean
+  expiry_threshold_days: number
+  created_at: string
+  updated_at: string
+}
+
+export interface UpdateNotificationSettingsRequest {
+  email_enabled?: boolean
+  in_app_enabled?: boolean
+  expiry_threshold_days?: number
+}
+
+export const notificationSettingsApi = {
+  // Get notification settings
+  getSettings: async (): Promise<NotificationSettings> => {
+    const response = await apiClient.get<NotificationSettings>('/notification-settings')
+    return response.data
+  },
+
+  // Update notification settings
+  updateSettings: async (settings: UpdateNotificationSettingsRequest): Promise<NotificationSettings> => {
+    const response = await apiClient.put<NotificationSettings>('/notification-settings', settings)
+    return response.data
+  },
+}
+

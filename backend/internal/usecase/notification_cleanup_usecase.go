@@ -44,7 +44,7 @@ func CleanupOldNotifications() error {
 	notifRepo := repository.NewNotificationRepository()
 
 	retentionDays := GetNotificationRetentionDays()
-	
+
 	err := notifRepo.DeleteOldNotifications(retentionDays)
 	if err != nil {
 		zapLog.Error("Error cleaning up old notifications", zap.Error(err))
@@ -61,7 +61,7 @@ func CleanupOldNotifications() error {
 // StartNotificationCleanup memulai background cleanup job untuk notifikasi
 func StartNotificationCleanup() {
 	zapLog := logger.GetLogger()
-	
+
 	// Jalankan cleanup setiap 24 jam
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
@@ -87,19 +87,25 @@ func StartNotificationCleanup() {
 }
 
 // StartNotificationScheduler memulai background scheduler untuk check expiring documents dan director terms
-// Default threshold: 30 hari (bisa diubah via environment variable NOTIFICATION_EXPIRY_THRESHOLD_DAYS)
+// Default threshold: 14 hari (bisa diubah via database settings per user atau environment variable NOTIFICATION_EXPIRY_THRESHOLD_DAYS)
+// Notifikasi pertama kali muncul sesuai threshold yang diatur user (default: 14 hari sebelum expired)
+// Dokumen/jabatan yang kurang dari threshold tapi belum ada notifikasinya akan langsung dibuat notifikasinya
 func StartNotificationScheduler() {
 	zapLog := logger.GetLogger()
 	notificationUC := NewNotificationUseCase()
 
-	// Get threshold from environment variable (default: 30 days)
-	thresholdDays := 30
+	// Get default threshold from environment variable (default: 14 days)
+	// Threshold per user akan dibaca dari database saat check expiring documents
+	defaultThresholdDays := 14
 	thresholdStr := os.Getenv("NOTIFICATION_EXPIRY_THRESHOLD_DAYS")
 	if thresholdStr != "" {
 		if parsed, err := strconv.Atoi(thresholdStr); err == nil && parsed > 0 {
-			thresholdDays = parsed
+			defaultThresholdDays = parsed
 		}
 	}
+
+	// Note: Helper function getThresholdForUser dan settingsRepo dihapus karena tidak digunakan
+	// Jika diperlukan di masa depan untuk per-user threshold, bisa ditambahkan kembali
 
 	// Jalankan check setiap 24 jam (sekali sehari)
 	ticker := time.NewTicker(24 * time.Hour)
@@ -108,18 +114,18 @@ func StartNotificationScheduler() {
 	// Jalankan check pertama kali setelah 5 menit (memberi waktu untuk server startup)
 	go func() {
 		time.Sleep(5 * time.Minute)
-		zapLog.Info("Starting initial notification expiry check", zap.Int("threshold_days", thresholdDays))
-		
-		// Check expiring documents
-		docNotifs, docFound, err := notificationUC.CheckExpiringDocuments(thresholdDays)
+		zapLog.Info("Starting initial notification expiry check", zap.Int("default_threshold_days", defaultThresholdDays))
+
+		// Check expiring documents (menggunakan default threshold, threshold per user akan dibaca di dalam fungsi)
+		docNotifs, docFound, err := notificationUC.CheckExpiringDocuments(defaultThresholdDays)
 		if err != nil {
 			zapLog.Error("Initial expiring documents check failed", zap.Error(err))
 		} else {
 			zapLog.Info("Initial expiring documents check completed", zap.Int("documents_found", docFound), zap.Int("notifications_created", docNotifs))
 		}
-		
-		// Check expiring director terms
-		dirNotifs, dirFound, err := notificationUC.CheckExpiringDirectorTerms(thresholdDays)
+
+		// Check expiring director terms (menggunakan default threshold, threshold per user akan dibaca di dalam fungsi)
+		dirNotifs, dirFound, err := notificationUC.CheckExpiringDirectorTerms(defaultThresholdDays)
 		if err != nil {
 			zapLog.Error("Initial director term expiry check failed", zap.Error(err))
 		} else {
@@ -130,18 +136,18 @@ func StartNotificationScheduler() {
 	// Jalankan check secara berkala (sekali sehari)
 	go func() {
 		for range ticker.C {
-			zapLog.Info("Running scheduled notification expiry check", zap.Int("threshold_days", thresholdDays))
-			
-			// Check expiring documents
-			docNotifs, docFound, err := notificationUC.CheckExpiringDocuments(thresholdDays)
+			zapLog.Info("Running scheduled notification expiry check", zap.Int("default_threshold_days", defaultThresholdDays))
+
+			// Check expiring documents (menggunakan default threshold, threshold per user akan dibaca di dalam fungsi)
+			docNotifs, docFound, err := notificationUC.CheckExpiringDocuments(defaultThresholdDays)
 			if err != nil {
 				zapLog.Error("Scheduled expiring documents check failed", zap.Error(err))
 			} else {
 				zapLog.Info("Scheduled expiring documents check completed", zap.Int("documents_found", docFound), zap.Int("notifications_created", docNotifs))
 			}
-			
-			// Check expiring director terms
-			dirNotifs, dirFound, err := notificationUC.CheckExpiringDirectorTerms(thresholdDays)
+
+			// Check expiring director terms (menggunakan default threshold, threshold per user akan dibaca di dalam fungsi)
+			dirNotifs, dirFound, err := notificationUC.CheckExpiringDirectorTerms(defaultThresholdDays)
 			if err != nil {
 				zapLog.Error("Scheduled expiring director terms check failed", zap.Error(err))
 			} else {
@@ -150,4 +156,3 @@ func StartNotificationScheduler() {
 		}
 	}()
 }
-

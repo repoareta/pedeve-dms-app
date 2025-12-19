@@ -58,16 +58,16 @@ func (r *notificationRepository) GetByID(id string) (*domain.NotificationModel, 
 func (r *notificationRepository) GetByUserID(userID string, unreadOnly bool, limit int) ([]domain.NotificationModel, error) {
 	var notifications []domain.NotificationModel
 	query := r.db.Where("user_id = ?", userID)
-	
+
 	if unreadOnly {
 		query = query.Where("is_read = ?", false)
 	}
-	
+
 	err := query.Order("created_at DESC").Limit(limit).Find(&notifications).Error
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Load documents manually untuk notifications dengan resource_type = 'document'
 	// Hanya load jika ada notifications
 	if len(notifications) > 0 {
@@ -81,36 +81,37 @@ func (r *notificationRepository) GetByUserID(userID string, unreadOnly bool, lim
 			}
 		}
 	}
-	
+
 	return notifications, nil
 }
 
 func (r *notificationRepository) GetByUserIDWithFilters(userID string, unreadOnly *bool, daysUntilExpiry *int, limit, offset int) ([]domain.NotificationModel, int64, error) {
 	var notifications []domain.NotificationModel
 	var total int64
-	
+
 	query := r.db.Model(&domain.NotificationModel{}).Where("user_id = ?", userID)
-	
+
 	// Filter by read status
 	// Jika unreadOnly = true, hanya ambil yang belum dibaca
 	// Jika unreadOnly = false atau nil, ambil semua (tidak filter)
 	if unreadOnly != nil && *unreadOnly {
 		query = query.Where("is_read = ?", false)
 	}
-	
+
 	// Filter by expiry date (join dengan documents)
+	// PENTING: Include dokumen yang sudah expired (0 hari atau kurang) juga
 	if daysUntilExpiry != nil {
 		thresholdDate := time.Now().AddDate(0, 0, *daysUntilExpiry)
 		query = query.
 			Joins("LEFT JOIN documents ON notifications.resource_id::text = documents.id::text AND notifications.resource_type = 'document'").
-			Where("documents.expiry_date IS NOT NULL AND documents.expiry_date <= ? AND documents.expiry_date > ?", thresholdDate, time.Now())
+			Where("documents.expiry_date IS NOT NULL AND documents.expiry_date <= ?", thresholdDate)
 	}
-	
+
 	// Count total
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	
+
 	// Get notifications
 	err := query.
 		Order("notifications.created_at DESC").
@@ -120,7 +121,7 @@ func (r *notificationRepository) GetByUserIDWithFilters(userID string, unreadOnl
 	if err != nil {
 		return nil, 0, err
 	}
-	
+
 	// Load documents manually untuk notifications dengan resource_type = 'document'
 	// Hanya load jika ada notifications
 	if len(notifications) > 0 {
@@ -134,7 +135,7 @@ func (r *notificationRepository) GetByUserIDWithFilters(userID string, unreadOnl
 			}
 		}
 	}
-	
+
 	return notifications, total, nil
 }
 
@@ -192,29 +193,30 @@ func (r *notificationRepository) DeleteByUserIDs(userIDs []string) error {
 func (r *notificationRepository) GetAllWithFilters(unreadOnly *bool, daysUntilExpiry *int, limit, offset int) ([]domain.NotificationModel, int64, error) {
 	var notifications []domain.NotificationModel
 	var total int64
-	
+
 	query := r.db.Model(&domain.NotificationModel{})
-	
+
 	// Filter by read status
 	// Jika unreadOnly = true, hanya ambil yang belum dibaca
 	// Jika unreadOnly = false atau nil, ambil semua (tidak filter)
 	if unreadOnly != nil && *unreadOnly {
 		query = query.Where("is_read = ?", false)
 	}
-	
+
 	// Filter by expiry date (join dengan documents)
+	// PENTING: Include dokumen yang sudah expired (0 hari atau kurang) juga
 	if daysUntilExpiry != nil {
 		thresholdDate := time.Now().AddDate(0, 0, *daysUntilExpiry)
 		query = query.
 			Joins("LEFT JOIN documents ON notifications.resource_id::text = documents.id::text AND notifications.resource_type = 'document'").
-			Where("documents.expiry_date IS NOT NULL AND documents.expiry_date <= ? AND documents.expiry_date > ?", thresholdDate, time.Now())
+			Where("documents.expiry_date IS NOT NULL AND documents.expiry_date <= ?", thresholdDate)
 	}
-	
+
 	// Count total
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	
+
 	// Get notifications
 	err := query.
 		Order("notifications.created_at DESC").
@@ -224,7 +226,7 @@ func (r *notificationRepository) GetAllWithFilters(unreadOnly *bool, daysUntilEx
 	if err != nil {
 		return nil, 0, err
 	}
-	
+
 	// Load documents manually
 	if len(notifications) > 0 {
 		docRepo := NewDocumentRepository()
@@ -237,7 +239,7 @@ func (r *notificationRepository) GetAllWithFilters(unreadOnly *bool, daysUntilEx
 			}
 		}
 	}
-	
+
 	return notifications, total, nil
 }
 
@@ -245,33 +247,34 @@ func (r *notificationRepository) GetAllWithFilters(unreadOnly *bool, daysUntilEx
 func (r *notificationRepository) GetByUserIDsWithFilters(userIDs []string, unreadOnly *bool, daysUntilExpiry *int, limit, offset int) ([]domain.NotificationModel, int64, error) {
 	var notifications []domain.NotificationModel
 	var total int64
-	
+
 	if len(userIDs) == 0 {
 		return []domain.NotificationModel{}, 0, nil
 	}
-	
+
 	query := r.db.Model(&domain.NotificationModel{}).Where("user_id IN ?", userIDs)
-	
+
 	// Filter by read status
 	// Jika unreadOnly = true, hanya ambil yang belum dibaca
 	// Jika unreadOnly = false atau nil, ambil semua (tidak filter)
 	if unreadOnly != nil && *unreadOnly {
 		query = query.Where("is_read = ?", false)
 	}
-	
+
 	// Filter by expiry date (join dengan documents)
+	// PENTING: Include dokumen yang sudah expired (0 hari atau kurang) juga
 	if daysUntilExpiry != nil {
 		thresholdDate := time.Now().AddDate(0, 0, *daysUntilExpiry)
 		query = query.
 			Joins("LEFT JOIN documents ON notifications.resource_id::text = documents.id::text AND notifications.resource_type = 'document'").
-			Where("documents.expiry_date IS NOT NULL AND documents.expiry_date <= ? AND documents.expiry_date > ?", thresholdDate, time.Now())
+			Where("documents.expiry_date IS NOT NULL AND documents.expiry_date <= ?", thresholdDate)
 	}
-	
+
 	// Count total
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	
+
 	// Get notifications
 	err := query.
 		Order("notifications.created_at DESC").
@@ -281,7 +284,7 @@ func (r *notificationRepository) GetByUserIDsWithFilters(userIDs []string, unrea
 	if err != nil {
 		return nil, 0, err
 	}
-	
+
 	// Load documents manually
 	if len(notifications) > 0 {
 		docRepo := NewDocumentRepository()
@@ -294,7 +297,7 @@ func (r *notificationRepository) GetByUserIDsWithFilters(userIDs []string, unrea
 			}
 		}
 	}
-	
+
 	return notifications, total, nil
 }
 
@@ -303,11 +306,10 @@ func (r *notificationRepository) GetUnreadCountByUserIDs(userIDs []string) (int6
 	if len(userIDs) == 0 {
 		return 0, nil
 	}
-	
+
 	var count int64
 	err := r.db.Model(&domain.NotificationModel{}).
 		Where("user_id IN ? AND is_read = ?", userIDs, false).
 		Count(&count).Error
 	return count, err
 }
-

@@ -10,6 +10,7 @@ import developmentApi from '../api/development'
 import { sonarqubeApi, type SonarQubeIssue, type SonarQubeIssuesParams } from '../api/sonarqube'
 import documentsApi, { type DocumentType } from '../api/documents'
 import { userApi, shareholderTypesApi, directorPositionsApi, type User, type ShareholderType, type DirectorPosition } from '../api/userManagement'
+import { notificationSettingsApi, type NotificationSettings } from '../api/notifications'
 import type { TableColumnsType } from 'ant-design-vue'
 import { logger } from '../utils/logger'
 
@@ -126,6 +127,15 @@ const directorPositionModalVisible = ref(false)
 const directorPositionModalMode = ref<'create' | 'edit'>('create')
 const editingDirectorPosition = ref<DirectorPosition | null>(null)
 const newDirectorPositionName = ref('')
+
+// Notification Settings state
+const notificationSettings = ref<NotificationSettings | null>(null)
+const notificationSettingsLoading = ref(false)
+const notificationSettingsSaving = ref(false)
+const notificationSettingsForm = ref({
+  in_app_enabled: true,
+  expiry_threshold_days: 14,
+})
 
 // Navigation state
 const selectedMenuKey = ref<string>('2fa') // Default: 2FA Setting
@@ -907,6 +917,11 @@ const handleRunAllSeeders = async () => {
 
 const handleMenuClick = (e: { key: string }) => {
   selectedMenuKey.value = e.key
+  
+  // Load notification settings saat tab dipilih
+  if (e.key === 'notification-settings') {
+    loadNotificationSettings()
+  }
   selectedKeys.value = [e.key]
 }
 
@@ -1237,6 +1252,46 @@ watch(
   { immediate: false },
 )
 
+// Load notification settings
+const loadNotificationSettings = async () => {
+  try {
+    notificationSettingsLoading.value = true
+    const settings = await notificationSettingsApi.getSettings()
+    notificationSettings.value = settings
+    notificationSettingsForm.value = {
+      in_app_enabled: settings.in_app_enabled,
+      expiry_threshold_days: settings.expiry_threshold_days,
+    }
+  } catch (error: unknown) {
+    logger.error('Failed to load notification settings:', error)
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal memuat pengaturan notifikasi'
+    message.error(errorMessage)
+  } finally {
+    notificationSettingsLoading.value = false
+  }
+}
+
+// Save notification settings
+const handleSaveNotificationSettings = async () => {
+  try {
+    notificationSettingsSaving.value = true
+    const updated = await notificationSettingsApi.updateSettings({
+      in_app_enabled: notificationSettingsForm.value.in_app_enabled,
+      expiry_threshold_days: notificationSettingsForm.value.expiry_threshold_days,
+    })
+    notificationSettings.value = updated
+    message.success('Pengaturan notifikasi berhasil disimpan')
+  } catch (error: unknown) {
+    logger.error('Failed to save notification settings:', error)
+    const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+    const errorMessage = axiosError.response?.data?.message || axiosError.message || 'Gagal menyimpan pengaturan notifikasi'
+    message.error(errorMessage)
+  } finally {
+    notificationSettingsSaving.value = false
+  }
+}
+
 onMounted(() => {
   check2FAStatus()
   // Fetch audit/user activity sesuai role
@@ -1315,6 +1370,13 @@ onUnmounted(() => {
                   </template>
                   <span>2FA Setting</span>
                 </a-menu-item>
+
+                <a-menu-item key="notification-settings">
+                  <template #icon>
+                    <IconifyIcon icon="mdi:bell-cog" width="20" />
+                  </template>
+                  <span>Pengaturan Notifikasi</span>
+                </a-menu-item>
                 
                 <a-menu-item v-if="isSuperadmin" key="development">
                   <template #icon>
@@ -1348,7 +1410,91 @@ onUnmounted(() => {
 
             <!-- Main Content Area -->
             <div class="settings-main-content" :class="{ 'content-maximized': isMaximized }">
-          <!-- 2FA Setting Content -->
+          <!-- Notification Settings Content -->
+          <div v-if="selectedMenuKey === 'notification-settings'" class="settings-section">
+            <div class="section-header">
+              <div>
+                <h3 class="section-title">Pengaturan Notifikasi</h3>
+                <p class="section-description">
+                  Kelola pengaturan notifikasi untuk dokumen dan masa jabatan yang akan expired
+                </p>
+              </div>
+            </div>
+
+            <a-spin :spinning="notificationSettingsLoading">
+              <a-card>
+                <a-form
+                  :model="notificationSettingsForm"
+                  layout="vertical"
+                  @finish="handleSaveNotificationSettings"
+                >
+                  <a-divider orientation="left" style="margin-top: 0;">
+                    <span style="font-weight: 500;">Pengaturan Umum</span>
+                  </a-divider>
+
+                  <a-form-item
+                    label="Aktifkan Notifikasi In-App"
+                    name="in_app_enabled"
+                  >
+                    <a-switch
+                      v-model:checked="notificationSettingsForm.in_app_enabled"
+                    />
+                    <div style="margin-top: 8px; color: #666; font-size: 12px; line-height: 1.5;">
+                      Aktifkan push notification untuk notifikasi dokumen dan masa jabatan yang akan expired.
+                      <br />
+                      <span style="color: #999;">Jika dinonaktifkan, push notification tidak akan muncul, namun notifikasi tetap tersedia di icon, dropdown, dan halaman notifikasi.</span>
+                    </div>
+                  </a-form-item>
+
+                  <a-divider orientation="left">
+                    <span style="font-weight: 500;">Pengaturan Waktu</span>
+                  </a-divider>
+
+                  <a-form-item
+                    label="Jumlah Hari Sebelum Expired"
+                    name="expiry_threshold_days"
+                    :rules="[
+                      { required: true, message: 'Harus diisi' },
+                      { type: 'number', min: 1, max: 365, message: 'Harus antara 1-365 hari' },
+                    ]"
+                  >
+                    <a-input-number
+                      v-model:value="notificationSettingsForm.expiry_threshold_days"
+                      :min="1"
+                      :max="365"
+                      style="width: 200px"
+                      placeholder="Masukkan jumlah hari"
+                    />
+                    <div style="margin-top: 8px; color: #666; font-size: 12px; line-height: 1.5;">
+                      Notifikasi pertama kali muncul <strong>{{ notificationSettingsForm.expiry_threshold_days }}</strong> hari sebelum dokumen atau masa jabatan expired.
+                      <br />
+                      Dokumen/jabatan yang kurang dari <strong>{{ notificationSettingsForm.expiry_threshold_days }}</strong> hari tapi belum ada notifikasinya akan langsung dibuat notifikasinya.
+                      <br />
+                      <span style="color: #999;">Rentang: 1-365 hari</span>
+                    </div>
+                  </a-form-item>
+
+                  <a-divider style="margin: 24px 0 16px 0;" />
+
+                  <a-form-item style="margin-bottom: 0;">
+                    <a-button
+                      type="primary"
+                      html-type="submit"
+                      :loading="notificationSettingsSaving"
+                      size="large"
+                      style="min-width: 150px;"
+                    >
+                      <template #icon>
+                        <IconifyIcon icon="mdi:content-save" width="16" />
+                      </template>
+                      Simpan Pengaturan
+                    </a-button>
+                  </a-form-item>
+                </a-form>
+              </a-card>
+            </a-spin>
+          </div>
+
           <div v-if="selectedMenuKey === '2fa'" class="settings-section">
             <a-card class="security-card" :loading="loading">
               <template #title>

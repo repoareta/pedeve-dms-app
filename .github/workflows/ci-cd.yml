@@ -14,9 +14,9 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write  # Needed for creating releases
+      contents: write
       packages: write
-      security-events: write  # Needed for Trivy security scan results
+      security-events: write
 
     steps:
       - name: Checkout repository
@@ -137,6 +137,8 @@ jobs:
           echo "backend_image_versioned=${IMAGE_REPO}:${{ steps.version.outputs.version }}" >> $GITHUB_OUTPUT
           
           echo "Using IMAGE_REPO=${IMAGE_REPO}"
+          echo "Repository owner: ${REPO_OWNER}"
+          echo "GitHub actor: ${{ github.actor }}"
 
       - name: Build backend Docker image
         id: build-backend
@@ -189,7 +191,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Push Docker images
         run: |
@@ -311,7 +313,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Pull Docker image for backend
         run: |
@@ -727,7 +729,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN != '' && secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Pull Docker image for backend (PROD - new repo name)
         run: |

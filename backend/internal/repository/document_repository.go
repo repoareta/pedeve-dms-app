@@ -176,7 +176,7 @@ func (r *documentRepository) ListDocumentsPaginated(q ListDocumentsQuery) ([]dom
 
 func (r *documentRepository) GetDocumentByID(id string) (*domain.DocumentModel, error) {
 	var doc domain.DocumentModel
-	// Explicitly select all fields including expiry_date to ensure it's loaded
+	// Explicitly select all fields to ensure they're loaded
 	if err := r.db.Select("*").Where("id = ?", id).First(&doc).Error; err != nil {
 		return nil, err
 	}

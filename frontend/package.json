@@ -16,7 +16,9 @@
     "test:coverage": "vitest run --coverage",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
-    "lint": "eslint . --fix --cache"
+    "lint": "eslint . --fix --cache",
+    "docs:build": "cd ../docs && npm install && npm run build && cd ../frontend && rm -rf public/user-guideline && mkdir -p public/user-guideline && cp -r ../docs/.vitepress/dist/* public/user-guideline/",
+    "docs:dev": "cd ../docs && npm run dev"
   },
   "dependencies": {
     "@iconify/vue": "^5.0.0",

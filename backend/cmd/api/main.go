@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -94,12 +95,20 @@ func main() {
 
 	// Setup Fiber app
 	app := fiber.New(fiber.Config{
-		BodyLimit: 10 * 1024 * 1024, // 10MB untuk upload dokumen
+		BodyLimit: 200 * 1024 * 1024, // 200MB untuk upload dokumen (mengakomodir file dokumen besar seperti PDF)
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			// Custom error handler untuk logging error ke audit log
 			code := fiber.StatusInternalServerError
 			if e, ok := err.(*fiber.Error); ok {
 				code = e.Code
+			}
+
+			// Handle body limit exceeded dengan pesan yang lebih jelas
+			if code == fiber.StatusRequestEntityTooLarge || strings.Contains(err.Error(), "request entity too large") {
+				return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
+					"error":   "file_too_large",
+					"message": "File terlalu besar. Batasan: File gambar maksimal 10MB, file dokumen (.docx, .xlsx, .xls, .pptx, .ppt, .pdf) maksimal 200MB.",
+				})
 			}
 
 			// Log error ke audit log
@@ -125,9 +134,10 @@ func main() {
 
 	// Rate limiting: Hanya diterapkan di endpoint tertentu, bukan global
 	// - Auth endpoints: AuthRateLimitMiddleware (20 req/min untuk prevent brute force)
-	// - Sensitive operations: StrictRateLimitMiddleware (500 req/min, burst 250 untuk file management)
-	//   * Mendukung batch upload 15-20 file sekaligus
+	// - Sensitive operations: StrictRateLimitMiddleware (2000 req/min, burst 1000 untuk file management)
+	//   * Mendukung batch upload 20-30 file sekaligus
 	//   * Cukup longgar untuk aktivitas upload/delete yang intensif
+	//   * IP-based rate limiting (fleksibel untuk concurrent user <10)
 	// - GET endpoints: Tidak perlu rate limit (atau sangat longgar jika diperlukan)
 	//
 	// Rate limiting aktif di semua environment (development & production) untuk testing
@@ -217,7 +227,7 @@ func main() {
 	protected.Put("/documents/folders/:id", documentHandler.UpdateFolder)
 	// Delete operations - sensitive, use strict rate limit
 	sensitiveOps.Delete("/documents/folders/:id", documentHandler.DeleteFolder)
-	// Upload documents - sensitive operation, use strict rate limit
+	// Upload documents - sensitive operation, use strict rate limit (IP-based)
 	sensitiveOps.Post("/documents/upload", documentHandler.UploadDocument)
 	protected.Get("/documents", documentHandler.ListDocuments)
 	protected.Get("/documents/summary", documentHandler.DocumentSummary) // ringkasan storage, pastikan sebelum :id

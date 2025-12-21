@@ -467,7 +467,7 @@
                 </div>
 
                 <!-- Pengurus/Dewan Direksi -->
-                <div v-if="company.directors && company.directors.length > 0" class="detail-section">
+                <div v-if="company.directors && company.directors.length > 0" class="detail-section" >
                   <h2 class="section-title">
                     <IconifyIcon icon="mdi:account-tie" width="20" style="margin-right: 8px;" />
                     Pengurus/Dewan Direksi

@@ -14,7 +14,7 @@ const getBaseURL = () => {
 const API_BASE_URL = getBaseURL()
 
 // Debug log (hanya muncul di development)
-logger.api('Base URL:', API_BASE_URL)
+// Base URL sudah di-setup, tidak perlu di-log
 
 // Penyimpanan token CSRF
 let csrfToken: string | null = null

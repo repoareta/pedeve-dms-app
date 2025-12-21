@@ -43,18 +43,18 @@ func (h *NotificationHandler) GetNotifications(c *fiber.Ctx) error {
 		})
 	}
 	userID := userIDVal.(string)
-	
+
 	// Get role and company for RBAC
 	roleNameVal := c.Locals("roleName")
 	companyIDVal := c.Locals("companyID")
-	
+
 	roleName := ""
 	if roleNameVal != nil {
 		if rn, ok := roleNameVal.(string); ok {
 			roleName = rn
 		}
 	}
-	
+
 	var companyID *string
 	if companyIDVal != nil {
 		if cid, ok := companyIDVal.(*string); ok && cid != nil {
@@ -63,25 +63,25 @@ func (h *NotificationHandler) GetNotifications(c *fiber.Ctx) error {
 			companyID = &cidStr
 		}
 	}
-	
+
 	unreadOnly := false
 	if c.Query("unread_only") == "true" {
 		unreadOnly = true
 	}
-	
+
 	limit := 5
 	if limitStr := c.Query("limit"); limitStr != "" {
 		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
 			limit = parsedLimit
 		}
 	}
-	
+
 	// Use RBAC-aware method untuk konsistensi dengan GetUnreadCount
 	var unreadOnlyPtr *bool
 	if unreadOnly {
 		unreadOnlyPtr = &unreadOnly
 	}
-	
+
 	zapLog := logger.GetLogger()
 	zapLog.Info("GetNotifications called",
 		zap.String("user_id", userID),
@@ -90,27 +90,27 @@ func (h *NotificationHandler) GetNotifications(c *fiber.Ctx) error {
 		zap.Bool("unread_only", unreadOnly),
 		zap.Int("limit", limit),
 	)
-	
+
 	notifications, total, _, err := h.notificationUC.GetNotificationsWithRBAC(
 		userID, roleName, companyID, unreadOnlyPtr, nil, 1, limit,
 	)
 	if err != nil {
 		// Log error untuk debugging
 		zapLog.Error("Failed to fetch notifications", zap.Error(err), zap.String("user_id", userID))
-		
+
 		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
 			Error:   "internal_error",
 			Message: fmt.Sprintf("Failed to fetch notifications: %v", err),
 		})
 	}
-	
+
 	zapLog.Info("GetNotifications success",
 		zap.String("user_id", userID),
 		zap.String("role_name", roleName),
 		zap.Int("count", len(notifications)),
 		zap.Int64("total", total),
 	)
-	
+
 	return c.JSON(fiber.Map{
 		"data": notifications,
 	})
@@ -139,18 +139,18 @@ func (h *NotificationHandler) GetNotificationsWithFilters(c *fiber.Ctx) error {
 		})
 	}
 	userID := userIDVal.(string)
-	
+
 	// Get role and company for RBAC
 	roleNameVal := c.Locals("roleName")
 	companyIDVal := c.Locals("companyID")
-	
+
 	roleName := ""
 	if roleNameVal != nil {
 		if rn, ok := roleNameVal.(string); ok {
 			roleName = rn
 		}
 	}
-	
+
 	var companyID *string
 	if companyIDVal != nil {
 		if cidPtr, ok := companyIDVal.(*string); ok && cidPtr != nil {
@@ -159,34 +159,34 @@ func (h *NotificationHandler) GetNotificationsWithFilters(c *fiber.Ctx) error {
 			companyID = &cidStr
 		}
 	}
-	
+
 	var unreadOnly *bool
 	if unreadStr := c.Query("unread_only"); unreadStr != "" {
 		val := unreadStr == "true"
 		unreadOnly = &val
 	}
-	
+
 	var daysUntilExpiry *int
 	if daysStr := c.Query("days_until_expiry"); daysStr != "" {
 		if days, err := strconv.Atoi(daysStr); err == nil && days > 0 {
 			daysUntilExpiry = &days
 		}
 	}
-	
+
 	page := 1
 	if pageStr := c.Query("page"); pageStr != "" {
 		if parsedPage, err := strconv.Atoi(pageStr); err == nil && parsedPage > 0 {
 			page = parsedPage
 		}
 	}
-	
+
 	pageSize := 10
 	if pageSizeStr := c.Query("page_size"); pageSizeStr != "" {
 		if parsedPageSize, err := strconv.Atoi(pageSizeStr); err == nil && parsedPageSize > 0 {
 			pageSize = parsedPageSize
 		}
 	}
-	
+
 	// Use RBAC-aware method
 	notifications, total, totalPages, err := h.notificationUC.GetNotificationsWithRBAC(
 		userID, roleName, companyID, unreadOnly, daysUntilExpiry, page, pageSize,
@@ -197,25 +197,26 @@ func (h *NotificationHandler) GetNotificationsWithFilters(c *fiber.Ctx) error {
 			Message: "Failed to fetch notifications",
 		})
 	}
-	
+
 	return c.JSON(fiber.Map{
-		"data":       notifications,
-		"total":      total,
-		"page":       page,
-		"page_size":  pageSize,
+		"data":        notifications,
+		"total":       total,
+		"page":        page,
+		"page_size":   pageSize,
 		"total_pages": totalPages,
 	})
 }
 
 // MarkAsRead godoc
 // @Summary      Mark notification as read
-// @Description  Mark a specific notification as read
+// @Description  Mark a specific notification as read (with RBAC: superadmin can mark any, admin can mark company+descendants, user can mark own)
 // @Tags         notifications
 // @Accept       json
 // @Produce      json
 // @Param        id  path      string  true  "Notification ID"
 // @Success      200  {object}  map[string]interface{}
 // @Failure      401  {object}  domain.ErrorResponse
+// @Failure      403  {object}  domain.ErrorResponse
 // @Failure      404  {object}  domain.ErrorResponse
 // @Router       /notifications/:id/read [put]
 // @Security     BearerAuth
@@ -229,7 +230,27 @@ func (h *NotificationHandler) MarkAsRead(c *fiber.Ctx) error {
 	}
 	userID := userIDVal.(string)
 	notificationID := c.Params("id")
-	
+
+	// Get role and company for RBAC
+	roleNameVal := c.Locals("roleName")
+	companyIDVal := c.Locals("companyID")
+
+	roleName := ""
+	if roleNameVal != nil {
+		if rn, ok := roleNameVal.(string); ok {
+			roleName = rn
+		}
+	}
+
+	var companyID *string
+	if companyIDVal != nil {
+		if cidPtr, ok := companyIDVal.(*string); ok && cidPtr != nil {
+			companyID = cidPtr
+		} else if cidStr, ok := companyIDVal.(string); ok && cidStr != "" {
+			companyID = &cidStr
+		}
+	}
+
 	// Get username for audit log
 	username := ""
 	if usernameVal := c.Locals("username"); usernameVal != nil {
@@ -237,18 +258,33 @@ func (h *NotificationHandler) MarkAsRead(c *fiber.Ctx) error {
 			username = u
 		}
 	}
-	
-	if err := h.notificationUC.MarkAsRead(notificationID, userID); err != nil {
-		if err.Error() == "notification not found" || err.Error() == "forbidden: notification does not belong to user" {
+
+	// Use RBAC-aware method
+	if err := h.notificationUC.MarkAsReadWithRBAC(notificationID, userID, roleName, companyID); err != nil {
+		if err.Error() == "notification not found" {
 			// Audit log untuk failure
 			if username != "" {
 				audit.LogAction(userID, username, audit.ActionMarkNotificationRead, audit.ResourceNotification, notificationID, getClientIP(c), c.Get("User-Agent"), audit.StatusFailure, map[string]interface{}{
-					"reason": "notification_not_found_or_forbidden",
+					"reason": "notification_not_found",
 				})
 			}
 			return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
 				Error:   "not_found",
 				Message: "Notification not found",
+			})
+		}
+		if err.Error() == "forbidden: notification does not belong to user" ||
+			err.Error() == "forbidden: notification does not belong to your company or its subsidiaries" ||
+			err.Error() == "forbidden: notification owner has no company" {
+			// Audit log untuk failure
+			if username != "" {
+				audit.LogAction(userID, username, audit.ActionMarkNotificationRead, audit.ResourceNotification, notificationID, getClientIP(c), c.Get("User-Agent"), audit.StatusFailure, map[string]interface{}{
+					"reason": "forbidden",
+				})
+			}
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "You don't have permission to mark this notification as read",
 			})
 		}
 		// Audit log untuk error
@@ -262,12 +298,12 @@ func (h *NotificationHandler) MarkAsRead(c *fiber.Ctx) error {
 			Message: "Failed to mark notification as read",
 		})
 	}
-	
+
 	// Audit log untuk success
 	if username != "" {
 		audit.LogAction(userID, username, audit.ActionMarkNotificationRead, audit.ResourceNotification, notificationID, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
 	}
-	
+
 	return c.JSON(fiber.Map{
 		"message": "Notification marked as read",
 	})
@@ -292,14 +328,14 @@ func (h *NotificationHandler) MarkAllAsRead(c *fiber.Ctx) error {
 		})
 	}
 	userID := userIDVal.(string)
-	
+
 	if err := h.notificationUC.MarkAllAsRead(userID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
 			Error:   "internal_error",
 			Message: "Failed to mark all notifications as read",
 		})
 	}
-	
+
 	return c.JSON(fiber.Map{
 		"message": "All notifications marked as read",
 	})
@@ -324,18 +360,18 @@ func (h *NotificationHandler) GetUnreadCount(c *fiber.Ctx) error {
 		})
 	}
 	userID := userIDVal.(string)
-	
+
 	// Get role and company for RBAC
 	roleNameVal := c.Locals("roleName")
 	companyIDVal := c.Locals("companyID")
-	
+
 	roleName := ""
 	if roleNameVal != nil {
 		if rn, ok := roleNameVal.(string); ok {
 			roleName = rn
 		}
 	}
-	
+
 	var companyID *string
 	if companyIDVal != nil {
 		if cidPtr, ok := companyIDVal.(*string); ok && cidPtr != nil {
@@ -344,7 +380,7 @@ func (h *NotificationHandler) GetUnreadCount(c *fiber.Ctx) error {
 			companyID = &cidStr
 		}
 	}
-	
+
 	// Use RBAC-aware method
 	count, err := h.notificationUC.GetUnreadCountWithRBAC(userID, roleName, companyID)
 	if err != nil {
@@ -353,7 +389,7 @@ func (h *NotificationHandler) GetUnreadCount(c *fiber.Ctx) error {
 			Message: "Failed to get unread count",
 		})
 	}
-	
+
 	return c.JSON(fiber.Map{
 		"count": count,
 	})
@@ -376,7 +412,7 @@ func (h *NotificationHandler) StreamNotifications(c *fiber.Ctx) error {
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
-	
+
 	if _, err := c.WriteString(": SSE endpoint - use polling instead\n\n"); err != nil {
 		return err
 	}
@@ -403,18 +439,18 @@ func (h *NotificationHandler) DeleteAllNotifications(c *fiber.Ctx) error {
 		})
 	}
 	userID := userIDVal.(string)
-	
+
 	// Get role and company for RBAC
 	roleNameVal := c.Locals("roleName")
 	companyIDVal := c.Locals("companyID")
-	
+
 	roleName := ""
 	if roleNameVal != nil {
 		if rn, ok := roleNameVal.(string); ok {
 			roleName = rn
 		}
 	}
-	
+
 	var companyID *string
 	if companyIDVal != nil {
 		if cidPtr, ok := companyIDVal.(*string); ok && cidPtr != nil {
@@ -423,7 +459,7 @@ func (h *NotificationHandler) DeleteAllNotifications(c *fiber.Ctx) error {
 			companyID = &cidStr
 		}
 	}
-	
+
 	// Use RBAC-aware method
 	if err := h.notificationUC.DeleteAllWithRBAC(userID, roleName, companyID); err != nil {
 		zapLog := logger.GetLogger()
@@ -433,9 +469,8 @@ func (h *NotificationHandler) DeleteAllNotifications(c *fiber.Ctx) error {
 			Message: "Failed to delete all notifications",
 		})
 	}
-	
+
 	return c.JSON(fiber.Map{
 		"message": "All notifications deleted successfully",
 	})
 }
-

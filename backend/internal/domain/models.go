@@ -161,21 +161,19 @@ func (DocumentFolderModel) TableName() string {
 // DocumentModel merepresentasikan file dokumen yang diupload
 // @Description Document model dengan metadata dalam format JSON
 type DocumentModel struct {
-	ID             string         `gorm:"primaryKey" json:"id"`
-	FolderID       *string        `gorm:"index" json:"folder_id"`
-	DirectorID     *string        `gorm:"index" json:"director_id"`  // Relasi dengan DirectorModel (untuk dokumen individu)
-	Name           string         `gorm:"not null" json:"name"`      // Judul dokumen
-	FileName       string         `gorm:"not null" json:"file_name"` // Nama file asli
-	FilePath       string         `gorm:"not null" json:"file_path"` // URL/path hasil upload
-	MimeType       string         `gorm:"not null" json:"mime_type"`
-	Size           int64          `gorm:"not null" json:"size"` // Size in bytes
-	Status         string         `gorm:"default:'active'" json:"status"`
-	Metadata       datatypes.JSON `json:"metadata" swaggertype:"object"` // Metadata tambahan (opsional, format JSON)
-	UploaderID     string         `gorm:"index" json:"uploader_id"`
-	ExpiryDate     *time.Time     `gorm:"index" json:"expiry_date"`             // Tanggal kadaluarsa dokumen
-	ExpiryNotified bool           `gorm:"default:false" json:"expiry_notified"` // Apakah sudah di-notify
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
+	ID         string         `gorm:"primaryKey" json:"id"`
+	FolderID   *string        `gorm:"index" json:"folder_id"`
+	DirectorID *string        `gorm:"index" json:"director_id"`  // Relasi dengan DirectorModel (untuk dokumen individu)
+	Name       string         `gorm:"not null" json:"name"`      // Judul dokumen
+	FileName   string         `gorm:"not null" json:"file_name"` // Nama file asli
+	FilePath   string         `gorm:"not null" json:"file_path"` // URL/path hasil upload
+	MimeType   string         `gorm:"not null" json:"mime_type"`
+	Size       int64          `gorm:"not null" json:"size"` // Size in bytes
+	Status     string         `gorm:"default:'active'" json:"status"`
+	Metadata   datatypes.JSON `json:"metadata" swaggertype:"object"` // Metadata tambahan (opsional, format JSON) - expiry_date disimpan di sini
+	UploaderID string         `gorm:"index" json:"uploader_id"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
 
 	Folder *DocumentFolderModel `gorm:"foreignKey:FolderID" json:"folder,omitempty"`
 }

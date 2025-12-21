@@ -205,7 +205,7 @@
                           <strong>Tidak ada perusahaan induk</strong><br/>
                           Modal Disetor perusahaan ini ({{ (formData.paid_up_capital || 0).toLocaleString('id-ID') }}) lebih besar dari total Modal Disetor semua pemegang saham ({{ getTotalShareholderCapital().toLocaleString('id-ID') }}). 
                           Perusahaan ini dianggap independen.<br/>
-                          <strong>Kepemilikan sendiri: {{ currentCompanyOwnershipPercent }}%</strong> dari total modal semua modal disetor dari perusahaan yang berkontribusi.
+                          <strong>Kepemilikan sendiri: {{ formatOwnershipPercent(currentCompanyOwnershipPercent) }}</strong> dari total modal semua modal disetor dari perusahaan yang berkontribusi.
                         </div>
                       </template>
                     </a-alert>
@@ -244,10 +244,7 @@
                         <template #content>
                           <div style="font-size: 12px; line-height: 1.6;">
                             <div style="margin-bottom: 8px;">
-                              <strong>Persentase Kepemilikan Sendiri:</strong>
-                            </div>
-                            <div style="margin-bottom: 4px;">
-                              <strong>{{ currentCompanyOwnershipPercent }}%</strong>
+                              <strong>Persentase ini dihitung otomatis berdasarkan Modal Disetor:</strong>
                             </div>
                             <div style="margin-bottom: 4px;">
                               Modal Disetor perusahaan sendiri: {{ formData.currency || 'IDR' }} {{ (formData.paid_up_capital || 0).toLocaleString('id-ID') }}
@@ -258,6 +255,9 @@
                             <div style="margin-bottom: 4px;">
                               Total modal: {{ formData.currency || 'IDR' }} {{ ((formData.paid_up_capital || 0) + getTotalShareholderCapital()).toLocaleString('id-ID') }}
                             </div>
+                            <div style="margin-bottom: 4px;">
+                              <strong>Persentase Kepemilikan Sendiri: {{ formatOwnershipPercent(currentCompanyOwnershipPercent) }}</strong>
+                            </div>
                             <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e8e8e8;">
                               <strong>Rumus perhitungan:</strong><br/>
                               Total modal = Modal perusahaan sendiri + Total modal semua pemegang saham<br/>
@@ -267,7 +267,7 @@
                         </template>
                         <template #default>
                           <span style="cursor: help; text-decoration: underline; color: #1890ff;">
-                            Kepemilikan sendiri: {{ currentCompanyOwnershipPercent }}%
+                            Kepemilikan sendiri: {{ formatOwnershipPercent(currentCompanyOwnershipPercent) }}
                           </span>
                         </template>
                       </a-popover>
@@ -361,18 +361,21 @@
                     style="width: 100%"
                     placeholder="Pilih perusahaan atau individu/eksternal"
                     show-search
-                    :filter-option="(input: string, option: { label?: string; children?: Array<{ children?: unknown }> }) => {
-                      const label = option?.label || (option?.children?.[0]?.children ? String(option.children[0].children) : '')
-                      return label.toLowerCase().includes(input.toLowerCase())
+                    :filter-option="false"
+                    :search-value="shareholderCompanySearchValue[index] || ''"
+                    @search="(value: string) => handleShareholderCompanySearch(index, value)"
+                    @change="(value: string | null) => {
+                      handleShareholderCompanyChange(record, value)
+                      // Clear search after selection
+                      shareholderCompanySearchValue[index] = ''
                     }"
-                    @change="(value: string | null) => handleShareholderCompanyChange(record, value)"
                   >
                     <a-select-option value="__individual__" style="color: #1890ff; font-weight: 500;">
                       <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
                       Individu/Eksternal (Input Manual)
                     </a-select-option>
                     <a-select-option
-                      v-for="company in getAvailableShareholderCompanies()"
+                      v-for="company in getFilteredShareholderCompanies(index)"
                       :key="company.id"
                       :value="company.id"
                     >
@@ -441,6 +444,9 @@
                         <div style="margin-bottom: 4px;">
                           Total modal: {{ formData.currency || 'IDR' }} {{ ((formData.paid_up_capital || 0) + getTotalShareholderCapital()).toLocaleString('id-ID') }}
                         </div>
+                        <div style="margin-bottom: 4px;">
+                          <strong>Persentase Kepemilikan: {{ formatOwnershipPercent(record.ownership_percent || 0) }}</strong>
+                        </div>
                         <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e8e8e8;">
                           <strong>Rumus perhitungan:</strong><br/>
                           Total modal = Modal perusahaan sendiri + Total modal semua pemegang saham<br/>
@@ -457,7 +463,7 @@
                         :color="record.ownership_percent === 0 ? 'error' : 'default'"
                         style="font-size: 14px; padding: 4px 12px; min-width: 80px; text-align: center;"
                       >
-                        {{ (record.ownership_percent || 0).toFixed(10).replace(/\.?0+$/, '') || '0' }}%
+                        {{ formatOwnershipPercent(record.ownership_percent || 0) }}
                       </a-tag>
                     </template>
                   </a-popover>
@@ -860,6 +866,9 @@ const shareholderTypes = ref<ShareholderType[]>([])
 const loadingShareholderTypes = ref(false)
 const shareholderTypeSearchValue = ref('')
 
+// Shareholder company search
+const shareholderCompanySearchValue = ref<Record<number, string>>({})
+
 // Director positions (master data)
 const directorPositions = ref<DirectorPosition[]>([])
 const loadingDirectorPositions = ref(false)
@@ -1032,7 +1041,9 @@ const removeShareholder = (index: number) => {
 
 // Calculate ownership percentages automatically based on paid_up_capital
 // Only for shareholders that are companies (have shareholder_company_id)
-// If current company's paid_up_capital > total shareholder capital, include it in calculation
+// Calculate ownership percentage based on paid_up_capital
+// Total capital = Modal perusahaan sendiri + Total modal semua pemegang saham
+// Persentase pemegang saham = (Modal Disetor pemegang saham ÷ Total modal) × 100%
 const calculateOwnershipPercentages = () => {
   // Get all company shareholders (those with shareholder_company_id)
   const companyShareholders = formData.value.shareholders.filter(sh => sh.shareholder_company_id)
@@ -1051,11 +1062,9 @@ const calculateOwnershipPercentages = () => {
   // Get current company's paid_up_capital
   const currentCompanyCapital = formData.value.paid_up_capital || 0
   
-  // If current company's capital is greater than total shareholder capital, include it in total
-  const includeCurrentCompanyInTotal = currentCompanyCapital > totalShareholderCapital && totalShareholderCapital > 0
-  const totalCapital = includeCurrentCompanyInTotal 
-    ? currentCompanyCapital + totalShareholderCapital 
-    : totalShareholderCapital
+  // Total capital = Modal perusahaan sendiri + Total modal semua pemegang saham
+  // Sesuai dengan rumus di currentCompanyOwnershipPercent
+  const totalCapital = currentCompanyCapital + totalShareholderCapital
   
   // Calculate percentage for each company shareholder (10 decimal places)
   if (totalCapital > 0) {
@@ -1119,10 +1128,31 @@ const handleShareholderCompanyChange = (record: typeof formData.value.shareholde
   }
 }
 
-// Get filtered companies for shareholder dropdown (exclude current company being edited)
-const getAvailableShareholderCompanies = () => {
+
+// Get filtered companies for shareholder dropdown with search (exclude current company being edited)
+const getFilteredShareholderCompanies = (index: number) => {
   const currentCompanyId = route.params.id as string
-  return availableCompanies.value.filter(c => c.id !== currentCompanyId)
+  const searchQuery = shareholderCompanySearchValue.value[index] || ''
+  
+  let filtered = availableCompanies.value.filter(c => c.id !== currentCompanyId)
+  
+  if (searchQuery.trim()) {
+    const query = searchQuery.toLowerCase()
+    filtered = filtered.filter(c => {
+      const name = (c.name || '').toLowerCase()
+      const code = (c.code || '').toLowerCase()
+      const npwp = (c.npwp || '').toLowerCase()
+      const nib = (c.nib || '').toLowerCase()
+      return name.includes(query) || code.includes(query) || npwp.includes(query) || nib.includes(query)
+    })
+  }
+  
+  return filtered
+}
+
+// Handle shareholder company search
+const handleShareholderCompanySearch = (index: number, value: string) => {
+  shareholderCompanySearchValue.value[index] = value
 }
 
 // Get shareholder capital info for popover
@@ -1170,6 +1200,7 @@ const isCompanyCapitalGreaterThanShareholders = computed(() => {
 // Calculate ownership percentage of current company (kepemilikan sendiri)
 // Always calculated: (Modal perusahaan sendiri / Total modal) × 100%
 // Total modal = Modal perusahaan sendiri + Total modal semua pemegang saham
+// Return raw value with full precision (no rounding)
 const currentCompanyOwnershipPercent = computed(() => {
   const currentCompanyCapital = formData.value.paid_up_capital || 0
   const totalShareholderCapital = getTotalShareholderCapital()
@@ -1180,9 +1211,27 @@ const currentCompanyOwnershipPercent = computed(() => {
   }
   
   const percentage = (currentCompanyCapital / totalCapital) * 100
-  // Round to 2 decimal places for display
-  return Math.round(percentage * 100) / 100
+  // Return with full precision (no rounding) - store with high precision
+  return Math.round(percentage * 10000000000) / 10000000000
 })
+
+// Format percentage for display - show all significant digits without rounding
+const formatOwnershipPercent = (percent: number): string => {
+  if (percent === 0) return '0%'
+  
+  // Use toFixed with high precision (10 decimal places) to ensure all digits are shown
+  // This matches the precision used in calculation (10000000000)
+  const str = percent.toFixed(10)
+  
+  // Remove trailing zeros but keep all significant digits
+  // This will show values like "80.6451612903%" instead of "80.64516129030000%"
+  const trimmed = str.replace(/\.?0+$/, '')
+  
+  // If after trimming it's empty or just '.', return '0%'
+  if (!trimmed || trimmed === '.') return '0%'
+  
+  return `${trimmed}%`
+}
 
 // Auto-update parent company based on highest ownership percentage
 // This will always update to the company with highest percentage (only for company shareholders, not individuals)
@@ -1611,12 +1660,6 @@ const handleSubmit = async () => {
   
   try {
     // Prepare data untuk API - menggunakan snake_case sesuai JSON tag
-    // Log currency sebelum submit untuk debugging
-    console.log('Submitting company data with currency:', {
-      currency: formData.value.currency,
-      formDataCurrency: formData.value.currency,
-      isEditMode: !!route.params.id
-    })
 
     const submitData = {
       name: formData.value.name,
@@ -1671,18 +1714,12 @@ const handleSubmit = async () => {
     
     if (route.params.id) {
       // Edit mode - use full update endpoint
-      console.log('Updating company with data:', JSON.stringify(submitData, null, 2))
-      const response = await apiClient.put(`/companies/${route.params.id}/full`, submitData)
-      console.log('Update response:', response.data)
+      await apiClient.put(`/companies/${route.params.id}/full`, submitData)
       message.success('Perusahaan berhasil diupdate')
       savedCompanyId = route.params.id as string
       
       // Reload company data setelah update untuk memastikan currency ter-update dan mendapatkan directors dengan ID
       const updatedCompany = await companyApi.getById(savedCompanyId)
-      console.log('Reloaded company after update:', {
-        currency: updatedCompany.currency,
-        fullCompany: updatedCompany
-      })
       formData.value.currency = updatedCompany.currency || 'IDR'
       
       // Upload pending files dan update director_id untuk pending documents
@@ -1702,9 +1739,7 @@ const handleSubmit = async () => {
       router.push(`/subsidiaries/${savedCompanyId}`)
     } else {
       // Create mode - use full create endpoint
-      console.log('Creating company with data:', JSON.stringify(submitData, null, 2))
       const response = await apiClient.post('/companies/full', submitData)
-      console.log('Create response:', response.data)
       message.success('Perusahaan berhasil dibuat')
       savedCompanyId = response.data.id
       
@@ -1967,12 +2002,6 @@ const loadCompanyData = async () => {
       formData.value.paid_up_capital = company.paid_up_capital || undefined
       // Load currency from company, default to IDR if not available
       formData.value.currency = company.currency || 'IDR'
-      console.log('Loaded company currency:', {
-        companyId: company.id,
-        currencyFromAPI: company.currency,
-        currencySet: formData.value.currency,
-        fullCompany: company
-      })
       formData.value.shareholders = (company.shareholders || []).map((sh: Shareholder) => ({
         id: sh.id,
         shareholder_company_id: sh.shareholder_company_id || null,

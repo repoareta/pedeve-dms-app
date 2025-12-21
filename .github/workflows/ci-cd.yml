@@ -50,6 +50,34 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      # ===== USER GUIDELINE DOCUMENTATION =====
+      - name: Setup Node.js for Documentation
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install documentation dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Build User Guideline Documentation
+        run: |
+          echo "📚 Building VitePress documentation..."
+          cd docs
+          # Build VitePress
+          echo "🔨 Building documentation..."
+          npm run build
+          # Copy build output to frontend/public/user-guideline
+          echo "📋 Copying build output to frontend/public/user-guideline..."
+          cd ..
+          rm -rf frontend/public/user-guideline
+          mkdir -p frontend/public/user-guideline
+          cp -r docs/.vitepress/dist/* frontend/public/user-guideline/
+          echo "✅ Documentation built and copied successfully!"
+          echo "📍 User guideline will be available at: /user-guideline/"
+
       - name: Lint frontend
         working-directory: frontend
         run: npm run lint

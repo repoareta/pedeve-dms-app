@@ -485,48 +485,57 @@
                     <IconifyIcon icon="mdi:account-group" width="20" style="margin-right: 8px;" />
                     Struktur Kepemilikan ({{ company!.shareholders.length }})
                   </h2>
-                  <div class="shareholders-list">
-                    <div v-for="(shareholder, index) in company!.shareholders" :key="shareholder.id || index" class="shareholder-card">
-                      <div class="shareholder-header">
-                        <h3 class="shareholder-name">
-                          {{ shareholder.name }}
-                          <a-tag v-if="shareholder.is_main_parent" color="blue" style="margin-left: 8px;">Induk Utama</a-tag>
-                        </h3>
-                        <div class="shareholder-badge">{{ (shareholder.ownership_percent || 0).toFixed(2) }}%</div>
-                      </div>
-                      <div class="shareholder-details">
-                        <div class="info-row">
-                          <span class="info-label">Jenis Pemegang Saham</span>
-                          <span class="info-value">
-                            <a-tag v-for="(type, idx) in (Array.isArray(shareholder.type) ? shareholder.type : [shareholder.type])" 
-                              :key="idx" color="cyan" style="margin-right: 4px;">
-                              {{ type }}
-                            </a-tag>
-                            <span v-if="!shareholder.type || (Array.isArray(shareholder.type) && shareholder.type.length === 0)">-</span>
-                          </span>
+                  <a-table
+                    :columns="shareholderColumns"
+                    :data-source="shareholdersWithSelf"
+                    :pagination="false"
+                    row-key="id"
+                    :scroll="{ x: 'max-content' }"
+                    class="striped-table"
+                  >
+                    <template #bodyCell="{ column, record }">
+                      <template v-if="column.key === 'name'">
+                        <div>
+                          <a
+                            v-if="record.shareholder_company_id && !record.is_self"
+                            :href="`/subsidiaries/${record.shareholder_company_id}`"
+                            target="_blank"
+                            style="color: #1890ff; font-weight: 500; text-decoration: none;"
+                            @click.stop
+                          >
+                            {{ record.name }}
+                            <IconifyIcon icon="mdi:open-in-new" width="14" style="margin-left: 4px;" />
+                          </a>
+                          <span v-else style="font-weight: 500; color: #52c41a;">{{ record.name }}</span>
+                          <a-tag v-if="record.is_main_parent" color="blue" style="margin-left: 8px;">Induk Utama</a-tag>
+                          <a-tag v-if="record.is_self" color="green" style="margin-left: 8px;">Perusahaan Sendiri</a-tag>
                         </div>
-                        <div class="info-row">
-                          <span class="info-label">Nomor Identitas</span>
-                          <span class="info-value">{{ shareholder.identity_number || '-' }}</span>
-                        </div>
-                        <div v-if="shareholder.shareholder_company_id" class="info-row">
-                          <span class="info-label">Perusahaan dari Sistem</span>
-                          <span class="info-value">
-                            <a-tag color="green" v-if="shareholder.shareholder_company_id">Ya</a-tag>
-                            <span v-else>-</span>
-                          </span>
-                        </div>
-                        <div v-if="shareholder.share_sheet_count" class="info-row">
-                          <span class="info-label">Jumlah Lembar Saham</span>
-                          <span class="info-value">{{ formatNumber(shareholder.share_sheet_count) }} lembar</span>
-                        </div>
-                        <div v-if="shareholder.share_value_per_sheet" class="info-row">
-                          <span class="info-label">Nilai Rupiah per Lembar</span>
-                          <span class="info-value">{{ formatCurrency(shareholder.share_value_per_sheet) }}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                      </template>
+                      <template v-else-if="column.key === 'authorized_capital'">
+                        <span v-if="record.authorized_capital && record.authorized_capital > 0">
+                          {{ formatCurrency(record.authorized_capital) }} {{ company?.currency || 'IDR' }}
+                        </span>
+                        <span v-else>-</span>
+                      </template>
+                      <template v-else-if="column.key === 'paid_up_capital'">
+                        <span v-if="record.paid_up_capital && record.paid_up_capital > 0">
+                          {{ formatCurrency(record.paid_up_capital) }} {{ company?.currency || 'IDR' }}
+                        </span>
+                        <span v-else>-</span>
+                      </template>
+                      <template v-else-if="column.key === 'ownership_percent'">
+                        <strong>{{ formatOwnershipPercent(record.ownership_percent || 0) }}</strong>
+                      </template>
+                      <template v-else-if="column.key === 'share_sheet_count'">
+                        <span v-if="record.share_sheet_count">{{ formatNumber(record.share_sheet_count) }} lembar</span>
+                        <span v-else>-</span>
+                      </template>
+                      <template v-else-if="column.key === 'share_value_per_sheet'">
+                        <span v-if="record.share_value_per_sheet">{{ formatCurrency(record.share_value_per_sheet) }}</span>
+                        <span v-else>-</span>
+                      </template>
+                    </template>
+                  </a-table>
                 </div>
 
                 <!-- Bidang Usaha -->
@@ -560,79 +569,130 @@
                 </div>
 
                 <!-- Pengurus/Dewan Direksi -->
-                <div v-if="company!.directors && company!.directors.length > 0" class="detail-section">
+                <div v-if="company!.directors && company!.directors.length > 0" class="detail-section" style="margin-top: 20px;">
                   <h2 class="section-title">
                     <IconifyIcon icon="mdi:account-tie" width="20" style="margin-right: 8px;" />
                     Pengurus/Dewan Direksi ({{ company!.directors.length }})
                   </h2>
-                  <div class="directors-list-compact">
-                    <div v-for="(director, index) in company!.directors" :key="director.id || index" class="director-item-compact">
-                      <div class="director-main-info">
-                        <div class="director-name-compact">
-                          <strong>{{ director.full_name }}</strong>
-                          <div class="director-positions-compact">
-                            <a-tag v-for="(pos, posIdx) in (Array.isArray(director.position) ? director.position : [director.position])" 
-                              :key="posIdx" size="small" color="blue" style="margin-right: 4px; margin-top: 4px;">
-                              {{ pos }}
-                            </a-tag>
-                          </div>
-                        </div>
-                        <div class="director-info-compact">
-                          <span class="info-compact"><strong>KTP:</strong> {{ director.ktp || '-' }}</span>
-                          <span class="info-compact"><strong>NPWP:</strong> {{ director.npwp || '-' }}</span>
-                          <span v-if="director.start_date" class="info-compact">
-                            <strong>Tanggal Mulai:</strong> {{ formatDate(director.start_date) }}
-                          </span>
-                          <span v-if="director.end_date" class="info-compact">
-                            <strong>Tanggal Akhir:</strong> {{ formatDate(director.end_date) }}
-                          </span>
-                          <span v-if="director.domicile_address" class="info-compact full-width-compact">
-                            <strong>Alamat:</strong> {{ director.domicile_address }}
-                          </span>
-                        </div>
-                      </div>
-                      <!-- Dokumen Lampiran -->
-                      <div v-if="director.id" class="director-documents-compact">
-                        <div class="documents-header-compact">
+                  <a-table
+                    :columns="directorColumns"
+                    :data-source="company!.directors"
+                    :pagination="false"
+                    row-key="id"
+                    :scroll="{ x: 'max-content' }"
+                    class="striped-table"
+                    :expandable="{
+                      rowExpandable: isDirectorRowExpandable,
+                      expandRowByClick: true,
+                    }"
+                  >
+                    <template #bodyCell="{ column, record }">
+                      <template v-if="column.key === 'full_name'">
+                        <strong>{{ record.full_name }}</strong>
+                      </template>
+                      <template v-else-if="column.key === 'position'">
+                        <a-tag v-for="(pos, posIdx) in (Array.isArray(record.position) ? record.position : [record.position])" 
+                          :key="posIdx" size="small" color="blue" style="margin-right: 4px;">
+                          {{ pos }}
+                        </a-tag>
+                      </template>
+                      <template v-else-if="column.key === 'ktp'">
+                        {{ record.ktp || '-' }}
+                      </template>
+                      <template v-else-if="column.key === 'npwp'">
+                        {{ record.npwp || '-' }}
+                      </template>
+                      <template v-else-if="column.key === 'start_date'">
+                        {{ record.start_date ? formatDate(record.start_date) : '-' }}
+                      </template>
+                      <template v-else-if="column.key === 'end_date'">
+                        {{ record.end_date ? formatDate(record.end_date) : '-' }}
+                      </template>
+                      <template v-else-if="column.key === 'documents'">
+                        <a-tag v-if="record.id && getDirectorDocumentsCount(record.id) > 0" color="cyan">
                           <IconifyIcon icon="mdi:attachment" width="14" style="margin-right: 4px;" />
-                          <span class="documents-label-compact">Dokumen ({{ getDirectorDocumentsCount(director.id) }}):</span>
-                        </div>
-                        <div v-if="loadingDirectorDocuments[director.id]" class="documents-loading-compact">
+                          {{ getDirectorDocumentsCount(record.id) }} dokumen
+                        </a-tag>
+                        <span v-else>-</span>
+                      </template>
+                    </template>
+                    <template #expandedRowRender="{ record }">
+                      <div v-if="record.id" style="padding: 16px; background-color: #fafafa;">
+                        <div v-if="loadingDirectorDocuments[record.id]" style="display: flex; align-items: center;">
                           <a-spin size="small" />
                           <span style="margin-left: 8px; color: #999; font-size: 12px;">Memuat...</span>
                         </div>
-                        <div v-else-if="getDirectorDocuments(director.id).length > 0" class="documents-list-compact">
-                          <div v-for="doc in getDirectorDocuments(director.id)" :key="doc.id" class="document-item-compact">
-                            <IconifyIcon icon="mdi:file-document" width="14" style="margin-right: 6px; color: #1890ff;" />
-                            <span class="document-name-compact">{{ doc.name || doc.file_name }}</span>
-                            <a-tag size="small" style="margin: 0 8px; font-size: 11px;">
+                        <div v-else-if="getDirectorDocuments(record.id).length === 0" style="color: #999; font-size: 14px;">
+                          Belum ada dokumen
+                        </div>
+                        <div v-else>
+                          <div
+                            v-for="doc in getDirectorDocuments(record.id)"
+                            :key="doc.id"
+                            :style="{
+                              display: 'flex',
+                              alignItems: 'center',
+                              padding: '12px',
+                              marginBottom: '8px',
+                              border: '1px solid #e8e8e8',
+                              borderRadius: '4px',
+                              backgroundColor: '#fff',
+                            }"
+                          >
+                            <IconifyIcon 
+                              :icon="getDocumentIcon(doc)" 
+                              width="18" 
+                              style="margin-right: 12px; color: #1890ff; flex-shrink: 0;" 
+                            />
+                            <span :style="{ flex: 1, color: '#333', fontWeight: 500 }">
+                              {{ doc.name || doc.file_name || 'Document' }}
+                            </span>
+                            <a-tag size="small" style="margin: 0 12px; font-size: 11px; flex-shrink: 0;">
                               {{ getDocumentCategoryLabel(doc) }}
                             </a-tag>
-                            <a-space class="document-actions">
-                              <a :href="getDocumentDownloadUrl(doc.file_path)" target="_blank"
-                                class="document-action-btn" title="Download">
-                                <IconifyIcon icon="mdi:download" width="14" />
-                              </a>
-                              <a-popconfirm
-                                title="Hapus dokumen ini?"
-                                description="Dokumen akan dihapus secara permanen dari sistem. Tindakan ini tidak dapat dibatalkan."
-                                ok-text="Ya, Hapus"
-                                cancel-text="Batal"
-                                @confirm="handleDeleteDirectorDocument(doc.id, director.id)"
+                            <a-space style="flex-shrink: 0;" @click.stop>
+                              <a
+                                v-if="canPreviewDocument(doc)"
+                                style="color: #1890ff; cursor: pointer; padding: 4px;"
+                                title="Preview"
+                                @click.stop="(e: MouseEvent) => {
+                                  e.stopPropagation();
+                                  handlePreviewDocument(doc, e);
+                                }"
                               >
-                                <a class="document-action-btn delete-btn" title="Hapus" @click.prevent>
-                                  <IconifyIcon icon="mdi:delete" width="14" />
-                                </a>
-                              </a-popconfirm>
+                                <IconifyIcon icon="mdi:eye" width="16" />
+                              </a>
+                              <a 
+                                :href="getDocumentDownloadUrl(doc.file_path)" 
+                                target="_blank"
+                                title="Download"
+                                style="color: #1890ff; padding: 4px;"
+                                @click.stop
+                              >
+                                <IconifyIcon icon="mdi:download" width="16" />
+                              </a>
+                              <a
+                                style="color: #ff4d4f; cursor: pointer; padding: 4px;"
+                                title="Hapus"
+                                @click.stop="(e: MouseEvent) => {
+                                  e.stopPropagation();
+                                  Modal.confirm({
+                                    title: 'Hapus dokumen ini?',
+                                    content: 'Dokumen akan dihapus secara permanen dari sistem. Tindakan ini tidak dapat dibatalkan.',
+                                    okText: 'Ya, Hapus',
+                                    cancelText: 'Batal',
+                                    onOk: () => handleDeleteDirectorDocument(doc.id, record.id!)
+                                  })
+                                }"
+                              >
+                                <IconifyIcon icon="mdi:delete" width="16" />
+                              </a>
                             </a-space>
                           </div>
                         </div>
-                        <div v-else class="documents-empty-compact">
-                          <span class="text-muted" style="font-size: 12px;">Belum ada dokumen</span>
-                        </div>
                       </div>
-                    </div>
-                  </div>
+                    </template>
+                  </a-table>
                 </div>
               </div>
             </a-tab-pane>
@@ -683,6 +743,33 @@
         <p>Subsidiary tidak ditemukan</p>
         <a-button type="primary" @click="handleBack">Kembali ke Daftar</a-button>
       </div>
+
+      <!-- Document Preview Modal -->
+      <a-modal
+        v-model:open="previewModalVisible"
+        :title="previewModalTitle"
+        :footer="null"
+        :width="'100%'"
+        :wrap-style="{ top: 0, paddingBottom: 0 }"
+        :style="{ top: 0, paddingBottom: 0 }"
+        :body-style="{ padding: 0, height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: previewModalType === 'image' ? '#000' : previewModalType === 'pdf' ? '#525252' : '#fff' }"
+        @cancel="previewModalVisible = false"
+      >
+        <div v-if="previewModalType === 'image'" style="width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background: #000; position: relative;">
+          <img :src="previewModalUrl" :alt="previewModalTitle" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
+        </div>
+        <div v-else-if="previewModalType === 'pdf'" style="width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background: #525252; position: relative;">
+          <iframe :src="previewModalUrl" style="width: 100%; height: 100%; border: none;"></iframe>
+        </div>
+        <div v-else style="width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; flex-direction: column; background: #fff;">
+          <IconifyIcon icon="mdi:file-document" width="64" style="color: #1890ff; margin-bottom: 16px;" />
+          <p style="margin-bottom: 16px;">{{ previewModalTitle }}</p>
+          <a-button type="primary" :href="previewModalUrl" target="_blank">
+            <IconifyIcon icon="mdi:download" width="16" style="margin-right: 8px;" />
+            Download File
+          </a-button>
+        </div>
+      </a-modal>
 
       <!-- Assign Role Modal -->
       <a-modal v-model:open="assignRoleModalVisible" title="Assign Role - Kelola Pengurus"
@@ -924,6 +1011,132 @@ const documentCategories = [
   { label: 'Lainnya', value: 'other' },
 ]
 
+// Shareholder columns
+const shareholderColumns = [
+  { title: 'Nama Pemegang Saham', key: 'name', width: 250 },
+  { title: 'Modal Dasar', key: 'authorized_capital', width: 200 },
+  { title: 'Modal Disetor', key: 'paid_up_capital', width: 180 },
+  { title: 'Persentase Kepemilikan', key: 'ownership_percent', width: 180, align: 'right' },
+  { title: 'Jumlah Lembar Saham', key: 'share_sheet_count', width: 180 },
+  { title: 'Nilai per Lembar', key: 'share_value_per_sheet', width: 180 },
+]
+
+// State untuk menyimpan data perusahaan pemegang saham yang sudah di-load
+const shareholderCompaniesMap = ref<Map<string, Company>>(new Map())
+
+// Load shareholder company data jika belum ada
+const loadShareholderCompany = async (companyId: string) => {
+  if (shareholderCompaniesMap.value.has(companyId)) {
+    return shareholderCompaniesMap.value.get(companyId)
+  }
+  
+  // Cek di allCompanies dulu
+  const foundInAll = allCompanies.value.find(c => c.id === companyId)
+  if (foundInAll) {
+    shareholderCompaniesMap.value.set(companyId, foundInAll)
+    return foundInAll
+  }
+  
+  // Jika tidak ada, load dari API
+  try {
+    const companyData = await companyApi.getById(companyId)
+    if (companyData) {
+      shareholderCompaniesMap.value.set(companyId, companyData)
+      // Juga tambahkan ke allCompanies untuk penggunaan selanjutnya
+      if (!allCompanies.value.find(c => c.id === companyId)) {
+        allCompanies.value.push(companyData)
+      }
+      return companyData
+    }
+  } catch (error) {
+    console.error(`Error loading shareholder company ${companyId}:`, error)
+  }
+  
+  return undefined
+}
+
+// Computed: Shareholders with self company row
+const shareholdersWithSelf = computed(() => {
+  if (!company.value) return []
+  
+  const shareholders = [...(company.value.shareholders || [])]
+  
+  // Calculate total capital from shareholders (only company shareholders)
+  const companyShareholders = shareholders.filter(sh => sh.shareholder_company_id)
+  let totalShareholderCapital = 0
+  
+  companyShareholders.forEach((sh) => {
+    // Find company data from allCompanies or shareholderCompaniesMap
+    const shareholderCompany = allCompanies.value.find(c => c.id === sh.shareholder_company_id) 
+      || shareholderCompaniesMap.value.get(sh.shareholder_company_id!)
+    const capital = shareholderCompany?.paid_up_capital || 0
+    totalShareholderCapital += capital
+  })
+  
+  const currentCompanyCapital = company.value.paid_up_capital || 0
+  
+  // Total capital = Modal perusahaan sendiri + Total modal semua pemegang saham
+  // Sesuai dengan rumus di form
+  const totalCapital = currentCompanyCapital + totalShareholderCapital
+  
+  // Calculate self ownership percent
+  let selfOwnershipPercent = 0
+  if (totalCapital > 0) {
+    selfOwnershipPercent = (currentCompanyCapital / totalCapital) * 100
+  }
+  
+  // Add self company row at the beginning
+  const selfRow = {
+    id: `__self__${company.value.id}`,
+    name: company.value.name,
+    authorized_capital: company.value.authorized_capital || 0,
+    paid_up_capital: company.value.paid_up_capital || 0,
+    ownership_percent: selfOwnershipPercent,
+    shareholder_company_id: company.value.id,
+    is_company: true,
+    is_main_parent: false,
+    is_self: true, // Flag untuk membedakan row perusahaan sendiri
+  }
+  
+  // Calculate ownership percent for each shareholder based on their paid_up_capital
+  const shareholdersWithPercent = shareholders.map((sh) => {
+    let ownershipPercent = sh.ownership_percent || 0
+    
+    // Find shareholder company data
+    let shareholderCompany: Company | undefined
+    if (sh.shareholder_company_id) {
+      shareholderCompany = allCompanies.value.find(c => c.id === sh.shareholder_company_id)
+        || shareholderCompaniesMap.value.get(sh.shareholder_company_id)
+    }
+    
+    // If shareholder is a company, recalculate based on paid_up_capital
+    if (shareholderCompany && totalCapital > 0) {
+      const shareholderCapital = shareholderCompany.paid_up_capital || 0
+      ownershipPercent = (shareholderCapital / totalCapital) * 100
+    }
+    
+    return {
+      ...sh,
+      authorized_capital: shareholderCompany?.authorized_capital || 0,
+      paid_up_capital: shareholderCompany?.paid_up_capital || 0,
+      ownership_percent: ownershipPercent,
+    }
+  })
+  
+  return [selfRow, ...shareholdersWithPercent]
+})
+
+// Director columns
+const directorColumns = [
+  { title: 'Nama Lengkap', key: 'full_name', width: 200 },
+  { title: 'Jabatan', key: 'position', width: 180 },
+  { title: 'KTP', key: 'ktp', width: 150 },
+  { title: 'NPWP', key: 'npwp', width: 150 },
+  { title: 'Tanggal Mulai', key: 'start_date', width: 130 },
+  { title: 'Tanggal Akhir', key: 'end_date', width: 130 },
+  { title: 'Dokumen', key: 'documents', width: 120 },
+]
+
 // User columns for table
 const userColumns = [
   { title: 'Username', dataIndex: 'username', key: 'username' },
@@ -1040,12 +1253,29 @@ const loadCompany = async () => {
   loading.value = true
   loadingHeader.value = true
   try {
+    // Load all companies first (needed for shareholder data)
+    if (allCompanies.value.length === 0) {
+      allCompanies.value = await companyApi.getAll()
+    }
+    
     // Load company first (required for other operations)
     company.value = await companyApi.getById(id)
     loadingHeader.value = false
     
     // Load reports after company is loaded
     if (company.value) {
+      // Load shareholder companies first (needed for ownership calculation)
+      if (company.value.shareholders && company.value.shareholders.length > 0) {
+        const companyShareholders = company.value.shareholders.filter(sh => sh.shareholder_company_id)
+        await Promise.all(
+          companyShareholders.map(sh => 
+            loadShareholderCompany(sh.shareholder_company_id!).catch(err => {
+              console.error(`Error loading shareholder company ${sh.shareholder_company_id}:`, err)
+            })
+          )
+        )
+      }
+      
       // Run independent API calls in parallel for better performance
       loadingReports.value = true
       loadingHierarchy.value = true
@@ -1096,12 +1326,10 @@ const loadCompanyHierarchy = async (companyId: string) => {
       }
       loadingHierarchy.value = false
       return
-    } catch (apiError) {
+    } catch {
       // If API endpoint doesn't exist (404 or other error), build hierarchy manually
       // Don't log as error if it's just 404 (endpoint not implemented yet)
-      if ((apiError as { response?: { status?: number } })?.response?.status !== 404) {
-        console.warn('Ancestors API error, building hierarchy manually:', apiError)
-      }
+      // Silently handle error and build hierarchy manually
     }
 
       // Fallback: Build hierarchy manually by loading all companies
@@ -1198,6 +1426,24 @@ const formatNumber = (value: number | string | undefined): string => {
   return new Intl.NumberFormat('id-ID').format(numValue)
 }
 
+// Format percentage for display - show all significant digits without rounding
+const formatOwnershipPercent = (percent: number): string => {
+  if (percent === 0) return '0%'
+  
+  // Use toFixed with high precision (10 decimal places) to ensure all digits are shown
+  // This matches the precision used in calculation (10000000000)
+  const str = percent.toFixed(10)
+  
+  // Remove trailing zeros but keep all significant digits
+  // This will show values like "80.6451612903%" instead of "80.64516129030000%"
+  const trimmed = str.replace(/\.?0+$/, '')
+  
+  // If after trimming it's empty or just '.', return '0%'
+  if (!trimmed || trimmed === '.') return '0%'
+  
+  return `${trimmed}%`
+}
+
 // Load all director documents
 const loadAllDirectorDocuments = async (directors: Array<{ id?: string }>) => {
   const directorsWithId = directors.filter(d => d.id)
@@ -1282,6 +1528,64 @@ const handleDeleteDirectorDocument = async (documentId: string, directorId: stri
     message.error(axiosError.response?.data?.message || 'Gagal menghapus dokumen')
   }
 }
+
+// Document preview modal state
+const previewModalVisible = ref(false)
+const previewModalTitle = ref('')
+const previewModalUrl = ref('')
+const previewModalType = ref<'image' | 'pdf' | 'file'>('image')
+
+// Handle document preview
+const handlePreviewDocument = (doc: DocumentItem, event?: MouseEvent) => {
+  if (event) {
+    event.stopPropagation()
+    event.preventDefault()
+    event.stopImmediatePropagation()
+  }
+  
+  const url = getDocumentDownloadUrl(doc.file_path)
+  const fileName = doc.name || doc.file_name || 'Document'
+  const fileExt = fileName.split('.').pop()?.toLowerCase() || ''
+  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg']
+  const previewableExtensions = [...imageExtensions, 'pdf']
+  
+  if (previewableExtensions.includes(fileExt)) {
+    previewModalType.value = imageExtensions.includes(fileExt) ? 'image' : 'pdf'
+    previewModalTitle.value = fileName
+    previewModalUrl.value = url
+    previewModalVisible.value = true
+  }
+}
+
+// Check if document can be previewed
+const canPreviewDocument = (doc: DocumentItem): boolean => {
+  const fileName = doc.name || doc.file_name || 'Document'
+  const fileExt = fileName.split('.').pop()?.toLowerCase() || ''
+  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg']
+  const previewableExtensions = [...imageExtensions, 'pdf']
+  return previewableExtensions.includes(fileExt)
+}
+
+// Get document icon based on file type
+const getDocumentIcon = (doc: DocumentItem): string => {
+  const fileName = doc.name || doc.file_name || 'Document'
+  const fileExt = fileName.split('.').pop()?.toLowerCase() || ''
+  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg']
+  
+  if (imageExtensions.includes(fileExt)) {
+    return 'mdi:file-image'
+  } else if (fileExt === 'pdf') {
+    return 'mdi:file-pdf-box'
+  } else {
+    return 'mdi:file-document'
+  }
+}
+
+// Check if director row can be expanded
+const isDirectorRowExpandable = (record: { id?: string }): boolean => {
+  return record.id ? getDirectorDocumentsCount(record.id) > 0 : false
+}
+
 
 const getCompanyLogo = (company: Company): string | undefined => {
   if (company.logo) {
@@ -3580,6 +3884,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 32px;
+  margin-top: 24px;
 }
 
 .detail-section {
@@ -3670,5 +3975,36 @@ onMounted(() => {
   margin-bottom: 4px;
   line-height: 1.6;
   color: #666;
+}
+
+/* Striped Table Styles */
+:deep(.striped-table) {
+  .ant-table-tbody > tr:nth-child(even) {
+    background-color: #fafafa;
+  }
+  
+  .ant-table-tbody > tr:hover {
+    background-color: #e6f7ff !important;
+    cursor: pointer;
+  }
+  
+  .ant-table-tbody > tr:nth-child(even):hover {
+    background-color: #e6f7ff !important;
+  }
+}
+
+/* Expanded Row Styles for Director Documents */
+:deep(.ant-table-expanded-row) {
+  background-color: #f9f9f9;
+  
+  .ant-table-expanded-row-level-1 {
+    background-color: #fff;
+  }
+}
+
+.document-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

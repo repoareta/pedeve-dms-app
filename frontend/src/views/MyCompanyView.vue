@@ -529,10 +529,10 @@
                         v-for="user in filteredUsers"
                         :key="user.id"
                         :value="user.id"
-                        :disabled="companyUsers.some(u => u.id === user.id)"
+                        :disabled="isUserAlreadyPengurus(user.id)"
                       >
                         {{ user.username }} ({{ user.email }})
-                        <span v-if="companyUsers.some(u => u.id === user.id)" class="text-muted"> - Sudah menjadi pengurus</span>
+                        <span v-if="isUserAlreadyPengurus(user.id)" class="text-muted"> - Sudah menjadi pengurus</span>
                       </a-select-option>
                     </a-select>
                     <small v-if="usersLoading" class="text-muted">Memuat daftar user...</small>
@@ -1385,7 +1385,11 @@ const handleRemoveUser = async (user: User) => {
 }
 
 const getUserById = (userId: string): User | undefined => {
-  return companyUsers.value.find(u => u.id === userId) || allUsers.value.find(u => u.id === userId)
+  return companyUsers.value.find((u: User) => u.id === userId) || allUsers.value.find((u: User) => u.id === userId)
+}
+
+const isUserAlreadyPengurus = (userId: string): boolean => {
+  return companyUsers.value.some((u: User) => u.id === userId)
 }
 
 const getRoleColor = (role: string): string => {

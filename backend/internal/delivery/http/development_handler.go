@@ -8,7 +8,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/audit"
-	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
@@ -17,9 +16,9 @@ import (
 )
 
 type DevelopmentHandler struct {
-	devUseCase      usecase.DevelopmentUseCase
-	notificationUC  usecase.NotificationUseCase
-	logger          *zap.Logger
+	devUseCase     usecase.DevelopmentUseCase
+	notificationUC usecase.NotificationUseCase
+	logger         *zap.Logger
 }
 
 func NewDevelopmentHandler(devUseCase usecase.DevelopmentUseCase) *DevelopmentHandler {
@@ -833,10 +832,10 @@ func (h *DevelopmentHandler) CreateTestNotifications(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message":   "Test notifications created",
-		"created":  len(created),
-		"failed":   len(errors),
-		"errors":   errors,
+		"message":       "Test notifications created",
+		"created":       len(created),
+		"failed":        len(errors),
+		"errors":        errors,
 		"notifications": created,
 	})
 }
@@ -908,9 +907,9 @@ func (h *DevelopmentHandler) CheckExpiringDocuments(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message":             "Expiring documents check completed",
-		"threshold_days":      req.ThresholdDays,
-		"documents_found":     documentsFound,
+		"message":               "Expiring documents check completed",
+		"threshold_days":        req.ThresholdDays,
+		"documents_found":       documentsFound,
 		"notifications_created": notificationsCreated,
 	})
 }
@@ -982,9 +981,9 @@ func (h *DevelopmentHandler) CheckExpiringDirectorTerms(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message":             "Expiring director terms check completed",
-		"threshold_days":      req.ThresholdDays,
-		"directors_found":     directorsFound,
+		"message":               "Expiring director terms check completed",
+		"threshold_days":        req.ThresholdDays,
+		"directors_found":       directorsFound,
 		"notifications_created": notificationsCreated,
 	})
 }
@@ -1069,11 +1068,11 @@ func (h *DevelopmentHandler) CheckAllExpiringNotifications(c *fiber.Ctx) error {
 		"message":        "All expiring notifications check completed",
 		"threshold_days": req.ThresholdDays,
 		"documents": fiber.Map{
-			"found":     documentsFound,
+			"found":                 documentsFound,
 			"notifications_created": docNotifications,
 		},
 		"directors": fiber.Map{
-			"found":     directorsFound,
+			"found":                 directorsFound,
 			"notifications_created": dirNotifications,
 		},
 		"total_notifications_created": docNotifications + dirNotifications,
@@ -1158,17 +1157,14 @@ func (h *DevelopmentHandler) CreateNotificationForDocument(c *fiber.Ctx) error {
 		zap.String("document_id", doc.ID),
 		zap.String("document_name", doc.Name),
 		zap.String("uploader_id", doc.UploaderID),
-		zap.Any("expiry_date", doc.ExpiryDate),
-		zap.Bool("expiry_date_is_nil", doc.ExpiryDate == nil),
 		zap.Any("metadata", doc.Metadata),
 	)
-	
-	// Cek expiry_date dari kolom expiry_date atau dari metadata.expired_date
-	var expiryDateToUse *time.Time = doc.ExpiryDate
-	var expiryDateFromDB *time.Time // Declare di scope yang lebih luas untuk logging
-	
-	// Jika expiry_date NULL, coba ambil dari metadata
-	if expiryDateToUse == nil && len(doc.Metadata) > 0 {
+
+	// Cek expiry_date dari metadata (field expiry_date di table sudah dihapus)
+	var expiryDateToUse *time.Time
+
+	// Ambil expiry_date dari metadata
+	if len(doc.Metadata) > 0 {
 		var metadata map[string]interface{}
 		if err := json.Unmarshal(doc.Metadata, &metadata); err == nil {
 			if expiredDateStr, ok := metadata["expired_date"].(string); ok && expiredDateStr != "" {
@@ -1190,27 +1186,11 @@ func (h *DevelopmentHandler) CreateNotificationForDocument(c *fiber.Ctx) error {
 			}
 		}
 	}
-	
-	// Debug: Cek langsung dari database apakah expiry_date ada (fallback)
-	if expiryDateToUse == nil {
-		errCheck := database.GetDB().Model(&domain.DocumentModel{}).
-			Select("expiry_date").
-			Where("id = ?", doc.ID).
-			Scan(&expiryDateFromDB).Error
-		
-		if errCheck == nil && expiryDateFromDB != nil {
-			h.logger.Info("Found expiry date in database column",
-				zap.String("document_id", doc.ID),
-				zap.Time("expiry_date_from_db", *expiryDateFromDB),
-			)
-			expiryDateToUse = expiryDateFromDB
-		}
-	}
 
 	// Calculate days until expiry (jika ada)
 	var daysUntilExpiry int
 	var title, message string
-	
+
 	if expiryDateToUse != nil {
 		daysUntilExpiry = int(time.Until(*expiryDateToUse).Hours() / 24)
 		title = fmt.Sprintf("Dokumen '%s' Akan Expired", doc.Name)
@@ -1231,12 +1211,11 @@ func (h *DevelopmentHandler) CreateNotificationForDocument(c *fiber.Ctx) error {
 		title = fmt.Sprintf("Notifikasi untuk Dokumen '%s'", doc.Name)
 		message = fmt.Sprintf("Ini adalah notifikasi test untuk dokumen '%s'. Dokumen ini tidak memiliki tanggal berakhir.", doc.Name)
 		daysUntilExpiry = 0
-		h.logger.Warn("Document does not have expiry_date",
+		h.logger.Warn("Document does not have expiry_date in metadata",
 			zap.String("document_id", doc.ID),
-			zap.Any("expiry_date_from_db", expiryDateFromDB),
 		)
 	}
-	
+
 	// Untuk testing: buat notifikasi untuk user yang sedang login (bukan uploader)
 	// Ini memungkinkan superadmin untuk test notifikasi mereka sendiri
 	userIDVal := c.Locals("userID")
@@ -1254,7 +1233,7 @@ func (h *DevelopmentHandler) CreateNotificationForDocument(c *fiber.Ctx) error {
 			zap.String("document_uploader_id", doc.UploaderID),
 		)
 	}
-	
+
 	notification, err := h.notificationUC.CreateNotification(
 		targetUserID,
 		"document_expiry",
@@ -1271,19 +1250,15 @@ func (h *DevelopmentHandler) CreateNotificationForDocument(c *fiber.Ctx) error {
 		})
 	}
 
-	// Mark document as notified (optional, untuk prevent duplicate)
-	err = database.GetDB().Model(&doc).Update("expiry_notified", true).Error
-	if err != nil {
-		h.logger.Warn("Failed to mark document as notified", zap.Error(err), zap.String("document_id", req.DocumentID))
-	}
+	// Note: expiry_notified field sudah dihapus, tidak perlu update lagi
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message":      "Notification created successfully for document",
 		"notification": notification,
 		"document": fiber.Map{
-			"id":           doc.ID,
-			"name":         doc.Name,
-			"expiry_date":  doc.ExpiryDate,
+			"id":                doc.ID,
+			"name":              doc.Name,
+			"expiry_date":       expiryDateToUse,
 			"days_until_expiry": daysUntilExpiry,
 		},
 	})

@@ -139,6 +139,19 @@ npm run test:unit       # Run unit tests dengan Vitest
 
 ## Testing
 
+### Menjalankan Semua Automated Tests
+
+Untuk menjalankan semua automated tests (backend + frontend) sekaligus, gunakan command:
+
+```bash
+make test
+```
+
+Command ini akan:
+- Menjalankan semua backend tests (Go test)
+- Menjalankan semua frontend tests (Vitest)
+- Menampilkan summary hasil test
+
 ### Frontend (Vitest)
 
 ```bash
@@ -146,10 +159,24 @@ cd frontend
 npm run test:unit        # Run unit tests
 ```
 
-Framework: Vitest (Vite-native test runner)
-Environment: jsdom (browser-like environment)
-Test Utils: Vue Test Utils
-Coverage: Integrated dengan Vitest
+**Framework:** Vitest (Vite-native test runner)  
+**Environment:** jsdom (browser-like environment)  
+**Test Utils:** Vue Test Utils  
+**Coverage:** Integrated dengan Vitest
+
+**Apa yang di-test:**
+- **Logika Bisnis:**
+  - Perhitungan persentase kepemilikan saham (kalau ada 2 pemegang saham dengan modal berbeda, persentasenya harus benar)
+  - Penentuan perusahaan induk (perusahaan mana yang jadi parent berdasarkan kepemilikan terbesar)
+  - Perhitungan persentase kepemilikan perusahaan sendiri
+  - Penanganan kasus khusus (misalnya modal = 0, modal perusahaan sendiri lebih besar dari total modal pemegang saham)
+  - Data yang diinput di form tersimpan dengan benar (termasuk ownership_percent dan parent_id)
+  - File attachment untuk direktur bisa di-upload dan ditampilkan
+- **Logika Komponen:**
+  - Validasi form (field wajib harus diisi, format harus benar)
+  - Data binding (kalau input berubah, data otomatis ter-update)
+  - Reactive updates (persentase kepemilikan otomatis terhitung ulang saat modal berubah)
+  - Computed properties untuk perhitungan dinamis
 
 ### Backend (Go Test)
 
@@ -160,9 +187,42 @@ go test ./... -v         # Verbose output
 go test ./... -cover      # With coverage report
 ```
 
-Framework: Go built-in testing
-Coverage: Integrated dengan `go tool cover`
-CI/CD: Otomatis dijalankan di GitHub Actions
+**Framework:** Go built-in testing  
+**Coverage:** Integrated dengan `go tool cover`  
+**CI/CD:** Otomatis dijalankan di GitHub Actions
+
+**Apa yang di-test:**
+- **Logika Bisnis:**
+  - CRUD laporan keuangan (buat, baca, update, hapus laporan)
+  - Validasi data laporan:
+    - Company ID harus ada dan valid
+    - Inputter ID harus ada dan valid (kalau diisi)
+    - Period harus format benar (YYYY-MM)
+    - Tidak boleh ada duplicate period untuk perusahaan yang sama
+    - Field wajib harus diisi
+  - Upload banyak file sekaligus (bulk upload) dan validasinya
+  - Baca data dari file Excel dan ekstrak datanya
+  - Perhitungan rasio keuangan
+  - Perbandingan RKAP vs Realisasi (apakah perhitungannya benar)
+  - RBAC (Role-Based Access Control):
+    - Superadmin bisa akses semua laporan
+    - Admin hanya bisa akses laporan perusahaan mereka
+    - User reguler hanya bisa akses laporan perusahaan mereka
+    - Validasi akses berdasarkan role dan company assignment
+- **API Endpoints:**
+  - Response dari API endpoint (apakah return data yang benar)
+  - Validasi request dan response
+  - Error handling (kalau ada error, apakah pesannya jelas)
+  - Upload banyak file via API (bulk upload Excel)
+  - Export laporan ke Excel (dengan filter period, company, multiple companies)
+  - Export laporan ke PDF (dengan filter period, company, multiple companies)
+  - Generate template Excel untuk bulk upload
+  - Route ordering (export routes tidak conflict dengan parameterized routes)
+- **Database Operations:**
+  - Operasi database (simpan, baca, update, hapus data)
+  - Filter dan pagination data
+  - Relasi antar data (perusahaan, user, laporan)
+  - Query berdasarkan company ID dengan RBAC filtering
 
 ## CI/CD & Deployment
 
@@ -231,6 +291,8 @@ git push origin v1.0.0
 ## Dokumentasi API
 
 ### Swagger UI
+
+**Catatan Penting:** Swagger UI hanya tersedia dan dapat diakses di environment **development**. Di environment **production**, Swagger UI tidak diaktifkan untuk alasan keamanan.
 
 Akses dokumentasi API lengkap di: http://localhost:8080/swagger/index.html
 
@@ -309,44 +371,6 @@ Swagger UI menyediakan:
 - `POST /api/v1/development/check-expiring-director-terms` - Manual trigger check expiring director terms
 - `POST /api/v1/development/check-all-expiring-notifications` - Manual trigger check all expiring notifications
 
-## Troubleshooting
-
-### Port sudah digunakan
-```bash
-# Cek port yang digunakan
-lsof -i :8080
-lsof -i :5173
-
-# Atau ubah port di docker-compose.dev.yml
-```
-
-### Docker build error
-```bash
-# Clean build
-docker-compose -f docker-compose.dev.yml down
-docker system prune -f
-docker-compose -f docker-compose.dev.yml up --build
-```
-
-### Frontend tidak connect ke backend
-- Pastikan `VITE_API_URL` atau `VITE_API_BASE_URL` di frontend sesuai dengan backend URL
-- Cek CORS settings di backend (default: localhost:5173, localhost:3000)
-- Pastikan backend sudah running di port 8080
-
-### CSRF Token Error
-- Pastikan frontend menggunakan `apiClient` dari `frontend/src/api/client.ts`
-- `apiClient` otomatis menambahkan CSRF token untuk POST/PUT/DELETE/PATCH
-- Jika masih error, coba logout dan login ulang untuk refresh token
-
-### Database Connection Error
-- Untuk PostgreSQL: Pastikan `DATABASE_URL` sudah di-set dengan benar
-- Untuk SQLite: File database akan dibuat otomatis di `backend/dms.db`
-- Cek koneksi database di `backend/internal/infrastructure/database/database.go`
-
-### Seeder tidak jalan
-- Pastikan role "admin" sudah ada di database (auto-created saat startup)
-- Gunakan fitur "Jalankan Seeder Data Subsidiary" di Settings (superadmin only)
-- Atau jalankan manual: `cd backend && go run ./cmd/seed-companies`
 
 ## Tech Stack
 
@@ -412,94 +436,132 @@ docker-compose -f docker-compose.dev.yml up --build
 ## Fitur Utama
 
 ### Authentication & Authorization
-- JWT-based authentication dengan httpOnly cookies
-- Two-Factor Authentication (2FA) dengan TOTP
-- Role-Based Access Control (RBAC)
-- Company hierarchy-based access control
-- CSRF protection untuk state-changing requests
+- Autentikasi berbasis JWT dengan httpOnly cookies untuk meningkatkan keamanan
+- Two-Factor Authentication (2FA) menggunakan TOTP sebagai perlindungan tambahan
+- Role-Based Access Control (RBAC) untuk mengatur akses berdasarkan peran pengguna
+- Kontrol akses berbasis hierarki perusahaan untuk membatasi akses data sesuai level perusahaan
+- Proteksi CSRF untuk mencegah serangan pada request yang mengubah state
 
 ### Company Management
-- Multi-level company hierarchy (Holding → Level 1 → Level 2 → Level 3)
-- Company CRUD dengan validasi hierarki
-- Company detail dengan shareholders, business fields, directors
-- Company logo upload (GCP Storage / Local)
-- "My Company" view untuk melihat company user yang di-assign
+- Hierarki perusahaan multi-level (Holding → Level 1 → Level 2 → Level 3)
+- Operasi CRUD perusahaan dengan validasi hierarki untuk memastikan struktur organisasi tetap konsisten
+- Detail perusahaan mencakup informasi pemegang saham, bidang usaha, dan dewan direksi
+- Upload logo perusahaan dengan penyimpanan di GCP Storage atau sistem lokal
+- Tampilan "My Company" untuk melihat perusahaan yang di-assign kepada pengguna
 
 ### User Management
-- User CRUD dengan RBAC
-- Multiple company assignments per user (junction table)
-- Flexible role assignment per company
-- User status management (active/inactive)
-- Password reset functionality
-- Standby users (tanpa company/role assignment)
+- Operasi CRUD pengguna dengan kontrol akses berbasis RBAC
+- Assignment perusahaan ganda per pengguna menggunakan junction table untuk fleksibilitas
+- Penugasan peran yang fleksibel per perusahaan, memungkinkan satu pengguna memiliki peran berbeda di perusahaan berbeda
+- Manajemen status pengguna (aktif/nonaktif) untuk mengontrol akses
+- Fungsi reset password untuk pemulihan akses
+- Pengguna standby yang belum memiliki assignment perusahaan atau peran
 
 ### Document Management
-- Document CRUD operations
-- Document categorization dengan folder structure
-- File upload dan storage (GCP Storage / Local)
-- Document expiry tracking
-- Document status management
+- Operasi CRUD dokumen untuk mengelola dokumen secara lengkap
+- Kategorisasi dokumen menggunakan struktur folder untuk organisasi yang lebih baik
+- Upload dan penyimpanan file dengan dukungan GCP Storage atau sistem lokal
+- **Dukungan batch upload** - Memungkinkan upload beberapa file sekaligus (PDF, gambar, dokumen)
+- **Validasi ukuran file** - File dokumen (.docx, .xlsx, .xls, .pptx, .ppt, .pdf) tanpa batasan ukuran, file gambar (.jpg, .jpeg, .png) maksimal 10MB
+- Pelacakan tanggal kedaluwarsa dokumen untuk manajemen siklus hidup dokumen
+- Manajemen status dokumen untuk mengontrol visibilitas dan akses
+- Preview dokumen untuk gambar dan PDF dengan modal fullscreen
 
 ### Financial Reports Management
-- Financial report CRUD operations
-- Support untuk RKAP (Rencana Kerja dan Anggaran Perusahaan) dan Realisasi
-- Bulk upload financial reports via Excel
-- Template Excel generation untuk bulk upload
-- Excel validation sebelum upload
-- Upsert mechanism (update if exists, insert if new)
-- Comparison RKAP vs Realisasi YTD
-- Monthly report status tracking per subsidiary
-- Financial ratios calculation dan validation
+- Operasi CRUD laporan keuangan untuk mengelola data finansial
+- Dukungan untuk RKAP (Rencana Kerja dan Anggaran Perusahaan) dan Realisasi
+- Upload massal laporan keuangan melalui Excel untuk efisiensi input data
+- Generasi template Excel untuk memudahkan proses bulk upload
+- Validasi Excel sebelum upload untuk memastikan data sesuai format
+- Mekanisme upsert (update jika sudah ada, insert jika baru) untuk menghindari duplikasi data
+- Perbandingan RKAP vs Realisasi YTD (Year-to-Date) untuk analisis performa
+- Pelacakan status laporan bulanan per anak perusahaan
+- Perhitungan dan validasi rasio keuangan untuk analisis finansial
 
 ### Notification System
-- In-app notifications untuk berbagai events
-- Document expiry notifications (grouped by folder)
-- Director term expiry notifications
-- Dynamic notification messages berdasarkan waktu real-time
-- Unread notification count
-- Mark as read functionality
-- Automated scheduler untuk check expiring items (every 24 hours)
-- Configurable threshold days via environment variable
+- Notifikasi dalam aplikasi untuk berbagai event dan aktivitas sistem
+- Notifikasi kedaluwarsa dokumen yang dikelompokkan berdasarkan folder
+- Notifikasi kedaluwarsa masa jabatan direktur untuk manajemen kepengurusan
+- Pesan notifikasi dinamis berdasarkan waktu real-time untuk informasi yang relevan
+- Penghitungan jumlah notifikasi yang belum dibaca
+- Fungsi mark as read untuk menandai notifikasi yang sudah ditindaklanjuti
+- Scheduler otomatis untuk memeriksa item yang akan kedaluwarsa (setiap 24 jam)
+- Konfigurasi threshold hari melalui environment variable untuk fleksibilitas
 
 ### Development Tools
-- Reset subsidiary data (superadmin only)
-- Reset all financial reports (superadmin only)
-- Run company seeder via UI (superadmin only)
-- Seeder status check
-- Manual notification trigger untuk testing (superadmin/administrator only)
+- Reset data anak perusahaan (hanya untuk superadmin)
+- Reset semua laporan keuangan (hanya untuk superadmin)
+- Menjalankan company seeder melalui UI (hanya untuk superadmin)
+- Pengecekan status seeder untuk memantau proses seeding
+- Trigger notifikasi manual untuk keperluan testing (hanya untuk superadmin/administrator)
 
 ### Security & Monitoring
-- Comprehensive audit logging dengan retention policy
-- Permanent Audit Log: User Activity Logs untuk data penting (Report, Document, Company, User) - disimpan permanen tanpa retention
-- Rate limiting (per endpoint type)
-- Security headers (CSP, HSTS, XSS protection)
-- Input validation & sanitization
-- Error logging dengan stack trace
-- Audit log UI dengan tab terpisah untuk "Audit Logs" dan "User Activity"
+- Audit logging komprehensif dengan retention policy untuk pelacakan aktivitas
+- Permanent Audit Log: User Activity Logs untuk data penting (Report, Document, Company, User) yang disimpan permanen tanpa retention policy
+- Rate limiting per tipe endpoint untuk mencegah abuse dan memastikan stabilitas sistem
+- Security headers (CSP, HSTS, XSS protection) untuk meningkatkan keamanan aplikasi
+- Validasi dan sanitasi input untuk mencegah serangan injection
+- Error logging dengan stack trace untuk debugging dan monitoring
+- UI audit log dengan tab terpisah untuk "Audit Logs" dan "User Activity" untuk kemudahan navigasi
 
 ## Contributing
 
-1. Buat branch dari `development` (untuk fitur baru) atau `main` (untuk hotfix)
-2. Develop fitur dengan mengikuti Clean Architecture pattern
-3. Write tests: Frontend (Vitest) dan Backend (Go test)
-4. Test & lint:
-   - Frontend: `npm run lint && npm run test:unit`
-   - Backend: `golangci-lint run && go test ./...`
-5. Push dan buat PR ke branch `development`
+### Workflow Development
+
+1. **Buat branch** dari `development` (untuk fitur baru) atau `main` (untuk hotfix)
+2. **Develop fitur** dengan mengikuti Clean Architecture pattern
+3. **Write tests:** Frontend (Vitest) dan Backend (Go test)
+4. **Wajib menjalankan lint dan test sebelum commit:**
+   
+   **Frontend:**
+   ```bash
+   cd frontend
+   npm run lint          # Lint code untuk memastikan code quality dan consistency
+   npm run test:unit     # Run unit tests untuk memastikan tidak ada regression
+   ```
+   
+   **Backend:**
+   ```bash
+   cd backend
+   golangci-lint run     # Lint code untuk memastikan code quality, best practices, dan security
+   go test ./...         # Run semua tests untuk memastikan business logic masih benar
+   ```
+   
+   **Atau gunakan Makefile untuk menjalankan semua:**
+   ```bash
+   make lint             # Lint frontend + backend
+   make test             # Test frontend + backend
+   ```
+
+5. **Push dan buat PR** ke branch `development`
 6. Setelah merge, CI/CD akan otomatis:
    - Run tests (frontend & backend)
    - Build dan deploy ke GCP
    - Setup SSL & Nginx otomatis
    - Verify services running
 
+### Mengapa Wajib Menjalankan Lint dan Test?
+
+**Lint (Code Quality):**
+- **Konsistensi kode:** Memastikan semua developer mengikuti style guide yang sama
+- **Best practices:** Mendeteksi pola kode yang tidak optimal atau berpotensi error
+- **Security:** Mendeteksi vulnerability dan security issues
+- **Maintainability:** Kode yang konsisten lebih mudah di-maintain dan di-review
+
+**Test (Business Logic Validation):**
+- **Regression prevention:** Memastikan perubahan kode tidak merusak fitur yang sudah ada
+- **Business logic verification:** Memastikan perhitungan dan logika bisnis masih benar
+- **Confidence:** Memberikan confidence bahwa kode yang diubah masih berfungsi dengan benar
+- **Documentation:** Test cases berfungsi sebagai dokumentasi hidup tentang bagaimana fitur seharusnya bekerja
+
+**Penting:** Jangan push kode yang belum di-lint dan di-test, karena:
+- CI/CD akan gagal jika ada lint errors atau test failures
+- Review process akan lebih lama jika ada banyak issues
+- Risiko tinggi untuk introduce bugs ke production
+
 ## Dokumentasi Tambahan
 
-- API Documentation: http://localhost:8080/swagger/index.html
-- Seeder Documentation: `backend/cmd/seed-companies/README.md`
-- Manual Fixes: `documentations/MANUAL_FIXES_DOCUMENTATION.md`
-- Backend Architecture: Clean Architecture dengan struktur `cmd/`, `internal/`
-- Testing Guide: `backend/doc/TESTING_USER_MANAGEMENT.md` (untuk manual testing)
-- Deployment Scripts: `scripts/` folder berisi semua deployment automation scripts
+- **API Documentation:** http://localhost:8080/swagger/index.html (hanya tersedia di development)
 - **TDE (Transparent Data Encryption)**: 
   - `documentations/TDE_IMPLEMENTATION_GUIDE.md` - Panduan lengkap implementasi TDE untuk PostgreSQL dan SQLite
 - **PDP Compliance**: 

@@ -36,10 +36,10 @@ const shownNotificationIds = ref<Set<string>>(new Set()) // Track notifikasi yan
 const isFirstLoad = ref(true) // Flag untuk menandai load pertama
 const hasShownInitialNotifications = ref(false) // Flag untuk track apakah sudah menampilkan notifikasi saat login
 const inAppNotificationsEnabled = ref(true) // Default: enabled, akan di-load dari settings
+const expiryThresholdDays = ref<number>(14) // Default: 14 hari, akan di-load dari settings
 
-// Stack configuration untuk notification
-// Ant Design Vue automatically stacks notifications when there are multiple
-// Stack behavior is built-in and doesn't require explicit configuration
+// CATATAN: Ant Design Vue 4.2.6 tidak mendukung useNotification
+// Menggunakan notification API default tanpa config tambahan
 
 // Valid roles that can access the application
 const validRoles = ['superadmin', 'administrator', 'admin', 'manager', 'staff']
@@ -203,45 +203,161 @@ const loadUserCompaniesCount = async () => {
 // Open notification box
 const openNotificationBox = (notif: Notification) => {
   // Tentukan type berdasarkan notif.type
+  // PENTING: Semua notifikasi document_expiry (baik sudah expired maupun akan expired) 
+  // harus ditampilkan sebagai warning/error untuk menarik perhatian
   let type: 'info' | 'success' | 'warning' | 'error' = 'info'
-  switch (notif.type) {
-    case 'success':
-      type = 'success'
-      break
-    case 'warning':
-      type = 'warning'
-      break
-    case 'error':
-      type = 'error'
-      break
-    default:
-      type = 'info'
+  if (notif.type === 'document_expiry') {
+    // Gunakan 'warning' untuk semua notifikasi document expiry (baik sudah expired maupun akan expired)
+    // Ini akan membuat semua notifikasi document expiry ditampilkan sebagai push notification
+    type = 'warning'
+  } else {
+    switch (notif.type) {
+      case 'success':
+        type = 'success'
+        break
+      case 'warning':
+        type = 'warning'
+        break
+      case 'error':
+        type = 'error'
+        break
+      default:
+        type = 'info'
+    }
   }
   
   try {
-    // Tampilkan notification dengan Ant Design Vue
-    // Note: showProgress dan pauseOnHover tidak didukung di Ant Design Vue
-    notification[type]({
+    // Pastikan notification API tersedia
+    if (!notification) {
+      return
+    }
+    
+    // Pastikan method untuk type tersedia
+    const notificationMethod = notification[type]
+    if (typeof notificationMethod !== 'function') {
+      return
+    }
+    
+    // Deteksi apakah notification untuk expired document
+    // PENTING: Hanya dokumen yang SUDAH expired yang mendapat styling merah
+    // Dokumen yang AKAN expired menggunakan styling default (putih)
+    const isExpiredDocument = notif.type === 'document_expiry'
+    const isAlreadyExpired = isExpiredDocument && notif.title.includes('Sudah Expired')
+    
+    // Prepare notification config
+    const notificationConfig: {
+      message: string
+      description: string
+      duration: number
+      placement: 'topRight'
+      onClick: () => void
+      className?: string
+      style?: {
+        backgroundColor: string
+        border: string
+        borderRadius: string
+      }
+    } = {
       message: notif.title,
       description: formatDynamicMessage(notif),
-      duration: 4.5, // Auto hide setelah 4.5 detik
+      duration: 2.5, // Auto hide setelah 2.5 detik
       placement: 'topRight',
       onClick: () => {
         handleNotificationClick(notif)
       },
-    })
-  } catch (error) {
-    logger.error('❌ [PushNotification] Failed to show notification:', error)
+    }
+    
+    // Custom styling HANYA untuk dokumen yang SUDAH expired (warna merah)
+    // Dokumen yang AKAN expired menggunakan styling default (putih)
+    if (isAlreadyExpired) {
+      // Gunakan className dan style untuk custom styling
+      notificationConfig.className = 'expired-document-notification'
+      // Tambahkan inline style sebagai fallback
+      notificationConfig.style = {
+        backgroundColor: '#bf4e4e',
+        border: '2px dashed #ccc',
+        borderRadius: '8px',
+      }
+    }
+    
+    // Tampilkan notification dengan Ant Design Vue
+    notificationMethod(notificationConfig)
+    
+    // Jika dokumen sudah expired, tambahkan class dan style setelah notification di-render
+    if (isAlreadyExpired) {
+      // Gunakan multiple setTimeout untuk memastikan element sudah di-render
+      setTimeout(() => {
+        const notices = document.querySelectorAll('.ant-notification-topRight .ant-notification-notice')
+        if (notices.length > 0) {
+          // Ambil notice terakhir (yang baru saja dibuat)
+          const lastNotice = notices[notices.length - 1] as HTMLElement
+          if (lastNotice) {
+            lastNotice.classList.add('expired-document-notification')
+            // Tambahkan inline style langsung sebagai fallback
+            lastNotice.style.backgroundColor = '#bf4e4e'
+            lastNotice.style.border = '2px dashed #ccc'
+            lastNotice.style.borderRadius = '8px'
+            lastNotice.style.backdropFilter = 'blur(10px)'
+            lastNotice.style.setProperty('-webkit-backdrop-filter', 'blur(10px)')
+            lastNotice.style.color = '#fff'
+            
+            // Pastikan semua text element di dalam notification berwarna putih
+            const textElements = lastNotice.querySelectorAll('span, div, p, strong, em, .ant-notification-notice-message, .ant-notification-notice-description')
+            textElements.forEach((textEl) => {
+              (textEl as HTMLElement).style.color = '#fff'
+            })
+          }
+        }
+      }, 100)
+      
+      // Double check setelah 200ms dan pastikan semua text berwarna putih
+      setTimeout(() => {
+        const notices = document.querySelectorAll('.ant-notification-topRight .ant-notification-notice')
+        notices.forEach((notice) => {
+          if (notice.classList.contains('expired-document-notification')) {
+            const el = notice as HTMLElement
+            el.style.backgroundColor = '#bf4e4e'
+            el.style.border = '2px dashed #ccc'
+            el.style.borderRadius = '8px'
+            el.style.color = '#fff'
+            
+            // Pastikan semua text element di dalam notification berwarna putih
+            const textElements = el.querySelectorAll('span, div, p, strong, em, .ant-notification-notice-message, .ant-notification-notice-description')
+            textElements.forEach((textEl) => {
+              (textEl as HTMLElement).style.color = '#fff'
+            })
+          }
+        })
+      }, 200)
+    }
+  } catch {
+    // Fallback: coba tampilkan dengan method langsung
+    try {
+      if (notification && typeof notification[type] === 'function') {
+        notification[type]({
+          message: notif.title,
+          description: formatDynamicMessage(notif),
+          duration: 1.5,
+        })
+      }
+    } catch {
+      // Silent fail - notification mungkin tidak bisa ditampilkan
+    }
   }
 }
 
 // Show push notification
 const showPushNotification = (notif: Notification) => {
   try {
+    // Validasi: jangan tampilkan jika notification sudah dibaca
+    if (notif.is_read) {
+      return
+    }
+    
     // Gunakan openNotificationBox untuk menampilkan notification
     openNotificationBox(notif)
-  } catch (error) {
-    logger.error('❌ [PushNotification] Failed to show notification:', error)
+  } catch {
+    // Silent fail - notification mungkin tidak bisa ditampilkan
   }
 }
 
@@ -265,15 +381,44 @@ const loadNotifications = async () => {
   try {
     // Endpoint ini sudah menggunakan RBAC di backend (GetNotificationsWithRBAC)
     // Tidak perlu filtering tambahan di frontend
-    const [notifs, count] = await Promise.all([
-      notificationApi.getNotifications(false, 5), // Ambil 5 notifikasi terakhir (read + unread) - sudah filtered by RBAC
+    // PENTING: Ambil hanya notifikasi yang BELUM DIBACA (unread_only: true) untuk push notification
+    // Push notification hanya ditampilkan untuk notifikasi yang belum ditindak lanjuti
+    const [notifsInbox, count] = await Promise.all([
+      notificationApi.getNotificationsInbox({
+        unread_only: true, // PENTING: Hanya ambil notifikasi yang belum dibaca untuk push notification
+        page: 1,
+        page_size: 50, // Ambil 50 notifikasi untuk memastikan semua document_expiry masuk
+      }),
       notificationApi.getUnreadCount(), // Unread count - sudah filtered by RBAC
     ])
     
-    // Hanya tampilkan notifikasi yang belum dibaca di dropdown
+    // Extract notifications dari inbox response
+    const notifs = notifsInbox.data || []
+    
+    // Debug: Log semua notifikasi yang diterima untuk superadmin
+    if (authStore.user?.role?.toLowerCase() === 'superadmin' || authStore.user?.role?.toLowerCase() === 'administrator') {
+      const unreadCount = notifs.filter(n => !n.is_read).length
+      console.log(`[PushNotification] Superadmin/Administrator - Total notifications received: ${notifs.length}, Unread: ${unreadCount}, UnreadCount from API: ${count}`)
+      if (notifs.length > 0) {
+        console.log(`[PushNotification] Sample notifications (first 5):`, 
+          notifs.slice(0, 5).map(n => ({ 
+            id: n.id, 
+            title: n.title, 
+            type: n.type,
+            is_read: n.is_read,
+            user_id: n.user_id
+          }))
+        )
+      }
+    }
+    
+    // Notifikasi yang diterima dari API sudah filtered unread_only: true, jadi semua seharusnya unread
+    // Tapi tetap filter untuk safety
     const unreadNotifs = notifs.filter(n => !n.is_read)
     notifications.value = unreadNotifs.slice(0, 5) // Maksimal 5 notifikasi unread
     
+    // PENTING: Pastikan unreadCount sesuai dengan jumlah notifikasi yang belum ditindak lanjuti
+    // Gunakan count dari API (sudah filtered by RBAC) sebagai sumber kebenaran
     unreadCount.value = count
     
     // PENTING: Tampilkan push notification hanya jika in-app notifications enabled
@@ -308,12 +453,68 @@ const loadNotifications = async () => {
       // PENTING: Tampilkan push notification untuk notifikasi yang BELUM ditindak lanjuti (is_read = false)
       // Push notification akan muncul berulang-ulang sampai user klik "Sudah ditindak lanjuti"
       // Bahkan setelah expired date lewat, push notification tetap muncul sampai ditindak lanjuti
-      const unresolvedNotifications = notifs.filter(notif => !notif.is_read)
+      // Notifikasi yang diterima dari API sudah filtered unread_only: true, jadi semua seharusnya unread
+      // Tapi tetap filter untuk safety
+      const unresolvedNotifications = notifs.filter(notif => {
+        // Filter hanya notifikasi yang belum dibaca
+        if (notif.is_read) {
+          return false
+        }
+        
+        // PENTING: Untuk notifikasi document_expiry, pastikan semua (baik sudah expired maupun akan expired) ditampilkan
+        // Backend sudah membuat notifikasi berdasarkan threshold, jadi kita hanya perlu memastikan semua document_expiry ditampilkan
+        if (notif.type === 'document_expiry') {
+          // Tampilkan semua notifikasi document_expiry (baik "Sudah Expired" maupun "Akan Expired")
+          // Backend sudah filter berdasarkan threshold, jadi kita hanya perlu memastikan semua ditampilkan
+          return true
+        }
+        
+        // Untuk notifikasi type lain, tampilkan juga
+        return true
+      })
+      
+      // Debug: Log semua notifikasi yang akan ditampilkan untuk superadmin
+      if (authStore.user?.role?.toLowerCase() === 'superadmin' || authStore.user?.role?.toLowerCase() === 'administrator') {
+        console.log(`[PushNotification] Superadmin/Administrator - Unresolved notifications: ${unresolvedNotifications.length}`, 
+          unresolvedNotifications.map(n => ({ 
+            id: n.id, 
+            title: n.title, 
+            type: n.type,
+            is_read: n.is_read
+          }))
+        )
+      }
       
       // Tampilkan push notification untuk notifikasi yang belum ditindak lanjuti
       // Jangan skip notifikasi yang sudah pernah ditampilkan - tampilkan lagi jika masih belum ditindak lanjuti
       if (unresolvedNotifications.length > 0) {
-        const notificationsToShow = unresolvedNotifications.slice(0, 3) // Maksimal 3 notifikasi
+        // Prioritaskan notifikasi document_expiry (baik sudah expired maupun akan expired)
+        const documentExpiryNotifs = unresolvedNotifications.filter(n => n.type === 'document_expiry')
+        const otherNotifs = unresolvedNotifications.filter(n => n.type !== 'document_expiry')
+        
+        // Debug: Log semua notifikasi document_expiry untuk memastikan semua masuk
+        if (documentExpiryNotifs.length > 0) {
+          console.log(`[PushNotification] Found ${documentExpiryNotifs.length} document_expiry notifications:`, 
+            documentExpiryNotifs.map(n => ({ 
+              id: n.id, 
+              title: n.title, 
+              is_read: n.is_read,
+              type: n.type 
+            }))
+          )
+        }
+        
+        // PENTING: Tampilkan SEMUA notifikasi document_expiry (baik sudah expired maupun akan expired)
+        // Jangan batasi hanya 5, karena kita perlu menampilkan semua document_expiry sebagai push notification
+        const allDocumentExpiryToShow = documentExpiryNotifs // Tampilkan semua, tidak dibatasi
+        const otherNotifsToShow = otherNotifs.slice(0, Math.max(0, 10 - allDocumentExpiryToShow.length))
+        
+        // Gabungkan: semua document_expiry dulu, baru yang lain
+        const notificationsToShow = [
+          ...allDocumentExpiryToShow,
+          ...otherNotifsToShow
+        ].slice(0, 10) // Maksimal 10 notifikasi untuk memastikan semua document_expiry masuk
+        
         notificationsToShow.forEach((notif, index) => {
           // Jangan tambahkan ke shownNotificationIds - biarkan muncul berulang sampai ditindak lanjuti
           
@@ -340,16 +541,17 @@ const loadNotifications = async () => {
   }
 }
 
-// Load notification settings untuk cek in-app notifications enabled
+// Load notification settings untuk cek in-app notifications enabled dan threshold
 const loadNotificationSettings = async (): Promise<void> => {
   try {
     const settings = await notificationSettingsApi.getSettings()
     inAppNotificationsEnabled.value = settings.in_app_enabled
-    logger.info('✅ [Notifications] Settings loaded', { in_app_enabled: settings.in_app_enabled })
+    expiryThresholdDays.value = settings.expiry_threshold_days || 14 // Default 14 hari jika tidak ada
   } catch (error) {
     logger.error('❌ [Notifications] Failed to load notification settings:', error)
     // Default to enabled jika gagal load
     inAppNotificationsEnabled.value = true
+    expiryThresholdDays.value = 14 // Default 14 hari
   }
 }
 
@@ -369,12 +571,12 @@ const startNotificationPolling = () => {
     loadNotifications()
   })
   
-  // Poll every 30 seconds (reduced frequency untuk mengurangi load)
+  // Poll every 2 minutes untuk push notification berulang
   notificationPollingInterval.value = setInterval(() => {
     // Reload settings setiap polling untuk memastikan perubahan settings langsung terdeteksi
     loadNotificationSettings()
     loadNotifications()
-  }, 30000) // 30 detik
+  }, 120000) // 2 menit (120000 ms)
 }
 
 // Stop polling
@@ -476,16 +678,75 @@ watch(() => authStore.isAuthenticated, (isAuthenticated) => {
 })
 
 onMounted(() => {
-  // Setup notification configuration
-  // Note: Stack configuration is handled automatically by Ant Design Vue
-  // Multiple notifications will be stacked automatically
-  notification.config({
-    placement: 'topRight',
-    top: 24,
-    bottom: 24,
-    duration: 4.5,
-    rtl: false,
-  })
+  // Inject CSS untuk custom styling expired document notification
+  const style = document.createElement('style')
+  style.id = 'expired-document-notification-style'
+  style.textContent = `
+    /* Custom styling untuk expired document notification */
+    /* Gunakan selector yang lebih luas untuk memastikan styling diterapkan */
+    .expired-document-notification,
+    .ant-notification-notice.expired-document-notification,
+    .ant-notification-topRight .ant-notification-notice.expired-document-notification,
+    .ant-notification .ant-notification-notice.expired-document-notification,
+    li.ant-notification-notice.expired-document-notification {
+      background: #bf4e4e !important;
+      background-color: #bf4e4e !important;
+      border: 2px dashed #ccc !important;
+      border-radius: 8px !important;
+      backdrop-filter: blur(10px) !important;
+      -webkit-backdrop-filter: blur(10px) !important;
+    }
+    
+    /* Override untuk inner content agar tetap readable dengan blur effect */
+    .expired-document-notification .ant-notification-notice-content,
+    .ant-notification-notice.expired-document-notification .ant-notification-notice-content {
+      position: relative;
+      z-index: 1;
+    }
+    
+    /* Pastikan icon dan close button tetap visible dengan warna putih */
+    .expired-document-notification .ant-notification-notice-icon,
+    .expired-document-notification .ant-notification-close-icon,
+    .ant-notification-notice.expired-document-notification .ant-notification-notice-icon,
+    .ant-notification-notice.expired-document-notification .ant-notification-close-icon {
+      color: #fff !important;
+    }
+    
+    /* Pastikan semua text tetap readable dengan warna putih */
+    .expired-document-notification,
+    .expired-document-notification *,
+    .ant-notification-notice.expired-document-notification,
+    .ant-notification-notice.expired-document-notification * {
+      color: #fff !important;
+    }
+    
+    /* Override khusus untuk message dan description */
+    .expired-document-notification .ant-notification-notice-message,
+    .expired-document-notification .ant-notification-notice-description,
+    .expired-document-notification .ant-notification-notice-message *,
+    .expired-document-notification .ant-notification-notice-description *,
+    .ant-notification-notice.expired-document-notification .ant-notification-notice-message,
+    .ant-notification-notice.expired-document-notification .ant-notification-notice-description,
+    .ant-notification-notice.expired-document-notification .ant-notification-notice-message *,
+    .ant-notification-notice.expired-document-notification .ant-notification-notice-description * {
+      color: #fff !important;
+    }
+    
+    /* Pastikan semua span, div, p, dan elemen text lainnya berwarna putih */
+    .expired-document-notification span,
+    .expired-document-notification div,
+    .expired-document-notification p,
+    .expired-document-notification strong,
+    .expired-document-notification em,
+    .ant-notification-notice.expired-document-notification span,
+    .ant-notification-notice.expired-document-notification div,
+    .ant-notification-notice.expired-document-notification p,
+    .ant-notification-notice.expired-document-notification strong,
+    .ant-notification-notice.expired-document-notification em {
+      color: #fff !important;
+    }
+  `
+  document.head.appendChild(style)
   
   loadUserCompaniesCount()
   startNotificationPolling()
@@ -567,6 +828,12 @@ onUnmounted(() => {
     window.removeEventListener('notification-read', notificationHandler)
     delete (window as WindowWithNotificationHandler).__notificationReadHandler
   }
+  
+  // Remove custom CSS untuk expired document notification
+  const expiredStyle = document.getElementById('expired-document-notification-style')
+  if (expiredStyle) {
+    expiredStyle.remove()
+  }
 })
 </script>
 
@@ -619,7 +886,7 @@ onUnmounted(() => {
           :z-index="1001"
           :trigger="['click']"
         >
-          <a-badge :count="unreadCount > 99 ? '99+' : unreadCount" :offset="[10, 0]">
+          <a-badge :count="unreadCount > 99 ? '99+' : unreadCount" :offset="[-10, 10]" style="font-size: 11px !important; padding: 0 4px !important;">
             <a-button type="text" class="icon-btn desktop-icon">
               <IconifyIcon icon="mdi:bell-outline" width="20" height="20" />
             </a-button>

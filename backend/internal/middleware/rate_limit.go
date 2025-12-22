@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -163,6 +164,58 @@ func RateLimitMiddleware(limiter *RateLimiter) fiber.Handler {
 	}
 }
 
+// UserRateLimitMiddleware applies rate limiting based on user ID (untuk upload operations)
+// Lebih adil daripada IP-based karena setiap user punya limit sendiri
+func UserRateLimitMiddleware(limiter *RateLimiter) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		// Bypass jika rate limiting di-disable
+		disableRateLimit := os.Getenv("DISABLE_RATE_LIMIT") == "true"
+		if disableRateLimit {
+			return c.Next()
+		}
+
+		// Get user ID from JWT (harus sudah di-authenticate)
+		userIDVal := c.Locals("userID")
+		if userIDVal == nil {
+			// Jika tidak ada userID, fallback ke IP-based (untuk backward compatibility)
+			ip := getClientIP(c)
+			visitorLimiter := limiter.GetVisitor(ip)
+			if !visitorLimiter.Allow() {
+				zapLog := logger.GetLogger()
+				zapLog.Warn("Rate limit exceeded (IP-based fallback)",
+					zap.String("ip", ip),
+					zap.String("path", c.Path()),
+				)
+				return c.Status(fiber.StatusTooManyRequests).JSON(domain.ErrorResponse{
+					Error:   "rate_limit_exceeded",
+					Message: "Too many requests. Please try again later.",
+				})
+			}
+			return c.Next()
+		}
+
+		userID := fmt.Sprintf("%v", userIDVal)
+		visitorLimiter := limiter.GetVisitor(userID)
+
+		// Check if request is allowed
+		if !visitorLimiter.Allow() {
+			zapLog := logger.GetLogger()
+			zapLog.Warn("Rate limit exceeded (user-based)",
+				zap.String("user_id", userID),
+				zap.String("path", c.Path()),
+				zap.String("method", c.Method()),
+			)
+			return c.Status(fiber.StatusTooManyRequests).JSON(domain.ErrorResponse{
+				Error:   "rate_limit_exceeded",
+				Message: "Terlalu banyak request upload. Silakan tunggu sebentar sebelum upload lagi.",
+			})
+		}
+
+		// Request allowed, continue
+		return c.Next()
+	}
+}
+
 // getClientIP extracts client IP from request (untuk Fiber)
 func getClientIP(c *fiber.Ctx) string {
 	// Normalisasi IP untuk konsistensi rate limiting
@@ -209,4 +262,10 @@ func AuthRateLimitMiddleware(c *fiber.Ctx) error {
 // StrictRateLimitMiddleware applies strict rate limiting (untuk Fiber)
 func StrictRateLimitMiddleware(c *fiber.Ctx) error {
 	return RateLimitMiddleware(StrictRateLimiter)(c)
+}
+
+// UserUploadRateLimitMiddleware applies user-based rate limiting untuk upload operations
+// Setiap user punya limit sendiri, lebih adil daripada IP-based
+func UserUploadRateLimitMiddleware(c *fiber.Ctx) error {
+	return UserRateLimitMiddleware(StrictRateLimiter)(c)
 }

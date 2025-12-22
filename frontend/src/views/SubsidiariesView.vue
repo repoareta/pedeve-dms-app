@@ -496,16 +496,6 @@ const getNetProfitData = (companyId: string): number => {
         return b.period.localeCompare(a.period)
       })[0]
       
-      // Debug log untuk verifikasi
-      if (import.meta.env.DEV && latest) {
-        console.log(`[Net Profit] Company ${companyId}:`, {
-          period: latest.period,
-          net_profit: latest.net_profit,
-          is_rkap: latest.is_rkap,
-          source: 'Financial Reports (Realisasi) - Input Laporan'
-        })
-      }
-      
       return latest?.net_profit || 0
     }
   }
@@ -600,17 +590,6 @@ const getFinancialHealthScore = (companyId: string): string => {
       })[0]
 
       if (latest) {
-        // Debug log untuk verifikasi
-        if (import.meta.env.DEV) {
-          console.log(`[Financial Health] Company ${companyId}:`, {
-            period: latest.period,
-            roe: latest.roe,
-            current_ratio: latest.current_ratio,
-            net_profit_margin: latest.net_profit_margin,
-            net_profit: latest.net_profit,
-            source: 'Financial Reports (Realisasi with Ratios) - Input Laporan'
-          })
-        }
         
         const score = calculateFinancialHealthScoreFromFinancialReport(latest)
         return score.grade
@@ -1195,14 +1174,6 @@ const loadAllCompanyFinancialReports = async () => {
         if (realisasiReports.length > 0) {
           const latest = realisasiReports[0]
           if (latest) {
-            console.log(`[${company.name}] Latest Realisasi:`, {
-              period: latest.period,
-              net_profit: latest.net_profit,
-              revenue: latest.revenue,
-              roe: latest.roe,
-              current_ratio: latest.current_ratio,
-              net_profit_margin: latest.net_profit_margin
-            })
           }
         }
       } catch (error) {

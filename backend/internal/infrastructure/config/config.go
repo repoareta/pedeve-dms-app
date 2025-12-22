@@ -223,15 +223,16 @@ func loadConfigFromEnv() *AppConfig {
 	config.RateLimit.Auth.Burst = authBurst
 
 	// Strict rate limit (untuk upload, delete, dll)
-	// Default: 500 requests per minute dengan burst 250 (ditingkatkan untuk file management system)
+	// Default: 2000 requests per minute dengan burst 1000 (ditingkatkan untuk batch upload 20-30 files)
 	// Aplikasi ini adalah file management system dengan usecase:
-	// - User bisa upload 15-20 file sekaligus (batch upload)
+	// - User bisa upload 20-30 file sekaligus (batch upload)
 	// - Banyak aktivitas upload dan delete file
 	// - Rate limit harus cukup longgar untuk operasi normal tanpa mengganggu user
+	// - Concurrent user sedikit (<10 user), jadi rate limit bisa lebih longgar
 	// Note: GET requests sudah di-bypass di middleware, jadi ini hanya untuk POST/PUT/DELETE
-	// Burst 250 memungkinkan batch upload 15-20 file + buffer untuk operasi lain
-	strictRPM := getEnvInt("RATE_LIMIT_STRICT_RPM", 500)
-	strictBurst := getEnvInt("RATE_LIMIT_STRICT_BURST", 250)
+	// Burst 1000 memungkinkan batch upload 20-30 file sekaligus + buffer untuk operasi lain
+	strictRPM := getEnvInt("RATE_LIMIT_STRICT_RPM", 2000)
+	strictBurst := getEnvInt("RATE_LIMIT_STRICT_BURST", 1000)
 	config.RateLimit.Strict.RPM = strictRPM
 	config.RateLimit.Strict.Burst = strictBurst
 

@@ -41,7 +41,7 @@
           <!-- Right Content - Table -->
           <div class="notifications-table-wrapper">
             <a-card :bordered="false" class="table-card">
-              <template #extra>
+              <!-- <template #extra>
                 <a-button 
                   v-if="hasUnread" 
                   type="primary" 
@@ -51,7 +51,7 @@
                   <IconifyIcon icon="mdi:check-all" width="16" style="margin-right: 8px;" />
                   Tandai Semua Ditindak Lanjuti
                 </a-button>
-              </template>
+              </template> -->
               
               <!-- Search and Actions -->
               <div class="table-filters-container">
@@ -60,14 +60,13 @@
                   placeholder="Cari notifikasi..." 
                   class="search-input"
                   allow-clear
-                  @pressEnter="handleSearch"
-                  @clear="handleSearch"
                 >
                   <template #prefix>
                     <IconifyIcon icon="mdi:magnify" width="16" />
                   </template>
                 </a-input>
                 <a-button 
+                  v-if="isSuperadmin"
                   type="default" 
                   danger
                   @click="handleDeleteAll"
@@ -139,7 +138,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import { Modal, message } from 'ant-design-vue'
@@ -156,19 +155,24 @@ dayjs.extend(relativeTime)
 const router = useRouter()
 const authStore = useAuthStore()
 
+// Check if user is superadmin
+const isSuperadmin = computed(() => {
+  return authStore.user?.role?.toLowerCase() === 'superadmin'
+})
+
 const handleLogout = () => {
   authStore.logout()
   router.push('/login')
 }
 
-// Filters
+// Filters - Hapus filter "Belum ditindak lanjuti" dan "Sudah ditindak lanjuti"
+// karena notifikasi yang sudah ditindak lanjuti akan otomatis hilang dari list
+// Semua filter hanya menampilkan notifikasi yang belum ditindak lanjuti
 const filters = [
-  { key: 'all', label: 'Tampilkan semua', unreadOnly: undefined, daysUntilExpiry: undefined },
-  { key: 'unread', label: 'Belum ditindak lanjuti', unreadOnly: true, daysUntilExpiry: undefined },
-  { key: 'read', label: 'Sudah ditindak lanjuti', unreadOnly: false, daysUntilExpiry: undefined },
-  { key: 'expiry_3', label: 'Kurang dari 3 Hari Expired', unreadOnly: undefined, daysUntilExpiry: 3 },
-  { key: 'expiry_7', label: 'Kurang dari 1 Minggu Expired', unreadOnly: undefined, daysUntilExpiry: 7 },
-  { key: 'expiry_30', label: 'Kurang dari 1 Bulan Expired', unreadOnly: undefined, daysUntilExpiry: 30 },
+  { key: 'all', label: 'Tampilkan semua', unreadOnly: true, daysUntilExpiry: undefined },
+  { key: 'expiry_3', label: 'Kurang dari 3 Hari Expired', unreadOnly: true, daysUntilExpiry: 3 },
+  { key: 'expiry_7', label: 'Kurang dari 1 Minggu Expired', unreadOnly: true, daysUntilExpiry: 7 },
+  { key: 'expiry_30', label: 'Kurang dari 1 Bulan Expired', unreadOnly: true, daysUntilExpiry: 30 },
 ]
 
 const activeFilter = ref('all')
@@ -176,15 +180,36 @@ const currentUnreadOnly = ref<boolean | undefined>(undefined)
 const currentDaysUntilExpiry = ref<number | undefined>(undefined)
 
 // Data
-const notifications = ref<Notification[]>([])
+const allNotifications = ref<Notification[]>([]) // Semua notifikasi dari API (sebelum filter search)
 const loading = ref(false)
-const markingAllAsRead = ref(false)
+// const markingAllAsRead = ref(false) // Tidak digunakan karena handleMarkAllAsRead sudah di-comment
 const deletingAll = ref(false)
 const markingResolvedIds = ref<Set<string>>(new Set())
 const searchText = ref('')
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
+
+// Computed: Filter notifications berdasarkan searchText (reaktif)
+const filteredNotifications = computed(() => {
+  if (!searchText.value.trim()) {
+    return allNotifications.value
+  }
+  
+  const searchLower = searchText.value.toLowerCase().trim()
+  return allNotifications.value.filter(notif => 
+    notif.title.toLowerCase().includes(searchLower) ||
+    notif.message.toLowerCase().includes(searchLower) ||
+    notif.type.toLowerCase().includes(searchLower)
+  )
+})
+
+// Computed: Paginated notifications (client-side pagination)
+const notifications = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return filteredNotifications.value.slice(start, end)
+})
 
 // Table columns
 const columns: TableColumnsType = [
@@ -238,27 +263,21 @@ const columns: TableColumnsType = [
     key: 'status',
     width: 200, // Fixed width untuk button "Tandai sudah ditindak lanjuti"
     fixed: 'right' as const, // Sticky di kanan
-    filters: [
-      { text: 'Belum ditindak lanjuti', value: false },
-      { text: 'Sudah ditindak lanjuti', value: true },
-    ],
-    onFilter: (value: string | number | boolean, record: Notification) => {
-      return record.is_read === Boolean(value)
-    },
+    // Hapus filters karena notifikasi yang sudah ditindak lanjuti akan otomatis hilang dari list
   },
 ]
 
 // Computed
-const hasUnread = computed(() => {
-  return notifications.value.some(n => !n.is_read)
-})
+// const hasUnread = computed(() => {
+//   return allNotifications.value.some(n => !n.is_read)
+// })
 
 const unreadCount = ref(0)
 
 const pagination = computed(() => ({
   current: currentPage.value,
   pageSize: pageSize.value,
-  total: total.value,
+  total: filteredNotifications.value.length, // Total dari filtered data (dengan atau tanpa search)
   showSizeChanger: true,
   showTotal: (total: number) => `Total ${total} notifikasi`,
 }))
@@ -266,7 +285,9 @@ const pagination = computed(() => ({
 // Methods
 const handleFilterChange = (key: string, unreadOnly?: boolean, daysUntilExpiry?: number) => {
   activeFilter.value = key
-  currentUnreadOnly.value = unreadOnly
+  // PENTING: Untuk filter "all", tetap hanya tampilkan notifikasi yang belum ditindak lanjuti
+  // karena notifikasi yang sudah ditindak lanjuti akan otomatis hilang dari list
+  currentUnreadOnly.value = unreadOnly !== undefined ? unreadOnly : true
   currentDaysUntilExpiry.value = daysUntilExpiry
   currentPage.value = 1
   loadNotifications()
@@ -275,15 +296,17 @@ const handleFilterChange = (key: string, unreadOnly?: boolean, daysUntilExpiry?:
 const loadNotifications = async () => {
   loading.value = true
   try {
+    // PENTING: Load semua data sekaligus (tanpa pagination) untuk memungkinkan search reaktif
+    // Search akan dilakukan client-side melalui computed property
     const filters: NotificationFilters = {
-      page: currentPage.value,
-      page_size: pageSize.value,
+      page: 1,
+      page_size: 1000, // Load banyak data untuk search reaktif
     }
     
-    // Filter by read status
-    if (currentUnreadOnly.value !== undefined) {
-      filters.unread_only = currentUnreadOnly.value
-    }
+    // PENTING: Hanya tampilkan notifikasi yang belum ditindak lanjuti (is_read = false)
+    // Notifikasi yang sudah ditindak lanjuti akan otomatis hilang dari list
+    // Gunakan currentUnreadOnly.value yang sudah di-set di handleFilterChange
+    filters.unread_only = currentUnreadOnly.value !== undefined ? currentUnreadOnly.value : true
     
     // Filter by expiry date
     if (currentDaysUntilExpiry.value !== undefined) {
@@ -292,19 +315,15 @@ const loadNotifications = async () => {
     
     const response = await notificationApi.getNotificationsInbox(filters)
     
-    // Apply search filter (client-side)
-    let filteredData = response.data
-    if (searchText.value.trim()) {
-      const searchLower = searchText.value.toLowerCase()
-      filteredData = filteredData.filter(notif => 
-        notif.title.toLowerCase().includes(searchLower) ||
-        notif.message.toLowerCase().includes(searchLower) ||
-        notif.type.toLowerCase().includes(searchLower)
-      )
-    }
+    // PENTING: Filter out notifikasi yang sudah ditindak lanjuti (double check)
+    // Ini memastikan bahwa meskipun backend mengembalikan notifikasi yang sudah read,
+    // frontend akan tetap filter out
+    const filteredData = response.data.filter(notif => !notif.is_read)
     
-    notifications.value = filteredData
-    total.value = searchText.value.trim() ? filteredData.length : response.total
+    // Simpan semua notifikasi (sebelum filter search) ke allNotifications
+    // Search akan dilakukan di computed property untuk reaktifitas
+    allNotifications.value = filteredData
+    total.value = filteredData.length // Gunakan length dari filtered data untuk pagination client-side
   } catch (error) {
     logger.error('Failed to load notifications:', error)
   } finally {
@@ -312,17 +331,19 @@ const loadNotifications = async () => {
   }
 }
 
-const handleSearch = () => {
+// Watch searchText untuk reset pagination saat search berubah
+watch(searchText, () => {
+  // Reset ke halaman pertama saat search berubah
   currentPage.value = 1
-  loadNotifications()
-}
+  // Search sudah reaktif melalui computed property, tidak perlu reload dari API
+})
 
 const handleTableChange: TableProps['onChange'] = (pag) => {
   if (pag) {
     currentPage.value = pag.current || 1
     pageSize.value = pag.pageSize || 10
+    // Tidak perlu reload dari API karena pagination sekarang client-side
   }
-  loadNotifications()
 }
 
 // Handle mark as resolved (sudah ditindak lanjuti)
@@ -331,35 +352,113 @@ const handleMarkAsResolved = async (notification: Notification) => {
     return // Sudah ditindak lanjuti
   }
   
-  markingResolvedIds.value.add(notification.id)
-  
-  try {
-    await notificationApi.markAsRead(notification.id)
+  // Tampilkan konfirmasi sebelum menandai sebagai sudah ditindak lanjuti
+  Modal.confirm({
+    title: 'Tandai Sebagai Sudah Ditindak Lanjuti?',
+    content: 'Apakah Anda yakin ingin menandai notifikasi ini sebagai sudah ditindak lanjuti?',
+    okText: 'Ya, Tandai',
+    okType: 'primary',
+    cancelText: 'Batal',
+    onOk: async () => {
+      markingResolvedIds.value.add(notification.id)
+      
+      try {
+        await notificationApi.markAsRead(notification.id)
+        
+        // PENTING: Langsung hilangkan notifikasi dari list setelah ditandai sebagai sudah ditindak lanjuti
+        const index = allNotifications.value.findIndex(n => n.id === notification.id)
+        if (index !== -1) {
+          allNotifications.value.splice(index, 1)
+          // Update total count
+          total.value = Math.max(0, total.value - 1)
+        }
+        
+        // Update unread count
+        unreadCount.value = Math.max(0, (unreadCount.value || 0) - 1)
+        
+        message.success('Notifikasi telah ditandai sebagai sudah ditindak lanjuti')
+        
+        // Cek apakah dokumen masih berpotensi terlewat masa aktifnya
+        checkDocumentExpiryWarning(notification)
+        
+        // Reload notifications untuk memastikan state ter-update (jika masih ada notifikasi lain)
+        await loadNotifications()
+        
+        // Trigger event untuk refresh notifications di header
+        window.dispatchEvent(new CustomEvent('notification-read', { 
+          detail: { notificationId: notification.id } 
+        }))
+      } catch (error) {
+        logger.error('❌ [NotificationsView] Failed to mark notification as resolved:', error)
+        message.error('Gagal menandai notifikasi sebagai sudah ditindak lanjuti')
+      } finally {
+        markingResolvedIds.value.delete(notification.id)
+      }
+    },
+  })
+}
+
+// Cek dan tampilkan warning jika dokumen masih berpotensi terlewat masa aktifnya
+const checkDocumentExpiryWarning = (notification: Notification) => {
+  // Hanya untuk notifikasi document_expiry yang memiliki document dengan expiry_date
+  if (notification.type === 'document_expiry' && notification.document?.expiry_date) {
+    const expiryDate = dayjs(notification.document.expiry_date)
+    const now = dayjs()
+    const diffDays = expiryDate.diff(now, 'day')
     
-    // Update local state
-    notification.is_read = true
-    unreadCount.value = Math.max(0, (unreadCount.value || 0) - 1)
+    // Extract document name
+    const docName = notification.document.name || notification.title.replace("Dokumen '", '').replace("' Akan Expired", '')
     
-    // Update di array notifications juga
-    const index = notifications.value.findIndex(n => n.id === notification.id)
-    if (index !== -1 && notifications.value[index]) {
-      notifications.value[index].is_read = true
+    // Jika dokumen sudah expired atau akan expired dalam waktu dekat (kurang dari 30 hari)
+    if (diffDays < 0) {
+      // Sudah expired
+      const daysAgo = Math.abs(diffDays)
+      let warningMessage = ''
+      
+      if (daysAgo === 0) {
+        warningMessage = `Dokumen '${docName}' sudah expired hari ini. Pastikan Anda sudah memperbarui atau memperpanjang dokumen tersebut agar tidak terlewat masa aktifnya.`
+      } else if (daysAgo === 1) {
+        warningMessage = `Dokumen '${docName}' sudah expired 1 hari yang lalu. Pastikan Anda sudah memperbarui atau memperpanjang dokumen tersebut agar tidak terlewat masa aktifnya.`
+      } else if (daysAgo < 7) {
+        warningMessage = `Dokumen '${docName}' sudah expired ${daysAgo} hari yang lalu. Pastikan Anda sudah memperbarui atau memperpanjang dokumen tersebut agar tidak terlewat masa aktifnya.`
+      } else if (daysAgo < 30) {
+        const weeksAgo = Math.floor(daysAgo / 7)
+        warningMessage = `Dokumen '${docName}' sudah expired ${weeksAgo} minggu yang lalu. Pastikan Anda sudah memperbarui atau memperpanjang dokumen tersebut agar tidak terlewat masa aktifnya.`
+      } else {
+        const monthsAgo = Math.floor(daysAgo / 30)
+        warningMessage = `Dokumen '${docName}' sudah expired lebih dari ${monthsAgo} bulan yang lalu. Pastikan Anda sudah memperbarui atau memperpanjang dokumen tersebut agar tidak terlewat masa aktifnya.`
+      }
+      
+      // Tampilkan warning dengan duration lebih lama (10 detik) agar user sempat membaca
+      Modal.warning({
+        title: 'Peringatan: Dokumen Berpotensi Terlewat Masa Aktifnya',
+        content: warningMessage,
+        okText: 'Mengerti',
+        width: 500,
+      })
+    } else if (diffDays <= 30) {
+      // Akan expired dalam waktu dekat (kurang dari atau sama dengan 30 hari)
+      let warningMessage = ''
+      
+      if (diffDays === 0) {
+        warningMessage = `Dokumen '${docName}' akan expired hari ini. Pastikan Anda segera memperbarui atau memperpanjang dokumen tersebut agar tidak terlewat masa aktifnya.`
+      } else if (diffDays === 1) {
+        warningMessage = `Dokumen '${docName}' akan expired besok. Pastikan Anda segera memperbarui atau memperpanjang dokumen tersebut agar tidak terlewat masa aktifnya.`
+      } else if (diffDays <= 7) {
+        warningMessage = `Dokumen '${docName}' akan expired dalam ${diffDays} hari. Pastikan Anda segera memperbarui atau memperpanjang dokumen tersebut agar tidak terlewat masa aktifnya.`
+      } else {
+        const weeksLeft = Math.ceil(diffDays / 7)
+        warningMessage = `Dokumen '${docName}' akan expired dalam ${weeksLeft} minggu (${diffDays} hari). Pastikan Anda segera memperbarui atau memperpanjang dokumen tersebut agar tidak terlewat masa aktifnya.`
+      }
+      
+      // Tampilkan warning dengan duration lebih lama (10 detik) agar user sempat membaca
+      Modal.warning({
+        title: 'Peringatan: Dokumen Berpotensi Terlewat Masa Aktifnya',
+        content: warningMessage,
+        okText: 'Mengerti',
+        width: 500,
+      })
     }
-    
-    message.success('Notifikasi telah ditandai sebagai sudah ditindak lanjuti')
-    
-    // Reload notifications untuk memastikan state ter-update
-    await loadNotifications()
-    
-    // Trigger event untuk refresh notifications di header
-    window.dispatchEvent(new CustomEvent('notification-read', { 
-      detail: { notificationId: notification.id } 
-    }))
-  } catch (error) {
-    logger.error('❌ [NotificationsView] Failed to mark notification as resolved:', error)
-    message.error('Gagal menandai notifikasi sebagai sudah ditindak lanjuti')
-  } finally {
-    markingResolvedIds.value.delete(notification.id)
   }
 }
 
@@ -381,18 +480,18 @@ const handleRowClick = async (notification: Notification, event?: Event) => {
   }
 }
 
-const handleMarkAllAsRead = async () => {
-  markingAllAsRead.value = true
-  try {
-    await notificationApi.markAllAsRead()
-    message.success('Semua notifikasi telah ditandai sebagai sudah ditindak lanjuti')
-    await loadNotifications()
-  } catch (error) {
-    logger.error('Failed to mark all as read:', error)
-  } finally {
-    markingAllAsRead.value = false
-  }
-}
+// const handleMarkAllAsRead = async () => {
+//   markingAllAsRead.value = true
+//   try {
+//     await notificationApi.markAllAsRead()
+//     message.success('Semua notifikasi telah ditandai sebagai sudah ditindak lanjuti')
+//     await loadNotifications()
+//   } catch (error) {
+//     logger.error('Failed to mark all as read:', error)
+//   } finally {
+//     markingAllAsRead.value = false
+//   }
+// }
 
 const handleDeleteAll = async () => {
   const userRole = authStore.user?.role?.toLowerCase() || ''

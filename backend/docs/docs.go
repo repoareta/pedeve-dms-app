@@ -6915,14 +6915,6 @@ const docTemplate = `{
                     "description": "Relasi dengan DirectorModel (untuk dokumen individu)",
                     "type": "string"
                 },
-                "expiry_date": {
-                    "description": "Tanggal kadaluarsa dokumen",
-                    "type": "string"
-                },
-                "expiry_notified": {
-                    "description": "Apakah sudah di-notify",
-                    "type": "boolean"
-                },
                 "file_name": {
                     "description": "Nama file asli",
                     "type": "string"

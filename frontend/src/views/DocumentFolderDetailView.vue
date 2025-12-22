@@ -49,9 +49,25 @@ type UploadItem = {
 }
 const uploadList = ref<UploadItem[]>([])
 const uploading = ref(false)
-// Fiber default body limit ~4MB, naikkan guard ke 5MB (sesuaikan dengan backend/proxy)
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+// File size limits:
+// - Document files (.docx, .xlsx, .xls, .pptx, .ppt, .pdf): No limit
+// - Image files (.jpg, .jpeg, .png): 10MB
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
 const searchText = ref('')
+
+// Check if file is a document type (no size limit)
+const isDocumentFile = (file: File): boolean => {
+  const fileName = file.name.toLowerCase()
+  const documentExts = ['.docx', '.xlsx', '.xls', '.pptx', '.ppt', '.pdf']
+  return documentExts.some(ext => fileName.endsWith(ext))
+}
+
+// Check if file is an image type (10MB limit)
+const isImageFile = (file: File): boolean => {
+  const fileName = file.name.toLowerCase()
+  const imageExts = ['.jpg', '.jpeg', '.png']
+  return imageExts.some(ext => fileName.endsWith(ext))
+}
 const tablePagination = ref({
   current: 1,
   pageSize: 10,
@@ -221,9 +237,7 @@ const loadDocuments = async () => {
   loading.value = true
   try {
     // Ensure we only load documents for the current folder_id
-    console.log('Loading documents for folder_id:', folderId.value)
     files.value = await documentsApi.listDocuments({ folder_id: folderId.value })
-    console.log('Loaded documents:', files.value.length, 'files for folder', folderId.value)
     tablePagination.value.total = files.value.length
   } catch (error: unknown) {
     const err = error as { message?: string }
@@ -245,10 +259,26 @@ const handleBatchUpload = async () => {
     message.warning('Pilih file terlebih dahulu')
     return
   }
-  const tooBig = uploadList.value.find(item => (item.originFileObj?.size || 0) > MAX_FILE_SIZE)
-  if (tooBig) {
-    message.error(`File ${tooBig.name} terlalu besar, batas maksimal 5MB`)
-    return
+  
+  // Validate file size based on file type
+  for (const item of uploadList.value) {
+    const file = item.originFileObj
+    if (!file) continue
+    
+    if (isImageFile(file)) {
+      // Image files: 10MB limit
+      if (file.size > MAX_IMAGE_SIZE) {
+        message.error(`File gambar "${file.name}" terlalu besar, batas maksimal ${MAX_IMAGE_SIZE / (1024 * 1024)}MB`)
+        return
+      }
+    } else if (!isDocumentFile(file)) {
+      // For other file types, apply 10MB limit as default
+      if (file.size > MAX_IMAGE_SIZE) {
+        message.error(`File "${file.name}" terlalu besar, batas maksimal ${MAX_IMAGE_SIZE / (1024 * 1024)}MB`)
+        return
+      }
+    }
+    // Document files (.docx, .xlsx, .xls, .pptx, .ppt, .pdf): No size limit
   }
   uploading.value = true
   try {
@@ -267,7 +297,7 @@ const handleBatchUpload = async () => {
     await loadDocuments()
   } catch (error: unknown) {
     if (axios.isAxiosError(error) && error.response?.status === 413) {
-      message.error('File terlalu besar, server menolak upload (413). Silakan pilih file yang lebih kecil atau hubungi admin.')
+      message.error(`File terlalu besar, server menolak upload (413). Batasan: File gambar maksimal ${MAX_IMAGE_SIZE / (1024 * 1024)}MB, file dokumen (.docx, .xlsx, .xls, .pptx, .ppt, .pdf) tidak dibatasi.`)
     } else {
       const err = error as { message?: string }
       message.error(err.message || 'Gagal upload file')
@@ -531,7 +561,6 @@ watch(
   async (newFolderId, oldFolderId) => {
     if (newFolderId !== oldFolderId) {
       // Reload data when folder ID changes (including when going to subfolder)
-      console.log('Folder ID changed from', oldFolderId, 'to', newFolderId)
       pageLoading.value = true
       try {
         // Load folders first, then load documents for the new folder_id

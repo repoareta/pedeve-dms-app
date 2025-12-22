@@ -135,6 +135,9 @@ const router = createRouter({
       component: () => import('../views/AboutView.vue'),
       meta: { title: 'About' },
     },
+    // User Guideline - tidak perlu route, Vite plugin akan handle
+    // Route ini hanya untuk mencegah catch-all route menangkap
+    // Vite plugin di vite.config.ts akan serve static files sebelum router
     {
       path: '/:pathMatch(.*)*',
       name: 'not-found',

@@ -165,6 +165,11 @@ lint-frontend: ## Run frontend linter
 # Lint all
 lint: lint-backend lint-frontend ## Run linters for both backend and frontend
 
+# Build documentation
+docs-build: ## Build VitePress documentation
+	@echo "📚 Building documentation..."
+	@./scripts/build-docs.sh
+
 # Help
 help:
 	@echo "DMS App - Development Commands"
@@ -190,6 +195,7 @@ help:
 	@echo "  lint          - Run linters for both backend and frontend"
 	@echo "  lint-backend  - Run backend linter only"
 	@echo "  lint-frontend - Run frontend linter only"
+	@echo "  docs-build    - Build VitePress documentation"
 	@echo "  help          - Show this help message"
 	@echo ""
 	@echo "Examples:"

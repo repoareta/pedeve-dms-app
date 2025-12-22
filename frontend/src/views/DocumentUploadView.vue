@@ -43,9 +43,25 @@ const fileList = ref<UploadItem[]>([])
 const folders = ref<DocumentFolder[]>([])
 const loadingFolders = ref(false)
 const document = ref<DocumentItem | null>(null)
-// Fiber default body limit ~4MB, naikkan guard ke 5MB (sesuaikan backend/proxy)
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+// File size limits:
+// - Document files (.docx, .xlsx, .xls, .pptx, .ppt, .pdf): No limit
+// - Image files (.jpg, .jpeg, .png): 10MB
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
 const isGeneratingReference = ref(false) // Flag to prevent multiple simultaneous generations
+
+// Check if file is a document type (no size limit)
+const isDocumentFile = (file: File): boolean => {
+  const fileName = file.name.toLowerCase()
+  const documentExts = ['.docx', '.xlsx', '.xls', '.pptx', '.ppt', '.pdf']
+  return documentExts.some(ext => fileName.endsWith(ext))
+}
+
+// Check if file is an image type (10MB limit)
+const isImageFile = (file: File): boolean => {
+  const fileName = file.name.toLowerCase()
+  const imageExts = ['.jpg', '.jpeg', '.png']
+  return imageExts.some(ext => fileName.endsWith(ext))
+}
 
 const formState = ref({
   title: '',
@@ -303,7 +319,6 @@ const handleSubmit = async () => {
     try {
       const generatedReference = await generateReferenceNumber()
       formState.value.reference = generatedReference
-      console.log('Auto-generated reference number:', generatedReference)
     } catch (error) {
       console.error('Failed to generate reference number:', error)
       message.warning('Gagal generate nomor referensi otomatis, mohon isi manual')
@@ -375,10 +390,22 @@ const handleSubmit = async () => {
     message.error('File tidak valid')
     return
   }
-    if (file.size > MAX_FILE_SIZE) {
-      message.error('File terlalu besar, batas maksimal 5MB')
-    return
+  
+  // Validate file size based on file type
+  if (isImageFile(file)) {
+    // Image files: 10MB limit
+    if (file.size > MAX_IMAGE_SIZE) {
+      message.error(`File gambar terlalu besar, batas maksimal ${MAX_IMAGE_SIZE / (1024 * 1024)}MB`)
+      return
+    }
+  } else if (!isDocumentFile(file)) {
+    // For other file types, apply 10MB limit as default
+    if (file.size > MAX_IMAGE_SIZE) {
+      message.error(`File terlalu besar, batas maksimal ${MAX_IMAGE_SIZE / (1024 * 1024)}MB`)
+      return
+    }
   }
+  // Document files (.docx, .xlsx, .xls, .pptx, .ppt, .pdf): No size limit
 
     loading.value = true
   try {
@@ -400,11 +427,18 @@ const handleSubmit = async () => {
     message.success('File berhasil diupload')
     router.push('/documents')
   } catch (error: unknown) {
-      if (axios.isAxiosError(error) && error.response?.status === 413) {
-        message.error('File terlalu besar, server menolak upload (413). Silakan pilih file yang lebih kecil atau hubungi admin.')
+      if (axios.isAxiosError(error)) {
+        // Handle error dari backend dengan pesan yang lebih jelas
+        const errorData = error.response?.data as { error?: string; message?: string } | undefined
+        if (error.response?.status === 413 || errorData?.error === 'file_too_large') {
+          message.error(errorData?.message || 'File terlalu besar. Batasan: File gambar maksimal 10MB, file dokumen (.docx, .xlsx, .xls, .pptx, .ppt, .pdf) maksimal 200MB.')
+        } else {
+          const err = error as { message?: string }
+          message.error(errorData?.message || err.message || 'Gagal upload dokumen')
+        }
       } else {
-    const err = error as { message?: string }
-    message.error(err.message || 'Gagal upload dokumen')
+        const err = error as { message?: string }
+        message.error(err.message || 'Gagal upload dokumen')
       }
     } finally {
       loading.value = false
@@ -597,7 +631,6 @@ const handleDocumentTypeChange = async (values: string[]) => {
   }
   
   // Log final state for debugging
-  console.log(`[DocumentUploadView] handleDocumentTypeChange completed. Final docTypes:`, formState.value.docType)
   
   // Auto-generate reference number if:
   // - Reference is empty or only whitespace
@@ -611,7 +644,6 @@ const handleDocumentTypeChange = async (values: string[]) => {
     try {
       const generatedReference = await generateReferenceNumber()
       formState.value.reference = generatedReference
-      console.log('Auto-generated reference number:', generatedReference)
     } catch (error) {
       console.error('Failed to auto-generate reference number:', error)
       // Don't show error message here, as it's auto-generation and user can still fill manually
@@ -656,7 +688,6 @@ const handleDocumentTypeSelect = async (value: string) => {
         try {
           const generatedReference = await generateReferenceNumber()
           formState.value.reference = generatedReference
-          console.log('Auto-generated reference number (from select):', generatedReference)
         } catch (error) {
           console.error('Failed to auto-generate reference number:', error)
         } finally {

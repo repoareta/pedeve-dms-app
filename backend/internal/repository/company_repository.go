@@ -115,7 +115,7 @@ func (r *companyRepository) GetDescendants(companyID string) ([]domain.CompanyMo
 		return nil, err
 	}
 
-	// Ensure we return all descendants including direct children
+	// Pastikan kita return semua descendants termasuk direct children
 	return descendants, nil
 }
 

@@ -30,7 +30,7 @@ func main() {
 	fmt.Println("✅ Connected to PostgreSQL")
 	fmt.Println()
 
-	// Fix levels using recursive update
+	// Fix level menggunakan recursive update
 	fmt.Println("🔄 Updating company levels...")
 	
 	// First, set all companies with parent_id = NULL to level 0 (holding)

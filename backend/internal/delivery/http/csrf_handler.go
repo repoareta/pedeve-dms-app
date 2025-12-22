@@ -35,7 +35,7 @@ func GetCSRFTokenHandler(c *fiber.Ctx) error {
 	// Simpan token
 	middleware.StoreCSRFToken(token)
 
-	// Set cookie with CSRF token (optional, untuk double submit cookie pattern)
+	// Set cookie dengan CSRF token (opsional, untuk double submit cookie pattern)
 	isHTTPS := os.Getenv("ENV") == "production" || 
 	           os.Getenv("HTTPS") == "true" ||
 	           os.Getenv("FORCE_HTTPS") == "true" ||

@@ -7,9 +7,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// SeedSuperAdmin creates a superadmin user if it doesn't exist
+// SeedSuperAdmin membuat user superadmin kalau belum ada
 func SeedSuperAdmin() {
-	// Check if superadmin already exists
+	// Cek apakah superadmin sudah ada
 	var existingUser UserModel
 	result := DB.Where("username = ? OR role = ?", "superadmin", "superadmin").First(&existingUser)
 	if result.Error == nil {
@@ -17,14 +17,14 @@ func SeedSuperAdmin() {
 		return
 	}
 
-	// Hash password for superadmin
+	// Hash password untuk superadmin
 	hashedPassword, err := HashPassword("Pedeve123")
 	if err != nil {
 		log.Printf("Failed to hash superadmin password: %v", err)
 		return
 	}
 
-	// Create superadmin user
+	// Buat user superadmin
 	now := time.Now()
 	superAdmin := &UserModel{
 		ID:        uuid.New().String(),
@@ -36,7 +36,7 @@ func SeedSuperAdmin() {
 		UpdatedAt: now,
 	}
 
-	// Save to database
+	// Simpan ke database
 	if err := DB.Create(superAdmin).Error; err != nil {
 		log.Printf("Failed to create superadmin user: %v", err)
 		return

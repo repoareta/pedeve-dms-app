@@ -18,11 +18,11 @@ import dayjs from 'dayjs'
 const router = useRouter()
 const authStore = useAuthStore()
 
-// Period filter - format YYYY-MM
+// Filter period - format YYYY-MM
 const selectedPeriod = ref<string | null>(null)
 const loading = ref(false)
 
-// Initialize selectedPeriod to current month
+// Initialize selectedPeriod ke bulan saat ini
 const initializePeriod = () => {
   const now = dayjs()
   selectedPeriod.value = now.format('YYYY-MM')

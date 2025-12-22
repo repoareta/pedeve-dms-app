@@ -42,7 +42,7 @@ Menambahkan pemegang saham perusahaan:
 
 3. **Persentase Kepemilikan**
 
-   Persentase kepemilikan saham dihitung secara otomatis oleh sistem berdasarkan **Modal Disetor** dari setiap pemegang saham. Sistem menggunakan perhitungan yang presisi hingga 10 digit desimal untuk memastikan akurasi.
+   Persentase kepemilikan saham dihitung otomatis berdasarkan **Modal Disetor** dari setiap pemegang saham. Perhitungan menggunakan presisi 10 digit desimal untuk akurasi maksimal.
 
    **Konsep Dasar:**
    
@@ -50,9 +50,7 @@ Menambahkan pemegang saham perusahaan:
    - **Modal Disetor**: Modal yang benar-benar sudah disetor dan dibayar oleh pemegang saham (paid-up capital). Ini adalah modal yang sebenarnya dimiliki perusahaan.
    - **Persentase Kepemilikan**: Proporsi kepemilikan saham yang dihitung berdasarkan Modal Disetor, bukan Modal Dasar.
 
-   **Cara Perhitungan:**
-
-   Sistem menghitung persentase kepemilikan dengan rumus berikut:
+   **Rumus Perhitungan:**
 
    ```
    Total Modal = Modal Disetor Perusahaan Sendiri + Total Modal Disetor Semua Pemegang Saham
@@ -96,19 +94,19 @@ Menambahkan pemegang saham perusahaan:
 
    **Catatan Penting:**
 
-   - **Perhitungan Otomatis**: Untuk pemegang saham yang merupakan perusahaan (bukan individu), persentase akan dihitung otomatis oleh sistem berdasarkan Modal Disetor perusahaan tersebut. Anda tidak perlu mengisi persentase secara manual.
+   - **Perhitungan Otomatis**: Untuk pemegang saham yang merupakan perusahaan (bukan individu), persentase dihitung otomatis berdasarkan Modal Disetor perusahaan tersebut. Tidak perlu input manual.
    
-   - **Input Manual untuk Individu**: Jika pemegang saham adalah individu atau entitas eksternal (bukan perusahaan di sistem), Anda perlu mengisi persentase secara manual karena sistem tidak memiliki data Modal Disetor untuk entitas tersebut.
+   - **Input Manual untuk Individu**: Jika pemegang saham adalah individu atau entitas eksternal (bukan perusahaan di sistem), Anda perlu input persentase secara manual karena sistem tidak punya data Modal Disetor untuk entitas tersebut.
    
-   - **Total Harus 100%**: Sistem akan memastikan bahwa total persentase kepemilikan selalu 100%. Jika total tidak mencapai 100%, sistem akan menampilkan peringatan dan tidak akan mengizinkan penyimpanan data.
+   - **Total Harus 100%**: Total persentase kepemilikan harus selalu 100%. Jika tidak, sistem akan menampilkan peringatan dan tidak mengizinkan penyimpanan.
    
-   - **Perhitungan Real-time**: Setiap kali Anda menambah, mengubah, atau menghapus pemegang saham, atau mengubah Modal Disetor, sistem akan secara otomatis menghitung ulang semua persentase kepemilikan secara real-time.
+   - **Perhitungan Real-time**: Setiap kali menambah, mengubah, atau menghapus pemegang saham, atau mengubah Modal Disetor, semua persentase akan dihitung ulang secara real-time.
    
-   - **Presisi Tinggi**: Sistem menggunakan presisi 10 digit desimal untuk perhitungan, sehingga dapat menangani perhitungan yang sangat detail dan akurat. Contoh: 33.3333333333% untuk pembagian yang tidak bulat.
+   - **Presisi Tinggi**: Perhitungan menggunakan presisi 10 digit desimal untuk akurasi maksimal. Contoh: 33.3333333333% untuk pembagian yang tidak bulat.
    
-   - **Perusahaan Sendiri Termasuk**: Perusahaan yang sedang Anda input juga dihitung sebagai pemegang saham dengan persentase kepemilikannya sendiri. Ini penting untuk menunjukkan proporsi kepemilikan yang dimiliki oleh perusahaan tersebut.
+   - **Perusahaan Sendiri Termasuk**: Perusahaan yang sedang Anda input juga dihitung sebagai pemegang saham dengan persentase kepemilikannya sendiri.
    
-   - **Modal Dasar vs Modal Disetor**: Perhitungan persentase hanya menggunakan Modal Disetor, bukan Modal Dasar. Modal Dasar hanya digunakan sebagai informasi referensi dan tidak mempengaruhi perhitungan persentase.
+   - **Modal Dasar vs Modal Disetor**: Perhitungan persentase hanya menggunakan Modal Disetor, bukan Modal Dasar. Modal Dasar hanya untuk referensi.
 
 4. **Hapus Pemegang Saham**
    - Klik tombol hapus (X) untuk menghapus pemegang saham
@@ -172,11 +170,11 @@ Sistem akan memvalidasi:
    - Cek persentase kepemilikan
 
 2. **Klik "Simpan"**
-   - Sistem akan menyimpan data
+   - Data akan disimpan
    - Jika berhasil, Anda akan diarahkan ke halaman detail perusahaan
 
 3. **Jika Ada Error**
-   - Sistem akan menampilkan pesan error
+   - Pesan error akan ditampilkan
    - Perbaiki field yang error
    - Coba simpan lagi
 
@@ -300,7 +298,7 @@ Sistem hanya menerima format file berikut:
   - Pesan error yang muncul (jika ada)
   - Screenshot error (jika memungkinkan)
 
-## Langkah Selanjutnya
+## Referensi
 
 - [Detail Perusahaan](./company-detail) - Lihat detail perusahaan yang baru dibuat
 - [Edit Perusahaan](./edit-company) - Pelajari cara edit perusahaan

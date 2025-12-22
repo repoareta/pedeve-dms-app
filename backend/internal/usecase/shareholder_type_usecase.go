@@ -48,11 +48,11 @@ func (uc *shareholderTypeUseCase) CreateShareholderType(name, createdBy string) 
 		return nil, errors.New("nama jenis pemegang saham tidak boleh kosong")
 	}
 
-	// Check if already exists (case-insensitive)
+	// Cek apakah sudah ada (case-insensitive)
 	existing, _ := uc.shareholderTypeRepo.GetByName(name)
 	if existing != nil {
 		if !existing.IsActive {
-			// Reactivate if exists but inactive
+			// Aktifkan lagi kalau ada tapi inactive
 			existing.IsActive = true
 			if err := uc.shareholderTypeRepo.Update(existing); err != nil {
 				return nil, fmt.Errorf("gagal mengaktifkan kembali jenis pemegang saham: %w", err)
@@ -64,11 +64,11 @@ func (uc *shareholderTypeUseCase) CreateShareholderType(name, createdBy string) 
 
 	// Create new
 	shareholderType := &domain.ShareholderTypeModel{
-		ID:        uuid.GenerateUUID(),
-		Name:      name,
-		IsActive:  true,
+		ID:         uuid.GenerateUUID(),
+		Name:       name,
+		IsActive:   true,
 		UsageCount: 0,
-		CreatedBy: createdBy,
+		CreatedBy:  createdBy,
 	}
 
 	if err := uc.shareholderTypeRepo.Create(shareholderType); err != nil {
@@ -106,7 +106,7 @@ func (uc *shareholderTypeUseCase) UpdateShareholderType(id string, name *string,
 			return nil, errors.New("nama jenis pemegang saham tidak boleh kosong")
 		}
 
-		// Check if name already exists (case-insensitive, excluding current)
+		// Cek apakah nama sudah ada (case-insensitive, kecuali yang sekarang)
 		existing, _ := uc.shareholderTypeRepo.GetByName(trimmedName)
 		if existing != nil && existing.ID != id {
 			return nil, errors.New("jenis pemegang saham dengan nama tersebut sudah ada")
@@ -132,14 +132,14 @@ func (uc *shareholderTypeUseCase) DeleteShareholderType(id, requesterRole string
 		return fmt.Errorf("jenis pemegang saham tidak ditemukan: %w", err)
 	}
 
-	// Check usage count
+	// Cek usage count
 	usageCount, err := uc.shareholderTypeRepo.CountUsage(id)
 	if err != nil {
 		return fmt.Errorf("gagal menghitung penggunaan: %w", err)
 	}
 
 	if usageCount > 0 {
-		// Soft delete only (set is_active = false)
+		// Soft delete saja (set is_active = false)
 		shareholderType.IsActive = false
 		if err := uc.shareholderTypeRepo.Update(shareholderType); err != nil {
 			return fmt.Errorf("gagal menonaktifkan jenis pemegang saham: %w", err)
@@ -147,7 +147,7 @@ func (uc *shareholderTypeUseCase) DeleteShareholderType(id, requesterRole string
 		return nil
 	}
 
-	// Hard delete if not in use and requester is superadmin
+	// Hard delete kalau tidak dipakai dan requester adalah superadmin
 	if strings.ToLower(requesterRole) == "superadmin" {
 		return uc.shareholderTypeRepo.SoftDelete(id)
 	}
@@ -156,4 +156,3 @@ func (uc *shareholderTypeUseCase) DeleteShareholderType(id, requesterRole string
 	shareholderType.IsActive = false
 	return uc.shareholderTypeRepo.Update(shareholderType)
 }
-

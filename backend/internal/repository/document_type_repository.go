@@ -85,14 +85,14 @@ func (r *documentTypeRepository) SoftDelete(id string) error {
 
 func (r *documentTypeRepository) CountUsage(id string) (int64, error) {
 	var count int64
-	// Get document type name first
+	// Ambil nama document type dulu
 	docType, err := r.GetByID(id)
 	if err != nil {
 		return 0, err
 	}
 	
-	// Count documents that have this document type name in metadata.doc_type
-	// Using JSON path query for PostgreSQL: metadata->>'doc_type' extracts text value
+	// Hitung dokumen yang punya document type name ini di metadata.doc_type
+	// Pakai JSON path query untuk PostgreSQL: metadata->>'doc_type' extract text value
 	err = r.db.Model(&domain.DocumentModel{}).
 		Where("metadata->>'doc_type' = ?", docType.Name).
 		Count(&count).Error

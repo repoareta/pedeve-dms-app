@@ -44,7 +44,7 @@ func Login(c *fiber.Ctx) error {
 		})
 	}
 
-	// Validate and sanitize input
+	// Validasi dan sanitasi input
 	if err := ValidateLoginInput(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error:   "validation_error",

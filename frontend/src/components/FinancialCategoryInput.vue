@@ -205,18 +205,18 @@ const handleSubmit = async () => {
       requestData[item.field] = formData.value[item.field] || 0
     })
 
-    // Add other required fields with default 0 if not in items
+    // Tambahkan field wajib lain dengan default 0 kalau tidak ada di items
     if (props.category === 'neraca') {
-      // Only include neraca fields
+      // Hanya include field neraca
     } else if (props.category === 'laba-rugi') {
       // Only include laba rugi fields
     } else if (props.category === 'cashflow') {
-      // Only include cashflow fields
+      // Hanya include field cashflow
     } else if (props.category === 'rasio') {
       // Only include rasio fields
     }
 
-    // Set other fields to 0 if not in current category
+    // Set field lain ke 0 kalau tidak ada di category saat ini
     const allFields = [
       'current_assets', 'non_current_assets', 'short_term_liabilities', 'long_term_liabilities', 'equity',
       'revenue', 'operating_expenses', 'operating_profit', 'other_income', 'tax', 'net_profit',
@@ -235,11 +235,11 @@ const handleSubmit = async () => {
     }
 
     if (editingRecord.value) {
-      // Update existing
+      // Update yang sudah ada
       await financialReportsApi.update(editingRecord.value.id, requestData)
       message.success(`${categoryLabel.value} berhasil diupdate`)
     } else {
-      // Create new - use double cast to satisfy TypeScript
+      // Buat baru - pakai double cast untuk satisfy TypeScript
       await financialReportsApi.create(requestData as unknown as CreateFinancialReportRequest)
       message.success(`${categoryLabel.value} berhasil ditambahkan`)
     }
@@ -307,7 +307,7 @@ const tableData = computed(() => {
     const aYear = parseInt(String(a.period), 10)
     const bYear = parseInt(String(b.period), 10)
     if (aYear !== bYear) {
-      return bYear - aYear // Newest year first
+      return bYear - aYear // Tahun terbaru dulu
     }
     
     // If same year, sort by month: December (12) to January (1)
@@ -315,8 +315,8 @@ const tableData = computed(() => {
     const aMonthIndex = monthNames.indexOf(String(a.month))
     const bMonthIndex = monthNames.indexOf(String(b.month))
     
-    // December (index 11) should be first, January (index 0) should be last
-    // So we reverse the order: higher index (December) comes first
+    // Desember (index 11) harus dulu, Januari (index 0) harus terakhir
+    // Jadi kita reverse urutan: index lebih tinggi (Desember) datang dulu
     return bMonthIndex - aMonthIndex
   })
   

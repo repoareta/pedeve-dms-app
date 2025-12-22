@@ -84,12 +84,12 @@ export const notificationApi = {
     await apiClient.put(`/notifications/${notificationId}/read`, {})
   },
 
-  // Mark all notifications as read
+  // Tandai semua notifikasi sebagai sudah dibaca
   markAllAsRead: async (): Promise<void> => {
     await apiClient.put('/notifications/read-all', {})
   },
 
-  // Get unread count
+  // Ambil jumlah unread
   // PENTING: Endpoint ini sudah menggunakan RBAC di backend (GetUnreadCountWithRBAC)
   // - Superadmin/Administrator: melihat semua unread count
   // - Admin: melihat unread count dari company mereka + descendants
@@ -99,7 +99,7 @@ export const notificationApi = {
     return response.data.count
   },
 
-  // Delete all notifications
+  // Hapus semua notifikasi
   deleteAll: async (): Promise<void> => {
     await apiClient.delete('/notifications/delete-all')
   },
@@ -128,7 +128,7 @@ export const notificationSettingsApi = {
     return response.data
   },
 
-  // Update notification settings
+  // Update pengaturan notifikasi
   updateSettings: async (settings: UpdateNotificationSettingsRequest): Promise<NotificationSettings> => {
     const response = await apiClient.put<NotificationSettings>('/notification-settings', settings)
     return response.data

@@ -16,7 +16,7 @@ type User struct {
 	Role      string    `json:"role"`       // Legacy field, akan deprecated
 	Password  string    `json:"-"`          // Jangan sertakan password di JSON
 	CompanyID *string   `json:"company_id"` // NULL untuk superadmin, required untuk user lain
-	RoleID    *string   `json:"role_id"`    // Reference ke Role table
+	RoleID    *string   `json:"role_id"`    // Referensi ke tabel Role
 	IsActive  bool      `json:"is_active"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -57,9 +57,9 @@ type UserModel struct {
 	ID       string `gorm:"primaryKey" json:"id"`
 	Username string `gorm:"uniqueIndex;not null" json:"username"`
 	Email    string `gorm:"uniqueIndex;not null" json:"email"`
-	// Role is a legacy field. We intentionally do NOT set a default here so that
-	// new users can be created in "standby" mode without any role.
-	Role      string    `json:"role"` // Legacy field, akan deprecated (can be empty for standby users)
+	// Role adalah field legacy. Sengaja tidak set default supaya
+	// user baru bisa dibuat dalam mode "standby" tanpa role dulu
+	Role      string    `json:"role"` // Field legacy, akan deprecated (bisa kosong untuk user standby)
 	Password  string    `gorm:"not null" json:"-"`
 	CompanyID *string   `gorm:"index" json:"company_id"` // NULL untuk superadmin
 	RoleID    *string   `gorm:"index" json:"role_id"`    // Reference ke Role table
@@ -77,9 +77,9 @@ func (UserModel) TableName() string {
 type TwoFactorAuth struct {
 	ID          string    `gorm:"primaryKey" json:"id"`
 	UserID      string    `gorm:"uniqueIndex;not null" json:"user_id"`
-	Secret      string    `gorm:"not null" json:"-"` // Secret TOTP
+	Secret      string    `gorm:"not null" json:"-"` // Secret untuk TOTP
 	Enabled     bool      `gorm:"default:false" json:"enabled"`
-	BackupCodes string    `gorm:"type:text" json:"-"` // Array JSON dari backup codes
+	BackupCodes string    `gorm:"type:text" json:"-"` // Backup codes dalam format JSON array
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -92,14 +92,14 @@ func (TwoFactorAuth) TableName() string {
 // AuditLog merepresentasikan audit log entry
 type AuditLog struct {
 	ID         string    `gorm:"primaryKey" json:"id"`
-	UserID     string    `gorm:"index" json:"user_id"`         // Optional untuk system-level errors
-	Username   string    `gorm:"index" json:"username"`        // Optional untuk system-level errors
+	UserID     string    `gorm:"index" json:"user_id"`         // Opsional untuk system-level errors
+	Username   string    `gorm:"index" json:"username"`        // Opsional untuk system-level errors
 	Action     string    `gorm:"index;not null" json:"action"` // login, logout, create_document, dll
 	Resource   string    `gorm:"index" json:"resource"`        // auth, document, user, dll
-	ResourceID string    `gorm:"index" json:"resource_id"`     // ID dari resource yang dioperasikan
+	ResourceID string    `gorm:"index" json:"resource_id"`     // ID resource yang dioperasikan
 	IPAddress  string    `json:"ip_address"`
 	UserAgent  string    `json:"user_agent"`
-	Details    string    `gorm:"type:text" json:"details"`                    // JSON string untuk detail tambahan
+	Details    string    `gorm:"type:text" json:"details"`                    // Detail tambahan dalam format JSON string
 	Status     string    `gorm:"index;not null" json:"status"`                // success, failure, error
 	LogType    string    `gorm:"index;default:'user_action'" json:"log_type"` // user_action atau technical_error
 	CreatedAt  time.Time `gorm:"index" json:"created_at"`
@@ -110,8 +110,8 @@ func (AuditLog) TableName() string {
 	return "audit_logs"
 }
 
-// UserActivityLog merepresentasikan permanent audit log untuk data penting
-// Data ini tidak akan dihapus (permanent storage) untuk compliance dan legal purposes
+// UserActivityLog untuk permanent audit log data penting
+// Data ini tidak akan dihapus (permanent storage) untuk compliance dan legal
 // Resource: report, document, company, user
 type UserActivityLog struct {
 	ID         string    `gorm:"primaryKey" json:"id"`
@@ -168,7 +168,7 @@ type DocumentModel struct {
 	FileName   string         `gorm:"not null" json:"file_name"` // Nama file asli
 	FilePath   string         `gorm:"not null" json:"file_path"` // URL/path hasil upload
 	MimeType   string         `gorm:"not null" json:"mime_type"`
-	Size       int64          `gorm:"not null" json:"size"` // Size in bytes
+	Size       int64          `gorm:"not null" json:"size"` // Ukuran file dalam bytes
 	Status     string         `gorm:"default:'active'" json:"status"`
 	Metadata   datatypes.JSON `json:"metadata" swaggertype:"object"` // Metadata tambahan (opsional, format JSON) - expiry_date disimpan di sini
 	UploaderID string         `gorm:"index" json:"uploader_id"`
@@ -195,8 +195,8 @@ type NotificationModel struct {
 	CreatedAt    time.Time  `gorm:"index" json:"created_at"`
 	ReadAt       *time.Time `json:"read_at"`
 
-	// Relationship (optional, untuk join dengan document)
-	// Note: ResourceID adalah string pointer, jadi kita perlu join manual
+	// Relasi (opsional, untuk join dengan document)
+	// Catatan: ResourceID adalah string pointer, jadi perlu join manual
 	// GORM tidak support foreign key dengan string pointer, jadi kita akan load manual di repository
 	Document *DocumentModel `gorm:"-" json:"document,omitempty"` // gorm:"-" berarti tidak di-handle oleh GORM
 }

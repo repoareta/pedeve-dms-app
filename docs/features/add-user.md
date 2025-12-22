@@ -52,7 +52,7 @@ Pengguna bisa dibuat tanpa assignment perusahaan (standby):
 
 ## Validasi
 
-Sistem akan memvalidasi:
+Validasi yang dilakukan:
 - Username harus unik
 - Email harus unik dan format valid
 - Password harus memenuhi kriteria (minimal 8 karakter)
@@ -70,11 +70,11 @@ Sistem akan memvalidasi:
    - Cek assignment perusahaan
 
 3. **Klik "Simpan"**
-   - Sistem akan menyimpan pengguna
+   - Pengguna akan disimpan
    - Jika berhasil, Anda akan diarahkan ke halaman daftar pengguna
 
 4. **Jika Ada Error**
-   - Sistem akan menampilkan pesan error
+   - Pesan error akan ditampilkan
    - Perbaiki field yang error
    - Coba simpan lagi
 

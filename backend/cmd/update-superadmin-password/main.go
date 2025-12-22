@@ -16,7 +16,7 @@ func main() {
 	// Initialize database (InitDB doesn't return error, it panics on failure)
 	database.InitDB()
 
-	// Update superadmin password from Vault
+	// Update password superadmin dari Vault
 	if err := seed.UpdateSuperadminPasswordFromVault(); err != nil {
 		zapLog.Error("Failed to update superadmin password", zap.Error(err))
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

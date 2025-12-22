@@ -104,7 +104,7 @@ Setelah notifikasi ditandai sebagai "sudah ditindak lanjuti":
 - Pastikan konfirmasi mark as read berhasil
 - Hubungi administrator jika masalah berlanjut
 
-## Langkah Selanjutnya
+## Referensi
 
 - [Daftar Notifikasi](./notifications) - Kembali ke daftar notifikasi
 - [Settings](./settings) - Pelajari pengaturan notifikasi

@@ -154,7 +154,7 @@ export interface FinancialReportComparison {
 }
 
 export const financialReportsApi = {
-  // Create financial report (RKAP or Realisasi)
+  // Buat financial report (RKAP atau Realisasi)
   async create(data: CreateFinancialReportRequest): Promise<FinancialReport> {
     const response = await apiClient.post<FinancialReport>('/financial-reports', data)
     return response.data
@@ -166,7 +166,7 @@ export const financialReportsApi = {
     return response.data
   },
 
-  // Get all financial reports for a company
+  // Ambil semua financial reports untuk company
   async getByCompanyId(companyId: string): Promise<FinancialReport[]> {
     const response = await apiClient.get<FinancialReport[]>(`/financial-reports/company/${companyId}`)
     return response.data
@@ -178,7 +178,7 @@ export const financialReportsApi = {
     return response.data
   },
 
-  // Get RKAP for a company and year
+  // Ambil RKAP untuk company dan tahun
   async getRKAP(companyId: string, year: string): Promise<FinancialReport | null> {
     try {
       const reports = await this.getByCompanyId(companyId)
@@ -189,7 +189,7 @@ export const financialReportsApi = {
     }
   },
 
-  // Get Realisasi for a company and period
+  // Ambil Realisasi untuk company dan period
   async getRealisasi(companyId: string, period: string): Promise<FinancialReport | null> {
     try {
       const reports = await this.getByCompanyId(companyId)
@@ -200,7 +200,7 @@ export const financialReportsApi = {
     }
   },
 
-  // Get comparison between RKAP and Realisasi YTD
+  // Ambil perbandingan antara RKAP dan Realisasi YTD
   async getComparison(companyId: string, year: string, month: string): Promise<FinancialReportComparison> {
     const response = await apiClient.get<FinancialReportComparison>('/financial-reports/compare', {
       params: {
@@ -218,12 +218,12 @@ export const financialReportsApi = {
     return response.data
   },
 
-  // Delete financial report
+  // Hapus financial report
   async delete(id: string): Promise<void> {
     await apiClient.delete(`/financial-reports/${id}`)
   },
 
-  // Export performance data to Excel (with charts and tables)
+  // Export data performa ke Excel (dengan charts dan tables)
   async exportPerformanceExcel(
     companyId: string,
     startPeriod: string,
@@ -253,12 +253,12 @@ export const financialReportsApi = {
         responseType: 'blob',
       })
       
-      // Check if response is actually a blob (Excel file)
+      // Cek apakah response benar-benar blob (file Excel)
       if (!(response.data instanceof Blob)) {
         throw new Error('Response is not a valid file')
       }
       
-      // Check content type - if it's JSON, it means there's an error
+      // Cek content type - kalau JSON, berarti ada error
       const contentType = response.headers['content-type'] || ''
       if (contentType.includes('application/json')) {
         // Response is JSON error, parse it
@@ -269,12 +269,12 @@ export const financialReportsApi = {
       
       return response.data
     } catch (error: unknown) {
-      // If it's already an Error with message, re-throw it
+      // Kalau sudah Error dengan message, re-throw
       if (error instanceof Error) {
         throw error
       }
       
-      // Otherwise, wrap it
+      // Kalau tidak, wrap
       const axiosError = error as {
         response?: {
           status?: number
@@ -292,7 +292,7 @@ export const financialReportsApi = {
     }
   },
 
-  // Validate bulk upload Excel file before upload
+  // Validasi file Excel bulk upload sebelum upload
   async validateBulkExcelFile(file: File): Promise<{
     valid: boolean
     errors: Array<{ row: number; column: string; message: string }>
@@ -309,7 +309,7 @@ export const financialReportsApi = {
     return response.data
   },
 
-  // Upload bulk financial reports from Excel file
+  // Upload financial reports secara bulk dari file Excel
   async uploadBulkFinancialReports(
     file: File,
     onProgress?: (progress: number) => void
@@ -333,7 +333,7 @@ export const financialReportsApi = {
           const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
           onProgress(progress)
         } else if (onProgress && progressEvent.loaded) {
-          // Fallback jika total tidak tersedia
+          // Fallback kalau total tidak tersedia
           onProgress(Math.min(99, Math.round(progressEvent.loaded / 1024))) // Estimate based on KB
         }
       },

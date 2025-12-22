@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/storage"
-	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
 )
 
@@ -176,11 +176,11 @@ func UploadLogo(c *fiber.Ctx) error {
 	}
 
 	// Normalize file URL to use backend proxy endpoint
-	// This ensures consistent URL format for both GCP Storage and Local Storage
+	// Ini memastikan format URL konsisten untuk GCP Storage dan Local Storage
 	// Format: /api/v1/files/logos/filename.png
-	
+
 	// If using GCP Storage, return backend proxy URL instead of direct GCP URL
-	// This allows access without requiring public bucket access
+	// Ini memungkinkan akses tanpa perlu public bucket access
 	if strings.HasPrefix(fileURL, "https://storage.googleapis.com/") {
 		// Extract path from GCP URL: https://storage.googleapis.com/bucket/logos/filename.png
 		// Convert to: /api/v1/files/logos/filename.png
@@ -192,7 +192,7 @@ func UploadLogo(c *fiber.Ctx) error {
 	} else if strings.HasPrefix(fileURL, "/") && !strings.HasPrefix(fileURL, "/api/v1/files/") {
 		// If using Local Storage, URL format is: /logos/filename.png
 		// Convert to: /api/v1/files/logos/filename.png
-		// Remove leading slash if present
+		// Hapus leading slash kalau ada
 		pathWithoutSlash := strings.TrimPrefix(fileURL, "/")
 		fileURL = fmt.Sprintf("/api/v1/files/%s", pathWithoutSlash)
 	}
@@ -209,4 +209,3 @@ func UploadLogo(c *fiber.Ctx) error {
 		Size:     file.Size,
 	})
 }
-

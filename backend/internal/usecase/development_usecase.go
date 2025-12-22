@@ -96,7 +96,7 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 	}
 
 	// Double check: juga exclude holding by code untuk extra safety
-	// Filter out any company with code 'PDV' (holding) just in case
+	// Filter out company dengan code 'PDV' (holding) untuk jaga-jaga
 	filteredCompanies := make([]domain.CompanyModel, 0)
 	for _, comp := range allCompanies {
 		if comp.Code != "PDV" {
@@ -111,7 +111,7 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 		return nil
 	}
 
-	// Collect all company IDs (including descendants)
+	// Kumpulkan semua company ID (termasuk descendants)
 	companyIDs := make([]string, 0, len(allCompanies))
 	for _, comp := range allCompanies {
 		companyIDs = append(companyIDs, comp.ID)
@@ -127,13 +127,13 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 		return fmt.Errorf("failed to get user company assignments: %w", err)
 	}
 
-	// Collect unique user IDs from assignments
+	// Kumpulkan unique user ID dari assignments
 	userIDsFromAssignments := make(map[string]bool)
 	for _, assignment := range assignments {
 		userIDsFromAssignments[assignment.UserID] = true
 	}
 
-	// Also get users from UserModel.CompanyID
+	// Ambil juga users dari UserModel.CompanyID
 	var usersFromCompanyID []domain.UserModel
 	if err := tx.Where("company_id IN ?", companyIDs).Find(&usersFromCompanyID).Error; err != nil {
 		tx.Rollback()
@@ -152,7 +152,7 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 	// Filter out superadmin users
 	userIDsToDelete := make([]string, 0)
 	for userID := range allUserIDs {
-		// Get user to check if superadmin
+		// Ambil user untuk cek apakah superadmin
 		var user domain.UserModel
 		if err := tx.Where("id = ?", userID).First(&user).Error; err != nil {
 			continue // Skip if user not found
@@ -170,7 +170,7 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 	zapLog.Info("Deleted user company assignments by company_id", zap.Int("company_count", len(companyIDs)))
 
 	// 4. Delete all remaining assignments for users that will be deleted (by user_id)
-	// This handles edge cases where user might have assignments in other companies
+	// Ini handle edge case dimana user mungkin punya assignments di company lain
 	if len(userIDsToDelete) > 0 {
 		if err := tx.Where("user_id IN ?", userIDsToDelete).Delete(&domain.UserCompanyAssignmentModel{}).Error; err != nil {
 			tx.Rollback()
@@ -181,12 +181,12 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 
 	// 5. Delete all related data for companies (shareholders, directors, business_fields)
 	// Delete shareholders (both as company owner and as shareholder company reference)
-	// Delete shareholders where company_id IN companyIDs (shareholders of these companies)
+	// Hapus shareholders dimana company_id IN companyIDs (shareholders dari companies ini)
 	if err := tx.Where("company_id IN ?", companyIDs).Delete(&domain.ShareholderModel{}).Error; err != nil {
 		tx.Rollback()
 		return fmt.Errorf("failed to delete shareholders: %w", err)
 	}
-	// Delete shareholders where shareholder_company_id IN companyIDs (these companies as shareholders in other companies)
+	// Hapus shareholders dimana shareholder_company_id IN companyIDs (companies ini sebagai shareholders di company lain)
 	if err := tx.Where("shareholder_company_id IN ?", companyIDs).Delete(&domain.ShareholderModel{}).Error; err != nil {
 		tx.Rollback()
 		return fmt.Errorf("failed to delete shareholders by shareholder_company_id: %w", err)
@@ -209,7 +209,7 @@ func (uc *developmentUseCase) ResetSubsidiaryData() error {
 
 	// Delete reports (from reports table)
 	if err := tx.Where("company_id IN ?", companyIDs).Delete(&domain.ReportModel{}).Error; err != nil {
-		// Log warning but don't fail - reports might not exist
+		// Log warning tapi jangan fail - reports mungkin tidak ada
 		zapLog.Warn("Failed to delete reports (might not exist)", zap.Error(err))
 	} else {
 		zapLog.Info("Deleted reports", zap.Int("company_count", len(companyIDs)))

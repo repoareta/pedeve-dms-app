@@ -155,7 +155,7 @@ func main() {
 	}
 
 	// CORS dengan peningkatan keamanan
-	// Get CORS origin from environment variable, fallback to localhost for development
+	// Ambil CORS origin dari environment variable, fallback ke localhost untuk development
 	corsOrigin := os.Getenv("CORS_ORIGIN")
 	if corsOrigin == "" {
 		corsOrigin = "http://localhost:5173,http://localhost:3000"
@@ -164,11 +164,11 @@ func main() {
 		zapLog.Info("CORS origin configured", zap.String("origin", corsOrigin))
 	}
 
-	// Split comma-separated origins into slice for Fiber CORS
-	// Fiber CORS AllowOrigins accepts comma-separated string or slice of strings
-	// Using comma-separated string is supported and will be parsed correctly
+	// Split comma-separated origins jadi slice untuk Fiber CORS
+	// Fiber CORS AllowOrigins terima comma-separated string atau slice of strings
+	// Pakai comma-separated string didukung dan akan di-parse dengan benar
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     corsOrigin, // Comma-separated string is supported by Fiber CORS
+		AllowOrigins:     corsOrigin, // Comma-separated string didukung oleh Fiber CORS
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS,PATCH",
 		AllowHeaders:     "Accept,Authorization,Content-Type,X-CSRF-Token,X-Requested-With",
 		ExposeHeaders:    "Link,X-Total-Count",

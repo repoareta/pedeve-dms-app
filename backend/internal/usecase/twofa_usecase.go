@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"image/png"
 
+	"github.com/pquerna/otp"
+	"github.com/pquerna/otp/totp"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/encryption"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/uuid"
-	"github.com/pquerna/otp"
-	"github.com/pquerna/otp/totp"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -39,7 +39,7 @@ func Verify2FALogin(userID, code string) (bool, error) {
 		return true, nil
 	}
 
-	// Decrypt backup codes (handle backward compatibility)
+	// Decrypt backup codes (handle backward compatibility - untuk data lama yang belum di-encrypt)
 	backupCodes, err := encryption.Decrypt(twoFA.BackupCodes)
 	if err != nil {
 		// Jika decrypt gagal, gunakan as-is (backward compatibility)
@@ -157,13 +157,13 @@ func Verify2FAUseCase(userID, code string) (map[string]interface{}, error) {
 
 	// Aktifkan 2FA dan generate backup codes
 	backupCodesJSON := generateBackupCodes()
-	
+
 	// Encrypt backup codes sebelum disimpan
 	encryptedBackupCodes, err := encryption.Encrypt(backupCodesJSON)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt backup codes: %w", err)
 	}
-	
+
 	twoFA.Enabled = true
 	twoFA.BackupCodes = encryptedBackupCodes // Simpan encrypted backup codes
 	if err := database.GetDB().Save(&twoFA).Error; err != nil {

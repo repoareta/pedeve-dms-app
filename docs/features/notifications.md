@@ -175,7 +175,7 @@ Anda dapat mengatur notifikasi di halaman Settings → Pengaturan Notifikasi:
 - Semakin besar threshold, semakin awal notifikasi dibuat
 - Threshold berlaku untuk semua dokumen dan masa jabatan direktur
 
-## Langkah Selanjutnya
+## Referensi
 
 - [Mark as Read](./mark-notifications-read) - Pelajari cara menandai notifikasi
 - [Settings](./settings) - Pelajari pengaturan notifikasi

@@ -57,7 +57,7 @@ Menu navigasi utama terletak di bagian atas halaman:
 - **Notifikasi** - Daftar notifikasi
 - **Pengaturan** - Pengaturan akun dan aplikasi
 
-## Langkah Selanjutnya
+## Referensi
 
 - [Login & Autentikasi](./authentication) - Pelajari cara login dan setup 2FA
 - [Halaman Daftar Anak Perusahaan](./dashboard) - Kenali halaman utama setelah login

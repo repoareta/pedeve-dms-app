@@ -184,14 +184,14 @@ const validating = ref(false)
 const uploading = ref(false)
 const uploadProgress = ref(0)
 
-// Validation result
+// Hasil validasi
 const validationResult = ref<{
   valid: boolean
   errors: Array<{ row: number; column: string; message: string }>
   data: Array<Record<string, unknown>>
 } | null>(null)
 
-// Upload error modal
+// Modal error upload
 const uploadErrorModalVisible = ref(false)
 const uploadErrors = ref<Array<{ row?: number; column?: string; message?: string }>>([])
 
@@ -241,9 +241,9 @@ const handleDownloadTemplate = async () => {
   }
 }
 
-// Handle before upload - validate file
+// Handle sebelum upload - validasi file
 const handleBeforeUpload = async (file: File): Promise<boolean> => {
-  // Validate file extension
+  // Validasi ekstensi file
   const validExtensions = ['.xlsx', '.xls']
   const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
   if (!validExtensions.includes(fileExtension)) {
@@ -287,7 +287,7 @@ const handleBeforeUpload = async (file: File): Promise<boolean> => {
   return false
 }
 
-// Handle remove file
+// Handle hapus file
 const handleRemoveFile = () => {
   fileList.value = []
   validationResult.value = null
@@ -315,7 +315,7 @@ const handleUpload = async () => {
       uploadProgress.value = progress
     })
 
-    // Build success message with created/updated info
+    // Buat success message dengan info created/updated
     let successMessage = ''
     if (result.created && result.updated) {
       successMessage = `Upload berhasil! ${result.created} data dibuat, ${result.updated} data diupdate.`

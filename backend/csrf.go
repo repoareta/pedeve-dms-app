@@ -135,7 +135,7 @@ func GetCSRFTokenHandler(c *fiber.Ctx) error {
 	// Simpan token
 	StoreCSRFToken(token)
 
-	// Set cookie with CSRF token (optional, untuk double submit cookie pattern)
+	// Set cookie dengan CSRF token (opsional, untuk double submit cookie pattern)
 	isHTTPS := c.Protocol() == "https" || c.Get("X-Forwarded-Proto") == "https"
 	c.Cookie(&fiber.Cookie{
 		Name:     csrfTokenCookie,

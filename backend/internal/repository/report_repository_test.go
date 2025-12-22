@@ -19,7 +19,7 @@ func TestReportRepository_Create(t *testing.T) {
 	repo := NewReportRepositoryWithDB(testDB)
 
 	t.Run("Create report successfully", func(t *testing.T) {
-		// Create test company first
+		// Buat test company dulu
 		company := &domain.CompanyModel{
 			ID:       uuid.GenerateUUID(),
 			Code:     "TEST001",
@@ -30,7 +30,7 @@ func TestReportRepository_Create(t *testing.T) {
 		err := testDB.Create(company).Error
 		require.NoError(t, err)
 
-		// Create test user
+		// Buat test user
 		user := &domain.UserModel{
 			ID:       uuid.GenerateUUID(),
 			Username: "testuser",
@@ -61,11 +61,11 @@ func TestReportRepository_Create(t *testing.T) {
 
 	t.Run("Create report with missing required fields", func(t *testing.T) {
 		// Note: GORM and SQLite may not strictly enforce NOT NULL constraints
-		// Validation is typically done at usecase/handler level
-		// This test verifies that repository doesn't crash with invalid data
+		// Validasi biasanya dilakukan di level usecase/handler
+		// Test ini verifikasi bahwa repository tidak crash dengan data invalid
 		report := &domain.ReportModel{
 			ID: uuid.GenerateUUID(),
-			// Missing required fields: Period, CompanyID, Revenue, Opex, NPAT, Dividend, FinancialRatio
+			// Field wajib yang hilang: Period, CompanyID, Revenue, Opex, NPAT, Dividend, FinancialRatio
 		}
 
 		err := repo.Create(report)
@@ -370,4 +370,3 @@ func createTestReport(t *testing.T, db *gorm.DB, companyID, userID string) *doma
 func stringPtr(s string) *string {
 	return &s
 }
-

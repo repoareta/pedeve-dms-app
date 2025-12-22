@@ -695,7 +695,7 @@ const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value
 // RBAC: Add Subsidiary hanya untuk admin
 const canAddSubsidiary = computed(() => isAdmin.value || isSuperAdmin.value)
 
-// Check if any menu item is available (to show/hide Options dropdown)
+// Cek apakah ada menu item yang tersedia (untuk show/hide Options dropdown)
 const hasAnyMenuOption = computed(() => canEdit.value || canAssignRole.value || canAddSubsidiary.value)
 
 const company = ref<Company | null>(null)
@@ -724,7 +724,7 @@ const rolesLoading = ref(false)
 const userSearchText = ref('')
 const roleSearchText = ref('')
 
-// Editing user role
+// Edit role user
 const editingUserRole = ref<{ userId: string; roleId: string | undefined } | null>(null)
 const editingUserRoleModalVisible = ref(false)
 const editingRoleLoading = ref(false)
@@ -775,7 +775,7 @@ const npatData = ref({
   change: 15
 })
 
-// Generate chart data
+// Generate data chart
 const generateChartData = (baseValue: number, variance: number = 0.2) => {
   const points = 12
   const data: number[] = []
@@ -909,7 +909,7 @@ const reportColumns = [
 // Computed: sorted companies by role level (highest role first)
 const sortedUserCompanies = computed(() => {
   return [...allUserCompanies.value].sort((a, b) => {
-    // Sort by role_level (0=superadmin, 1=admin, 2=manager, 3=staff)
+    // Sort berdasarkan role_level (0=superadmin, 1=admin, 2=manager, 3=staff)
     // Semakin kecil level, semakin tinggi role
     return a.role_level - b.role_level
   })
@@ -921,13 +921,13 @@ const loadUserCompanies = async () => {
   try {
     allUserCompanies.value = await userApi.getMyCompanies()
     
-    // If no companies, show warning
+    // Kalau tidak ada companies, tampilkan warning
     if (allUserCompanies.value.length === 0) {
       message.warning('Anda belum di-assign ke perusahaan')
       return
     }
     
-    // If only 1 company, load it directly
+    // Kalau hanya 1 company, load langsung
     if (allUserCompanies.value.length === 1) {
       const comp = allUserCompanies.value[0]!
       await loadCompanyDetail(comp.company.id)
@@ -954,7 +954,7 @@ const loadCompanyDetail = async (companyId: string) => {
   try {
     company.value = await companyApi.getById(companyId)
     
-    // Find role user di company ini
+    // Cari role user di company ini
     const userCompany = allUserCompanies.value.find(c => c.company.id === companyId)
     if (userCompany) {
       currentUserRole.value = userCompany.role

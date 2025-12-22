@@ -74,7 +74,7 @@ func (h *ReportHandler) CreateReport(c *fiber.Ctx) error {
 			})
 		}
 
-		// Check if user has access to create report for this company
+		// Cek apakah user punya akses untuk create report untuk company ini
 		hasAccess, err := h.reportUseCase.ValidateReportAccess(roleName, &userCompanyID, req.CompanyID)
 		if err != nil || !hasAccess {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{

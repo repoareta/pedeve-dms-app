@@ -176,7 +176,7 @@ func (r *documentRepository) ListDocumentsPaginated(q ListDocumentsQuery) ([]dom
 
 func (r *documentRepository) GetDocumentByID(id string) (*domain.DocumentModel, error) {
 	var doc domain.DocumentModel
-	// Explicitly select all fields to ensure they're loaded
+	// Explicitly select semua field untuk memastikan ter-load
 	if err := r.db.Select("*").Where("id = ?", id).First(&doc).Error; err != nil {
 		return nil, err
 	}
@@ -192,31 +192,31 @@ func (r *documentRepository) UpdateDocument(doc *domain.DocumentModel) error {
 }
 
 func (r *documentRepository) DeleteDocument(id string) error {
-	// Delete notifications for this document first (to avoid foreign key constraint)
+	// Hapus notifikasi untuk dokumen ini dulu (untuk hindari foreign key constraint)
 	// Ignore error - notifications might not exist, this prevents foreign key constraint error
 	_ = r.db.Where("resource_type = ? AND resource_id = ?", "document", id).
 		Delete(&domain.NotificationModel{}).Error
 
-	// Now delete the document
+	// Sekarang hapus dokumen
 	return r.db.Delete(&domain.DocumentModel{}, "id = ?", id).Error
 }
 
 func (r *documentRepository) DeleteDocumentsByFolder(folderID string) error {
-	// Get all document IDs in this folder first
+	// Ambil semua document ID di folder ini dulu
 	var documents []domain.DocumentModel
 	if err := r.db.Where("folder_id = ?", folderID).Find(&documents).Error; err != nil {
 		return fmt.Errorf("failed to get documents: %w", err)
 	}
 
-	// Delete notifications for each document first (to avoid foreign key constraint)
+	// Hapus notifikasi untuk setiap dokumen dulu (untuk hindari foreign key constraint)
 	for _, doc := range documents {
-		// Delete notifications where resource_type = 'document' and resource_id = doc.ID
+		// Hapus notifikasi dimana resource_type = 'document' dan resource_id = doc.ID
 		// Ignore error - notifications might not exist, this prevents foreign key constraint error
 		_ = r.db.Where("resource_type = ? AND resource_id = ?", "document", doc.ID).
 			Delete(&domain.NotificationModel{}).Error
 	}
 
-	// Now delete all documents in the folder
+	// Sekarang hapus semua dokumen di folder
 	return r.db.Delete(&domain.DocumentModel{}, "folder_id = ?", folderID).Error
 }
 

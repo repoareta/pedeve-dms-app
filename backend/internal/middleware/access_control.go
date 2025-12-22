@@ -15,7 +15,7 @@ func RequireCompanyAccess() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		zapLog := logger.GetLogger()
 
-		// Get user info from JWT claims
+		// Ambil info user dari JWT claims
 		userIDVal := c.Locals("userID")
 		companyIDVal := c.Locals("companyID")
 		roleNameVal := c.Locals("roleName")
@@ -37,7 +37,7 @@ func RequireCompanyAccess() fiber.Handler {
 			return c.Next()
 		}
 
-		// Get target company ID from request (bisa dari param, query, atau body)
+		// Ambil target company ID dari request (bisa dari param, query, atau body)
 		targetCompanyID := c.Params("company_id")
 		if targetCompanyID == "" {
 			targetCompanyID = c.Query("company_id")
@@ -63,7 +63,7 @@ func RequireCompanyAccess() fiber.Handler {
 			return c.Next()
 		}
 
-		// Check if target company is a descendant of user's company
+		// Cek apakah target company adalah descendant dari company user
 		companyRepo := repository.NewCompanyRepository()
 		isDescendant, err := companyRepo.IsDescendantOf(targetCompanyID, userCompanyID)
 		if err != nil {
@@ -81,7 +81,7 @@ func RequireCompanyAccess() fiber.Handler {
 			})
 		}
 
-		// User has access, continue
+		// User punya akses, lanjutkan
 		return c.Next()
 	}
 }
@@ -89,7 +89,7 @@ func RequireCompanyAccess() fiber.Handler {
 // RequirePermissionFromJWT middleware checks permission dari JWT claims (tidak perlu query database)
 func RequirePermissionFromJWT(permissionName string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Get permissions from JWT claims
+		// Ambil permissions dari JWT claims
 		permissionsVal := c.Locals("permissions")
 		roleNameVal := c.Locals("roleName")
 
@@ -108,7 +108,7 @@ func RequirePermissionFromJWT(permissionName string) fiber.Handler {
 			})
 		}
 
-		// Superadmin has all permissions (check for "*" permission)
+		// Superadmin punya semua permissions (cek untuk permission "*")
 		roleName := ""
 		if roleNameVal != nil {
 			roleName = roleNameVal.(string)
@@ -118,7 +118,7 @@ func RequirePermissionFromJWT(permissionName string) fiber.Handler {
 			return c.Next()
 		}
 
-		// Check if user has the required permission
+		// Cek apakah user punya permission yang diperlukan
 		hasPermission := false
 		for _, perm := range permissions {
 			if perm == "*" || perm == permissionName {
@@ -134,7 +134,7 @@ func RequirePermissionFromJWT(permissionName string) fiber.Handler {
 			})
 		}
 
-		// User has permission, continue
+		// User punya permission, lanjutkan
 		return c.Next()
 	}
 }
@@ -142,7 +142,7 @@ func RequirePermissionFromJWT(permissionName string) fiber.Handler {
 // RequireRoleFromJWT middleware checks role dari JWT claims (tidak perlu query database)
 func RequireRoleFromJWT(roles ...string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Get role from JWT claims
+		// Ambil role dari JWT claims
 		roleNameVal := c.Locals("roleName")
 
 		if roleNameVal == nil {
@@ -154,7 +154,7 @@ func RequireRoleFromJWT(roles ...string) fiber.Handler {
 
 		roleName := roleNameVal.(string)
 
-		// Check if user has one of the required roles
+		// Cek apakah user punya salah satu role yang diperlukan
 		hasRole := false
 		for _, role := range roles {
 			if roleName == role {
@@ -170,7 +170,7 @@ func RequireRoleFromJWT(roles ...string) fiber.Handler {
 			})
 		}
 
-		// User has required role, continue
+		// User punya role yang diperlukan, lanjutkan
 		return c.Next()
 	}
 }

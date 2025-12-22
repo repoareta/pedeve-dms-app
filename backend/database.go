@@ -19,7 +19,6 @@ func GenerateUUID() string {
 	return uuid.New().String()
 }
 
-
 // InitDB menginisialisasi koneksi database
 func InitDB() {
 	var err error
@@ -45,7 +44,7 @@ func InitDB() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	// Auto migrate schema
+	// Migrasi schema otomatis
 	err = DB.AutoMigrate(&UserModel{}, &TwoFactorAuth{}, &AuditLog{})
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
@@ -54,7 +53,7 @@ func InitDB() {
 	log.Println("Database connected and migrated successfully")
 }
 
-// Model User untuk database
+// Model User di database
 type UserModel struct {
 	ID        string    `gorm:"primaryKey" json:"id"`
 	Username  string    `gorm:"uniqueIndex;not null" json:"username"`
@@ -69,4 +68,3 @@ type UserModel struct {
 func (UserModel) TableName() string {
 	return "users"
 }
-

@@ -14,24 +14,24 @@ const router = useRouter()
 
 onMounted(async () => {
   try {
-    // Get user's companies
+    // Ambil companies user
     const companies = await userApi.getMyCompanies()
     
     if (companies.length === 0) {
-      // No companies assigned, redirect to subsidiaries list
+      // Tidak ada companies yang di-assign, redirect ke subsidiaries list
       message.warning('Anda belum di-assign ke perusahaan')
       router.replace({ name: 'subsidiaries' })
     } else if (companies.length === 1) {
       // Single company, redirect to detail page
       router.replace({ name: 'subsidiary-detail', params: { id: companies[0]!.company.id } })
     } else {
-      // Multiple companies, redirect to subsidiaries list
+      // Multiple companies, redirect ke subsidiaries list
       router.replace({ name: 'subsidiaries' })
     }
   } catch (error) {
     console.error('Error loading user companies:', error)
     message.error('Gagal memuat data perusahaan')
-    // On error, redirect to subsidiaries list
+    // Kalau error, redirect ke subsidiaries list
     router.replace({ name: 'subsidiaries' })
   }
 })

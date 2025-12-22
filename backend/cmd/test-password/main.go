@@ -74,7 +74,7 @@ func main() {
 	fmt.Printf("   Password Hash Preview: %s...\n", user.Password[:min(20, len(user.Password))])
 	fmt.Println()
 
-	// Check if password is hashed (bcrypt hashes start with $2a$ or $2b$)
+	// Cek apakah password sudah di-hash (bcrypt hash dimulai dengan $2a$ atau $2b$)
 	if len(user.Password) < 10 || (user.Password[:4] != "$2a$" && user.Password[:4] != "$2b$") {
 		fmt.Printf("⚠️  WARNING: Password tidak ter-hash dengan benar!\n")
 		fmt.Printf("   Password seharusnya di-hash dengan bcrypt (dimulai dengan $2a$ atau $2b$)\n")

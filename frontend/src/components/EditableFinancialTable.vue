@@ -61,11 +61,11 @@
                   required: true,
                   message: `Harap isi ${column.title}!`,
                   validator: (_rule: any, value: any) => {
-                    // Use Promise reference from component scope to avoid context issues
-                    // This ensures Promise is always available even in different execution contexts
+                    // Pakai Promise reference dari component scope untuk hindari context issues
+                    // Ini memastikan Promise selalu tersedia bahkan di execution contexts berbeda
                     const P = PromiseRef
                     
-                    // Allow 0 as valid value, only reject undefined, null, or empty string
+                    // Izinkan 0 sebagai nilai valid, hanya reject undefined, null, atau empty string
                     if (value === undefined || value === null || value === '') {
                       return P.reject(new Error(`Harap isi ${column.title}!`))
                     }
@@ -73,7 +73,7 @@
                     if (typeof value === 'number' && value === 0) {
                       return P.resolve()
                     }
-                    // Validate ratio fields (max 100 for percentage-based ratios)
+                    // Validasi field ratio (max 100 untuk ratio berbasis persentase)
                     const isRatioField = column.dataIndex?.includes('roe') || 
                                         column.dataIndex?.includes('roi') || 
                                         column.dataIndex?.includes('ratio') || 
@@ -156,7 +156,7 @@ const emit = defineEmits<{
   delete: [key: string]
 }>()
 
-// Type for form instance - in Ant Design Vue 4.x, form instance has different structure
+// Type untuk form instance - di Ant Design Vue 4.x, form instance punya struktur berbeda
 interface FormInstance {
   setFieldsValue?: (values: Record<string, unknown>) => void
   validateFields?: () => Promise<Record<string, unknown>>
@@ -181,8 +181,8 @@ const defaultFormInstance: FormInstance = {
   validate: async () => ({}),
 } as unknown as FormInstance
 
-// Try to get form from Form.useForm(), with fallback to default
-// In Ant Design Vue 4.x, useForm() can be called without arguments
+// Coba ambil form dari Form.useForm(), dengan fallback ke default
+// Di Ant Design Vue 4.x, useForm() bisa dipanggil tanpa arguments
 let formResultRaw: unknown
 try {
   // TypeScript may require arguments, but runtime doesn't - use type assertion
@@ -192,7 +192,7 @@ try {
   formResultRaw = null
 }
 
-// Safely extract form instance - handle both array and object returns
+// Extract form instance dengan aman - handle return array dan object
 let form: FormInstance = defaultFormInstance
 
 if (formResultRaw) {
@@ -203,29 +203,29 @@ if (formResultRaw) {
       form = instance as unknown as FormInstance
     }
   } else if (typeof formResultRaw === 'object') {
-    // If object, use directly
+    // Kalau object, pakai langsung
     form = formResultRaw as unknown as FormInstance
   }
 }
 
-// Ensure form always has required methods
+// Pastikan form selalu punya methods yang diperlukan
 if (!form.setFieldsValue || !form.validateFields || !form.resetFields) {
   // Merge with default to ensure all methods exist
   form = { ...defaultFormInstance, ...form } as unknown as FormInstance
 }
 const editingKey = ref<string>('')
 
-// Store Promise reference at component level to ensure it's available in validator
-// This prevents "Cannot read properties of undefined (reading 'Promise')" errors
+// Simpan Promise reference di level component untuk pastikan tersedia di validator
+// Ini mencegah error "Cannot read properties of undefined (reading 'Promise')"
 const PromiseRef = Promise
 
-// Create setFieldsValue wrapper using modelRef if available
-// In Ant Design Vue 4.x, modelRef is a ref that needs to be accessed with unref
+// Buat setFieldsValue wrapper pakai modelRef kalau tersedia
+// Di Ant Design Vue 4.x, modelRef adalah ref yang perlu diakses dengan unref
 if (!form.setFieldsValue) {
   form.setFieldsValue = (values: Record<string, unknown>) => {
     console.log('setFieldsValue called with:', values)
     if (form.modelRef) {
-      // modelRef is a ref, access its value property
+      // modelRef adalah ref, akses property value-nya
       const modelRefValue = form.modelRef as { value?: Record<string, unknown> }
       if (modelRefValue && 'value' in modelRefValue) {
         if (!modelRefValue.value) {
@@ -240,7 +240,7 @@ if (!form.setFieldsValue) {
           Object.assign(model, values)
           console.log('setFieldsValue - model after assign:', model)
         } else {
-          // Initialize if needed
+          // Initialize kalau diperlukan
           if (form.modelRef && typeof form.modelRef === 'object') {
             (form.modelRef as { value: Record<string, unknown> }).value = { ...values }
             console.log('setFieldsValue - initialized modelRef.value:', (form.modelRef as { value: Record<string, unknown> }).value)
@@ -253,7 +253,7 @@ if (!form.setFieldsValue) {
   }
 }
 
-// Create validateFields wrapper using validate if available
+// Buat validateFields wrapper pakai validate kalau tersedia
 if (!form.validateFields && form.validate) {
   form.validateFields = async () => {
     await form.validate?.()
@@ -291,7 +291,7 @@ const getColumnPrecision = (column: ColumnType): number | undefined => {
 }
 
 const getColumnMax = (column: ColumnType): number | undefined => {
-  // For ratio fields (percentage-based), limit to 100
+  // Untuk field ratio (berbasis persentase), limit ke 100
   const isRatioField = column.dataIndex?.includes('roe') || 
                       column.dataIndex?.includes('roi') || 
                       column.dataIndex?.includes('ratio') || 
@@ -300,8 +300,8 @@ const getColumnMax = (column: ColumnType): number | undefined => {
   if (isRatioField) {
     return 100
   }
-  // For EBITDA (absolute value, not percentage), allow larger values
-  // But still reasonable limit (e.g., 1 trillion)
+  // Untuk EBITDA (nilai absolut, bukan persentase), izinkan nilai lebih besar
+  // Tapi tetap limit yang wajar (misalnya, 1 triliun)
   if (column.dataIndex?.includes('ebitda') && !column.dataIndex?.includes('margin')) {
     return 1000000000000 // 1 trillion
   }
@@ -311,7 +311,7 @@ const getColumnMax = (column: ColumnType): number | undefined => {
 const edit = (record: Record<string, unknown>) => {
   const formValues: Record<string, unknown> = {}
   
-  // Collect all editable fields from columns and their children
+  // Kumpulkan semua field editable dari columns dan children-nya
   const collectEditableFields = (cols: ColumnType[]) => {
     cols.forEach((col) => {
       if (col.editable && col.dataIndex) {
@@ -346,10 +346,10 @@ const edit = (record: Record<string, unknown>) => {
     return
   }
   
-  // Try to set form values - in Ant Design Vue 4.x, use modelRef
+  // Coba set form values - di Ant Design Vue 4.x, pakai modelRef
   try {
     if (typeof form.setFieldsValue === 'function') {
-      // Use setFieldsValue if available (our wrapper)
+      // Pakai setFieldsValue kalau tersedia (wrapper kita)
       form.setFieldsValue(formValues)
       console.log('Form values set successfully using setFieldsValue')
     } else if (form.modelRef) {
@@ -359,7 +359,7 @@ const edit = (record: Record<string, unknown>) => {
         if (!modelRefValue.value) {
           modelRefValue.value = {}
         }
-        // Set values one by one to ensure reactivity
+        // Set values satu per satu untuk pastikan reactivity
         Object.keys(formValues).forEach((key) => {
           if (modelRefValue.value) {
             modelRefValue.value[key] = formValues[key]
@@ -413,7 +413,7 @@ const save = async (key: string) => {
     // In Ant Design Vue 4.x, validateFields might be different
     let row: Record<string, unknown>
     if (typeof form.validateFields === 'function') {
-      // Use validateFields if available (our wrapper)
+      // Pakai validateFields kalau tersedia (wrapper kita)
       row = await form.validateFields()
     } else if (form.validate) {
       // Use validate method and then get modelRef
@@ -462,14 +462,14 @@ const save = async (key: string) => {
   }
 }
 
-// Format cell value for display
+// Format nilai cell untuk ditampilkan
 const formatCellValue = (value: unknown, inputType?: 'number' | 'text'): string => {
   if (value === undefined || value === null) return '-'
   
   if (inputType === 'number') {
     const numValue = typeof value === 'string' ? parseFloat(value) : value
     if (typeof numValue === 'number' && !isNaN(numValue)) {
-      // Format as currency for large numbers, or as ratio for small numbers
+      // Format sebagai currency untuk angka besar, atau sebagai ratio untuk angka kecil
       if (numValue >= 1000000000) {
         return `Rp ${(numValue / 1000000000).toFixed(2)}M`
       } else if (numValue >= 1000000) {
@@ -477,7 +477,7 @@ const formatCellValue = (value: unknown, inputType?: 'number' | 'text'): string 
       } else if (numValue >= 1000) {
         return `Rp ${(numValue / 1000).toFixed(2)}Rb`
       } else if (numValue < 100 && numValue > 0) {
-        // Likely a ratio/percentage
+        // Kemungkinan ratio/persentase
         return `${numValue.toFixed(2)}%`
       }
       return numValue.toLocaleString('id-ID')
@@ -489,7 +489,7 @@ const formatCellValue = (value: unknown, inputType?: 'number' | 'text'): string 
 
 const mergedColumns = computed(() => {
   return props.columns.map((col) => {
-    // If column has children, handle children
+    // Kalau column punya children, handle children
     if (col.children) {
       return {
         ...col,
@@ -511,12 +511,12 @@ const mergedColumns = computed(() => {
       } as TableColumnType
     }
     
-    // If column is not editable, return as is
+    // Kalau column tidak editable, return apa adanya
     if (!col.editable) {
       return col as TableColumnType
     }
     
-    // Editable column
+    // Column editable
     return {
       ...col,
       onCell: (record: Record<string, unknown>) => ({

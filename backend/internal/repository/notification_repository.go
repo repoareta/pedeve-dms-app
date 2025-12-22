@@ -71,7 +71,7 @@ func (r *notificationRepository) GetByUserID(userID string, unreadOnly bool, lim
 		return nil, err
 	}
 
-	// Load documents manually untuk notifications dengan resource_type = 'document'
+	// Load documents secara manual untuk notifications dengan resource_type = 'document'
 	// Hanya load jika ada notifications
 	if len(notifications) > 0 {
 		docRepo := NewDocumentRepository()
@@ -94,7 +94,7 @@ func (r *notificationRepository) GetByUserIDWithFilters(userID string, unreadOnl
 
 	query := r.db.Model(&domain.NotificationModel{}).Where("user_id = ?", userID)
 
-	// Filter by read status
+	// Filter berdasarkan status read
 	// Jika unreadOnly = true, hanya ambil yang belum dibaca (is_read = false)
 	// Jika unreadOnly = false, hanya ambil yang sudah dibaca (is_read = true)
 	// Jika unreadOnly = nil, ambil semua (tidak filter)
@@ -106,7 +106,7 @@ func (r *notificationRepository) GetByUserIDWithFilters(userID string, unreadOnl
 		}
 	}
 
-	// Filter by expiry date (join dengan documents)
+	// Filter berdasarkan expiry date (join dengan documents)
 	// PENTING: expiry_date sekarang disimpan di metadata, bukan di kolom expiry_date
 	// Filter ini tidak bisa menggunakan WHERE langsung karena expiry_date ada di JSON metadata
 	// Filter akan dilakukan di application layer setelah load documents
@@ -131,7 +131,7 @@ func (r *notificationRepository) GetByUserIDWithFilters(userID string, unreadOnl
 		return nil, 0, err
 	}
 
-	// Load documents manually untuk notifications dengan resource_type = 'document'
+	// Load documents secara manual untuk notifications dengan resource_type = 'document'
 	// Hanya load jika ada notifications
 	if len(notifications) > 0 {
 		docRepo := NewDocumentRepository()
@@ -281,7 +281,7 @@ func (r *notificationRepository) GetAllWithFilters(unreadOnly *bool, daysUntilEx
 
 	query := r.db.Model(&domain.NotificationModel{})
 
-	// Filter by read status
+	// Filter berdasarkan status read
 	// Jika unreadOnly = true, hanya ambil yang belum dibaca (is_read = false)
 	// Jika unreadOnly = false, hanya ambil yang sudah dibaca (is_read = true)
 	// Jika unreadOnly = nil, ambil semua (tidak filter)
@@ -293,7 +293,7 @@ func (r *notificationRepository) GetAllWithFilters(unreadOnly *bool, daysUntilEx
 		}
 	}
 
-	// Filter by expiry date (join dengan documents)
+	// Filter berdasarkan expiry date (join dengan documents)
 	// PENTING: expiry_date sekarang disimpan di metadata, bukan di kolom expiry_date
 	// Filter ini tidak bisa menggunakan WHERE langsung karena expiry_date ada di JSON metadata
 	// Filter akan dilakukan di application layer setelah load documents
@@ -318,7 +318,7 @@ func (r *notificationRepository) GetAllWithFilters(unreadOnly *bool, daysUntilEx
 		return nil, 0, err
 	}
 
-	// Load documents manually
+	// Load documents secara manual
 	if len(notifications) > 0 {
 		docRepo := NewDocumentRepository()
 		for i := range notifications {
@@ -350,7 +350,7 @@ func (r *notificationRepository) GetByUserIDsWithFilters(userIDs []string, unrea
 
 	query := r.db.Model(&domain.NotificationModel{}).Where("user_id IN ?", userIDs)
 
-	// Filter by read status
+	// Filter berdasarkan status read
 	// Jika unreadOnly = true, hanya ambil yang belum dibaca (is_read = false)
 	// Jika unreadOnly = false, hanya ambil yang sudah dibaca (is_read = true)
 	// Jika unreadOnly = nil, ambil semua (tidak filter)
@@ -362,7 +362,7 @@ func (r *notificationRepository) GetByUserIDsWithFilters(userIDs []string, unrea
 		}
 	}
 
-	// Filter by expiry date (join dengan documents)
+	// Filter berdasarkan expiry date (join dengan documents)
 	// PENTING: expiry_date sekarang disimpan di metadata, bukan di kolom expiry_date
 	// Filter ini tidak bisa menggunakan WHERE langsung karena expiry_date ada di JSON metadata
 	// Filter akan dilakukan di application layer setelah load documents
@@ -387,7 +387,7 @@ func (r *notificationRepository) GetByUserIDsWithFilters(userIDs []string, unrea
 		return nil, 0, err
 	}
 
-	// Load documents manually
+	// Load documents secara manual
 	if len(notifications) > 0 {
 		docRepo := NewDocumentRepository()
 		for i := range notifications {

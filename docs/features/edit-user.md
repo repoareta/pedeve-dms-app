@@ -13,15 +13,15 @@ Panduan untuk mengedit data pengguna yang sudah ada.
 
 Form edit sama dengan form tambah, tetapi sudah terisi dengan data yang ada.
 
-### Field yang Dapat Diedit
+### Field yang Bisa Diedit
 
-- **Username**: Dapat diubah (jika belum digunakan pengguna lain)
-- **Email**: Dapat diubah (jika belum digunakan pengguna lain)
-- **Password**: Dapat diubah (kosongkan jika tidak ingin mengubah)
-- **Role**: Dapat diubah
-- **Nama Lengkap**: Dapat diubah
-- **Telepon**: Dapat diubah
-- **Status**: Dapat diubah (aktif/nonaktif)
+- **Username**: Bisa diubah asalkan belum digunakan pengguna lain
+- **Email**: Bisa diubah asalkan belum digunakan pengguna lain
+- **Password**: Bisa diubah (kosongkan jika tidak ingin mengubah)
+- **Role**: Bisa diubah
+- **Nama Lengkap**: Bisa diubah
+- **Telepon**: Bisa diubah
+- **Status**: Bisa diubah (aktif/nonaktif)
 
 ### Assignment Perusahaan
 
@@ -54,11 +54,11 @@ Sama seperti form tambah:
    - Cek assignment perusahaan
 
 2. **Klik "Update"**
-   - Sistem akan menyimpan perubahan
+   - Perubahan akan disimpan
    - Jika berhasil, Anda akan diarahkan ke halaman detail pengguna
 
 3. **Jika Ada Error**
-   - Sistem akan menampilkan pesan error
+   - Pesan error akan ditampilkan
    - Perbaiki field yang error
    - Coba simpan lagi
 
@@ -104,6 +104,6 @@ Untuk reset password pengguna:
 - Kosongkan field jika tidak ingin mengubah password
 - Pastikan password memenuhi kriteria
 
-## Langkah Selanjutnya
+## Referensi
 
 - [Daftar Pengguna](./user-management) - Kembali ke daftar pengguna

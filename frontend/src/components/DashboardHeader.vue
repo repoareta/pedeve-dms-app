@@ -17,7 +17,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 const user = computed(() => authStore.user)
 
-// User companies count for badge
+// Jumlah companies user untuk badge
 const userCompaniesCount = ref(0)
 const loadingCompaniesCount = ref(false)
 
@@ -44,7 +44,7 @@ const expiryThresholdDays = ref<number>(14) // Default: 14 hari, akan di-load da
 // Valid roles that can access the application
 const validRoles = ['superadmin', 'administrator', 'admin', 'manager', 'staff']
 
-// Check if user role is valid
+// Cek apakah role user valid
 const isRoleValid = computed(() => {
   const userRole = user.value?.role?.toLowerCase() || ''
   return validRoles.includes(userRole)
@@ -52,7 +52,7 @@ const isRoleValid = computed(() => {
 
 // Menu items - only show for valid roles
 const menuItems = computed(() => {
-  // If role is not recognized, hide all menus except dashboard (which will show error)
+  // Kalau role tidak dikenali, sembunyikan semua menu kecuali dashboard (yang akan tampilkan error)
   if (!isRoleValid.value) {
     return []
   }
@@ -76,9 +76,9 @@ const handleLogout = () => {
 }
 
 const handleToggleMaximize = () => {
-  // Check if browser supports fullscreen API
+  // Cek apakah browser support fullscreen API
   if (document.fullscreenElement) {
-    // Exit fullscreen
+    // Keluar dari fullscreen
     document.exitFullscreen().then(() => {
       isMaximized.value = false
       emit('toggleMaximize', false)
@@ -96,7 +96,7 @@ const handleToggleMaximize = () => {
       }
     })
   } else {
-    // Enter fullscreen
+    // Masuk ke fullscreen
     const element = document.documentElement
     if (element.requestFullscreen) {
       element.requestFullscreen().then(() => {
@@ -132,7 +132,7 @@ onMounted(() => {
   document.addEventListener('mozfullscreenchange', handleFullscreenChange)
   document.addEventListener('MSFullscreenChange', handleFullscreenChange)
   
-  // Store handler for cleanup
+  // Simpan handler untuk cleanup
   interface WindowWithFullscreenHandler extends Window {
     __fullscreenHandler?: () => void
   }
@@ -192,7 +192,7 @@ const loadUserCompaniesCount = async () => {
     const companies = await userApi.getMyCompanies()
     userCompaniesCount.value = companies.length
   } catch (error) {
-    // Silently fail - badge is not critical
+    // Fail secara silent - badge tidak kritis
     logger.warn('Failed to load user companies count:', error)
     userCompaniesCount.value = 0
   } finally {
@@ -244,7 +244,7 @@ const openNotificationBox = (notif: Notification) => {
     const isExpiredDocument = notif.type === 'document_expiry'
     const isAlreadyExpired = isExpiredDocument && notif.title.includes('Sudah Expired')
     
-    // Prepare notification config
+    // Siapkan notification config
     const notificationConfig: {
       message: string
       description: string
@@ -285,7 +285,7 @@ const openNotificationBox = (notif: Notification) => {
     
     // Jika dokumen sudah expired, tambahkan class dan style setelah notification di-render
     if (isAlreadyExpired) {
-      // Gunakan multiple setTimeout untuk memastikan element sudah di-render
+      // Pakai multiple setTimeout untuk pastikan element sudah di-render
       setTimeout(() => {
         const notices = document.querySelectorAll('.ant-notification-topRight .ant-notification-notice')
         if (notices.length > 0) {

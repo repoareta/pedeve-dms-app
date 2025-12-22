@@ -13,12 +13,12 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
-// Check if this is edit mode
+// Cek apakah ini mode edit
 const isEditMode = computed(() => !!route.params.id)
 const documentId = computed(() => route.params.id as string | undefined)
 const loading = ref(false)
 
-// Document types
+// Tipe dokumen
 const documentTypes = ref<DocumentType[]>([])
 const loadingDocumentTypes = ref(false)
 const documentTypeSearchValue = ref('')
@@ -47,7 +47,7 @@ const document = ref<DocumentItem | null>(null)
 // - Document files (.docx, .xlsx, .xls, .pptx, .ppt, .pdf): No limit
 // - Image files (.jpg, .jpeg, .png): 10MB
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
-const isGeneratingReference = ref(false) // Flag to prevent multiple simultaneous generations
+const isGeneratingReference = ref(false) // Flag untuk cegah multiple generation bersamaan
 
 // Check if file is a document type (no size limit)
 const isDocumentFile = (file: File): boolean => {
@@ -101,7 +101,7 @@ const handleUploadChange = ({ fileList: newList }: { fileList: UploadItem[] }) =
   fileList.value = newList
 }
 
-// Normalize document type for reference number format
+// Normalisasi document type untuk format nomor referensi
 const normalizeDocType = (docType: string | undefined): string => {
   if (!docType || typeof docType !== 'string') return 'DOC'
   
@@ -118,7 +118,7 @@ const normalizeDocType = (docType: string | undefined): string => {
 
 // Generate reference number automatically
 const generateReferenceNumber = async (): Promise<string> => {
-  // Get first doc type or use default
+  // Ambil doc type pertama atau pakai default
   const docType = formState.value.docType && formState.value.docType.length > 0 
     ? formState.value.docType[0] 
     : 'DOC'

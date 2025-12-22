@@ -41,7 +41,7 @@ func NewDevelopmentHandler(devUseCase usecase.DevelopmentUseCase) *DevelopmentHa
 // @Failure      500  {object}  domain.ErrorResponse
 // @Router       /development/reset-subsidiary [post]
 func (h *DevelopmentHandler) ResetSubsidiaryData(c *fiber.Ctx) error {
-	// Check if user is superadmin
+	// Cek apakah user adalah superadmin
 	roleNameVal := c.Locals("roleName")
 	if roleNameVal == nil {
 		h.logger.Warn("RoleName not found in context", zap.String("path", c.Path()))
@@ -71,7 +71,7 @@ func (h *DevelopmentHandler) ResetSubsidiaryData(c *fiber.Ctx) error {
 		})
 	}
 
-	// Reset subsidiary data
+	// Reset data subsidiary
 	if err := h.devUseCase.ResetSubsidiaryData(); err != nil {
 		h.logger.Error("Failed to reset subsidiary data", zap.Error(err))
 		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -104,7 +104,7 @@ func (h *DevelopmentHandler) ResetSubsidiaryData(c *fiber.Ctx) error {
 // @Failure      500  {object}  domain.ErrorResponse
 // @Router       /development/run-subsidiary-seeder [post]
 func (h *DevelopmentHandler) RunSubsidiarySeeder(c *fiber.Ctx) error {
-	// Check if user is superadmin
+	// Cek apakah user adalah superadmin
 	roleNameVal := c.Locals("roleName")
 	if roleNameVal == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
@@ -180,7 +180,7 @@ func (h *DevelopmentHandler) RunSubsidiarySeeder(c *fiber.Ctx) error {
 // @Failure      500  {object}  domain.ErrorResponse
 // @Router       /development/check-seeder-status [get]
 func (h *DevelopmentHandler) CheckSeederDataExists(c *fiber.Ctx) error {
-	// Check if user is superadmin
+	// Cek apakah user adalah superadmin
 	roleNameVal := c.Locals("roleName")
 	if roleNameVal == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
@@ -238,7 +238,7 @@ func (h *DevelopmentHandler) CheckSeederDataExists(c *fiber.Ctx) error {
 // @Failure      500  {object}  domain.ErrorResponse
 // @Router       /development/reset-reports [post]
 func (h *DevelopmentHandler) ResetReportData(c *fiber.Ctx) error {
-	// Check if user is superadmin
+	// Cek apakah user adalah superadmin
 	roleNameVal := c.Locals("roleName")
 	if roleNameVal == nil {
 		h.logger.Warn("RoleName not found in context", zap.String("path", c.Path()))
@@ -301,7 +301,7 @@ func (h *DevelopmentHandler) ResetReportData(c *fiber.Ctx) error {
 // @Failure      500  {object}  domain.ErrorResponse
 // @Router       /development/run-report-seeder [post]
 func (h *DevelopmentHandler) RunReportSeeder(c *fiber.Ctx) error {
-	// Check if user is superadmin
+	// Cek apakah user adalah superadmin
 	roleNameVal := c.Locals("roleName")
 	if roleNameVal == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
@@ -377,7 +377,7 @@ func (h *DevelopmentHandler) RunReportSeeder(c *fiber.Ctx) error {
 // @Failure      500  {object}  domain.ErrorResponse
 // @Router       /development/check-report-status [get]
 func (h *DevelopmentHandler) CheckReportDataExists(c *fiber.Ctx) error {
-	// Check if user is superadmin
+	// Cek apakah user adalah superadmin
 	roleNameVal := c.Locals("roleName")
 	if roleNameVal == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
@@ -435,7 +435,7 @@ func (h *DevelopmentHandler) CheckReportDataExists(c *fiber.Ctx) error {
 // @Failure      500  {object}  domain.ErrorResponse
 // @Router       /development/run-all-seeders [post]
 func (h *DevelopmentHandler) RunAllSeeders(c *fiber.Ctx) error {
-	// Check if user is superadmin
+	// Cek apakah user adalah superadmin
 	roleNameVal := c.Locals("roleName")
 	if roleNameVal == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
@@ -501,7 +501,7 @@ func (h *DevelopmentHandler) RunAllSeeders(c *fiber.Ctx) error {
 // @Failure      500  {object}  domain.ErrorResponse
 // @Router       /development/reset-all-seeded-data [post]
 func (h *DevelopmentHandler) ResetAllSeededData(c *fiber.Ctx) error {
-	// Check if user is superadmin
+	// Cek apakah user adalah superadmin
 	roleNameVal := c.Locals("roleName")
 	if roleNameVal == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
@@ -530,7 +530,7 @@ func (h *DevelopmentHandler) ResetAllSeededData(c *fiber.Ctx) error {
 		})
 	}
 
-	// Reset all seeded data
+	// Reset semua seeded data
 	err := h.devUseCase.ResetAllSeededData()
 	if err != nil {
 		h.logger.Error("Failed to reset all seeded data", zap.Error(err))
@@ -567,7 +567,7 @@ func (h *DevelopmentHandler) ResetAllSeededData(c *fiber.Ctx) error {
 // @Failure      500  {object}  domain.ErrorResponse
 // @Router       /development/reset-all-financial-reports [post]
 func (h *DevelopmentHandler) ResetAllFinancialReports(c *fiber.Ctx) error {
-	// Check if user is superadmin
+	// Cek apakah user adalah superadmin
 	roleNameVal := c.Locals("roleName")
 	if roleNameVal == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
@@ -596,7 +596,7 @@ func (h *DevelopmentHandler) ResetAllFinancialReports(c *fiber.Ctx) error {
 		})
 	}
 
-	// Reset all financial reports
+	// Reset semua financial reports
 	err := h.devUseCase.ResetAllFinancialReports()
 	if err != nil {
 		h.logger.Error("Failed to reset all financial reports", zap.Error(err))
@@ -629,7 +629,7 @@ func (h *DevelopmentHandler) ResetAllFinancialReports(c *fiber.Ctx) error {
 // @Failure      500  {object}  domain.ErrorResponse
 // @Router       /development/check-all-seeder-status [get]
 func (h *DevelopmentHandler) CheckAllSeederStatus(c *fiber.Ctx) error {
-	// Check if user is superadmin
+	// Cek apakah user adalah superadmin
 	roleNameVal := c.Locals("roleName")
 	if roleNameVal == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
@@ -654,7 +654,7 @@ func (h *DevelopmentHandler) CheckAllSeederStatus(c *fiber.Ctx) error {
 		})
 	}
 
-	// Check all seeder status
+	// Cek status semua seeder
 	status, err := h.devUseCase.CheckAllSeederStatus()
 	if err != nil {
 		h.logger.Error("Failed to check all seeder status", zap.Error(err))
@@ -772,7 +772,7 @@ func (h *DevelopmentHandler) CreateTestNotifications(c *fiber.Ctx) error {
 	}
 	userID := userIDVal.(string)
 
-	// Create multiple test notifications
+	// Buat multiple test notifications
 	testNotifications := []struct {
 		Type         string
 		Title        string
@@ -853,7 +853,7 @@ func (h *DevelopmentHandler) CreateTestNotifications(c *fiber.Ctx) error {
 // @Failure      500  {object}  domain.ErrorResponse
 // @Router       /development/check-expiring-documents [post]
 func (h *DevelopmentHandler) CheckExpiringDocuments(c *fiber.Ctx) error {
-	// Check if user is superadmin
+	// Cek apakah user adalah superadmin
 	roleNameVal := c.Locals("roleName")
 	if roleNameVal == nil {
 		h.logger.Warn("RoleName not found in context", zap.String("path", c.Path()))
@@ -927,7 +927,7 @@ func (h *DevelopmentHandler) CheckExpiringDocuments(c *fiber.Ctx) error {
 // @Failure      500  {object}  domain.ErrorResponse
 // @Router       /development/check-expiring-director-terms [post]
 func (h *DevelopmentHandler) CheckExpiringDirectorTerms(c *fiber.Ctx) error {
-	// Check if user is superadmin
+	// Cek apakah user adalah superadmin
 	roleNameVal := c.Locals("roleName")
 	if roleNameVal == nil {
 		h.logger.Warn("RoleName not found in context", zap.String("path", c.Path()))
@@ -1001,7 +1001,7 @@ func (h *DevelopmentHandler) CheckExpiringDirectorTerms(c *fiber.Ctx) error {
 // @Failure      500  {object}  domain.ErrorResponse
 // @Router       /development/check-all-expiring-notifications [post]
 func (h *DevelopmentHandler) CheckAllExpiringNotifications(c *fiber.Ctx) error {
-	// Check if user is superadmin
+	// Cek apakah user adalah superadmin
 	roleNameVal := c.Locals("roleName")
 	if roleNameVal == nil {
 		h.logger.Warn("RoleName not found in context", zap.String("path", c.Path()))
@@ -1094,7 +1094,7 @@ func (h *DevelopmentHandler) CheckAllExpiringNotifications(c *fiber.Ctx) error {
 // @Failure      500  {object}  domain.ErrorResponse
 // @Router       /development/create-notification-for-document [post]
 func (h *DevelopmentHandler) CreateNotificationForDocument(c *fiber.Ctx) error {
-	// Check if user is superadmin
+	// Cek apakah user adalah superadmin
 	roleNameVal := c.Locals("roleName")
 	if roleNameVal == nil {
 		h.logger.Warn("RoleName not found in context", zap.String("path", c.Path()))
@@ -1187,7 +1187,7 @@ func (h *DevelopmentHandler) CreateNotificationForDocument(c *fiber.Ctx) error {
 		}
 	}
 
-	// Calculate days until expiry (jika ada)
+	// Hitung hari sampai expiry (kalau ada)
 	var daysUntilExpiry int
 	var title, message string
 

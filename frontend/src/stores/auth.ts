@@ -6,7 +6,7 @@ export const useAuthStore = defineStore('auth', () => {
   // Token disimpan di httpOnly cookie + fallback di localStorage (untuk Authorization header)
   const token = ref<string | null>(localStorage.getItem('auth_token'))
   
-  // Initialize user from localStorage
+  // Initialize user dari localStorage
   const getInitialUser = (): User | null => {
     const stored = localStorage.getItem('auth_user')
     return stored ? JSON.parse(stored) : null
@@ -26,7 +26,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await authApi.login({ username: usernameOrEmail, password })
       
-      // Jika 2FA diperlukan, jangan simpan token/user - return response tanpa menyimpan
+      // Kalau 2FA diperlukan, jangan simpan token/user - return response tanpa menyimpan
       if (response.requires_2fa) {
         // Hapus token/user yang ada ketika 2FA diperlukan
         token.value = null
@@ -86,7 +86,7 @@ export const useAuthStore = defineStore('auth', () => {
       }
     } catch (error) {
       // Lanjutkan dengan pembersihan lokal meskipun API call gagal
-      // Jangan log error jika status 401 (user sudah logout)
+      // Jangan log error kalau status 401 (user sudah logout)
       if (error && typeof error === 'object' && 'response' in error) {
         const axiosError = error as { response?: { status?: number } }
         const status = axiosError.response?.status
@@ -107,7 +107,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Get profile
   const fetchProfile = async () => {
-    // Jangan fetch profile jika sedang logout
+    // Jangan fetch profile kalau sedang logout
     if (isLoggingOut.value) {
       throw new Error('Logout in progress')
     }

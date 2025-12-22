@@ -135,12 +135,12 @@ func (uc *documentUseCase) UpdateFolderName(id, name string, requesterCompanyID 
 		return nil, err
 	}
 
-	// Only company owner or superadmin/administrator can rename
+	// Hanya company owner atau superadmin/administrator yang bisa rename
 	roleLower := strings.ToLower(roleName)
 	isSuperAdmin := roleLower == "superadmin" || roleLower == "administrator"
 
 	if !isSuperAdmin {
-		// Check if requester's company matches folder's company
+		// Cek apakah company requester sama dengan company folder
 		if requesterCompanyID == nil || folder.CompanyID == nil || *requesterCompanyID != *folder.CompanyID {
 			return nil, fmt.Errorf("forbidden")
 		}
@@ -155,20 +155,20 @@ func (uc *documentUseCase) UpdateFolderName(id, name string, requesterCompanyID 
 
 // deleteFolderRecursive menghapus folder beserta semua child folders dan dokumen di dalamnya secara rekursif
 func (uc *documentUseCase) deleteFolderRecursive(folderID string) error {
-	// Get child folders first
+	// Ambil child folders dulu
 	childFolders, err := uc.docRepo.GetChildFolders(folderID)
 	if err != nil {
 		return fmt.Errorf("failed to get child folders: %w", err)
 	}
 
-	// Recursively delete all child folders first
+	// Hapus semua child folders secara recursive dulu
 	for _, child := range childFolders {
 		if err := uc.deleteFolderRecursive(child.ID); err != nil {
 			return fmt.Errorf("failed to delete child folder %s: %w", child.ID, err)
 		}
 	}
 
-	// Delete all documents inside this folder
+	// Hapus semua dokumen di dalam folder ini
 	if err := uc.docRepo.DeleteDocumentsByFolder(folderID); err != nil {
 		return fmt.Errorf("failed to delete documents in folder: %w", err)
 	}
@@ -210,7 +210,7 @@ func (uc *documentUseCase) DeleteFolder(id string, requesterCompanyID *string, r
 		}
 	}
 
-	// Delete folder recursively (including all child folders and documents)
+	// Hapus folder secara recursive (termasuk semua child folders dan dokumen)
 	if err := uc.deleteFolderRecursive(id); err != nil {
 		return err
 	}
@@ -287,18 +287,18 @@ func (uc *documentUseCase) checkReferenceExists(reference string, excludeDocumen
 		return false, nil // Empty reference is considered not existing
 	}
 
-	// Get all documents
+	// Ambil semua dokumen
 	allDocs, err := uc.docRepo.ListDocuments(nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to list documents: %w", err)
 	}
 
-	// Normalize input reference for comparison
+	// Normalisasi input reference untuk perbandingan
 	normalizedInput := normalizeReferenceForComparison(reference)
 
-	// Check if any document has the same reference (excluding current document if specified)
+	// Cek apakah ada dokumen dengan reference yang sama (kecuali dokumen saat ini kalau di-specify)
 	for _, doc := range allDocs {
-		// Skip current document if in edit mode
+		// Skip dokumen saat ini kalau dalam mode edit
 		if excludeDocumentID != "" && doc.ID == excludeDocumentID {
 			continue
 		}
@@ -313,16 +313,16 @@ func (uc *documentUseCase) checkReferenceExists(reference string, excludeDocumen
 			continue
 		}
 
-		// Get reference from metadata
+		// Ambil reference dari metadata
 		existingRef, ok := metadata["reference"].(string)
 		if !ok || existingRef == "" {
 			continue
 		}
 
-		// Normalize existing reference for comparison
+		// Normalisasi existing reference untuk perbandingan
 		normalizedExisting := normalizeReferenceForComparison(existingRef)
 
-		// Check if they match (case-insensitive, space-insensitive)
+		// Cek apakah cocok (case-insensitive, space-insensitive)
 		if normalizedInput == normalizedExisting {
 			return true, nil // Reference already exists
 		}
@@ -361,12 +361,12 @@ func (uc *documentUseCase) UploadDocument(input UploadDocumentInput) (*domain.Do
 		return nil, fmt.Errorf("failed to upload file: %w", err)
 	}
 
-	// Normalize file URL to use backend proxy endpoint
-	// This ensures consistent URL format for both GCP Storage and Local Storage
+	// Normalisasi file URL untuk pakai backend proxy endpoint
+	// Ini memastikan format URL konsisten untuk GCP Storage dan Local Storage
 	// Format: /api/v1/files/documents/filename.pdf
 	if strings.HasPrefix(fileURL, "https://storage.googleapis.com/") {
-		// Extract path from GCP URL: https://storage.googleapis.com/bucket/documents/filename.pdf
-		// Convert to: /api/v1/files/documents/filename.pdf
+		// Extract path dari GCP URL: https://storage.googleapis.com/bucket/documents/filename.pdf
+		// Konversi ke: /api/v1/files/documents/filename.pdf
 		parts := strings.SplitN(fileURL, "/", 5) // Split after bucket name
 		if len(parts) >= 5 {
 			// parts[4] contains "documents/filename.pdf"
@@ -375,7 +375,7 @@ func (uc *documentUseCase) UploadDocument(input UploadDocumentInput) (*domain.Do
 	} else if strings.HasPrefix(fileURL, "/") && !strings.HasPrefix(fileURL, "/api/v1/files/") {
 		// If using Local Storage, URL format is: /documents/filename.pdf
 		// Convert to: /api/v1/files/documents/filename.pdf
-		// Remove leading slash if present
+		// Hapus leading slash kalau ada
 		pathWithoutSlash := strings.TrimPrefix(fileURL, "/")
 		fileURL = fmt.Sprintf("/api/v1/files/%s", pathWithoutSlash)
 	}
@@ -414,13 +414,13 @@ func (uc *documentUseCase) UploadDocument(input UploadDocumentInput) (*domain.Do
 }
 
 func (uc *documentUseCase) UpdateDocument(id string, input UpdateDocumentInput) (*domain.DocumentModel, error) {
-	// Get existing document
+	// Ambil dokumen yang sudah ada
 	doc, err := uc.docRepo.GetDocumentByID(id)
 	if err != nil {
 		return nil, fmt.Errorf("document not found: %w", err)
 	}
 
-	// Validate reference uniqueness if provided in metadata update
+	// Validasi keunikan reference kalau diisi di metadata update
 	if input.Metadata != nil {
 		if reference, ok := input.Metadata["reference"].(string); ok && reference != "" {
 			exists, err := uc.checkReferenceExists(reference, id)
@@ -433,7 +433,7 @@ func (uc *documentUseCase) UpdateDocument(id string, input UpdateDocumentInput) 
 		}
 	}
 
-	// Update fields if provided
+	// Update field-field kalau diisi
 	if input.Title != nil {
 		doc.Name = *input.Title
 	}

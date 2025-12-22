@@ -52,11 +52,11 @@ func main() {
 	fmt.Println("✅ Connected to PostgreSQL")
 	fmt.Println()
 
-	// Get underlying sql.DB for raw queries
+	// Ambil underlying sql.DB untuk raw queries
 	sqliteSQL, _ := sqliteDB.DB()
 	postgresSQL, _ := postgresDB.DB()
 
-	// Migrate in order (respecting foreign keys)
+	// Migrasi sesuai urutan (menghormati foreign keys)
 	fmt.Println("🔄 Starting data migration...")
 	fmt.Println()
 
@@ -149,7 +149,7 @@ func main() {
 }
 
 func migrateTable(sqliteDB, postgresDB *sql.DB, tableName string, columns []string) error {
-	// Check if table exists in SQLite
+	// Cek apakah tabel ada di SQLite
 	var count int
 	err := sqliteDB.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)).Scan(&count)
 	if err != nil {
@@ -161,7 +161,7 @@ func migrateTable(sqliteDB, postgresDB *sql.DB, tableName string, columns []stri
 		return nil
 	}
 
-	// Build column list for SELECT
+	// Buat daftar kolom untuk SELECT
 	columnList := ""
 	for i, col := range columns {
 		if i > 0 {
@@ -170,7 +170,7 @@ func migrateTable(sqliteDB, postgresDB *sql.DB, tableName string, columns []stri
 		columnList += col
 	}
 
-	// Build placeholders for INSERT
+	// Buat placeholders untuk INSERT
 	placeholders := ""
 	for i := range columns {
 		if i > 0 {
@@ -179,7 +179,7 @@ func migrateTable(sqliteDB, postgresDB *sql.DB, tableName string, columns []stri
 		placeholders += fmt.Sprintf("$%d", i+1)
 	}
 
-	// Query data from SQLite
+	// Query data dari SQLite
 	rows, err := sqliteDB.Query(fmt.Sprintf("SELECT %s FROM %s", columnList, tableName))
 	if err != nil {
 		return fmt.Errorf("failed to query SQLite: %v", err)
@@ -194,16 +194,16 @@ func migrateTable(sqliteDB, postgresDB *sql.DB, tableName string, columns []stri
 	}
 	defer stmt.Close()
 
-	// Get column types for scanning
+	// Ambil tipe kolom untuk scanning
 	columnTypes, err := rows.ColumnTypes()
 	if err != nil {
 		return fmt.Errorf("failed to get column types: %v", err)
 	}
 
-	// Insert data into PostgreSQL
+	// Insert data ke PostgreSQL
 	inserted := 0
 	for rows.Next() {
-		// Create scan destination based on column types
+		// Buat scan destination berdasarkan tipe kolom
 		values := make([]interface{}, len(columns))
 		valuePtrs := make([]interface{}, len(columns))
 		for i := range values {
@@ -214,7 +214,7 @@ func migrateTable(sqliteDB, postgresDB *sql.DB, tableName string, columns []stri
 			return fmt.Errorf("failed to scan row: %v", err)
 		}
 
-		// Convert values to appropriate types for PostgreSQL
+		// Konversi nilai ke tipe yang sesuai untuk PostgreSQL
 		convertedValues := make([]interface{}, len(values))
 		for i, val := range values {
 			convertedValues[i] = convertValue(val, columnTypes[i].DatabaseTypeName())
@@ -248,7 +248,7 @@ func convertValue(val interface{}, dbType string) interface{} {
 	case time.Time:
 		return v
 	case string:
-		// Try to parse as time if it looks like a timestamp
+		// Coba parse sebagai time kalau terlihat seperti timestamp
 		if t, err := time.Parse("2006-01-02 15:04:05.999999999-07:00", v); err == nil {
 			return t
 		}

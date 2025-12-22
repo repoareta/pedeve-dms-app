@@ -44,7 +44,7 @@ export const getCSRFToken = async (): Promise<string | null> => {
 // Inisialisasi token CSRF saat module load (opsional)
 // getCSRFToken()
 
-// Create axios instance
+// Buat axios instance
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -56,7 +56,7 @@ const apiClient = axios.create({
 // Request interceptor untuk menambahkan token JWT dan token CSRF
 apiClient.interceptors.request.use(
   async (config) => {
-    // Tambahkan Authorization header jika token tersedia di store/localStorage (fallback jika cookie tidak terkirim)
+    // Tambahkan Authorization header kalau token tersedia di store/localStorage (fallback kalau cookie tidak terkirim)
     const authStore = useAuthStore()
     const bearerToken = authStore?.token || localStorage.getItem('auth_token')
     if (bearerToken) {

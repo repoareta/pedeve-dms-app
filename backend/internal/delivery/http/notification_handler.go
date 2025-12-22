@@ -44,7 +44,7 @@ func (h *NotificationHandler) GetNotifications(c *fiber.Ctx) error {
 	}
 	userID := userIDVal.(string)
 
-	// Get role and company for RBAC
+	// Ambil role dan company untuk RBAC
 	roleNameVal := c.Locals("roleName")
 	companyIDVal := c.Locals("companyID")
 
@@ -140,7 +140,7 @@ func (h *NotificationHandler) GetNotificationsWithFilters(c *fiber.Ctx) error {
 	}
 	userID := userIDVal.(string)
 
-	// Get role and company for RBAC
+	// Ambil role dan company untuk RBAC
 	roleNameVal := c.Locals("roleName")
 	companyIDVal := c.Locals("companyID")
 
@@ -231,7 +231,7 @@ func (h *NotificationHandler) MarkAsRead(c *fiber.Ctx) error {
 	userID := userIDVal.(string)
 	notificationID := c.Params("id")
 
-	// Get role and company for RBAC
+	// Ambil role dan company untuk RBAC
 	roleNameVal := c.Locals("roleName")
 	companyIDVal := c.Locals("companyID")
 
@@ -361,7 +361,7 @@ func (h *NotificationHandler) GetUnreadCount(c *fiber.Ctx) error {
 	}
 	userID := userIDVal.(string)
 
-	// Get role and company for RBAC
+	// Ambil role dan company untuk RBAC
 	roleNameVal := c.Locals("roleName")
 	companyIDVal := c.Locals("companyID")
 
@@ -440,7 +440,7 @@ func (h *NotificationHandler) DeleteAllNotifications(c *fiber.Ctx) error {
 	}
 	userID := userIDVal.(string)
 
-	// Get role and company for RBAC
+	// Ambil role dan company untuk RBAC
 	roleNameVal := c.Locals("roleName")
 	companyIDVal := c.Locals("companyID")
 

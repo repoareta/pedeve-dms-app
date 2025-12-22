@@ -16,7 +16,7 @@ export interface RunSeederResponse {
 }
 
 const developmentApi = {
-  // Check seeder status
+  // Cek status seeder
   async checkSeederStatus(): Promise<SeederStatusResponse> {
     const response = await apiClient.get<SeederStatusResponse>(
       '/development/check-seeder-status'
@@ -24,7 +24,7 @@ const developmentApi = {
     return response.data
   },
 
-  // Reset subsidiary data
+  // Reset data subsidiary
   async resetSubsidiaryData(): Promise<ResetSubsidiaryResponse> {
     const response = await apiClient.post<ResetSubsidiaryResponse>(
       '/development/reset-subsidiary',
@@ -33,7 +33,7 @@ const developmentApi = {
     return response.data
   },
 
-  // Run subsidiary seeder
+  // Jalankan subsidiary seeder
   async runSubsidiarySeeder(): Promise<RunSeederResponse> {
     const response = await apiClient.post<RunSeederResponse>(
       '/development/run-subsidiary-seeder',
@@ -42,7 +42,7 @@ const developmentApi = {
     return response.data
   },
 
-  // Check report status
+  // Cek status report
   async checkReportStatus(): Promise<SeederStatusResponse> {
     const response = await apiClient.get<SeederStatusResponse>(
       '/development/check-report-status'
@@ -59,7 +59,7 @@ const developmentApi = {
     return response.data
   },
 
-  // Run report seeder
+  // Jalankan report seeder
   async runReportSeeder(): Promise<RunSeederResponse> {
     const response = await apiClient.post<RunSeederResponse>(
       '/development/run-report-seeder',
@@ -77,7 +77,7 @@ const developmentApi = {
     return response.data
   },
 
-  // Reset all seeded data (reports + company)
+  // Reset semua seeded data (reports + company)
   async resetAllSeededData(): Promise<ResetSubsidiaryResponse & { details?: Record<string, string> }> {
     const response = await apiClient.post<ResetSubsidiaryResponse & { details?: Record<string, string> }>(
       '/development/reset-all-seeded-data',
@@ -86,7 +86,7 @@ const developmentApi = {
     return response.data
   },
 
-  // Check all seeder status
+  // Cek status semua seeder
   async checkAllSeederStatus(): Promise<{ status: Record<string, boolean>; message: string }> {
     const response = await apiClient.get<{ status: Record<string, boolean>; message: string }>(
       '/development/check-all-seeder-status'
@@ -94,7 +94,7 @@ const developmentApi = {
     return response.data
   },
 
-  // Reset all financial reports
+  // Reset semua financial reports
   async resetAllFinancialReports(): Promise<ResetSubsidiaryResponse> {
     const response = await apiClient.post<ResetSubsidiaryResponse>(
       '/development/reset-all-financial-reports',
@@ -103,7 +103,7 @@ const developmentApi = {
     return response.data
   },
 
-  // Check expiring documents
+  // Cek dokumen yang akan expired
   async checkExpiringDocuments(thresholdDays: number = 30): Promise<{ message: string; threshold_days: number; documents_found: number; notifications_created: number }> {
     const response = await apiClient.post<{ message: string; threshold_days: number; documents_found: number; notifications_created: number }>(
       '/development/check-expiring-documents',
@@ -112,7 +112,7 @@ const developmentApi = {
     return response.data
   },
 
-  // Check expiring director terms
+  // Cek masa jabatan direktur yang akan expired
   async checkExpiringDirectorTerms(thresholdDays: number = 30): Promise<{ message: string; threshold_days: number; directors_found: number; notifications_created: number }> {
     const response = await apiClient.post<{ message: string; threshold_days: number; directors_found: number; notifications_created: number }>(
       '/development/check-expiring-director-terms',
@@ -121,7 +121,7 @@ const developmentApi = {
     return response.data
   },
 
-  // Check all expiring notifications
+  // Cek semua notifikasi yang akan expired
   async checkAllExpiringNotifications(thresholdDays: number = 30): Promise<{ message: string; threshold_days: number; documents: { found: number; notifications_created: number }; directors: { found: number; notifications_created: number }; total_notifications_created: number }> {
     const response = await apiClient.post<{ message: string; threshold_days: number; documents: { found: number; notifications_created: number }; directors: { found: number; notifications_created: number }; total_notifications_created: number }>(
       '/development/check-all-expiring-notifications',

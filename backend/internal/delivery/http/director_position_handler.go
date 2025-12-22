@@ -87,7 +87,7 @@ func (h *DirectorPositionHandler) CreateDirectorPosition(c *fiber.Ctx) error {
 	userIDStr := fmt.Sprintf("%v", userIDVal)
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
 
-	// Only superadmin and administrator can create director positions
+	// Hanya superadmin dan administrator yang bisa create director positions
 	if !utils.IsSuperAdminLike(roleName) {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
@@ -149,7 +149,7 @@ func (h *DirectorPositionHandler) UpdateDirectorPosition(c *fiber.Ctx) error {
 	userIDStr := fmt.Sprintf("%v", userIDVal)
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
 
-	// Only superadmin and administrator can update director positions
+	// Hanya superadmin dan administrator yang bisa update director positions
 	if !utils.IsSuperAdminLike(roleName) {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
@@ -212,7 +212,7 @@ func (h *DirectorPositionHandler) DeleteDirectorPosition(c *fiber.Ctx) error {
 	userIDStr := fmt.Sprintf("%v", userIDVal)
 	roleName := fmt.Sprintf("%v", roleVal)
 
-	// Only superadmin and administrator can delete director positions
+	// Hanya superadmin dan administrator yang bisa delete director positions
 	if !utils.IsSuperAdminLike(roleName) {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
@@ -236,4 +236,3 @@ func (h *DirectorPositionHandler) DeleteDirectorPosition(c *fiber.Ctx) error {
 		"message": "Jabatan pengurus berhasil dihapus",
 	})
 }
-

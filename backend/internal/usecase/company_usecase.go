@@ -40,7 +40,7 @@ type companyUseCase struct {
 	documentRepo      repository.DocumentRepository
 }
 
-// NewCompanyUseCaseWithDB creates a new company use case with injected DB (for testing)
+// NewCompanyUseCaseWithDB membuat company use case dengan DB yang di-inject (untuk testing)
 func NewCompanyUseCaseWithDB(db *gorm.DB) CompanyUseCase {
 	return &companyUseCase{
 		companyRepo:       repository.NewCompanyRepositoryWithDB(db),
@@ -51,7 +51,7 @@ func NewCompanyUseCaseWithDB(db *gorm.DB) CompanyUseCase {
 	}
 }
 
-// NewCompanyUseCase creates a new company use case with default DB (backward compatibility)
+// NewCompanyUseCase membuat company use case dengan default DB (backward compatibility)
 func NewCompanyUseCase() CompanyUseCase {
 	return NewCompanyUseCaseWithDB(database.GetDB())
 }
@@ -59,14 +59,14 @@ func NewCompanyUseCase() CompanyUseCase {
 func (uc *companyUseCase) CreateCompany(name, code, description string, parentID *string) (*domain.CompanyModel, error) {
 	zapLog := logger.GetLogger()
 
-	// Validate code uniqueness
+	// Validasi keunikan code
 	existing, _ := uc.companyRepo.GetByCode(code)
 	if existing != nil {
 		return nil, errors.New("company code already exists")
 	}
 
-	// Validate: Only one company with parentID == nil can exist
-	// This prevents multiple root companies (companies without parent)
+	// Validasi: Hanya satu company dengan parentID == nil yang boleh ada
+	// Ini mencegah multiple root companies (companies tanpa parent)
 	// Note: Level 0 hanya untuk code "PDV", tapi validasi ini berlaku untuk semua parentID == nil
 	if parentID == nil {
 		existingHolding, err := uc.companyRepo.GetRootHolding()
@@ -75,7 +75,7 @@ func (uc *companyUseCase) CreateCompany(name, code, description string, parentID
 		}
 	}
 
-	// Determine level
+	// Tentukan level
 	// CRITICAL: Level 0 hanya untuk holding company yang sebenarnya (misalnya code = "PDV")
 	// Perusahaan tanpa parent_id yang baru dibuat menggunakan level 1 sebagai default (temporary)
 	// Level akan di-recalculate dengan benar setelah parent_id di-set nanti
@@ -177,7 +177,7 @@ func (uc *companyUseCase) ValidateCompanyAccess(userCompanyID, targetCompanyID s
 		return true, nil
 	}
 
-	// Check if target company is a descendant of user's company
+	// Cek apakah target company adalah descendant dari company user
 	return uc.companyRepo.IsDescendantOf(targetCompanyID, userCompanyID)
 }
 
@@ -188,7 +188,7 @@ func (uc *companyUseCase) CountRootHoldings() (int64, error) {
 func (uc *companyUseCase) CreateCompanyFull(data *domain.CompanyCreateRequest) (*domain.CompanyModel, error) {
 	zapLog := logger.GetLogger()
 
-	// Validate code uniqueness - check dengan lock untuk prevent race condition
+	// Validasi keunikan code - cek dengan lock untuk prevent race condition
 	existing, _ := uc.companyRepo.GetByCode(data.Code)
 	if existing != nil {
 		zapLog.Warn("Company code already exists", zap.String("code", data.Code), zap.String("existing_id", existing.ID))
@@ -200,7 +200,7 @@ func (uc *companyUseCase) CreateCompanyFull(data *domain.CompanyCreateRequest) (
 	// Sekarang: perusahaan bisa dibuat tanpa parent_id, dan parent_id akan di-setup nanti secara terpisah
 	// Validasi ini dihapus karena user ingin bisa membuat perusahaan baru tanpa parent_id di awal
 
-	// Determine level
+	// Tentukan level
 	// CRITICAL: Level 0 hanya untuk holding company yang sebenarnya (misalnya code = "PDV")
 	// Perusahaan tanpa parent_id yang baru dibuat menggunakan level 1 sebagai default (temporary)
 	// Level akan di-recalculate dengan benar setelah parent_id di-set nanti
@@ -213,7 +213,7 @@ func (uc *companyUseCase) CreateCompanyFull(data *domain.CompanyCreateRequest) (
 		level = parent.Level + 1
 	}
 
-	// Set default currency to IDR if not provided
+	// Set default currency ke IDR kalau tidak disediakan
 	currency := data.Currency
 	if currency == "" {
 		currency = "IDR"
@@ -295,7 +295,7 @@ func (uc *companyUseCase) CreateCompanyFull(data *domain.CompanyCreateRequest) (
 		}
 	}
 
-	// Create main business field
+	// Buat main business field
 	if data.MainBusiness != nil {
 		var startOpDate *time.Time
 		if data.MainBusiness.StartOperationDate != nil && !data.MainBusiness.StartOperationDate.Time.IsZero() {
@@ -360,7 +360,7 @@ func (uc *companyUseCase) UpdateCompanyFull(id string, data *domain.CompanyUpdat
 		return nil, fmt.Errorf("company not found: %w", err)
 	}
 
-	// Prevent update jika company sudah di-delete (soft delete)
+	// Cegah update kalau company sudah di-delete (soft delete)
 	if !company.IsActive {
 		return nil, fmt.Errorf("cannot update inactive company")
 	}
@@ -392,7 +392,7 @@ func (uc *companyUseCase) UpdateCompanyFull(id string, data *domain.CompanyUpdat
 		newParentID = nil
 	}
 
-	// Only update parent_id if it's different from current value
+	// Update parent_id hanya kalau berbeda dari nilai saat ini
 	oldParentID := company.ParentID
 	parentIDChanged := false
 	if (oldParentID == nil && newParentID != nil) ||

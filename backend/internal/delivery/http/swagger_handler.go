@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// RegenerateSwagger regenerates Swagger documentation
+// RegenerateSwagger regenerate dokumentasi Swagger
 // @Summary      Regenerate Swagger Documentation
 // @Description  Regenerate Swagger documentation dari source code. Endpoint ini berguna untuk development agar Swagger selalu up-to-date tanpa perlu restart server.
 // @Tags         System
@@ -22,10 +22,10 @@ import (
 func RegenerateSwagger(c *fiber.Ctx) error {
 	zapLog := logger.GetLogger()
 
-	// Get working directory (backend directory)
+	// Ambil working directory (folder backend)
 	workDir := filepath.Join(".")
 	
-	// Run swag init command
+	// Jalankan command swag init
 	cmd := exec.Command("go", "run", "github.com/swaggo/swag/cmd/swag@latest", "init", "-g", "cmd/api/main.go", "-o", "docs")
 	cmd.Dir = workDir
 	
@@ -54,23 +54,23 @@ func RegenerateSwagger(c *fiber.Ctx) error {
 
 // GetSwaggerJSON serves the swagger.json file with auto-reload headers
 func GetSwaggerJSON(c *fiber.Ctx) error {
-	// Set headers untuk prevent caching dan enable auto-reload
+	// Set header untuk prevent caching dan enable auto-reload
 	c.Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	c.Set("Pragma", "no-cache")
 	c.Set("Expires", "0")
 	
-	// Serve swagger.json dari docs folder
+	// Serve file swagger.json dari folder docs
 	return c.SendFile("docs/swagger.json")
 }
 
 // GetSwaggerYAML serves the swagger.yaml file with auto-reload headers
 func GetSwaggerYAML(c *fiber.Ctx) error {
-	// Set headers untuk prevent caching dan enable auto-reload
+	// Set header untuk prevent caching dan enable auto-reload
 	c.Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	c.Set("Pragma", "no-cache")
 	c.Set("Expires", "0")
 	
-	// Serve swagger.yaml dari docs folder
+	// Serve file swagger.yaml dari folder docs
 	return c.SendFile("docs/swagger.yaml")
 }
 

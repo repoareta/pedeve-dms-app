@@ -42,7 +42,7 @@ func NewDocumentTypeUseCase() DocumentTypeUseCase {
 }
 
 func (uc *documentTypeUseCase) CreateDocumentType(name, createdBy string) (*domain.DocumentTypeModel, error) {
-	// Trim and validate name
+	// Trim dan validasi nama
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, errors.New("nama jenis dokumen tidak boleh kosong")
@@ -51,7 +51,7 @@ func (uc *documentTypeUseCase) CreateDocumentType(name, createdBy string) (*doma
 	// Check if already exists (case-insensitive)
 	existing, err := uc.docTypeRepo.GetByName(name)
 	if err == nil && existing != nil {
-		// If exists but inactive, reactivate it
+		// Kalau ada tapi inactive, aktifkan lagi
 		if !existing.IsActive {
 			existing.IsActive = true
 			existing.CreatedBy = createdBy
@@ -63,13 +63,13 @@ func (uc *documentTypeUseCase) CreateDocumentType(name, createdBy string) (*doma
 		return nil, fmt.Errorf("jenis dokumen '%s' sudah ada", name)
 	}
 
-	// Create new document type
+	// Buat document type baru
 	docType := &domain.DocumentTypeModel{
-		ID:        uuid.GenerateUUID(),
-		Name:      name,
-		IsActive:  true,
+		ID:         uuid.GenerateUUID(),
+		Name:       name,
+		IsActive:   true,
 		UsageCount: 0,
-		CreatedBy: createdBy,
+		CreatedBy:  createdBy,
 	}
 
 	if err := uc.docTypeRepo.Create(docType); err != nil {
@@ -96,20 +96,20 @@ func (uc *documentTypeUseCase) GetActiveDocumentTypes() ([]domain.DocumentTypeMo
 }
 
 func (uc *documentTypeUseCase) UpdateDocumentType(id string, name *string, isActive *bool) (*domain.DocumentTypeModel, error) {
-	// Get existing document type
+	// Ambil document type yang sudah ada
 	docType, err := uc.docTypeRepo.GetByID(id)
 	if err != nil {
 		return nil, fmt.Errorf("jenis dokumen tidak ditemukan: %w", err)
 	}
 
-	// Update name if provided
+	// Update nama kalau diisi
 	if name != nil {
 		trimmedName := strings.TrimSpace(*name)
 		if trimmedName == "" {
 			return nil, errors.New("nama jenis dokumen tidak boleh kosong")
 		}
 
-		// Check if name already exists (case-insensitive, excluding current)
+		// Cek apakah nama sudah ada (case-insensitive, kecuali yang sekarang)
 		existing, err := uc.docTypeRepo.GetByName(trimmedName)
 		if err == nil && existing != nil && existing.ID != id {
 			return nil, fmt.Errorf("jenis dokumen '%s' sudah ada", trimmedName)
@@ -138,20 +138,20 @@ func (uc *documentTypeUseCase) DeleteDocumentType(id, requesterRole string) erro
 		return errors.New("hanya superadmin dan administrator yang dapat menghapus jenis dokumen")
 	}
 
-	// Check if document type exists
+	// Cek apakah document type ada
 	docType, err := uc.docTypeRepo.GetByID(id)
 	if err != nil {
 		return fmt.Errorf("jenis dokumen tidak ditemukan: %w", err)
 	}
 
-	// Check usage count
+	// Cek usage count
 	usageCount, err := uc.docTypeRepo.CountUsage(id)
 	if err != nil {
 		return fmt.Errorf("gagal mengecek penggunaan jenis dokumen: %w", err)
 	}
 
-	// If in use, prevent deletion but allow soft delete (set is_active = false)
-	// This way, existing documents won't break, but new documents can't use this type
+	// Kalau dipakai, prevent deletion tapi izinkan soft delete (set is_active = false)
+	// Dengan cara ini, dokumen existing tidak rusak, tapi dokumen baru tidak bisa pakai type ini
 	if usageCount > 0 {
 		// Soft delete: set is_active = false
 		docType.IsActive = false
@@ -161,7 +161,7 @@ func (uc *documentTypeUseCase) DeleteDocumentType(id, requesterRole string) erro
 		return nil // Successfully soft deleted
 	}
 
-	// If not in use, we can soft delete (safer than hard delete)
+	// Kalau tidak dipakai, kita bisa soft delete (lebih aman daripada hard delete)
 	docType.IsActive = false
 	if err := uc.docTypeRepo.Update(docType); err != nil {
 		return fmt.Errorf("gagal menghapus jenis dokumen: %w", err)
@@ -169,4 +169,3 @@ func (uc *documentTypeUseCase) DeleteDocumentType(id, requesterRole string) erro
 
 	return nil
 }
-

@@ -411,7 +411,7 @@ button {
           background: rgba(128, 128, 128, 0.072);
         }
 
-        // Ensure icon and text are aligned
+        // Pastikan icon dan text sejajar
         :deep(svg) {
           flex-shrink: 0;
         }
@@ -486,7 +486,7 @@ button {
     }
   }
 
-  // Ensure dropdown menu is above everything
+  // Pastikan dropdown menu di atas semuanya
   :deep(.ant-dropdown) {
     z-index: 1002 !important;
   }
@@ -509,7 +509,7 @@ button {
     color: var(--text-color);
   }
 
-  // Mobile menu toggle button
+  // Button toggle mobile menu
   .mobile-menu-toggle {
     display: none;
     background: none;
@@ -1183,7 +1183,7 @@ button {
 .content-row {
   margin-bottom: 24px;
 
-  // Ensure all columns have equal height
+  // Pastikan semua columns punya tinggi sama
   :deep(.ant-row) {
     display: flex;
     align-items: stretch;

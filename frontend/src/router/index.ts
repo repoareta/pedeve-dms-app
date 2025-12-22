@@ -136,7 +136,7 @@ const router = createRouter({
       meta: { title: 'About' },
     },
     // User Guideline - tidak perlu route, Vite plugin akan handle
-    // Route ini hanya untuk mencegah catch-all route menangkap
+    // Route ini hanya untuk cegah catch-all route menangkap
     // Vite plugin di vite.config.ts akan serve static files sebelum router
     {
       path: '/:pathMatch(.*)*',
@@ -160,7 +160,7 @@ router.beforeEach(async (to, from, next) => {
     }
 
     // Validasi token dengan backend (verifikasi apakah masih valid)
-    // Hanya validasi jika belum divalidasi baru-baru ini (untuk menghindari terlalu banyak API calls)
+    // Hanya validasi kalau belum divalidasi baru-baru ini (untuk hindari terlalu banyak API calls)
     try {
       await authStore.fetchProfile()
       
@@ -169,7 +169,7 @@ router.beforeEach(async (to, from, next) => {
       const validRoles = ['superadmin', 'administrator', 'admin', 'manager', 'staff']
       const isRoleValid = validRoles.includes(userRole)
       
-      // Jika role tidak dikenali dan bukan di subsidiaries, redirect ke subsidiaries
+      // Kalau role tidak dikenali dan bukan di subsidiaries, redirect ke subsidiaries
       if (!isRoleValid && to.name !== 'subsidiaries' && to.name !== 'profile' && to.name !== 'settings') {
         next({ name: 'subsidiaries' })
         return
@@ -206,7 +206,7 @@ router.beforeEach(async (to, from, next) => {
         console.error('Token validation failed:', error)
       }
       
-      // Hapus state lokal tanpa memanggil logout API (untuk menghindari loop)
+      // Hapus state lokal tanpa panggil logout API (untuk hindari loop)
       // karena cookie mungkin sudah dihapus atau tidak valid
       authStore.clearAuthState()
       
@@ -226,7 +226,7 @@ router.beforeEach(async (to, from, next) => {
     
     if (hasUserInStorage) {
       // Info user ada - validasi apakah cookie masih valid
-      // Tapi jangan blokir akses jika validasi gagal (cookie mungkin sudah expired)
+      // Tapi jangan blokir akses kalau validasi gagal (cookie mungkin sudah expired)
       try {
         // Coba validasi dengan backend (diam-diam)
         await authStore.fetchProfile()
@@ -272,3 +272,4 @@ router.onError((error) => {
 })
 
 export default router
+

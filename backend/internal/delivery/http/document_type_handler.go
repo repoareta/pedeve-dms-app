@@ -87,7 +87,7 @@ func (h *DocumentTypeHandler) CreateDocumentType(c *fiber.Ctx) error {
 	userIDStr := fmt.Sprintf("%v", userIDVal)
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
 
-	// Only superadmin and administrator can create document types
+	// Hanya superadmin dan administrator yang bisa create document types
 	if !utils.IsSuperAdminLike(roleName) {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
@@ -151,7 +151,7 @@ func (h *DocumentTypeHandler) UpdateDocumentType(c *fiber.Ctx) error {
 	userIDStr := fmt.Sprintf("%v", userIDVal)
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
 
-	// Only superadmin and administrator can update document types
+	// Hanya superadmin dan administrator yang bisa update document types
 	if !utils.IsSuperAdminLike(roleName) {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
@@ -170,7 +170,7 @@ func (h *DocumentTypeHandler) UpdateDocumentType(c *fiber.Ctx) error {
 		})
 	}
 
-	// At least one field must be provided
+	// Minimal satu field harus diisi
 	if payload.Name == nil && payload.IsActive == nil {
 		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
 			Error:   "invalid_request",
@@ -251,4 +251,3 @@ func (h *DocumentTypeHandler) DeleteDocumentType(c *fiber.Ctx) error {
 		"message": "Jenis dokumen berhasil dihapus (soft delete)",
 	})
 }
-

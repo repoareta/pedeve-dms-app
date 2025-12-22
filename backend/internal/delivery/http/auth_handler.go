@@ -1,6 +1,7 @@
 package http
 
 import (
+	"github.com/gofiber/fiber/v2"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/audit"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/cookie"
@@ -10,12 +11,11 @@ import (
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/password"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/validation"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
-	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
-// Login handles user login (untuk Fiber)
+// Login handle login user (untuk Fiber)
 // @Summary      Login User
 // @Description  Autentikasi user dan kembalikan JWT token. Mendukung login dengan username atau email. Jika 2FA aktif, akan memerlukan kode verifikasi tambahan pada request berikutnya.
 // @Tags         Authentication
@@ -43,7 +43,7 @@ func Login(c *fiber.Ctx) error {
 		})
 	}
 
-	// Validate and sanitize input
+	// Validasi dan sanitasi input
 	if err := validation.ValidateLoginInput(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
 			Error:   "validation_error",
@@ -281,7 +281,7 @@ func GetProfile(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(userResponse)
 }
 
-// Logout handles user logout (untuk Fiber)
+// Logout handle logout user (untuk Fiber)
 // @Summary      Logout User
 // @Description  Logout user dan hapus authentication cookie (auth_token). Aksi logout dicatat dalam audit log untuk keamanan dan audit trail. Endpoint ini memerlukan CSRF token karena menggunakan method POST.
 // @Tags         Authentication
@@ -358,7 +358,7 @@ func UpdateProfileEmail(c *fiber.Ctx) error {
 		})
 	}
 
-	// Check if email already exists (by another user)
+	// Cek apakah email sudah ada (oleh user lain)
 	var existingUser domain.UserModel
 	result := database.GetDB().Where("email = ? AND id != ?", req.Email, userID).First(&existingUser)
 	if result.Error == nil {
@@ -433,7 +433,7 @@ func ChangePassword(c *fiber.Ctx) error {
 		})
 	}
 
-	// Validate new password length
+	// Validasi panjang password baru
 	if len(req.NewPassword) < 8 {
 		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
 			Error:   "validation_error",

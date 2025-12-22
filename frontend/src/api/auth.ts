@@ -91,7 +91,7 @@ export const authApi = {
     return response.data
   },
 
-  // Profile management
+  // Manajemen profil
   updateEmail: async (email: string): Promise<User> => {
     const response = await apiClient.put<User>('/auth/profile/email', { email })
     return response.data

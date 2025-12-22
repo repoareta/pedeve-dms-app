@@ -345,7 +345,7 @@ func (h *DocumentHandler) ListDocuments(c *fiber.Ctx) error {
 				Message: "Folder tidak ditemukan",
 			})
 		}
-		// Check jika folder milik company user
+		// Cek apakah folder milik company user
 		if userCompanyID == nil || folder.CompanyID == nil || *userCompanyID != *folder.CompanyID {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
@@ -540,7 +540,7 @@ func (h *DocumentHandler) GetDocument(c *fiber.Ctx) error {
 		})
 	}
 
-	// Check access berdasarkan company_id folder
+	// Cek akses berdasarkan company_id folder
 	companyIDVal := c.Locals("companyID")
 	var userCompanyID *string
 	if companyIDVal != nil {
@@ -719,7 +719,7 @@ func (h *DocumentHandler) UploadDocument(c *fiber.Ctx) error {
 				Message: "Folder tidak ditemukan",
 			})
 		}
-		// Check jika folder milik company user
+		// Cek apakah folder milik company user
 		if userCompanyID == nil || folder.CompanyID == nil || *userCompanyID != *folder.CompanyID {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
@@ -812,7 +812,7 @@ func (h *DocumentHandler) UpdateDocument(c *fiber.Ctx) error {
 			Message: "Document tidak ditemukan",
 		})
 	}
-	// Check access berdasarkan company_id folder
+	// Cek akses berdasarkan company_id folder
 	companyIDValForUpdate := c.Locals("companyID")
 	var userCompanyIDForUpdate *string
 	if companyIDValForUpdate != nil {
@@ -906,7 +906,7 @@ func (h *DocumentHandler) UpdateDocument(c *fiber.Ctx) error {
 					Message: "Folder tidak ditemukan",
 				})
 			}
-			// Check jika folder milik company user
+			// Cek apakah folder milik company user
 			if userCompanyIDForMultipart == nil || folder.CompanyID == nil || *userCompanyIDForMultipart != *folder.CompanyID {
 				return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 					Error:   "forbidden",
@@ -989,7 +989,7 @@ func (h *DocumentHandler) UpdateDocument(c *fiber.Ctx) error {
 				Message: "Folder tidak ditemukan",
 			})
 		}
-		// Check jika folder milik company user
+		// Cek apakah folder milik company user
 		if userCompanyIDForJSON == nil || folder.CompanyID == nil || *userCompanyIDForJSON != *folder.CompanyID {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
@@ -1051,7 +1051,7 @@ func (h *DocumentHandler) DeleteDocument(c *fiber.Ctx) error {
 	userIDStr := fmt.Sprintf("%v", userIDVal)
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
 
-	// Get document first
+	// Ambil dokumen dulu
 	existingDoc, err := h.docUseCase.GetDocumentByID(id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{

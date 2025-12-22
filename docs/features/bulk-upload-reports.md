@@ -149,7 +149,7 @@ Sistem menggunakan mekanisme **upsert**:
 - Coba upload file yang lebih kecil
 - Hubungi administrator jika masalah berlanjut
 
-## Langkah Selanjutnya
+## Referensi
 
 - [Daftar Laporan](./financial-reports) - Lihat laporan yang sudah diupload
 - [Tambah Laporan](./add-report) - Tambah laporan manual jika diperlukan

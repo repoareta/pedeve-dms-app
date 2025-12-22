@@ -38,7 +38,7 @@ const metadata = ref<Record<string, unknown>>({})
 const editMode = ref(false)
 const updatingStatus = ref(false)
 
-// Load document
+// Load dokumen
 const loadDocument = async () => {
   loading.value = true
   try {
@@ -47,7 +47,7 @@ const loadDocument = async () => {
     documentStatus.value = data.status || 'active'
     metadata.value = data.metadata || {}
     
-    // Debug: log document data
+    // Debug: log data dokumen
     logger.debug('Document loaded:', {
       id: data.id,
       name: data.name,
@@ -56,7 +56,7 @@ const loadDocument = async () => {
       mime_type: data.mime_type
     })
     
-    // Load file with authentication after document data is loaded
+    // Load file dengan authentication setelah data dokumen ter-load
     await loadDocumentFile()
   } catch (error: unknown) {
     const err = error as { message?: string }

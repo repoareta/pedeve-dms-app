@@ -49,20 +49,20 @@ export interface SonarQubeStatus {
 
 export const sonarqubeApi = {
   /**
-   * Check if SonarQube Monitor feature is enabled
+   * Cek apakah fitur SonarQube Monitor aktif
    */
   async getStatus(): Promise<SonarQubeStatus> {
     try {
       const response = await apiClient.get<SonarQubeStatus>('/sonarqube/status')
       return response.data
     } catch {
-      // If endpoint doesn't exist or returns error, feature is disabled
+      // Kalau endpoint tidak ada atau return error, fitur disabled
       return { enabled: false }
     }
   },
 
   /**
-   * Get SonarCloud issues
+   * Ambil issues SonarCloud
    */
   async getIssues(params?: SonarQubeIssuesParams): Promise<SonarQubeIssuesResponse> {
     const queryParams = new URLSearchParams()
@@ -87,7 +87,7 @@ export const sonarqubeApi = {
   },
 
   /**
-   * Export SonarCloud issues as JSON
+   * Export issues SonarCloud sebagai JSON
    */
   async exportIssues(params?: SonarQubeIssuesParams): Promise<Blob> {
     const queryParams = new URLSearchParams()

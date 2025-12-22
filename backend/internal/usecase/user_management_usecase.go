@@ -75,7 +75,7 @@ func (uc *userManagementUseCase) CreateUser(username, email, password string, co
 		return nil, errors.New("email already exists")
 	}
 
-	// Validate company if provided
+	// Validasi company kalau diisi
 	if companyID != nil {
 		_, err := uc.companyRepo.GetByID(*companyID)
 		if err != nil {
@@ -97,7 +97,7 @@ func (uc *userManagementUseCase) CreateUser(username, email, password string, co
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	// Get role name for legacy field
+	// Ambil nama role untuk legacy field
 	// If no role provided, leave empty (standby mode) - DO NOT default to "user" or "superadmin"
 	var roleName string
 	if roleID != nil {
@@ -135,8 +135,8 @@ func (uc *userManagementUseCase) CreateUser(username, email, password string, co
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	// If companyID and roleID are provided, automatically create entry in junction table
-	// This ensures user appears in "My Company" and can be managed via "Assign Role"
+	// Kalau companyID dan roleID diisi, otomatis buat entry di junction table
+	// Ini memastikan user muncul di "My Company" dan bisa di-manage via "Assign Role"
 	if companyID != nil && roleID != nil {
 		assignment := &domain.UserCompanyAssignmentModel{
 			ID:        uuid.GenerateUUID(),
@@ -154,7 +154,7 @@ func (uc *userManagementUseCase) CreateUser(username, email, password string, co
 				zap.Error(err))
 		}
 	} else if companyID != nil {
-		// If only companyID provided (no role), create assignment without role (standby)
+		// Kalau hanya companyID diisi (tidak ada role), buat assignment tanpa role (standby)
 		assignment := &domain.UserCompanyAssignmentModel{
 			ID:        uuid.GenerateUUID(),
 			UserID:    user.ID,
@@ -178,13 +178,13 @@ func (uc *userManagementUseCase) GetUserByID(id string) (*domain.UserModel, erro
 }
 
 func (uc *userManagementUseCase) GetUsersByCompany(companyID string) ([]domain.UserModel, error) {
-	// Get users from junction table (supports multiple company assignments)
+	// Ambil users dari junction table (support multiple company assignments)
 	assignments, err := uc.assignmentRepo.GetByCompanyID(companyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get assignments: %w", err)
 	}
 
-	// Get unique user IDs
+	// Ambil unique user IDs
 	userIDs := make(map[string]bool)
 	for _, assignment := range assignments {
 		if assignment.IsActive {
@@ -203,7 +203,7 @@ func (uc *userManagementUseCase) GetUsersByCompany(companyID string) ([]domain.U
 		// Get role from assignment for this company
 		for _, assignment := range assignments {
 			if assignment.UserID == userID && assignment.CompanyID == companyID && assignment.RoleID != nil {
-				// Add role info from assignment
+				// Tambahkan info role dari assignment
 				user.RoleID = assignment.RoleID
 				// Get role name
 				if role, err := uc.roleRepo.GetByID(*assignment.RoleID); err == nil {
@@ -222,13 +222,13 @@ func (uc *userManagementUseCase) GetUsersByCompany(companyID string) ([]domain.U
 // GetUsersByCompanyHierarchy gets all users from a company and all its descendants (RBAC)
 // This is used for User Management to show only users that the current user has access to
 func (uc *userManagementUseCase) GetUsersByCompanyHierarchy(companyID string) ([]domain.UserModel, error) {
-	// Get company descendants (includes direct children and all nested descendants)
+	// Ambil company descendants (termasuk direct children dan semua nested descendants)
 	descendants, err := uc.companyRepo.GetDescendants(companyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get company descendants: %w", err)
 	}
 
-	// Include the company itself
+	// Include company itu sendiri
 	allCompanyIDs := []string{companyID}
 	for _, desc := range descendants {
 		allCompanyIDs = append(allCompanyIDs, desc.ID)
@@ -245,29 +245,29 @@ func (uc *userManagementUseCase) GetUsersByCompanyHierarchy(companyID string) ([
 		}
 
 		for _, assignment := range assignments {
-			// Include both active and inactive assignments
-			// This ensures users who were unassigned still appear in the list
+			// Include assignment aktif dan tidak aktif
+			// Ini memastikan users yang sudah di-unassign masih muncul di list
 			allUserIDs[assignment.UserID] = true
 			if userRoleMap[assignment.UserID] == nil {
 				userRoleMap[assignment.UserID] = make(map[string]*string)
 			}
-			// Only set role if assignment is active, otherwise keep nil to indicate unassigned
+			// Set role hanya kalau assignment aktif, kalau tidak biarkan nil untuk indikasikan unassigned
 			if assignment.IsActive {
 				userRoleMap[assignment.UserID][compID] = assignment.RoleID
 			}
 		}
 	}
 
-	// Also get users from UserModel.CompanyID as fallback (backward compatibility)
-	// This ensures users created before junction table implementation are still visible
+	// Ambil juga users dari UserModel.CompanyID sebagai fallback (backward compatibility)
+	// Ini memastikan users yang dibuat sebelum junction table implementation masih terlihat
 	for _, compID := range allCompanyIDs {
 		usersFromCompanyID, err := uc.userRepo.GetByCompanyID(compID)
 		if err == nil {
 			for _, user := range usersFromCompanyID {
-				// Only add if not already in junction table
+				// Tambahkan hanya kalau belum ada di junction table
 				if !allUserIDs[user.ID] {
 					allUserIDs[user.ID] = true
-					// Use role from UserModel if available
+					// Pakai role dari UserModel kalau ada
 					if user.RoleID != nil {
 						if userRoleMap[user.ID] == nil {
 							userRoleMap[user.ID] = make(map[string]*string)
@@ -287,13 +287,13 @@ func (uc *userManagementUseCase) GetUsersByCompanyHierarchy(companyID string) ([
 			continue // Skip if user not found
 		}
 
-		// Skip superadmin users for security
+		// Skip users superadmin untuk keamanan
 		if user.Role == "superadmin" {
 			continue
 		}
 
-		// Get role from assignment for the primary company (user's company)
-		// If user is assigned to multiple companies, use the role from the primary company
+		// Ambil role dari assignment untuk primary company (company user)
+		// Kalau user di-assign ke multiple companies, pakai role dari primary company
 		if roleMap, ok := userRoleMap[userID]; ok {
 			if roleID, ok := roleMap[companyID]; ok && roleID != nil {
 				user.RoleID = roleID

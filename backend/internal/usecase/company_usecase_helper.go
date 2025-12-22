@@ -13,7 +13,7 @@ import (
 func (uc *companyUseCase) updateDescendantsLevel(companyID string) error {
 	zapLog := logger.GetLogger()
 
-	// Use recursive approach: get all descendants and update their levels
+	// Pakai recursive approach: ambil semua descendants dan update level mereka
 	maxIterations := 10
 	maxLevel := 10 // Maximum allowed level to prevent infinite growth
 
@@ -45,7 +45,7 @@ func (uc *companyUseCase) updateDescendantsLevel(companyID string) error {
 			break // No descendants to update
 		}
 
-		// Update each descendant's level based on its parent
+		// Update level setiap descendant berdasarkan parent-nya
 		updated := 0
 		for _, desc := range descendants {
 			// CRITICAL: Skip holding company (code = "PDV") - should never be updated
@@ -56,7 +56,7 @@ func (uc *companyUseCase) updateDescendantsLevel(companyID string) error {
 				)
 				continue
 			}
-			// Get parent to determine correct level
+			// Ambil parent untuk tentukan level yang benar
 			if desc.ParentID == nil {
 				// CRITICAL: Level 0 hanya untuk holding company yang sebenarnya (misalnya code = "PDV")
 				// Perusahaan tanpa parent_id menggunakan level 1 sebagai default (bukan level 0)
@@ -89,7 +89,7 @@ func (uc *companyUseCase) updateDescendantsLevel(companyID string) error {
 				continue
 			}
 
-			// Calculate expected level: parent level + 1
+			// Hitung expected level: parent level + 1
 			expectedLevel := parent.Level + 1
 
 			// Safety check: prevent level from exceeding max level
@@ -104,7 +104,7 @@ func (uc *companyUseCase) updateDescendantsLevel(companyID string) error {
 				expectedLevel = maxLevel
 			}
 
-			// Only update if level is incorrect
+			// Update hanya kalau level salah
 			if desc.Level != expectedLevel {
 				oldLevel := desc.Level
 				desc.Level = expectedLevel

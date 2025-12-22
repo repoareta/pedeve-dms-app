@@ -19,7 +19,7 @@ Panduan lengkap untuk setup dan menggunakan Two-Factor Authentication.
 
 1. **Klik "Enable 2FA" atau "Aktifkan 2FA"**
    - Tombol berada di bagian 2FA
-   - Sistem akan generate QR code
+   - QR code akan di-generate
 
 2. **QR Code Akan Muncul**
    - QR code ditampilkan di layar
@@ -54,7 +54,7 @@ Jika belum punya, install salah satu aplikasi berikut:
    - Kode berubah setiap 30 detik, pastikan menggunakan kode terbaru
 
 2. **Klik "Verify" atau "Verifikasi"**
-   - Sistem akan memverifikasi kode
+   - Kode akan diverifikasi
    - Jika benar, 2FA akan aktif
 
 ### Langkah 6: Simpan Backup Codes
@@ -81,7 +81,7 @@ Setelah 2FA aktif, proses login sedikit berbeda:
    - Masukkan kode 6 digit yang ditampilkan
 
 3. **Klik "Verify"**
-   - Sistem akan memverifikasi kode
+   - Kode akan diverifikasi
    - Jika benar, Anda akan login
 
 ## Menggunakan Backup Codes

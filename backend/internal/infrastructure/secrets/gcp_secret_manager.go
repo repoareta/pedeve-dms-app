@@ -67,11 +67,11 @@ func (g *GCPSecretManager) Close() error {
 func (g *GCPSecretManager) GetSecret(secretName string) (string, error) {
 	zapLog := logger.GetLogger()
 
-	// Construct full secret name
+	// Buat full secret name
 	// Format: projects/{project_id}/secrets/{secret_name}/versions/latest
 	secretPath := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", g.projectID, secretName)
 
-	// Access secret version
+	// Akses secret version
 	req := &secretmanagerpb.AccessSecretVersionRequest{
 		Name: secretPath,
 	}

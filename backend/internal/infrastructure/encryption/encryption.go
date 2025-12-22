@@ -44,7 +44,7 @@ func InitEncryption() error {
 }
 
 // Encrypt mengenkripsi plaintext menggunakan AES-256-GCM
-// Returns: base64-encoded encrypted string
+// Return: string ter-encrypt yang di-encode base64
 func Encrypt(plaintext string) (string, error) {
 	if !initialized {
 		if err := InitEncryption(); err != nil {
@@ -83,8 +83,8 @@ func Encrypt(plaintext string) (string, error) {
 }
 
 // Decrypt mendekripsi ciphertext yang di-encrypt dengan Encrypt
-// Input: base64-encoded encrypted string
-// Returns: plaintext string
+// Input: string ter-encrypt yang di-encode base64
+// Return: plaintext string
 func Decrypt(ciphertext string) (string, error) {
 	if !initialized {
 		if err := InitEncryption(); err != nil {

@@ -29,7 +29,7 @@ func NewRateLimiter(rps rate.Limit, burst int) *RateLimiter {
 		burst:    burst,
 	}
 
-	// Clean up old visitors every minute
+	// Bersihkan visitor lama setiap menit
 	go rl.cleanupVisitors()
 
 	return rl
@@ -86,10 +86,10 @@ func RateLimitMiddleware(limiter *RateLimiter) fiber.Handler {
 		// Get client IP
 		ip := getClientIP(c)
 
-		// Get rate limiter for this IP
+		// Ambil rate limiter untuk IP ini
 		visitorLimiter := limiter.GetVisitor(ip)
 
-		// Check if request is allowed
+		// Cek apakah request diizinkan
 		if !visitorLimiter.Allow() {
 			return c.Status(fiber.StatusTooManyRequests).JSON(ErrorResponse{
 				Error:   "rate_limit_exceeded",

@@ -52,14 +52,14 @@ func (h *CompanyHandler) CreateCompany(c *fiber.Ctx) error {
 		})
 	}
 
-	// Get user info from JWT
+	// Ambil info user dari JWT
 	userID := c.Locals("userID").(string)
 	username := c.Locals("username").(string)
 	companyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
 
 	// Superadmin/administrator can create company at any level
-	// Admin can only create sub-company under their company
+	// Admin hanya bisa create sub-company di bawah company mereka
 	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
@@ -73,7 +73,7 @@ func (h *CompanyHandler) CreateCompany(c *fiber.Ctx) error {
 			})
 		}
 		if req.ParentID != nil && *req.ParentID != userCompanyID {
-			// Check if parent is descendant of user's company
+			// Cek apakah parent adalah descendant dari company user
 			hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, *req.ParentID)
 			if err != nil || !hasAccess {
 				return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
@@ -130,14 +130,14 @@ func (h *CompanyHandler) CreateCompanyFull(c *fiber.Ctx) error {
 		})
 	}
 
-	// Get user info from JWT
+	// Ambil info user dari JWT
 	userID := c.Locals("userID").(string)
 	username := c.Locals("username").(string)
 	companyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
 
-	// Superadmin can create company at any level
-	// Admin can only create sub-company under their company
+	// Superadmin bisa create company di level apapun
+	// Admin hanya bisa create sub-company di bawah company mereka
 	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
@@ -172,7 +172,7 @@ func (h *CompanyHandler) CreateCompanyFull(c *fiber.Ctx) error {
 		})
 	}
 
-	// Get full company data with relationships
+	// Ambil data company lengkap dengan relationships
 	fullCompany, _ := h.companyUseCase.GetCompanyByID(company.ID)
 
 	// Audit log
@@ -239,7 +239,7 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 		// Admin holding boleh edit holding mereka sendiri, tapi tidak boleh edit holding lain
 		targetCompany, err := h.companyUseCase.GetCompanyByID(id)
 		if err == nil && targetCompany != nil && targetCompany.Code == "PDV" {
-			// Allow admin holding to edit their own holding
+			// Izinkan admin holding edit holding mereka sendiri
 			if userCompanyID != targetCompany.ID {
 				// Admin holding lain tidak bisa edit holding
 				zapLog.Warn("Admin attempted to update holding company (not their own), blocking",
@@ -273,7 +273,7 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 		}
 	}
 
-	// Get old company data before update for audit log
+	// Ambil data company lama sebelum update untuk audit log
 	oldCompany, _ := h.companyUseCase.GetCompanyByID(id)
 
 	company, err := h.companyUseCase.UpdateCompanyFull(id, &req)
@@ -284,14 +284,14 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 		})
 	}
 
-	// Get full company data with relationships
+	// Ambil data company lengkap dengan relationships
 	fullCompany, _ := h.companyUseCase.GetCompanyByID(company.ID)
 
-	// Prepare audit details with changes
+	// Siapkan detail audit dengan perubahan
 	userID := c.Locals("userID").(string)
 	username := c.Locals("username").(string)
 
-	// Compare old and new values to create changes map
+	// Bandingkan nilai lama dan baru untuk buat map perubahan
 	changes := make(map[string]map[string]interface{})
 	if oldCompany != nil {
 		if oldCompany.Name != company.Name {
@@ -439,7 +439,7 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 			}
 		}
 
-		// Check for individual shareholder changes (for shareholders that exist in both)
+		// Cek perubahan individual shareholder (untuk shareholder yang ada di kedua versi)
 		maxLen := len(oldShareholders)
 		if len(newShareholders) < maxLen {
 			maxLen = len(newShareholders)
@@ -534,7 +534,7 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 			}
 		}
 
-		// Check for individual director changes (for directors that exist in both)
+		// Cek perubahan individual director (untuk director yang ada di kedua versi)
 		directorMaxLen := len(oldDirectors)
 		if len(newDirectors) < directorMaxLen {
 			directorMaxLen = len(newDirectors)
@@ -882,7 +882,7 @@ func (h *CompanyHandler) GetCompanyAncestors(c *fiber.Ctx) error {
 	roleName := roleNameVal.(string)
 	companyID := c.Locals("companyID")
 
-	// Check if company exists
+	// Cek apakah company ada
 	_, err := h.companyUseCase.GetCompanyByID(id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
@@ -913,7 +913,7 @@ func (h *CompanyHandler) GetCompanyAncestors(c *fiber.Ctx) error {
 			})
 		}
 
-		// Check if user has access to this company or its descendants
+		// Cek apakah user punya akses ke company ini atau descendants-nya
 		hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, id)
 		if err != nil || !hasAccess {
 			// Also check if the target company is an ancestor of user's company

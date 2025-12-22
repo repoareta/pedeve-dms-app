@@ -8,19 +8,19 @@ import (
 )
 
 // GetUserAuthInfo mendapatkan informasi lengkap user untuk JWT generation
-// Returns: roleID, roleName, companyID, companyLevel, hierarchyScope, permissions
+// Return: roleID, roleName, companyID, companyLevel, hierarchyScope, permissions
 // Role yang dikembalikan adalah role TERTINGGI dari semua assignments (untuk dashboard)
 func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []string, error) {
 	zapLog := logger.GetLogger()
 
-	// Get user with relationships
+	// Ambil user dengan relationships
 	userRepo := repository.NewUserRepository()
 	user, role, company, err := userRepo.GetUserWithRoleAndCompany(userID)
 	if err != nil {
 		return nil, "", nil, 0, "", nil, err
 	}
 
-	// Get all assignments untuk user ini (dari junction table)
+	// Ambil semua assignments untuk user ini (dari junction table)
 	assignmentRepo := repository.NewUserCompanyAssignmentRepository()
 	assignments, err := assignmentRepo.GetByUserID(userID)
 	if err == nil && len(assignments) > 0 {
@@ -34,7 +34,7 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 				continue
 			}
 
-			// Get role detail
+			// Ambil detail role
 			roleDetail, err := roleRepo.GetByID(*assignment.RoleID)
 			if err != nil {
 				continue
@@ -99,7 +99,7 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 				}
 			}
 
-			// Get permissions from role
+			// Ambil permissions dari role
 			permissions := []string{}
 			if roleID != nil {
 				permissionModels, err := roleRepo.GetPermissions(*roleID)
@@ -112,7 +112,7 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 				}
 			}
 
-			// Add default permissions based on role name (backward compatibility)
+			// Tambahkan default permissions berdasarkan nama role (backward compatibility)
 			if len(permissions) == 0 {
 				switch roleName {
 				case "superadmin", "administrator":
@@ -141,7 +141,7 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 		roleName = user.Role
 	}
 
-	// Determine company info
+	// Tentukan info company
 	var companyID *string
 	companyLevel := 0
 	hierarchyScope := "global"
@@ -150,7 +150,7 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 		companyID = &company.ID
 		companyLevel = company.Level
 
-		// Determine hierarchy scope based on company level
+		// Tentukan hierarchy scope berdasarkan level company
 		if companyLevel == 0 {
 			hierarchyScope = "global" // Root/Superadmin
 		} else if companyLevel == 1 {
@@ -177,7 +177,7 @@ func GetUserAuthInfo(userID string) (*string, string, *string, int, string, []st
 		}
 	}
 
-	// Add default permissions based on role name (backward compatibility)
+	// Tambahkan default permissions berdasarkan nama role (backward compatibility)
 	if len(permissions) == 0 {
 		switch roleName {
 		case "superadmin", "administrator":

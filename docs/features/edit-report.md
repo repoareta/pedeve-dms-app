@@ -12,18 +12,18 @@ Panduan untuk mengedit laporan keuangan yang sudah ada.
 
 Form edit sama dengan form tambah, tetapi sudah terisi dengan data yang ada.
 
-### Field yang Dapat Diedit
+### Field yang Bisa Diedit
 
-- **Periode**: Dapat diubah (jika belum ada duplicate)
-- **Perusahaan**: Dapat diubah
-- **Revenue**: Dapat diubah
-- **OPEX**: Dapat diubah
-- **NPAT**: Dapat diubah
-- **Dividend**: Dapat diubah
+- **Periode**: Bisa diubah asalkan belum ada duplicate
+- **Perusahaan**: Bisa diubah
+- **Revenue**: Bisa diubah
+- **OPEX**: Bisa diubah
+- **NPAT**: Bisa diubah
+- **Dividend**: Bisa diubah
 - **Financial Ratio**: Akan terhitung ulang otomatis
-- **Inputter**: Dapat diubah
-- **Remark**: Dapat diubah
-- **Attachment**: Dapat diubah atau dihapus
+- **Inputter**: Bisa diubah
+- **Remark**: Bisa diubah
+- **Attachment**: Bisa diubah atau dihapus
 
 ## Validasi
 
@@ -39,11 +39,11 @@ Sama seperti form tambah:
    - Cek perhitungan financial ratio
 
 2. **Klik "Update"**
-   - Sistem akan menyimpan perubahan
+   - Perubahan akan disimpan
    - Jika berhasil, Anda akan diarahkan ke halaman detail laporan
 
 3. **Jika Ada Error**
-   - Sistem akan menampilkan pesan error
+   - Pesan error akan ditampilkan
    - Perbaiki field yang error
    - Coba simpan lagi
 
@@ -63,10 +63,10 @@ Sama seperti form tambah:
 ### Financial Ratio Tidak Update
 
 - Pastikan Revenue dan OPEX sudah diubah
-- Sistem akan menghitung ulang otomatis saat simpan
+- Perhitungan akan dilakukan ulang otomatis saat simpan
 - Refresh halaman jika perhitungan tidak muncul
 
-## Langkah Selanjutnya
+## Referensi
 
 - [Detail Laporan](./financial-reports) - Lihat perubahan yang sudah disimpan
 - [Daftar Laporan](./financial-reports) - Kembali ke daftar laporan

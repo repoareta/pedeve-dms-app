@@ -36,10 +36,10 @@ Halaman menampilkan informasi profil:
    - Anda akan diarahkan ke form edit
 
 2. **Edit Field yang Diizinkan**
-   - **Nama Lengkap**: Dapat diubah
-   - **Telepon**: Dapat diubah
-   - **Email**: Dapat diubah (jika diizinkan)
-   - **Password**: Dapat diubah
+   - **Nama Lengkap**: Bisa diubah
+   - **Telepon**: Bisa diubah
+   - **Email**: Bisa diubah (jika diizinkan)
+   - **Password**: Bisa diubah
 
 3. **Simpan Perubahan**
    - Klik "Update" untuk menyimpan
@@ -81,7 +81,7 @@ Halaman menampilkan informasi profil:
 - Pastikan password baru memenuhi kriteria
 - Pastikan konfirmasi password sama dengan password baru
 
-## Langkah Selanjutnya
+## Referensi
 
 - [Settings](./settings) - Pengaturan aplikasi
 - [Two-Factor Authentication](./2fa) - Setup 2FA untuk keamanan

@@ -5,7 +5,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Permission represents a permission in the system
+// Permission merepresentasikan permission di sistem
 type Permission string
 
 const (
@@ -41,7 +41,7 @@ var RolePermissions = map[string][]Permission{
 		PermissionAdminRead,
 	},
 	"superadmin": {
-		// Superadmin has all permissions
+		// Superadmin punya semua permissions
 		PermissionUserRead,
 		PermissionUserWrite,
 		PermissionUserDelete,
@@ -54,14 +54,14 @@ var RolePermissions = map[string][]Permission{
 	},
 }
 
-// HasPermission checks if a role has a specific permission
+// HasPermission cek apakah role punya permission tertentu
 func HasPermission(role string, permission Permission) bool {
 	permissions, exists := RolePermissions[role]
 	if !exists {
 		return false
 	}
 
-	// Superadmin has all permissions
+	// Superadmin punya semua permissions
 	if role == "superadmin" {
 		return true
 	}
@@ -87,7 +87,7 @@ func RequirePermission(permission Permission) fiber.Handler {
 		}
 		userID := userIDVal.(string)
 
-		// Get user from database to check role
+		// Ambil user dari database untuk cek role
 		var userModel UserModel
 		result := DB.First(&userModel, "id = ?", userID)
 		if result.Error == gorm.ErrRecordNotFound {
@@ -105,7 +105,7 @@ func RequirePermission(permission Permission) fiber.Handler {
 			})
 		}
 
-		// User has permission, continue
+		// User punya permission, lanjutkan
 		return c.Next()
 	}
 }
@@ -123,7 +123,7 @@ func RequireRole(roles ...string) fiber.Handler {
 		}
 		userID := userIDVal.(string)
 
-		// Get user from database to check role
+		// Ambil user dari database untuk cek role
 		var userModel UserModel
 		result := DB.First(&userModel, "id = ?", userID)
 		if result.Error == gorm.ErrRecordNotFound {
@@ -133,7 +133,7 @@ func RequireRole(roles ...string) fiber.Handler {
 			})
 		}
 
-		// Check if user has one of the required roles
+		// Cek apakah user punya salah satu role yang diperlukan
 		hasRole := false
 		for _, role := range roles {
 			if userModel.Role == role {
@@ -149,7 +149,7 @@ func RequireRole(roles ...string) fiber.Handler {
 			})
 		}
 
-		// User has required role, continue
+		// User punya role yang diperlukan, lanjutkan
 		return c.Next()
 	}
 }

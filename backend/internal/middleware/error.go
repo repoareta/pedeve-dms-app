@@ -18,7 +18,7 @@ const (
 )
 
 // isSuspiciousPath mengecek apakah path adalah request mencurigakan (bot/scanner)
-// Request ini biasanya tidak perlu di-log sebagai technical error untuk mengurangi noise
+// Request ini biasanya tidak perlu di-log sebagai technical error untuk kurangi noise
 func isSuspiciousPath(path string) bool {
 	suspiciousPatterns := []string{
 		"/boaform/",       // Router/device admin panels
@@ -53,7 +53,7 @@ func LogTechnicalError(err error, c *fiber.Ctx, details map[string]interface{}) 
 		return
 	}
 
-	// Jika path mencurigakan, abaikan seluruh logging (apapun status code-nya)
+	// Kalau path mencurigakan, abaikan seluruh logging (apapun status code-nya)
 	if isSuspiciousPath(c.Path()) {
 		return
 	}
@@ -70,12 +70,12 @@ func LogTechnicalError(err error, c *fiber.Ctx, details map[string]interface{}) 
 		"query":       c.Queries(),
 	}
 
-	// Gabungkan dengan detail tambahan jika diberikan
+	// Gabungkan dengan detail tambahan kalau diberikan
 	for k, v := range details {
 		errorDetails[k] = v
 	}
 
-	// Ambil info user jika tersedia (mungkin nil untuk error yang tidak terautentikasi)
+	// Ambil info user kalau tersedia (mungkin nil untuk error yang tidak terautentikasi)
 	userID := ""
 	username := "system"
 	if userIDVal := c.Locals("userID"); userIDVal != nil {
@@ -145,7 +145,7 @@ func ErrorHandlerMiddleware(c *fiber.Ctx) error {
 			return err
 		}
 
-		// Ekstrak pesan error dari response body jika memungkinkan
+		// Ekstrak pesan error dari response body kalau memungkinkan
 		details := map[string]interface{}{
 			"status_code": statusCode,
 		}

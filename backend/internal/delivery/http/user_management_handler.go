@@ -50,9 +50,9 @@ func (h *UserManagementHandler) CreateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	// Prevent creating superadmin user
+	// Cegah create user superadmin
 	if req.RoleID != nil {
-		// Check role name
+		// Cek nama role
 		roleUseCase := usecase.NewRoleManagementUseCase()
 		role, err := roleUseCase.GetRoleByID(*req.RoleID)
 		if err == nil && role != nil {
@@ -63,7 +63,7 @@ func (h *UserManagementHandler) CreateUser(c *fiber.Ctx) error {
 					Message: "Superadmin role cannot be assigned through this interface. Superadmin is a system account managed separately.",
 				})
 			}
-			// Only superadmin can assign administrator
+			// Hanya superadmin yang bisa assign administrator
 			if roleNameLower == "administrator" {
 				currentRole := strings.ToLower(c.Locals("roleName").(string))
 				if currentRole != "superadmin" {
@@ -195,7 +195,7 @@ func (h *UserManagementHandler) GetAllUsers(c *fiber.Ctx) error {
 			})
 		}
 
-		// Filter out superadmin users for security
+		// Filter out users superadmin untuk keamanan
 		filtered := []domain.UserModel{}
 		for _, user := range users {
 			if user.Role != "superadmin" {
@@ -224,7 +224,7 @@ func (h *UserManagementHandler) GetAllUsers(c *fiber.Ctx) error {
 		})
 	}
 
-	// Get users from user's company and all descendants (RBAC)
+	// Ambil users dari company user dan semua descendants (RBAC)
 	users, err := h.userUseCase.GetUsersByCompanyHierarchy(userCompanyID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -279,7 +279,7 @@ func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	// Prevent editing superadmin user (even by other superadmins/administrator)
+	// Cegah edit user superadmin (bahkan oleh superadmin/administrator lain)
 	if targetUser.Role == "superadmin" {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
@@ -301,7 +301,7 @@ func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	// Safe type assertion for companyID (can be *string or nil)
+	// Safe type assertion untuk companyID (bisa *string atau nil)
 	var userCompanyID string
 	companyIDVal := c.Locals("companyID")
 	if companyIDVal != nil {
@@ -400,7 +400,7 @@ func (h *UserManagementHandler) DeleteUser(c *fiber.Ctx) error {
 		})
 	}
 
-	// Prevent deleting superadmin user
+	// Cegah delete user superadmin
 	if targetUser.Role == "superadmin" {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
@@ -472,9 +472,9 @@ func (h *UserManagementHandler) ToggleUserStatus(c *fiber.Ctx) error {
 		})
 	}
 
-	// Prevent deactivating superadmin user (if trying to deactivate active superadmin)
+	// Cegah deactivate user superadmin (kalau coba deactivate superadmin yang aktif)
 	if targetUser.Role == "superadmin" && targetUser.IsActive {
-		// Allow activating superadmin if inactive, but not deactivating if active
+		// Izinkan activate superadmin kalau inactive, tapi tidak deactivate kalau aktif
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
 			Message: "Superadmin account cannot be deactivated through this interface.",
@@ -545,7 +545,7 @@ func (h *UserManagementHandler) ResetUserPassword(c *fiber.Ctx) error {
 		})
 	}
 
-	// Prevent superadmin from resetting their own password
+	// Cegah superadmin reset password mereka sendiri
 	if id == currentUserID {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
@@ -572,7 +572,7 @@ func (h *UserManagementHandler) ResetUserPassword(c *fiber.Ctx) error {
 		})
 	}
 
-	// Get target user to verify they exist
+	// Ambil target user untuk verifikasi mereka ada
 	targetUser, err := h.userUseCase.GetUserByID(id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
@@ -635,7 +635,7 @@ func (h *UserManagementHandler) AssignUserToCompany(c *fiber.Ctx) error {
 	}
 
 	// Superadmin/administrator can assign to any company
-	// Admin can only assign to their own company
+	// Admin hanya bisa assign ke company mereka sendiri
 	if !utils.IsSuperAdminLike(roleName) {
 		// Check if user has company
 		if companyID == nil {
@@ -658,7 +658,7 @@ func (h *UserManagementHandler) AssignUserToCompany(c *fiber.Ctx) error {
 			})
 		}
 
-		// Admin can only assign to their own company
+		// Admin hanya bisa assign ke company mereka sendiri
 		if req.CompanyID != userCompanyID {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
@@ -666,7 +666,7 @@ func (h *UserManagementHandler) AssignUserToCompany(c *fiber.Ctx) error {
 			})
 		}
 
-		// Only admin role can assign (not manager or staff)
+		// Hanya role admin yang bisa assign (bukan manager atau staff)
 		if roleName != "admin" {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
@@ -675,7 +675,7 @@ func (h *UserManagementHandler) AssignUserToCompany(c *fiber.Ctx) error {
 		}
 	}
 
-	// Get target user to verify they exist
+	// Ambil target user untuk verifikasi mereka ada
 	targetUser, err := h.userUseCase.GetUserByID(id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
@@ -684,7 +684,7 @@ func (h *UserManagementHandler) AssignUserToCompany(c *fiber.Ctx) error {
 		})
 	}
 
-	// Prevent assigning superadmin user
+	// Cegah assign user superadmin
 	if targetUser.Role == "superadmin" {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
@@ -692,7 +692,7 @@ func (h *UserManagementHandler) AssignUserToCompany(c *fiber.Ctx) error {
 		})
 	}
 
-	// Assign user to company (now supports multiple company assignments via junction table)
+	// Assign user ke company (sekarang support multiple company assignments via junction table)
 	if err := h.userUseCase.AssignUserToCompany(id, req.CompanyID); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
 			Error:   "assign_failed",
@@ -701,7 +701,7 @@ func (h *UserManagementHandler) AssignUserToCompany(c *fiber.Ctx) error {
 	}
 
 	// If role_id is provided, assign role in this specific company via junction table
-	// This allows same user to have different roles in different companies
+	// Ini memungkinkan user yang sama punya role berbeda di companies berbeda
 	if req.RoleID != nil {
 		if err := h.userUseCase.AssignUserToRoleInCompany(id, req.CompanyID, *req.RoleID); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
@@ -803,7 +803,7 @@ func (h *UserManagementHandler) UnassignUserFromCompany(c *fiber.Ctx) error {
 		}
 	}
 
-	// Get target user to verify they exist
+	// Ambil target user untuk verifikasi mereka ada
 	targetUser, err := h.userUseCase.GetUserByID(id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{

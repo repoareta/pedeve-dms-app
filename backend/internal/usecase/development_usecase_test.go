@@ -15,7 +15,7 @@ import (
 func setupTestDevelopmentUseCase(t *testing.T) (*developmentUseCase, *gorm.DB) {
 	db := helpers.SetupTestDB(t)
 
-	// Auto migrate models
+	// Auto migrate model-model
 	err := db.AutoMigrate(
 		&domain.CompanyModel{},
 		&domain.UserModel{},
@@ -25,7 +25,7 @@ func setupTestDevelopmentUseCase(t *testing.T) (*developmentUseCase, *gorm.DB) {
 	)
 	require.NoError(t, err)
 
-	// Create use case with test database
+	// Buat use case dengan test database
 	uc := NewDevelopmentUseCaseWithDB(db).(*developmentUseCase)
 
 	return uc, db
@@ -43,7 +43,7 @@ func TestDevelopmentUseCase_ResetReportData(t *testing.T) {
 		createTestReportForDevelopment(t, db, company.ID, user.ID)
 		createTestReportForDevelopment(t, db, company.ID, user.ID)
 
-		// Verify reports exist
+		// Verifikasi reports ada
 		count, err := uc.reportRepo.Count()
 		require.NoError(t, err)
 		assert.GreaterOrEqual(t, count, int64(2))
@@ -52,14 +52,14 @@ func TestDevelopmentUseCase_ResetReportData(t *testing.T) {
 		err = uc.ResetReportData()
 		require.NoError(t, err)
 
-		// Verify all deleted
+		// Verifikasi semua terhapus
 		count, err = uc.reportRepo.Count()
 		require.NoError(t, err)
 		assert.Equal(t, int64(0), count)
 	})
 
 	t.Run("Reset when no reports exist", func(t *testing.T) {
-		// Should not error when no reports exist
+		// Tidak boleh error kalau tidak ada reports
 		err := uc.ResetReportData()
 		require.NoError(t, err)
 	})
@@ -75,7 +75,7 @@ func TestDevelopmentUseCase_RunReportSeeder(t *testing.T) {
 		company := createTestCompanyForDevelopment(t, db)
 		_ = createTestUserForDevelopment(t, db) // User for potential inputter assignment
 
-		// Ensure company is active and has level > 0
+		// Pastikan company aktif dan punya level > 0
 		company.Level = 1
 		company.IsActive = true
 		err := db.Save(company).Error
@@ -85,7 +85,7 @@ func TestDevelopmentUseCase_RunReportSeeder(t *testing.T) {
 		err = uc.RunReportSeeder()
 		require.NoError(t, err)
 
-		// Verify reports created
+		// Verifikasi reports terbuat
 		reports, err := uc.reportRepo.GetByCompanyID(company.ID)
 		require.NoError(t, err)
 		assert.Greater(t, len(reports), 0)
@@ -100,7 +100,7 @@ func TestDevelopmentUseCase_RunReportSeeder(t *testing.T) {
 		err := db.Save(company).Error
 		require.NoError(t, err)
 
-		// Create existing report
+		// Buat report yang sudah ada
 		createTestReportForDevelopment(t, db, company.ID, user.ID)
 
 		// Run seeder - should return error
@@ -128,9 +128,9 @@ func TestDevelopmentUseCase_CheckReportDataExists(t *testing.T) {
 	})
 
 	t.Run("Check when no reports exist", func(t *testing.T) {
-		// Ensure no reports exist by resetting first
+		// Pastikan tidak ada reports dengan reset dulu
 		_ = uc.ResetReportData() // Ignore error if no reports to reset
-		
+
 		// Check
 		exists, err := uc.CheckReportDataExists()
 		require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestDevelopmentUseCase_RunAllSeeders(t *testing.T) {
 	defer helpers.CleanupTestDB(t, db)
 
 	t.Run("Run all seeders successfully", func(t *testing.T) {
-		// Create admin role first (required for seeder)
+		// Buat admin role dulu (diperlukan untuk seeder)
 		adminRole := &domain.RoleModel{
 			ID:          uuid.GenerateUUID(),
 			Name:        "admin",
@@ -155,9 +155,9 @@ func TestDevelopmentUseCase_RunAllSeeders(t *testing.T) {
 		err := db.Create(adminRole).Error
 		require.NoError(t, err)
 
-		// Run all seeders
+		// Jalankan semua seeders
 		err = uc.RunAllSeeders()
-		// May error if data already exists, which is acceptable
+		// Bisa error kalau data sudah ada, itu normal
 		_ = err // We don't assert here as it depends on test state
 	})
 }
@@ -177,7 +177,7 @@ func TestDevelopmentUseCase_ResetAllSeededData(t *testing.T) {
 		err := uc.ResetAllSeededData()
 		require.NoError(t, err)
 
-		// Verify reports deleted
+		// Verifikasi reports terhapus
 		count, err := uc.reportRepo.Count()
 		require.NoError(t, err)
 		assert.Equal(t, int64(0), count)
@@ -250,4 +250,3 @@ func createTestReportForDevelopment(t *testing.T, db *gorm.DB, companyID, userID
 	require.NoError(t, err)
 	return report
 }
-

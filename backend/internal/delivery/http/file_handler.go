@@ -10,15 +10,15 @@ import (
 	"path/filepath"
 	"strings"
 
+	storageClient "cloud.google.com/go/storage"
+	"github.com/gofiber/fiber/v2"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/storage"
-	"github.com/gofiber/fiber/v2"
-	storageClient "cloud.google.com/go/storage"
 	"go.uber.org/zap"
 )
 
 // ServeFile serves a file from GCP Storage or local storage as a proxy
-// This allows frontend to access files without requiring public access to the bucket
+// Ini memungkinkan frontend akses file tanpa perlu public access ke bucket
 // @Summary      Serve File
 // @Description  Serve file dari storage (GCP Storage atau local) sebagai proxy. Endpoint ini protected dan memerlukan authentication untuk keamanan file documents.
 // @Tags         Files
@@ -36,7 +36,7 @@ func ServeFile(c *fiber.Ctx) error {
 
 	// CRITICAL: Set headers to allow embedding in iframe
 	// Use CSP frame-ancestors instead of X-Frame-Options for better flexibility
-	// This allows the file to be embedded in iframe from same origin
+	// Ini memungkinkan file di-embed di iframe dari same origin
 	c.Set("X-Frame-Options", "SAMEORIGIN")
 	c.Set("Content-Security-Policy", "frame-ancestors 'self'")
 
@@ -47,8 +47,8 @@ func ServeFile(c *fiber.Ctx) error {
 		// Fallback: try regular param if wildcard doesn't work
 		filePath = c.Params("path")
 	}
-	
-	// Log request details for debugging
+
+	// Log detail request untuk debugging
 	zapLog.Info("ServeFile handler called",
 		zap.String("original_url", c.OriginalURL()),
 		zap.String("path", c.Path()),
@@ -56,14 +56,14 @@ func ServeFile(c *fiber.Ctx) error {
 		zap.String("file_path_param", filePath),
 		zap.String("user_agent", c.Get("User-Agent")),
 	)
-	
+
 	if filePath == "" {
 		zapLog.Warn("File path is empty in request",
 			zap.String("url", c.OriginalURL()),
 			zap.String("path", c.Path()),
 			zap.String("all_params", fmt.Sprintf("%+v", c.AllParams())),
 		)
-		// Still set headers even for error
+		// Tetap set headers meski error
 		c.Set("X-Frame-Options", "SAMEORIGIN")
 		c.Set("Content-Security-Policy", "frame-ancestors 'self'")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -79,11 +79,11 @@ func ServeFile(c *fiber.Ctx) error {
 			zap.String("original_path", filePath),
 			zap.Error(err),
 		)
-		// Continue with original path if decoding fails
+		// Lanjutkan dengan path original kalau decoding gagal
 		decodedPath = filePath
 	}
 
-	// Log for debugging
+	// Log untuk debugging
 	zapLog.Debug("Serving file request",
 		zap.String("original_path", filePath),
 		zap.String("decoded_path", decodedPath),
@@ -104,17 +104,17 @@ func ServeFile(c *fiber.Ctx) error {
 		})
 	}
 
-	// Clean the path (normalize separators, remove redundant elements)
+	// Bersihkan path (normalize separators, hapus elemen redundant)
 	decodedPath = filepath.Clean(decodedPath)
 
-	// Get storage manager
+	// Ambil storage manager
 	storageManager, err := storage.GetStorageManager()
 	if err != nil {
 		zapLog.Error("Failed to initialize storage manager",
 			zap.String("file_path", decodedPath),
 			zap.Error(err),
 		)
-		// Still set headers even for error
+		// Tetap set headers meski error
 		c.Set("X-Frame-Options", "SAMEORIGIN")
 		c.Set("Content-Security-Policy", "frame-ancestors 'self'")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -131,7 +131,7 @@ func ServeFile(c *fiber.Ctx) error {
 			zap.String("file_path", decodedPath),
 			zap.String("expected_format", "bucketPath/filename"),
 		)
-		// Still set headers even for error
+		// Tetap set headers meski error
 		c.Set("X-Frame-Options", "SAMEORIGIN")
 		c.Set("Content-Security-Policy", "frame-ancestors 'self'")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -142,14 +142,14 @@ func ServeFile(c *fiber.Ctx) error {
 	bucketPath := parts[0]
 	filename := parts[1]
 
-	// Validate bucket path and filename are not empty
+	// Validasi bucket path dan filename tidak kosong
 	if bucketPath == "" || filename == "" {
 		zapLog.Warn("Empty bucket path or filename",
 			zap.String("bucket_path", bucketPath),
 			zap.String("filename", filename),
 			zap.String("decoded_path", decodedPath),
 		)
-		// Still set headers even for error
+		// Tetap set headers meski error
 		c.Set("X-Frame-Options", "SAMEORIGIN")
 		c.Set("Content-Security-Policy", "frame-ancestors 'self'")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -164,20 +164,20 @@ func ServeFile(c *fiber.Ctx) error {
 		zap.String("full_path", decodedPath),
 	)
 
-	// Check if using GCP Storage
-	// Use type assertion with interface check
+	// Cek apakah pakai GCP Storage
+	// Pakai type assertion dengan interface check
 	type GCPStorageGetter interface {
 		GetBucketName() string
 		GetClient() *storageClient.Client
 		GetContext() context.Context
 	}
-	
+
 	if gcpStorage, ok := storageManager.(GCPStorageGetter); ok {
-		// Serve from GCP Storage
+		// Serve dari GCP Storage
 		return serveFromGCPStorage(c, gcpStorage, bucketPath, filename, decodedPath)
 	}
 
-	// Serve from local storage
+	// Serve dari local storage
 	return serveFromLocalStorage(c, storageManager, bucketPath, filename, decodedPath)
 }
 
@@ -189,7 +189,7 @@ func serveFromGCPStorage(c *fiber.Ctx, gcpStorage interface {
 }, bucketPath, filename, fullPath string) error {
 	zapLog := logger.GetLogger()
 
-	// Get GCP Storage client and bucket name from GCPStorageManager
+	// Ambil GCP Storage client dan bucket name dari GCPStorageManager
 	ctx := gcpStorage.GetContext()
 	bucketName := gcpStorage.GetBucketName()
 	client := gcpStorage.GetClient()
@@ -204,7 +204,7 @@ func serveFromGCPStorage(c *fiber.Ctx, gcpStorage interface {
 		})
 	}
 
-	// Construct object path in bucket
+	// Buat object path di bucket
 	// Format: bucketPath/filename (e.g., "logos/1764336646_man photo.jpg")
 	objectPath := fmt.Sprintf("%s/%s", bucketPath, filename)
 
@@ -215,11 +215,11 @@ func serveFromGCPStorage(c *fiber.Ctx, gcpStorage interface {
 		zap.String("filename", filename),
 	)
 
-	// Get object from bucket
+	// Ambil object dari bucket
 	bucket := client.Bucket(bucketName)
 	obj := bucket.Object(objectPath)
-	
-	// Check if object exists first (optional, but provides better error message)
+
+	// Cek apakah object ada dulu (opsional, tapi memberikan error message yang lebih baik)
 	_, err := obj.Attrs(ctx)
 	if err != nil {
 		if err == storageClient.ErrObjectNotExist {
@@ -358,7 +358,7 @@ func serveFromLocalStorage(c *fiber.Ctx, storageManager storage.StorageManager, 
 	type LocalStorageGetter interface {
 		GetBasePath() string
 	}
-	
+
 	localStorage, ok := storageManager.(LocalStorageGetter)
 	if !ok {
 		// LocalStorageGetter interface not available
@@ -366,7 +366,7 @@ func serveFromLocalStorage(c *fiber.Ctx, storageManager storage.StorageManager, 
 			zap.String("bucket_path", bucketPath),
 			zap.String("filename", filename),
 		)
-		// Still set headers even for error
+		// Tetap set headers meski error
 		c.Set("X-Frame-Options", "SAMEORIGIN")
 		c.Set("Content-Security-Policy", "frame-ancestors 'self'")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -378,7 +378,7 @@ func serveFromLocalStorage(c *fiber.Ctx, storageManager storage.StorageManager, 
 	// Read file directly from filesystem and serve
 	basePath := localStorage.GetBasePath()
 	filePath := fmt.Sprintf("%s/%s/%s", basePath, bucketPath, filename)
-	
+
 	zapLog.Info("Reading file from local filesystem",
 		zap.String("file_path", filePath),
 	)
@@ -438,4 +438,3 @@ func serveFromLocalStorage(c *fiber.Ctx, storageManager storage.StorageManager, 
 	// Send file content
 	return c.Send(fileData)
 }
-

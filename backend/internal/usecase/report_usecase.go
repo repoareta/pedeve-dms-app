@@ -50,7 +50,7 @@ func (uc *reportUseCase) CreateReport(data *domain.CreateReportRequest) (*domain
 		return nil, errors.New("company not found")
 	}
 
-	// Validate inputter if provided
+	// Validasi inputter kalau diisi
 	if data.InputterID != nil && *data.InputterID != "" {
 		_, err := uc.userRepo.GetByID(*data.InputterID)
 		if err != nil {
@@ -58,7 +58,7 @@ func (uc *reportUseCase) CreateReport(data *domain.CreateReportRequest) (*domain
 		}
 	}
 
-	// Check if report for this company and period already exists
+	// Cek apakah report untuk company dan period ini sudah ada
 	existing, _ := uc.reportRepo.GetByCompanyIDAndPeriod(data.CompanyID, data.Period)
 	if existing != nil {
 		return nil, errors.New("report for this company and period already exists")
@@ -89,7 +89,7 @@ func (uc *reportUseCase) CreateReport(data *domain.CreateReportRequest) (*domain
 		return nil, fmt.Errorf("failed to create report: %w", err)
 	}
 
-	// Reload with relationships
+	// Reload dengan relationships
 	return uc.reportRepo.GetByID(report.ID)
 }
 
@@ -98,20 +98,20 @@ func (uc *reportUseCase) GetReportByID(id string) (*domain.ReportModel, error) {
 }
 
 func (uc *reportUseCase) GetAllReports(userRole string, userCompanyID *string) ([]domain.ReportModel, error) {
-	// Superadmin can see all reports
+	// Superadmin bisa lihat semua reports
 	if utils.IsSuperAdminLike(userRole) {
 		return uc.reportRepo.GetAll()
 	}
 
-	// Admin can see reports from their company and all children companies
+	// Admin bisa lihat reports dari company mereka dan semua children companies
 	if userRole == "admin" && userCompanyID != nil {
-		// Get all descendants (children, grandchildren, etc)
+		// Ambil semua descendants (children, grandchildren, dll)
 		descendants, err := uc.companyRepo.GetDescendants(*userCompanyID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get company descendants: %w", err)
 		}
 
-		// Collect all company IDs (own company + descendants)
+		// Kumpulkan semua company IDs (company sendiri + descendants)
 		companyIDs := []string{*userCompanyID}
 		for _, desc := range descendants {
 			companyIDs = append(companyIDs, desc.ID)
@@ -120,7 +120,7 @@ func (uc *reportUseCase) GetAllReports(userRole string, userCompanyID *string) (
 		return uc.reportRepo.GetByCompanyIDs(companyIDs)
 	}
 
-	// Regular users can only see reports from their own company
+	// User reguler hanya bisa lihat reports dari company mereka sendiri
 	if userCompanyID != nil {
 		return uc.reportRepo.GetByCompanyID(*userCompanyID)
 	}
@@ -142,19 +142,19 @@ func (uc *reportUseCase) GetReportsByCompanyID(companyID string, userRole string
 }
 
 func (uc *reportUseCase) UpdateReport(id string, data *domain.UpdateReportRequest) (*domain.ReportModel, error) {
-	// Get existing report
+	// Ambil report yang sudah ada
 	report, err := uc.reportRepo.GetByID(id)
 	if err != nil {
 		return nil, errors.New("report not found")
 	}
 
-	// Update fields if provided
+	// Update field-field kalau diisi
 	if data.Period != nil {
-		// Validate period format
+		// Validasi format period
 		if len(*data.Period) != 7 || (*data.Period)[4] != '-' {
 			return nil, errors.New("invalid period format. must be YYYY-MM")
 		}
-		// Check if new period conflicts with existing report for same company
+		// Cek apakah period baru conflict dengan report yang sudah ada untuk company yang sama
 		if *data.Period != report.Period {
 			existing, _ := uc.reportRepo.GetByCompanyIDAndPeriod(report.CompanyID, *data.Period)
 			if existing != nil && existing.ID != id {
@@ -175,7 +175,7 @@ func (uc *reportUseCase) UpdateReport(id string, data *domain.UpdateReportReques
 
 	if data.InputterID != nil {
 		if *data.InputterID != "" {
-			// Validate inputter exists
+			// Validasi inputter ada
 			_, err := uc.userRepo.GetByID(*data.InputterID)
 			if err != nil {
 				return nil, errors.New("inputter user not found")
@@ -235,22 +235,22 @@ func (uc *reportUseCase) DeleteReport(id string) error {
 // - User is admin and companyID is their company or one of their descendants
 // - User is regular user and companyID is their company
 func (uc *reportUseCase) ValidateReportAccess(userRole string, userCompanyID *string, reportCompanyID string) (bool, error) {
-	// Superadmin can access all
+	// Superadmin bisa akses semua
 	if utils.IsSuperAdminLike(userRole) {
 		return true, nil
 	}
 
-	// If user has no company, they can't access any reports (except superadmin)
+	// Kalau user tidak punya company, mereka tidak bisa akses reports apapun (kecuali superadmin)
 	if userCompanyID == nil {
 		return false, nil
 	}
 
-	// If report is for user's own company, allow access
+	// Kalau report untuk company user sendiri, izinkan akses
 	if *userCompanyID == reportCompanyID {
 		return true, nil
 	}
 
-	// Admin can access reports from their company and all descendants
+	// Admin bisa akses reports dari company mereka dan semua descendants
 	if userRole == "admin" {
 		isDescendant, err := uc.companyRepo.IsDescendantOf(reportCompanyID, *userCompanyID)
 		if err != nil {
@@ -259,6 +259,6 @@ func (uc *reportUseCase) ValidateReportAccess(userRole string, userCompanyID *st
 		return isDescendant, nil
 	}
 
-	// Regular users can only access their own company's reports
+	// User reguler hanya bisa akses reports dari company mereka sendiri
 	return false, nil
 }

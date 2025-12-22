@@ -486,7 +486,7 @@ const availableYearsWithStatus = computed<YearOption[]>(() => {
     }
   })
   
-  // Jika user sudah input tahun manual yang tidak ada di list, tambahkan ke result
+  // Kalau user sudah input tahun manual yang tidak ada di list, tambahkan ke result
   if (formData.value.year && !availableYears.value.includes(formData.value.year)) {
     const yearNum = parseInt(formData.value.year)
     const hasRKAP = existingRKAPYears.value.includes(formData.value.year)
@@ -508,7 +508,7 @@ const isFutureYear = (year: string): boolean => {
   return parseInt(year) > currentYear
 }
 
-// Get status untuk tahun tertentu
+// Ambil status untuk tahun tertentu
 const getYearStatus = (year: string): 'exists' | 'missing' | 'future' | null => {
   if (!year || !props.isRKAP) return null
   const currentYear = parseInt(dayjs().format('YYYY'))
@@ -535,7 +535,7 @@ const getYearStatusColor = (status: string): string => {
 }
 
 const filterYear = (input: string, option: { value: string }) => {
-  // Jika tidak ada input, tampilkan semua
+  // Kalau tidak ada input, tampilkan semua
   if (!input) {
     return true
   }

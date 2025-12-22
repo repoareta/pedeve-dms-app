@@ -21,13 +21,13 @@ const loading = ref(false)
 const pageLoading = ref(true)
 const userMap = ref<Record<string, string>>({})
 
-// Subfolder state
+// State subfolder
 const subfolders = ref<DocumentFolder[]>([])
 const subfolderModalVisible = ref(false)
 const subfolderName = ref('')
 const creatingSubfolder = ref(false)
 
-// Rename folder state
+// State rename folder
 const renameFolderModalVisible = ref(false)
 const renameFolderName = ref('')
 const folderBeingEdited = ref<DocumentFolder | null>(null)
@@ -39,7 +39,7 @@ const isSuperAdminOrAdministratorSync = computed(() => {
   return role === 'superadmin' || role === 'administrator'
 })
 
-// Upload state
+// State upload
 type UploadItem = {
   uid: string
   name: string
@@ -55,14 +55,14 @@ const uploading = ref(false)
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
 const searchText = ref('')
 
-// Check if file is a document type (no size limit)
+// Cek apakah file adalah document type (tidak ada size limit)
 const isDocumentFile = (file: File): boolean => {
   const fileName = file.name.toLowerCase()
   const documentExts = ['.docx', '.xlsx', '.xls', '.pptx', '.ppt', '.pdf']
   return documentExts.some(ext => fileName.endsWith(ext))
 }
 
-// Check if file is an image type (10MB limit)
+// Cek apakah file adalah image type (limit 10MB)
 const isImageFile = (file: File): boolean => {
   const fileName = file.name.toLowerCase()
   const imageExts = ['.jpg', '.jpeg', '.png']
@@ -84,20 +84,20 @@ const currentFolder = computed(() => {
   return folders.value.find(f => f.id === folderId.value)
 })
 
-// Build breadcrumb path from current folder to root
+// Buat breadcrumb path dari folder saat ini ke root
 const breadcrumbPath = computed(() => {
   const path: Array<{ id: string; name: string }> = []
   if (!folderId.value || folders.value.length === 0) {
     return path
   }
 
-  // Start from current folder and traverse up to root
+  // Mulai dari folder saat ini dan traverse ke atas sampai root
   const findFolderById = (id: string): DocumentFolder | undefined => {
     return folders.value.find(f => f.id === id)
   }
 
   let currentFolderId: string | null = folderId.value
-  const visited = new Set<string>() // Prevent infinite loops
+    const visited = new Set<string>() // Cegah infinite loops
 
   while (currentFolderId && !visited.has(currentFolderId)) {
     visited.add(currentFolderId)
@@ -190,7 +190,7 @@ const getUploaderName = (record: DocumentItem): string => {
 const loadFolders = async () => {
   try {
     folders.value = await documentsApi.listFolders()
-    // Load subfolders after folders are loaded
+    // Load subfolders setelah folders ter-load
     await loadSubfolders()
   } catch (error: unknown) {
     const err = error as { message?: string }
@@ -204,22 +204,22 @@ const loadSubfolders = async () => {
     return
   }
   try {
-    // Filter folders where parent_id matches current folderId
+    // Filter folders dimana parent_id cocok dengan folderId saat ini
     subfolders.value = folders.value.filter(f => f.parent_id === folderId.value)
-    // Load files for all subfolders to calculate stats
-    // Note: This loads all files, which might be inefficient for many subfolders
-    // Consider optimizing by loading summary stats per folder if available
+    // Load files untuk semua subfolders untuk hitung stats
+    // Catatan: Ini load semua files, mungkin tidak efisien untuk banyak subfolders
+    // Pertimbangkan optimasi dengan load summary stats per folder kalau tersedia
   } catch (error: unknown) {
     console.error('Failed to load subfolders:', error)
     subfolders.value = []
   }
 }
 
-// Load files for all subfolders to get accurate file counts and sizes
+// Load files untuk semua subfolders untuk dapatkan file counts dan sizes yang akurat
 const allFiles = ref<DocumentItem[]>([])
 const loadAllFilesForStats = async () => {
   try {
-    // Load all files without folder filter to get stats for subfolders
+    // Load semua files tanpa folder filter untuk dapatkan stats untuk subfolders
     allFiles.value = await documentsApi.listDocuments()
   } catch (error: unknown) {
     console.error('Failed to load all files for stats:', error)
@@ -236,7 +236,7 @@ const loadDocuments = async () => {
 
   loading.value = true
   try {
-    // Ensure we only load documents for the current folder_id
+    // Pastikan kita hanya load dokumen untuk folder_id saat ini
     files.value = await documentsApi.listDocuments({ folder_id: folderId.value })
     tablePagination.value.total = files.value.length
   } catch (error: unknown) {
@@ -260,19 +260,19 @@ const handleBatchUpload = async () => {
     return
   }
   
-  // Validate file size based on file type
+  // Validasi ukuran file berdasarkan tipe file
   for (const item of uploadList.value) {
     const file = item.originFileObj
     if (!file) continue
     
     if (isImageFile(file)) {
-      // Image files: 10MB limit
+      // File gambar: limit 10MB
       if (file.size > MAX_IMAGE_SIZE) {
         message.error(`File gambar "${file.name}" terlalu besar, batas maksimal ${MAX_IMAGE_SIZE / (1024 * 1024)}MB`)
         return
       }
     } else if (!isDocumentFile(file)) {
-      // For other file types, apply 10MB limit as default
+      // Untuk tipe file lain, terapkan limit 10MB sebagai default
       if (file.size > MAX_IMAGE_SIZE) {
         message.error(`File "${file.name}" terlalu besar, batas maksimal ${MAX_IMAGE_SIZE / (1024 * 1024)}MB`)
         return
@@ -421,7 +421,7 @@ const handleCreateSubfolder = async () => {
     message.success('Subfolder berhasil dibuat')
     subfolderModalVisible.value = false
     subfolderName.value = ''
-    // Reload folders to get the new subfolder and reload files for stats
+    // Reload folders untuk dapatkan subfolder baru dan reload files untuk stats
     await loadFolders()
     await loadAllFilesForStats()
   } catch (error: unknown) {
@@ -432,14 +432,14 @@ const handleCreateSubfolder = async () => {
   }
 }
 
-// Removed handleSubfolderClick - using handleSubfolderDoubleClick instead
+// Removed handleSubfolderClick - pakai handleSubfolderDoubleClick sebagai gantinya
 
 const handleSubfolderDoubleClick = (subfolder: DocumentFolder) => {
-  // Add transition effect
+  // Tambahkan efek transisi
   pageLoading.value = true
   setTimeout(() => {
     router.push(`/documents/folders/${subfolder.id}`)
-  }, 150) // Short delay for transition effect
+  }, 150) // Delay singkat untuk efek transisi
 }
 
 const handleBreadcrumbClick = (folderId: string) => {
@@ -449,20 +449,20 @@ const handleBreadcrumbClick = (folderId: string) => {
   }, 150)
 }
 
-// Helper functions for folder stats
+// Helper functions untuk folder stats
 const getSubfolderFileCount = (subfolderId: string): number => {
   // Use allFiles for more accurate count (includes files from all folders)
   return allFiles.value.filter(f => f.folder_id === subfolderId).length
 }
 
 const getSubfolderSize = (subfolderId: string): string => {
-  // Use allFiles for more accurate size (includes files from all folders)
+  // Pakai allFiles untuk size yang lebih akurat (termasuk files dari semua folders)
   const subfolderFiles = allFiles.value.filter(f => f.folder_id === subfolderId)
   const totalSize = subfolderFiles.reduce((sum, f) => sum + (f.size || 0), 0)
   return formatBytes(totalSize)
 }
 
-// Rename folder functions
+// Functions rename folder
 const openRenameModal = (folder: DocumentFolder) => {
   folderBeingEdited.value = folder
   renameFolderName.value = folder.name

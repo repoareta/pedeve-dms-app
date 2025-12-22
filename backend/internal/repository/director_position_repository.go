@@ -83,15 +83,15 @@ func (r *directorPositionRepository) SoftDelete(id string) error {
 }
 
 func (r *directorPositionRepository) CountUsage(id string) (int64, error) {
-	// First get the director position name
+	// Ambil nama director position dulu
 	directorPosition, err := r.GetByID(id)
 	if err != nil {
 		return 0, err
 	}
 	
 	var count int64
-	// Count directors that use this position (check if position string contains the position name)
-	// Position is stored as comma-separated string in DirectorModel.Position
+	// Hitung director yang pakai position ini (cek apakah string position mengandung nama position)
+	// Position disimpan sebagai comma-separated string di DirectorModel.Position
 	err = r.db.Model(&domain.DirectorModel{}).
 		Where("position LIKE ?", "%"+directorPosition.Name+"%"). // Check if position string contains the name
 		Count(&count).Error

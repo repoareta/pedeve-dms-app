@@ -17,7 +17,7 @@ dayjs.extend(relativeTime)
 const router = useRouter()
 const authStore = useAuthStore()
 
-// Check user role
+// Cek role user
 const userRole = computed(() => {
   return authStore.user?.role?.toLowerCase() || ''
 })
@@ -43,11 +43,11 @@ const searchQuery = ref('')
 const searchResults = ref<DocumentItem[]>([])
 const loading = ref(false)
 const tableLoading = ref(false)
-const pageLoading = ref(true) // Initial page load
+const pageLoading = ref(true) // Load halaman awal
 const tablePage = ref(1)
 const tablePageSize = ref(5)
 const currentSortBy = ref<string>('updated_at') // Sort by updated_at for recently files
-const currentSortDir = ref<string>('desc') // Descending: newest first
+const currentSortDir = ref<string>('desc') // Descending: terbaru dulu
 const currentTypeFilter = ref<string>('')
 const folderStatsMap = ref<Record<string, { count: number; size: number }>>({})
 const totalStorageSize = ref(0)
@@ -187,7 +187,7 @@ const loadDocuments = async (opts: { page?: number; pageSize?: number; search?: 
     const sortedData = [...res.data].sort((a, b) => {
       const dateA = new Date(a.updated_at || a.created_at || 0).getTime()
       const dateB = new Date(b.updated_at || b.created_at || 0).getTime()
-      return dateB - dateA // Descending: newest first
+      return dateB - dateA // Descending: terbaru dulu
     })
     
     pagedFiles.value = sortedData
@@ -347,7 +347,7 @@ const selectFolder = (folderId: string | undefined) => {
   // Klik tunggal hanya untuk seleksi; tidak ada notifikasi
 }
 
-// Handle row click to navigate to document detail
+// Handle klik row untuk navigasi ke detail dokumen
 const handleRowClick = (record: DocumentItem) => {
   router.push(`/documents/${record.id}`)
 }
@@ -361,7 +361,7 @@ const loadActivities = async () => {
       pageSize: 5, // tampilkan 5 aktivitas terbaru saja
       resource: 'document',
     }
-    // Jika bukan superadmin, backend sudah otomatis filter ke user sendiri. Untuk superadmin biarkan melihat semua.
+    // Kalau bukan superadmin, backend sudah otomatis filter ke user sendiri. Untuk superadmin biarkan lihat semua.
     const response = await auditApi.getUserActivityLogs(params)
     activities.value = response.data
   } catch (error: unknown) {
@@ -378,7 +378,7 @@ const getDisplayName = (username: string): string => {
   return parts[0] || username
 }
 
-// Format activity description (lebih naratif)
+// Format deskripsi aktivitas (lebih naratif)
 const getDocumentNameById = (id: string | undefined): string => {
   if (!id) return ''
   const doc = pagedFiles.value.find(f => f.id === id) || searchResults.value.find(f => f.id === id)
@@ -416,7 +416,7 @@ const getActivityDescription = (activity: UserActivityLog): string => {
   return `Telah melakukan aksi ${action} pada ${target}`
 }
 
-// Format timestamp to relative time
+// Format timestamp ke relative time
 const formatTime = (timestamp: string): string => {
   const time = dayjs(timestamp)
   const now = dayjs()
@@ -436,7 +436,7 @@ const formatTime = (timestamp: string): string => {
   }
 }
 
-// Get user avatar color (dummy - untuk styling)
+// Ambil warna avatar user (dummy - untuk styling)
 const getUserAvatarColor = (username: string): string => {
   const colors: string[] = ['#82a2bf', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#eb2f96']
   if (!username || username.length === 0) return colors[0] || '#82a2bf'
@@ -455,13 +455,13 @@ const legendColorClass = (type: string, idx: number) => {
   return classes[idx % classes.length]
 }
 
-// Folder helpers
-// Check if folder has subfolders
+// Helper folder
+// Cek apakah folder punya subfolders
 const hasSubfolders = (folderId: string): boolean => {
   return folders.value.some(f => f.parent_id === folderId)
 }
 
-// Recursively get all child folder IDs including the folder itself
+// Ambil semua child folder IDs secara recursive termasuk folder itu sendiri
 const getAllChildFolderIds = (folderId: string): string[] => {
   const result: string[] = [folderId]
   const children = folders.value.filter(f => f.parent_id === folderId)
@@ -471,7 +471,7 @@ const getAllChildFolderIds = (folderId: string): string[] => {
   return result
 }
 
-// Recursive count: includes files from all subfolders
+// Count recursive: termasuk files dari semua subfolders
 const getFolderFileCount = (folderId: string): number => {
   const allFolderIds = getAllChildFolderIds(folderId)
   let totalCount = 0

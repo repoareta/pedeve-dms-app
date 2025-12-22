@@ -83,7 +83,7 @@ Sistem akan memvalidasi:
 - Pastikan Anda memiliki akses ke perusahaan tersebut
 - Hubungi administrator jika perusahaan seharusnya muncul
 
-## Langkah Selanjutnya
+## Referensi
 
 - [Edit Laporan](./edit-report) - Pelajari cara edit laporan
 - [Bulk Upload](./bulk-upload-reports) - Pelajari bulk upload untuk input banyak laporan

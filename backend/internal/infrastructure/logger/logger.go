@@ -45,7 +45,7 @@ func GetLogger() *zap.Logger {
 	return Log
 }
 
-// Sync flushes any buffered log entries
+// Sync flush semua log entries yang ter-buffer
 func Sync() {
 	if Log != nil {
 		_ = Log.Sync()

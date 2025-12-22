@@ -594,18 +594,18 @@ func getFieldValue(report *domain.FinancialReportModel, field string) interface{
 // Each sheet contains chart and table data with RKAP vs Realisasi comparison
 func (uc *financialReportUseCase) ExportPerformanceExcel(companyID, startPeriod, endPeriod string) ([]byte, error) {
 
-	// Validate period format (YYYY-MM)
+	// Validasi format period (YYYY-MM)
 	if len(startPeriod) != 7 || len(endPeriod) != 7 {
 		return nil, fmt.Errorf("invalid period format, expected YYYY-MM")
 	}
 
-	// Get all financial reports for company
+	// Ambil semua financial reports untuk company
 	reports, err := uc.repo.GetByCompanyID(companyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get financial reports: %w", err)
 	}
 
-	// Extract year and months from periods
+	// Extract tahun dan bulan dari periods
 	startYear := startPeriod[:4]
 	startMonth := startPeriod[5:7]
 
@@ -619,7 +619,7 @@ func (uc *financialReportUseCase) ExportPerformanceExcel(companyID, startPeriod,
 			rkapReport = &report
 		}
 
-		// Get realisasi reports in the range
+		// Ambil realisasi reports dalam range
 		if !report.IsRKAP {
 			reportYear := report.Period[:4]
 			reportMonth := report.Period[5:7]
@@ -629,7 +629,7 @@ func (uc *financialReportUseCase) ExportPerformanceExcel(companyID, startPeriod,
 		}
 	}
 
-	// Sort by period
+	// Sort berdasarkan period
 	sort.Slice(filteredReports, func(i, j int) bool {
 		return filteredReports[i].Period < filteredReports[j].Period
 	})
@@ -659,7 +659,7 @@ func (uc *financialReportUseCase) ExportPerformanceExcel(companyID, startPeriod,
 		return nil, fmt.Errorf("failed to generate ratio sheet: %w", err)
 	}
 
-	// Save to buffer
+	// Simpan ke buffer
 	var buf bytes.Buffer
 	if err := f.Write(&buf); err != nil {
 		return nil, fmt.Errorf("failed to write Excel file: %w", err)
@@ -668,7 +668,7 @@ func (uc *financialReportUseCase) ExportPerformanceExcel(companyID, startPeriod,
 	return buf.Bytes(), nil
 }
 
-// Helper function to get column letter from number (1=A, 2=B, ..., 27=AA, etc.)
+// Helper function untuk ambil column letter dari number (1=A, 2=B, ..., 27=AA, dll)
 func (uc *financialReportUseCase) getColumnLetter(colNum int) string {
 	result := ""
 	for colNum > 0 {
@@ -683,7 +683,7 @@ func (uc *financialReportUseCase) getColumnLetter(colNum int) string {
 // Excel requires single quotes around sheet names that contain spaces or special characters
 // If sheet name contains single quotes, they must be escaped by doubling them
 func (uc *financialReportUseCase) formatExcelRef(sheetName, rangeRef string) string {
-	// Check if sheet name contains spaces or special characters that require quoting
+	// Cek apakah sheet name mengandung spaces atau special characters yang perlu quoting
 	needsQuotes := false
 	for _, r := range sheetName {
 		if r == ' ' || r == '\'' || r == '[' || r == ']' || r == '(' || r == ')' {
@@ -699,7 +699,7 @@ func (uc *financialReportUseCase) formatExcelRef(sheetName, rangeRef string) str
 	return fmt.Sprintf("%s!%s", sheetName, rangeRef)
 }
 
-// Helper function to format currency value (IDR)
+// Helper function untuk format currency value (IDR)
 func formatCurrencyValue(value int64) string {
 	if value == 0 {
 		return "Rp 0"
@@ -726,9 +726,9 @@ func formatCurrencyValue(value int64) string {
 	return fmt.Sprintf("%sRp %s", sign, formatNumber(int64(absValue)))
 }
 
-// Helper function to format number with thousand separators
+// Helper function untuk format number dengan thousand separators
 func formatNumber(value int64) string {
-	// Simple formatting without library
+	// Formatting sederhana tanpa library
 	str := fmt.Sprintf("%d", value)
 	result := ""
 	for i, c := range str {
@@ -740,12 +740,12 @@ func formatNumber(value int64) string {
 	return result
 }
 
-// Helper function to format ratio value
+// Helper function untuk format ratio value
 func formatRatioValue(value float64) string {
 	return fmt.Sprintf("%.2f", value)
 }
 
-// Table item structure
+// Struktur table item
 type tableItem struct {
 	label    string
 	field    string
@@ -756,7 +756,7 @@ type tableItem struct {
 	getRealF func(domain.FinancialReportModel) float64
 }
 
-// Helper function to write table with multi-level headers (like frontend)
+// Helper function untuk write table dengan multi-level headers (seperti frontend)
 func (uc *financialReportUseCase) writeFinancialTable(
 	f *excelize.File,
 	sheetName string,
@@ -765,17 +765,17 @@ func (uc *financialReportUseCase) writeFinancialTable(
 	rkap *domain.FinancialReportModel,
 	startRow int,
 ) (dataStartRow int, chartDataStartRow int) {
-	// Row for main header (category names with merged cells for RKAP/Realisasi)
+	// Row untuk main header (category names dengan merged cells untuk RKAP/Realisasi)
 	headerRow1 := startRow
-	// Row for sub-header (RKAP, Realisasi)
+	// Row untuk sub-header (RKAP, Realisasi)
 	headerRow2 := startRow + 1
-	// Row for data start (monthRow is not needed, months are in column A of each data row)
+	// Row untuk data start (monthRow tidak diperlukan, months ada di column A dari setiap data row)
 	dataStartRow = startRow + 3
 	chartDataStartRow = dataStartRow
 
 	monthNames := []string{"Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"}
 
-	// Header style for category
+	// Header style untuk category
 	categoryHeaderStyle, _ := f.NewStyle(&excelize.Style{
 		Font:      &excelize.Font{Bold: true, Size: 11},
 		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#E3F2FD"}, Pattern: 1},
@@ -787,7 +787,7 @@ func (uc *financialReportUseCase) writeFinancialTable(
 			{Type: "bottom", Color: "#000000", Style: 1},
 		},
 	})
-	// Header style for RKAP/Realisasi (light grey background, bold, center)
+	// Header style untuk RKAP/Realisasi (light grey background, bold, center)
 	subHeaderStyle, _ := f.NewStyle(&excelize.Style{
 		Font:      &excelize.Font{Bold: true, Size: 10},
 		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#F5F5F5"}, Pattern: 1},
@@ -799,7 +799,7 @@ func (uc *financialReportUseCase) writeFinancialTable(
 			{Type: "bottom", Color: "#000000", Style: 1},
 		},
 	})
-	// Data cell style (left aligned for currency values as per app display)
+	// Data cell style (left aligned untuk currency values sesuai app display)
 	dataCellStyle, _ := f.NewStyle(&excelize.Style{
 		Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center"},
 		Border: []excelize.Border{
@@ -815,10 +815,10 @@ func (uc *financialReportUseCase) writeFinancialTable(
 	bulanCellA1 := fmt.Sprintf("A%d", headerRow1)
 	bulanCellA2 := fmt.Sprintf("A%d", headerRow2)
 	_ = f.SetCellValue(sheetName, bulanCellA1, "Bulan")
-	// Set value in second cell before merging (required for Excelize)
+	// Set value di second cell sebelum merging (diperlukan untuk Excelize)
 	_ = f.SetCellValue(sheetName, bulanCellA2, "")
 	_ = f.MergeCell(sheetName, bulanCellA1, bulanCellA2)
-	// Style for merged "Bulan" header (light grey background, bold, center)
+	// Style untuk merged "Bulan" header (light grey background, bold, center)
 	bulanHeaderStyle, _ := f.NewStyle(&excelize.Style{
 		Font:      &excelize.Font{Bold: true, Size: 10},
 		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#F5F5F5"}, Pattern: 1},
@@ -832,7 +832,7 @@ func (uc *financialReportUseCase) writeFinancialTable(
 	})
 	_ = f.SetCellStyle(sheetName, bulanCellA1, bulanCellA2, bulanHeaderStyle)
 
-	// Write category headers and sub-headers
+	// Write category headers dan sub-headers
 	col := 2
 	for _, item := range items {
 		// Category header (merge 2 columns)
@@ -840,7 +840,7 @@ func (uc *financialReportUseCase) writeFinancialTable(
 		startCell, _ := excelize.CoordinatesToCellName(col, headerRow1)
 		endCell, _ := excelize.CoordinatesToCellName(col+1, headerRow1)
 		_ = f.SetCellValue(sheetName, startCell, item.label)
-		// Set value in end cell before merging (required for Excelize merge to work correctly)
+		// Set value di end cell sebelum merging (diperlukan untuk Excelize merge bekerja dengan benar)
 		_ = f.SetCellValue(sheetName, endCell, "")
 		_ = f.MergeCell(sheetName, startCell, endCell)
 		_ = f.SetCellStyle(sheetName, startCell, endCell, categoryHeaderStyle)
@@ -857,14 +857,14 @@ func (uc *financialReportUseCase) writeFinancialTable(
 	}
 
 	// Month row (row 5) - not needed, month names will be in column A for each data row
-	// This row can be left empty or used for additional styling
+	// Row ini bisa dibiarkan kosong atau dipakai untuk additional styling
 
 	numMonths := len(reports)
 	if numMonths == 0 && rkap != nil {
 		numMonths = 3 // Minimum for chart
 	}
 
-	// Write data rows - one row per month
+	// Write data rows - satu row per bulan
 	for monthIdx := 0; monthIdx < numMonths; monthIdx++ {
 		dataRow := dataStartRow + monthIdx
 		var monthName string

@@ -48,12 +48,12 @@ Form terdiri dari beberapa bagian:
 - **Gambar** (JPG, PNG): **Maksimal 10MB**
 
 **Catatan:**
-- Sistem mendukung upload **satu file** per form
+- Upload **satu file** per form
 - Untuk upload banyak file sekaligus, gunakan fitur batch upload di halaman folder detail
 
 ### Generate Nomor Referensi Otomatis
 
-Sistem dapat generate nomor referensi otomatis:
+Nomor referensi dapat di-generate otomatis:
 - Format: `{TIPE_DOKUMEN}/{TAHUN}/{BULAN}/{NOMOR_URUT}`
 - Contoh: `INVOICE/2025/01/001`
 - Generate otomatis jika field "Nomor Referensi" kosong
@@ -79,11 +79,11 @@ Sistem akan memvalidasi:
    - Cek file yang akan diupload
 
 3. **Klik "Upload"**
-   - Sistem akan upload file dan menyimpan metadata
+   - File akan diupload dan metadata disimpan
    - Jika berhasil, Anda akan diarahkan ke halaman daftar dokumen
 
 4. **Jika Ada Error**
-   - Sistem akan menampilkan pesan error
+   - Pesan error akan ditampilkan
    - Perbaiki field yang error
    - Coba upload lagi
 
@@ -142,9 +142,9 @@ Untuk upload banyak file sekaligus:
 
 - Pastikan tipe dokumen sudah dipilih
 - Pastikan field "Nomor Referensi" kosong (jika ingin auto-generate)
-- Sistem akan generate saat klik Upload
+- Nomor referensi akan di-generate saat klik Upload
 
-## Langkah Selanjutnya
+## Referensi
 
 - [Detail Dokumen](./document-detail) - Lihat detail dokumen yang sudah diupload
 - [Daftar Dokumen](./document-management) - Kembali ke daftar dokumen

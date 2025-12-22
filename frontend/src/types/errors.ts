@@ -1,4 +1,4 @@
-// Helper types for error handling
+// Helper types untuk error handling
 export interface AxiosErrorResponse {
   response?: {
     data?: {

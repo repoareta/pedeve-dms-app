@@ -9,7 +9,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 // Clear auth state saat masuk ke halaman login
-// Memastikan state benar-benar clean saat redirect dari protected route
+// Pastikan state benar-benar clean saat redirect dari protected route
 onMounted(() => {
   // Clear state lokal untuk memastikan kondisi seperti belum login
   // Cookie akan tetap ada di browser, tapi state aplikasi di-reset

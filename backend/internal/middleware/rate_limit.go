@@ -35,7 +35,7 @@ func NewRateLimiter(rps rate.Limit, burst int) *RateLimiter {
 		burst:    burst,
 	}
 
-	// Clean up old visitors every minute
+	// Bersihkan visitor lama setiap menit
 	go rl.cleanupVisitors()
 
 	return rl
@@ -74,14 +74,14 @@ func (rl *RateLimiter) cleanupVisitors() {
 	}
 }
 
-// Global rate limiters (will be initialized from config)
+// Global rate limiters (akan di-initialize dari config)
 var (
 	GeneralRateLimiter *RateLimiter
 	AuthRateLimiter    *RateLimiter
 	StrictRateLimiter  *RateLimiter
 )
 
-// InitRateLimiters initializes rate limiters from configuration
+// InitRateLimiters initialize rate limiters dari konfigurasi
 func InitRateLimiters() {
 	zapLog := logger.GetLogger()
 
@@ -117,7 +117,7 @@ func InitRateLimiters() {
 func RateLimitMiddleware(limiter *RateLimiter) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// Rate limiting aktif di semua environment (development & production) untuk testing
-		// Bisa di-disable sepenuhnya dengan DISABLE_RATE_LIMIT=true jika diperlukan
+		// Bisa di-disable sepenuhnya dengan DISABLE_RATE_LIMIT=true kalau diperlukan
 		env := os.Getenv("ENV")
 		disableRateLimit := os.Getenv("DISABLE_RATE_LIMIT") == "true"
 
@@ -133,7 +133,7 @@ func RateLimitMiddleware(limiter *RateLimiter) fiber.Handler {
 		}
 
 		// Apply rate limiting (aktif di development & production)
-		// IMPORTANT: GET requests untuk browsing/navigasi tidak perlu rate limit
+		// PENTING: GET requests untuk browsing/navigasi tidak perlu rate limit
 		// Rate limit hanya untuk operasi yang berpotensi abuse (POST, PUT, DELETE, PATCH)
 		method := c.Method()
 		if method == "GET" || method == "OPTIONS" || method == "HEAD" {

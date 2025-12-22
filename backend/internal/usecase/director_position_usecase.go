@@ -42,13 +42,13 @@ func NewDirectorPositionUseCase() DirectorPositionUseCase {
 }
 
 func (uc *directorPositionUseCase) CreateDirectorPosition(name, createdBy string) (*domain.DirectorPositionModel, error) {
-	// Trim and validate name
+	// Trim dan validasi nama
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, errors.New("nama jabatan tidak boleh kosong")
 	}
 
-	// Check if already exists (case-insensitive)
+	// Cek apakah sudah ada (case-insensitive)
 	existing, _ := uc.directorPositionRepo.GetByName(name)
 	if existing != nil {
 		if !existing.IsActive {
@@ -59,8 +59,8 @@ func (uc *directorPositionUseCase) CreateDirectorPosition(name, createdBy string
 			}
 			return existing, nil
 		}
-		// Return existing instead of error to prevent duplicate key error
-		// This handles race conditions where multiple requests try to create the same position
+		// Return existing daripada error untuk hindari duplicate key error
+		// Ini handle race condition dimana multiple request coba create position yang sama
 		return existing, nil
 	}
 
@@ -74,8 +74,8 @@ func (uc *directorPositionUseCase) CreateDirectorPosition(name, createdBy string
 	}
 
 	if err := uc.directorPositionRepo.Create(directorPosition); err != nil {
-		// Check if error is due to duplicate key (case-sensitive database constraint)
-		// If so, try to find existing record (case-insensitive) and return it
+		// Cek apakah error karena duplicate key (case-sensitive database constraint)
+		// Kalau iya, coba cari existing record (case-insensitive) dan return
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
 			existing, findErr := uc.directorPositionRepo.GetByName(name)
 			if findErr == nil && existing != nil {
@@ -149,7 +149,7 @@ func (uc *directorPositionUseCase) DeleteDirectorPosition(id, requesterRole stri
 		return fmt.Errorf("jabatan tidak ditemukan: %w", err)
 	}
 
-	// Check usage count
+	// Cek usage count
 	usageCount, err := uc.directorPositionRepo.CountUsage(id)
 	if err != nil {
 		return fmt.Errorf("gagal menghitung penggunaan: %w", err)
@@ -164,7 +164,7 @@ func (uc *directorPositionUseCase) DeleteDirectorPosition(id, requesterRole stri
 		return nil
 	}
 
-	// Hard delete if not in use and requester is superadmin
+	// Hard delete kalau tidak dipakai dan requester adalah superadmin
 	if strings.ToLower(requesterRole) == "superadmin" {
 		return uc.directorPositionRepo.SoftDelete(id)
 	}
@@ -173,4 +173,3 @@ func (uc *directorPositionUseCase) DeleteDirectorPosition(id, requesterRole stri
 	directorPosition.IsActive = false
 	return uc.directorPositionRepo.Update(directorPosition)
 }
-

@@ -4,13 +4,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/audit"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/database"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
-	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
 )
 
@@ -87,7 +87,7 @@ func GetAuditLogsHandler(c *fiber.Ctx) error {
 		// Admin bisa lihat semua logs, jangan filter berdasarkan userID
 		filterUserID = ""
 	}
-	
+
 	// CRITICAL: Admin holding hanya bisa lihat user activity logs (bukan technical logs)
 	// Filter out technical_error logs untuk admin (superadmin bisa lihat semua)
 	if currentUser.Role == "admin" && logType == audit.LogTypeTechnicalError {
@@ -100,13 +100,13 @@ func GetAuditLogsHandler(c *fiber.Ctx) error {
 			"totalPages": 0,
 		})
 	}
-	
+
 	// Jika admin tidak specify logType, default ke user_action (bukan technical_error)
 	if currentUser.Role == "admin" && logType == "" {
 		// Admin default hanya lihat user_action logs
 		logType = audit.LogTypeUserAction
 	}
-	
+
 	// CRITICAL: Admin holding hanya bisa lihat user activity logs (bukan technical logs)
 	// Filter out technical_error logs untuk admin (superadmin bisa lihat semua)
 	if currentUser.Role == "admin" && logType == "technical_error" {
@@ -119,7 +119,7 @@ func GetAuditLogsHandler(c *fiber.Ctx) error {
 			"totalPages": 0,
 		})
 	}
-	
+
 	// Jika admin tidak specify logType, default ke user_action (bukan technical_error)
 	if currentUser.Role == "admin" && logType == "" {
 		// Admin default hanya lihat user_action logs
@@ -177,7 +177,7 @@ func GetAuditLogStatsHandler(c *fiber.Ctx) error {
 	// Tambahkan informasi retention policy
 	userActionRetention := usecase.GetRetentionDays(audit.LogTypeUserAction)
 	technicalErrorRetention := usecase.GetRetentionDays(audit.LogTypeTechnicalError)
-	
+
 	stats["retention_policy"] = fiber.Map{
 		"user_action_days":     userActionRetention,
 		"technical_error_days": technicalErrorRetention,
@@ -264,7 +264,7 @@ func GetUserActivityLogsHandler(c *fiber.Ctx) error {
 	// User reguler hanya bisa lihat logs mereka sendiri.
 	// Admin/superadmin/administrator bisa lihat semua logs, namun administrator tidak boleh melihat log milik superadmin.
 	zapLog := logger.GetLogger()
-	
+
 	// Debug: Log role information
 	zapLog.Info("GetUserActivityLogsHandler - Role check",
 		zap.String("current_user_id", currentUserID),
@@ -279,12 +279,12 @@ func GetUserActivityLogsHandler(c *fiber.Ctx) error {
 		zap.String("user_role_trimmed", strings.TrimSpace(userRole)),
 		zap.String("user_role_lower", strings.ToLower(strings.TrimSpace(userRole))),
 	)
-	
+
 	filterUserID := currentUserID
-	// Normalize role to lowercase for comparison (handle case sensitivity issues)
+	// Normalize role ke lowercase untuk perbandingan (handle case sensitivity issues)
 	roleLower := strings.ToLower(strings.TrimSpace(userRole))
-	
-	// Determine access level:
+
+	// Tentukan access level:
 	// - superadmin: bisa lihat semua logs termasuk milik superadmin
 	// - administrator: bisa lihat semua logs kecuali milik superadmin
 	// - admin, manager, staff: bisa lihat semua logs kecuali milik superadmin
@@ -292,7 +292,7 @@ func GetUserActivityLogsHandler(c *fiber.Ctx) error {
 	isSuperadmin := roleLower == "superadmin"
 	isAdministrator := roleLower == "administrator"
 	isAdminLike := roleLower == "admin" || roleLower == "manager" || roleLower == "staff" || isAdministrator || isSuperadmin
-	
+
 	zapLog.Info("GetUserActivityLogsHandler - RBAC check",
 		zap.String("role", roleLower),
 		zap.Bool("is_superadmin", isSuperadmin),
@@ -300,7 +300,7 @@ func GetUserActivityLogsHandler(c *fiber.Ctx) error {
 		zap.Bool("is_admin_like", isAdminLike),
 		zap.String("original_filter_user_id", filterUserID),
 	)
-	
+
 	if isAdminLike {
 		// Admin, manager, staff, administrator, dan superadmin bisa lihat semua logs (tidak filter berdasarkan userID)
 		filterUserID = ""

@@ -56,12 +56,12 @@ type notificationUseCase struct {
 	db           *gorm.DB // For direct queries in CheckExpiringDocuments and CheckExpiringDirectorTerms
 }
 
-// NewNotificationUseCase creates a new notification use case
+// NewNotificationUseCase membuat notification use case baru
 func NewNotificationUseCase() NotificationUseCase {
 	return NewNotificationUseCaseWithDB(database.GetDB())
 }
 
-// NewNotificationUseCaseWithDB creates a new notification use case with injected DB (for testing)
+// NewNotificationUseCaseWithDB membuat notification use case dengan DB yang di-inject (untuk testing)
 func NewNotificationUseCaseWithDB(db *gorm.DB) NotificationUseCase {
 	return &notificationUseCase{
 		notifRepo:    repository.NewNotificationRepositoryWithDB(db),
@@ -129,7 +129,7 @@ func (uc *notificationUseCase) GetNotificationsWithRBAC(userID, roleName string,
 
 	// Admin melihat notifikasi dari company mereka + descendants
 	if roleName == "admin" && companyID != nil {
-		// Get all descendants
+		// Ambil semua descendants
 		descendants, err := uc.companyRepo.GetDescendants(*companyID)
 		if err != nil {
 			return nil, 0, 0, fmt.Errorf("failed to get company descendants: %w", err)
@@ -208,7 +208,7 @@ func (uc *notificationUseCase) GetUnreadCountWithRBAC(userID, roleName string, c
 
 	// Admin melihat unread count dari company mereka + descendants
 	if roleName == "admin" && companyID != nil {
-		// Get all descendants
+		// Ambil semua descendants
 		descendants, err := uc.companyRepo.GetDescendants(*companyID)
 		if err != nil {
 			return 0, fmt.Errorf("failed to get company descendants: %w", err)
@@ -275,12 +275,12 @@ func (uc *notificationUseCase) MarkAsRead(notificationID, userID string) error {
 	return err
 }
 
-// MarkAsReadWithRBAC marks notification as read with RBAC support
-// - Superadmin/Administrator: can mark any notification as read
-// - Admin: can mark notifications from their company + descendants as read
-// - Regular users: can only mark their own notifications as read
+// MarkAsReadWithRBAC menandai notifikasi sebagai read dengan dukungan RBAC
+// - Superadmin/Administrator: bisa mark notifikasi apapun sebagai read
+// - Admin: bisa mark notifikasi dari company mereka + descendants sebagai read
+// - Regular users: hanya bisa mark notifikasi mereka sendiri sebagai read
 func (uc *notificationUseCase) MarkAsReadWithRBAC(notificationID, userID, roleName string, companyID *string) error {
-	// Get notification first
+	// Ambil notifikasi dulu
 	notification, err := uc.notifRepo.GetByID(notificationID)
 	if err != nil {
 		return fmt.Errorf("notification not found")
@@ -311,7 +311,7 @@ func (uc *notificationUseCase) MarkAsReadWithRBAC(notificationID, userID, roleNa
 			return fmt.Errorf("forbidden: notification owner has no company")
 		}
 
-		// Check if owner's company is same or descendant of admin's company
+		// Cek apakah company owner sama atau descendant dari company admin
 		descendants, err := uc.companyRepo.GetDescendants(*companyID)
 		if err != nil {
 			return fmt.Errorf("failed to get company descendants: %w", err)
@@ -326,7 +326,7 @@ func (uc *notificationUseCase) MarkAsReadWithRBAC(notificationID, userID, roleNa
 			return err
 		}
 
-		// Check if owner's company is descendant of admin's company
+		// Cek apakah company owner adalah descendant dari company admin
 		for _, desc := range descendants {
 			if desc.ID == *owner.CompanyID {
 				err = uc.notifRepo.MarkAsReadByID(notificationID)
@@ -449,7 +449,7 @@ func (uc *notificationUseCase) DeleteAllWithRBAC(userID, roleName string, compan
 
 	// Admin menghapus notifikasi dari company mereka + descendants
 	if roleName == "admin" && companyID != nil {
-		// Get all descendants
+		// Ambil semua descendants
 		descendants, err := uc.companyRepo.GetDescendants(*companyID)
 		if err != nil {
 			return fmt.Errorf("failed to get company descendants: %w", err)

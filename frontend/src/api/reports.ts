@@ -74,8 +74,8 @@ export type ValidationRow = {
 }
 
 const reportsApi = {
-  // Get all reports with pagination and filters
-  // company_id can be a single ID or comma-separated string for multiple IDs
+  // Ambil semua reports dengan pagination dan filters
+  // company_id bisa single ID atau comma-separated string untuk multiple IDs
   async getAll(params?: {
     company_id?: string
     period?: string
@@ -86,13 +86,13 @@ const reportsApi = {
     return response.data
   },
 
-  // Get report by ID
+  // Ambil report berdasarkan ID
   async getById(id: string): Promise<Report> {
     const response = await apiClient.get<Report>(`/reports/${id}`)
     return response.data
   },
 
-  // Get reports by company ID
+  // Ambil reports berdasarkan company ID
   async getByCompanyId(companyId: string): Promise<Report[]> {
     const response = await apiClient.get<Report[]>(`/reports/company/${companyId}`)
     return response.data

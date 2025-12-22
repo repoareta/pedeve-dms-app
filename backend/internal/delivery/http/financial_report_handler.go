@@ -56,7 +56,7 @@ func (h *FinancialReportHandler) CreateFinancialReport(c *fiber.Ctx) error {
 		})
 	}
 
-	// Get user info from JWT
+	// Ambil info user dari JWT
 	userID := c.Locals("userID").(string)
 	username := c.Locals("username").(string)
 	companyID := c.Locals("companyID")
@@ -87,7 +87,7 @@ func (h *FinancialReportHandler) CreateFinancialReport(c *fiber.Ctx) error {
 			})
 		}
 
-		// User can only create report for their own company or descendants
+		// User hanya bisa create report untuk company mereka sendiri atau descendants
 		if req.CompanyID != userCompanyID {
 			hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, req.CompanyID)
 			if err != nil || !hasAccess {
@@ -136,7 +136,7 @@ func (h *FinancialReportHandler) UpdateFinancialReport(c *fiber.Ctx) error {
 		})
 	}
 
-	// Get user info from JWT
+	// Ambil info user dari JWT
 	userID := c.Locals("userID").(string)
 	username := c.Locals("username").(string)
 	companyID := c.Locals("companyID")
@@ -146,7 +146,7 @@ func (h *FinancialReportHandler) UpdateFinancialReport(c *fiber.Ctx) error {
 	ipAddress := c.IP()
 	userAgent := c.Get("User-Agent", "")
 
-	// Get existing report to check authorization
+	// Ambil report yang sudah ada untuk cek authorization
 	existingReport, err := h.financialReportUseCase.GetFinancialReportByID(id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
@@ -176,7 +176,7 @@ func (h *FinancialReportHandler) UpdateFinancialReport(c *fiber.Ctx) error {
 			})
 		}
 
-		// User can only update report for their own company or descendants
+		// User hanya bisa update report untuk company mereka sendiri atau descendants
 		if existingReport.CompanyID != userCompanyID {
 			hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, existingReport.CompanyID)
 			if err != nil || !hasAccess {
@@ -303,7 +303,7 @@ func (h *FinancialReportHandler) GetComparison(c *fiber.Ctx) error {
 func (h *FinancialReportHandler) GetRKAPYearsByCompanyID(c *fiber.Ctx) error {
 	companyID := c.Params("company_id")
 
-	// Get user info from JWT
+	// Ambil info user dari JWT
 	roleName := c.Locals("roleName").(string)
 	companyIDFromJWT := c.Locals("companyID")
 
@@ -328,7 +328,7 @@ func (h *FinancialReportHandler) GetRKAPYearsByCompanyID(c *fiber.Ctx) error {
 			})
 		}
 
-		// User can only access their own company or descendants
+		// User hanya bisa akses company mereka sendiri atau descendants
 		if companyID != userCompanyID {
 			hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, companyID)
 			if err != nil || !hasAccess {
@@ -367,7 +367,7 @@ func (h *FinancialReportHandler) GetRKAPYearsByCompanyID(c *fiber.Ctx) error {
 func (h *FinancialReportHandler) DeleteFinancialReport(c *fiber.Ctx) error {
 	id := c.Params("id")
 
-	// Get user info from JWT
+	// Ambil info user dari JWT
 	userID := c.Locals("userID").(string)
 	username := c.Locals("username").(string)
 	companyID := c.Locals("companyID")
@@ -377,7 +377,7 @@ func (h *FinancialReportHandler) DeleteFinancialReport(c *fiber.Ctx) error {
 	ipAddress := c.IP()
 	userAgent := c.Get("User-Agent", "")
 
-	// Get existing report to check authorization
+	// Ambil report yang sudah ada untuk cek authorization
 	existingReport, err := h.financialReportUseCase.GetFinancialReportByID(id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
@@ -407,7 +407,7 @@ func (h *FinancialReportHandler) DeleteFinancialReport(c *fiber.Ctx) error {
 			})
 		}
 
-		// User can only delete report for their own company or descendants
+		// User hanya bisa delete report untuk company mereka sendiri atau descendants
 		if existingReport.CompanyID != userCompanyID {
 			hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, existingReport.CompanyID)
 			if err != nil || !hasAccess {
@@ -493,7 +493,7 @@ func (h *FinancialReportHandler) ExportPerformanceExcel(c *fiber.Ctx) error {
 		}
 	}
 
-	// Get company info for filename
+	// Ambil info company untuk filename
 	company, err := h.companyUseCase.GetCompanyByID(companyID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
@@ -518,7 +518,7 @@ func (h *FinancialReportHandler) ExportPerformanceExcel(c *fiber.Ctx) error {
 		endPeriod,
 	)
 
-	// Set headers and send file
+	// Set headers dan kirim file
 	c.Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	return c.Send(excelData)
@@ -539,15 +539,15 @@ func (h *FinancialReportHandler) ExportPerformanceExcel(c *fiber.Ctx) error {
 func (h *FinancialReportHandler) GenerateBulkUploadTemplate(c *fiber.Ctx) error {
 	// Use current year for template
 	year := time.Now().Format("2006")
-	
-	// Get user info to determine accessible companies
+
+	// Ambil info user untuk tentukan companies yang bisa diakses
 	companyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
 
 	var accessibleCompanies []domain.CompanyModel
 	var err error
 
-	// Get accessible companies based on user role
+	// Ambil companies yang bisa diakses berdasarkan role user
 	if roleName == "superadmin" || roleName == "administrator" {
 		// Superadmin/Administrator can access all companies
 		accessibleCompanies, err = h.companyUseCase.GetAllCompanies()
@@ -587,7 +587,7 @@ func (h *FinancialReportHandler) GenerateBulkUploadTemplate(c *fiber.Ctx) error 
 			})
 		}
 
-		// Get all descendants (including user's company)
+		// Ambil semua descendants (termasuk company user)
 		descendants, err := h.companyUseCase.GetCompanyDescendants(userCompanyID)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -709,7 +709,7 @@ func (h *FinancialReportHandler) GenerateBulkUploadTemplate(c *fiber.Ctx) error 
 		// Generate 12 rows per company (satu per bulan)
 		for bulan := 1; bulan <= 12; bulan++ {
 			col := 0
-			
+
 			// Company Code
 			if err := setCellValue(f, sheetName, row, col, company.Code); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -718,7 +718,7 @@ func (h *FinancialReportHandler) GenerateBulkUploadTemplate(c *fiber.Ctx) error 
 				})
 			}
 			col++
-			
+
 			// Company Name
 			if err := setCellValue(f, sheetName, row, col, company.Name); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -727,7 +727,7 @@ func (h *FinancialReportHandler) GenerateBulkUploadTemplate(c *fiber.Ctx) error 
 				})
 			}
 			col++
-			
+
 			// Tahun (current year)
 			if err := setCellValue(f, sheetName, row, col, year); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -736,7 +736,7 @@ func (h *FinancialReportHandler) GenerateBulkUploadTemplate(c *fiber.Ctx) error 
 				})
 			}
 			col++
-			
+
 			// Bulan (1-12)
 			if err := setCellValue(f, sheetName, row, col, bulan); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -745,52 +745,52 @@ func (h *FinancialReportHandler) GenerateBulkUploadTemplate(c *fiber.Ctx) error 
 				})
 			}
 			col++
-		
-		// Is RKAP tidak perlu di template (default false untuk bulk upload realisasi bulanan)
-		// Neraca fields (leave empty for user to fill)
-		for j := 0; j < 5; j++ {
-			if err := setCellValue(f, sheetName, row, col, ""); err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
-					Error:   "template_failed",
-					Message: fmt.Sprintf("Failed to set cell value: %v", err),
-				})
+
+			// Is RKAP tidak perlu di template (default false untuk bulk upload realisasi bulanan)
+			// Neraca fields (leave empty for user to fill)
+			for j := 0; j < 5; j++ {
+				if err := setCellValue(f, sheetName, row, col, ""); err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+						Error:   "template_failed",
+						Message: fmt.Sprintf("Failed to set cell value: %v", err),
+					})
+				}
+				col++
 			}
-			col++
-		}
-		
-		// Laba Rugi fields (leave empty for user to fill)
-		for j := 0; j < 6; j++ {
-			if err := setCellValue(f, sheetName, row, col, ""); err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
-					Error:   "template_failed",
-					Message: fmt.Sprintf("Failed to set cell value: %v", err),
-				})
+
+			// Laba Rugi fields (leave empty for user to fill)
+			for j := 0; j < 6; j++ {
+				if err := setCellValue(f, sheetName, row, col, ""); err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+						Error:   "template_failed",
+						Message: fmt.Sprintf("Failed to set cell value: %v", err),
+					})
+				}
+				col++
 			}
-			col++
-		}
-		
-		// Cashflow fields (leave empty for user to fill)
-		for j := 0; j < 4; j++ {
-			if err := setCellValue(f, sheetName, row, col, ""); err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
-					Error:   "template_failed",
-					Message: fmt.Sprintf("Failed to set cell value: %v", err),
-				})
+
+			// Cashflow fields (leave empty for user to fill)
+			for j := 0; j < 4; j++ {
+				if err := setCellValue(f, sheetName, row, col, ""); err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+						Error:   "template_failed",
+						Message: fmt.Sprintf("Failed to set cell value: %v", err),
+					})
+				}
+				col++
 			}
-			col++
-		}
-		
-		// Rasio fields (leave empty for user to fill)
-		for j := 0; j < 10; j++ {
-			if err := setCellValue(f, sheetName, row, col, ""); err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
-					Error:   "template_failed",
-					Message: fmt.Sprintf("Failed to set cell value: %v", err),
-				})
+
+			// Rasio fields (leave empty for user to fill)
+			for j := 0; j < 10; j++ {
+				if err := setCellValue(f, sheetName, row, col, ""); err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+						Error:   "template_failed",
+						Message: fmt.Sprintf("Failed to set cell value: %v", err),
+					})
+				}
+				col++
 			}
-			col++
-		}
-		
+
 			// Remark (optional)
 			if err := setCellValue(f, sheetName, row, col, ""); err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -798,7 +798,7 @@ func (h *FinancialReportHandler) GenerateBulkUploadTemplate(c *fiber.Ctx) error 
 					Message: fmt.Sprintf("Failed to set cell value: %v", err),
 				})
 			}
-			
+
 			row++ // Move to next row
 		}
 	}
@@ -841,7 +841,7 @@ func (h *FinancialReportHandler) GenerateBulkUploadTemplate(c *fiber.Ctx) error 
 
 	// Set response headers
 	filename := fmt.Sprintf("financial_report_template_%s.xlsx", year)
-	
+
 	c.Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 
@@ -1207,7 +1207,7 @@ func (h *FinancialReportHandler) ValidateBulkExcelFile(c *fiber.Ctx) error {
 		// Bulan (required, 1-12)
 		var bulan int
 		var period string
-		
+
 		if len(row) > colIndex {
 			rawValue := row[colIndex]
 			bulanStr := cellToString(rawValue) // Convert to string first
@@ -1344,8 +1344,8 @@ func (h *FinancialReportHandler) ValidateBulkExcelFile(c *fiber.Ctx) error {
 
 		// Laba Rugi fields (all required, allow negative for expenses and tax)
 		labaRugiFields := []struct {
-			name           string
-			allowNegative  bool
+			name          string
+			allowNegative bool
 		}{
 			{"Revenue", false},
 			{"Operating Expenses", true},
@@ -1391,8 +1391,8 @@ func (h *FinancialReportHandler) ValidateBulkExcelFile(c *fiber.Ctx) error {
 
 		// Rasio fields (optional, default 0)
 		rasioFields := []struct {
-			name          string
-			isInt64       bool
+			name    string
+			isInt64 bool
 		}{
 			{"ROE (%)", false},
 			{"ROI (%)", false},
@@ -1416,13 +1416,13 @@ func (h *FinancialReportHandler) ValidateBulkExcelFile(c *fiber.Ctx) error {
 						}
 					} else {
 						// Tentukan apakah field ini persentase
-						isPercentage := strings.Contains(field.name, "ROE") || 
-							strings.Contains(field.name, "ROI") || 
-							strings.Contains(field.name, "Rasio Lancar") || 
+						isPercentage := strings.Contains(field.name, "ROE") ||
+							strings.Contains(field.name, "ROI") ||
+							strings.Contains(field.name, "Rasio Lancar") ||
 							strings.Contains(field.name, "Rasio Kas") ||
 							strings.Contains(field.name, "Margin") ||
 							strings.Contains(field.name, "(%")
-						
+
 						value, ok := parseFloat64Field(valueStr, field.name, false, true, isPercentage)
 						if ok {
 							rowData[fieldKey] = value
@@ -1599,7 +1599,7 @@ func (h *FinancialReportHandler) UploadBulkFinancialReports(c *fiber.Ctx) error 
 	// MaxInt64: 9223372036854775807 (untuk PostgreSQL bigint)
 	// MaxDecimal10_2: 99999999.99 (untuk decimal(10,2))
 	const MaxDecimal10_2 = 99999999.99
-	
+
 	parseInt64Field := func(value string, allowNegative bool) (int64, error) {
 		parsed, err := strconv.ParseFloat(value, 64)
 		if err != nil {
@@ -1681,7 +1681,7 @@ func (h *FinancialReportHandler) UploadBulkFinancialReports(c *fiber.Ctx) error 
 			}
 		}
 		colIndex++ // Move to Company Name (colIndex 1)
-		
+
 		// Skip Company Name (colIndex 1) - it's just for reference, we don't need to validate it
 		colIndex++ // Move to Tahun (colIndex 2)
 
@@ -1808,7 +1808,7 @@ func (h *FinancialReportHandler) UploadBulkFinancialReports(c *fiber.Ctx) error 
 		var bulan int
 		var period string
 		bulanParsed := false
-		
+
 		if len(row) > colIndex {
 			rawValue := row[colIndex]
 			bulanStr := cellToString(rawValue) // Convert to string first
@@ -1845,7 +1845,7 @@ func (h *FinancialReportHandler) UploadBulkFinancialReports(c *fiber.Ctx) error 
 			failedCount++
 			continue
 		}
-		
+
 		// Generate period from year and bulan
 		if period == "" {
 			period = fmt.Sprintf("%s-%02d", year, bulan)
@@ -1983,13 +1983,13 @@ func (h *FinancialReportHandler) UploadBulkFinancialReports(c *fiber.Ctx) error 
 						}
 					} else {
 						// Tentukan apakah field ini persentase
-						isPercentage := strings.Contains(field.name, "ROE") || 
-							strings.Contains(field.name, "ROI") || 
-							strings.Contains(field.name, "Rasio Lancar") || 
+						isPercentage := strings.Contains(field.name, "ROE") ||
+							strings.Contains(field.name, "ROI") ||
+							strings.Contains(field.name, "Rasio Lancar") ||
 							strings.Contains(field.name, "Rasio Kas") ||
 							strings.Contains(field.name, "Margin") ||
 							strings.Contains(field.name, "(%")
-						
+
 						value, err := parseFloat64Field(valueStr, true, isPercentage)
 						if err != nil {
 							rowErrors = append(rowErrors, map[string]interface{}{
@@ -2024,7 +2024,7 @@ func (h *FinancialReportHandler) UploadBulkFinancialReports(c *fiber.Ctx) error 
 		// Check if financial report already exists (upsert logic)
 		var existingReport *domain.FinancialReportModel
 		var err error
-		
+
 		if isRKAP {
 			// For RKAP, check by company_id, year, and is_rkap
 			existingReport, err = h.financialReportUseCase.GetRKAPByCompanyIDAndYear(companyIDValue, year)
@@ -2095,7 +2095,7 @@ func (h *FinancialReportHandler) UploadBulkFinancialReports(c *fiber.Ctx) error 
 				// Parse error untuk menentukan kolom yang bermasalah
 				errMsg := err.Error()
 				column := "general"
-				
+
 				// Cek apakah error terkait validasi rasio > 100%
 				if strings.Contains(errMsg, "rasio keuangan tidak boleh melebihi 100%") {
 					// Tentukan kolom mana yang bermasalah
@@ -2120,7 +2120,7 @@ func (h *FinancialReportHandler) UploadBulkFinancialReports(c *fiber.Ctx) error 
 					column = "Data numerik terlalu besar"
 					errMsg = "Nilai terlalu besar untuk disimpan. Pastikan: int64 tidak melebihi 9,223,372,036,854,775,807 dan persentase/rasio tidak melebihi 99,999,999.99"
 				}
-				
+
 				errorsList = append(errorsList, map[string]interface{}{
 					"row":     rowNum,
 					"column":  column,
@@ -2137,7 +2137,7 @@ func (h *FinancialReportHandler) UploadBulkFinancialReports(c *fiber.Ctx) error 
 				// Parse error untuk menentukan kolom yang bermasalah
 				errMsg := err.Error()
 				column := "general"
-				
+
 				// Cek apakah error terkait validasi rasio > 100%
 				if strings.Contains(errMsg, "rasio keuangan tidak boleh melebihi 100%") {
 					// Tentukan kolom mana yang bermasalah
@@ -2158,7 +2158,7 @@ func (h *FinancialReportHandler) UploadBulkFinancialReports(c *fiber.Ctx) error 
 					}
 					errMsg = fmt.Sprintf("%s: nilai tidak boleh melebihi 100%%", column)
 				}
-				
+
 				errorsList = append(errorsList, map[string]interface{}{
 					"row":     rowNum,
 					"column":  column,
@@ -2187,11 +2187,11 @@ func (h *FinancialReportHandler) UploadBulkFinancialReports(c *fiber.Ctx) error 
 	}
 
 	return c.Status(fiber.StatusOK).JSON(map[string]interface{}{
-		"success":      successCount,
-		"failed":       failedCount,
-		"created":      createdCount,
-		"updated":      updatedCount,
-		"errors":       errorsList,
-		"message":      fmt.Sprintf("Upload selesai: %d berhasil (%d dibuat, %d diupdate), %d gagal", successCount, createdCount, updatedCount, failedCount),
+		"success": successCount,
+		"failed":  failedCount,
+		"created": createdCount,
+		"updated": updatedCount,
+		"errors":  errorsList,
+		"message": fmt.Sprintf("Upload selesai: %d berhasil (%d dibuat, %d diupdate), %d gagal", successCount, createdCount, updatedCount, failedCount),
 	})
 }

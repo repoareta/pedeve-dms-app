@@ -159,7 +159,7 @@ Halaman ini memungkinkan Anda mengatur preferensi notifikasi dan threshold untuk
 - Data yang sudah digunakan tidak bisa dihapus
 - Hapus penggunaan data terlebih dahulu
 
-## Langkah Selanjutnya
+## Referensi
 
 - [Two-Factor Authentication](./2fa) - Setup 2FA
 - [Profil](./profile) - Edit profil

@@ -77,22 +77,22 @@ func (g *GCPStorageManager) Close() error {
 	return nil
 }
 
-// UploadFile uploads a file to GCP Cloud Storage
-// bucketPath: path dalam bucket (e.g., "logos", "documents")
-// filename: nama file (e.g., "logo.png")
-// data: file content sebagai byte array
-// contentType: MIME type (e.g., "image/png")
-// Returns: public URL untuk file yang di-upload
+// UploadFile upload file ke GCP Cloud Storage
+// bucketPath: path dalam bucket (contoh: "logos", "documents")
+// filename: nama file (contoh: "logo.png")
+// data: konten file sebagai byte array
+// contentType: MIME type (contoh: "image/png")
+// Return: public URL untuk file yang di-upload
 func (g *GCPStorageManager) UploadFile(bucketPath string, filename string, data []byte, contentType string) (string, error) {
 	zapLog := logger.GetLogger()
 
-	// Construct object path dalam bucket
+	// Buat object path dalam bucket
 	objectPath := fmt.Sprintf("%s/%s", bucketPath, filename)
 
-	// Get bucket handle
+	// Ambil bucket handle
 	bucket := g.client.Bucket(g.bucketName)
 	
-	// Create object writer
+	// Buat object writer
 	obj := bucket.Object(objectPath)
 	writer := obj.NewWriter(g.ctx)
 	
@@ -121,7 +121,7 @@ func (g *GCPStorageManager) UploadFile(bucketPath string, filename string, data 
 		return "", fmt.Errorf("failed to close writer: %w", err)
 	}
 
-	// Make object publicly readable
+	// Buat object bisa dibaca publik
 	if err := obj.ACL().Set(g.ctx, storage.AllUsers, storage.RoleReader); err != nil {
 		zapLog.Warn("Failed to set public ACL on object (may need bucket-level IAM instead)",
 			zap.String("bucket", g.bucketName),
@@ -185,7 +185,7 @@ func (g *GCPStorageManager) GetFileURL(bucketPath string, filename string) (stri
 func (g *GCPStorageManager) GetSignedURL(bucketPath string, filename string, expiresIn time.Duration) (string, error) {
 	// Return public URL (bucket should be configured for public read access to uploaded files)
 	// Signed URL requires service account private key which is complex to manage
-	// If bucket is private, configure bucket IAM to allow public read access to specific objects
+	// Kalau bucket private, konfigurasi bucket IAM untuk izinkan public read access ke object tertentu
 	return g.GetFileURL(bucketPath, filename)
 }
 
@@ -223,7 +223,7 @@ func NewLocalStorageManager(basePath string) *LocalStorageManager {
 func (l *LocalStorageManager) UploadFile(bucketPath string, filename string, data []byte, contentType string) (string, error) {
 	zapLog := logger.GetLogger()
 
-	// Create directory if not exists
+	// Buat directory kalau belum ada
 	dirPath := fmt.Sprintf("%s/%s", l.basePath, bucketPath)
 	if err := os.MkdirAll(dirPath, 0755); err != nil {
 		zapLog.Error("Failed to create directory", zap.Error(err))

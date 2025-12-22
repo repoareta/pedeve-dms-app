@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"github.com/hashicorp/vault/api"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
 	"go.uber.org/zap"
 )
 
@@ -82,7 +82,7 @@ func (v *VaultSecretManager) GetEncryptionKey() (string, error) {
 	vaultPath := convertToKVv2Path(v.path)
 	secret, err := client.Logical().Read(vaultPath)
 	if err != nil {
-		zapLog.Error("Failed to read secret from Vault", 
+		zapLog.Error("Failed to read secret from Vault",
 			zap.String("path", v.path),
 			zap.Error(err),
 		)
@@ -110,7 +110,7 @@ func (v *VaultSecretManager) GetEncryptionKey() (string, error) {
 	// Ambil encryption_key dari data
 	encryptionKey, ok := data["encryption_key"]
 	if !ok {
-		zapLog.Error("encryption_key not found in Vault secret", 
+		zapLog.Error("encryption_key not found in Vault secret",
 			zap.String("path", v.path),
 			zap.Any("available_keys", getKeys(data)),
 		)
@@ -120,7 +120,7 @@ func (v *VaultSecretManager) GetEncryptionKey() (string, error) {
 	// Convert ke string
 	keyStr, ok := encryptionKey.(string)
 	if !ok {
-		zapLog.Error("encryption_key is not a string", 
+		zapLog.Error("encryption_key is not a string",
 			zap.String("path", v.path),
 			zap.Any("type", fmt.Sprintf("%T", encryptionKey)),
 		)
@@ -131,7 +131,7 @@ func (v *VaultSecretManager) GetEncryptionKey() (string, error) {
 		return "", fmt.Errorf("encryption_key is empty at path: %s", v.path)
 	}
 
-	zapLog.Info("Successfully retrieved encryption key from Vault", 
+	zapLog.Info("Successfully retrieved encryption key from Vault",
 		zap.String("path", v.path),
 		zap.Int("key_length", len(keyStr)),
 	)
@@ -188,17 +188,17 @@ func (v *VaultSecretManager) GetAllSecrets(path string) (map[string]interface{},
 	return data, nil
 }
 
-// GetSecret reads a specific secret key from Vault
+// GetSecret baca secret key tertentu dari Vault
 func (v *VaultSecretManager) GetSecret(key string) (string, error) {
 	zapLog := logger.GetLogger()
 
-	// Get all secrets from Vault
+	// Ambil semua secrets dari Vault
 	data, err := v.GetAllSecrets(v.path)
 	if err != nil {
 		return "", err
 	}
 
-	// Extract specific key
+	// Extract key tertentu
 	value, ok := data[key]
 	if !ok {
 		zapLog.Error("Secret key not found in Vault",
@@ -209,7 +209,7 @@ func (v *VaultSecretManager) GetSecret(key string) (string, error) {
 		return "", fmt.Errorf("secret key '%s' not found at path: %s", key, v.path)
 	}
 
-	// Convert to string
+	// Konversi ke string
 	valueStr, ok := value.(string)
 	if !ok {
 		return "", fmt.Errorf("secret key '%s' is not a string", key)
@@ -248,7 +248,7 @@ func GetSecretManager() SecretManager {
 	// Priority 1: Cek apakah GCP Secret Manager dikonfigurasi
 	gcpEnabled := os.Getenv("GCP_SECRET_MANAGER_ENABLED")
 	gcpProjectID := os.Getenv("GCP_PROJECT_ID")
-	
+
 	if gcpEnabled == "true" && gcpProjectID != "" {
 		gcpManager, err := NewGCPSecretManager(gcpProjectID)
 		if err != nil {
@@ -312,13 +312,13 @@ func GetSecretWithFallback(key string, envKey string, defaultValue string) (stri
 	zapLog := logger.GetLogger()
 	manager := GetSecretManager()
 
-	// Try to get from secret manager
+	// Coba ambil dari secret manager
 	value, err := manager.GetSecret(key)
 	if err == nil && value != "" {
 		return value, nil
 	}
 
-	// Fallback to environment variable
+	// Fallback ke environment variable
 	if envKey != "" {
 		value = os.Getenv(envKey)
 		if value != "" {
@@ -330,7 +330,7 @@ func GetSecretWithFallback(key string, envKey string, defaultValue string) (stri
 		}
 	}
 
-	// Fallback to default value if provided
+	// Fallback ke default value kalau ada
 	if defaultValue != "" {
 		zapLog.Warn("Using default value for secret (NOT SECURE FOR PRODUCTION!)",
 			zap.String("key", key),
@@ -340,4 +340,3 @@ func GetSecretWithFallback(key string, envKey string, defaultValue string) (stri
 
 	return "", fmt.Errorf("secret '%s' not found and no fallback available", key)
 }
-

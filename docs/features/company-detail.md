@@ -176,7 +176,7 @@ Jika persentase kepemilikan tidak tampil atau tampil sebagai 0%, ikuti langkah-l
      - Persentase = (Modal Disetor Pemegang Saham ÷ Total Modal) × 100%
    - Pastikan total semua persentase mencapai 100%
 
-## Langkah Selanjutnya
+## Referensi
 
 - [Edit Perusahaan](./edit-company) - Pelajari cara edit perusahaan
 - [My Company](./my-company) - Lihat perusahaan yang di-assign ke Anda

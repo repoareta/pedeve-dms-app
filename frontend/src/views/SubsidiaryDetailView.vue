@@ -586,6 +586,7 @@
                       expandRowByClick: true,
                     }"
                   >
+                  
                     <template #bodyCell="{ column, record }">
                       <template v-if="column.key === 'full_name'">
                         <strong>{{ record.full_name }}</strong>

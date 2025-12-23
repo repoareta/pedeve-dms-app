@@ -117,7 +117,13 @@ status:
 # Seed companies
 seed-companies: ## Seed sample companies and users (10 subsidiaries with 3-layer hierarchy)
 	@echo "🌱 Seeding Companies and Users..."
-	@cd backend && DATABASE_URL="postgres://postgres:dms_password@localhost:5432/db_dms_pedeve?sslmode=disable" go run ./cmd/seed-companies
+	@if [ -z "$$DATABASE_URL" ]; then \
+		echo "❌ Error: DATABASE_URL environment variable is required."; \
+		echo "   Please set it before running this command."; \
+		echo "   Example: export DATABASE_URL='postgres://postgres:password@localhost:5432/db_dms_pedeve?sslmode=disable'"; \
+		exit 1; \
+	fi
+	@cd backend && go run ./cmd/seed-companies
 
 # Run tests (both backend and frontend)
 test: ## Run all tests (backend + frontend)

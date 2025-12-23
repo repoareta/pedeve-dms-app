@@ -171,7 +171,7 @@ jobs:
           echo "SonarCloud args: $ARGS"
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+        uses: sonarsource/sonarqube-scan-action@v5.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
@@ -179,7 +179,9 @@ jobs:
           projectBaseDir: backend
           # Override project key dan organization jika ada di GitHub Secrets
           # Jika tidak di-set, akan menggunakan default dari sonar-project.properties
-          args: ${{ steps.sonar-args.outputs.args }}
+          args: >
+            ${{ steps.sonar-args.outputs.args }}
+            -Dsonar.ci.autoscan.disabled=true
         continue-on-error: true  # Don't fail pipeline on code quality issues, just report
         # Note: Step ini akan skip otomatis jika SONAR_TOKEN kosong oleh SonarCloud action
 

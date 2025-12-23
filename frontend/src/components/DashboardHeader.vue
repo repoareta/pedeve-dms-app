@@ -33,8 +33,21 @@ const unreadCount = ref(0)
 const loadingNotifications = ref(false)
 const notificationPollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
 const shownNotificationIds = ref<Set<string>>(new Set()) // Track notifikasi yang sudah ditampilkan
-const isFirstLoad = ref(true) // Flag untuk menandai load pertama
-const hasShownInitialNotifications = ref(false) // Flag untuk track apakah sudah menampilkan notifikasi saat login
+
+// PENTING: Simpan hasShownInitialNotifications di sessionStorage untuk persist across component remounts
+// Ini akan persist selama session browser masih aktif
+const getHasShownInitialNotifications = (): boolean => {
+  const stored = sessionStorage.getItem('hasShownInitialNotifications')
+  return stored === 'true'
+}
+const setHasShownInitialNotifications = (value: boolean) => {
+  sessionStorage.setItem('hasShownInitialNotifications', value.toString())
+}
+
+// PENTING: isFirstLoad harus di-reset saat logout dan di-set saat login
+// Jangan gunakan sessionStorage untuk isFirstLoad karena kita ingin reset setiap login baru
+const isFirstLoad = ref(true) // Flag untuk menandai load pertama setelah login
+const hasShownInitialNotifications = ref(getHasShownInitialNotifications()) // Flag untuk track apakah sudah menampilkan notifikasi saat login
 const inAppNotificationsEnabled = ref(true) // Default: enabled, akan di-load dari settings
 const expiryThresholdDays = ref<number>(14) // Default: 14 hari, akan di-load dari settings
 
@@ -72,6 +85,10 @@ const emit = defineEmits<{
 }>()
 
 const handleLogout = () => {
+  // PENTING: Clear sessionStorage saat logout untuk reset state push notification
+  sessionStorage.removeItem('hasShownInitialNotifications')
+  hasShownInitialNotifications.value = false
+  isFirstLoad.value = true
   emit('logout')
 }
 
@@ -356,7 +373,7 @@ const showPushNotification = (notif: Notification) => {
     
     // Gunakan openNotificationBox untuk menampilkan notification
     openNotificationBox(notif)
-  } catch {
+  } catch (error) {
     // Silent fail - notification mungkin tidak bisa ditampilkan
   }
 }
@@ -369,13 +386,40 @@ const showPushNotification = (notif: Notification) => {
 // Frontend tidak perlu melakukan filtering tambahan, cukup menggunakan endpoint yang sudah ada
 const loadNotifications = async () => {
   if (!authStore.isAuthenticated) {
-    // Stop polling jika user tidak authenticated
-    stopNotificationPolling()
     return
   }
   
-  // Jangan restart polling di sini - biarkan hanya di startNotificationPolling
-  // untuk menghindari infinite loop
+  // PENTING: Cek sessionStorage TERLEBIH DAHULU - ini adalah sumber kebenaran utama
+  // Jika sessionStorage = true, berarti sudah pernah menampilkan push notification = navigasi
+  // JANGAN tampilkan push notification lagi
+  const stored = getHasShownInitialNotifications()
+  if (stored) {
+    // Update state untuk konsistensi
+    hasShownInitialNotifications.value = true
+    isFirstLoad.value = false
+    loadNotificationsForBadge()
+    return
+  }
+  
+  // PENTING: Jika sudah pernah menampilkan push notification (dari ref), jangan tampilkan lagi
+  // Ini untuk mencegah push notification muncul saat navigasi
+  if (hasShownInitialNotifications.value) {
+    // Update badge saja, tidak perlu load semua notifications untuk push notification
+    // PENTING: Pastikan isFirstLoad = false saat navigasi
+    isFirstLoad.value = false
+    loadNotificationsForBadge()
+    return
+  }
+  
+  // PENTING: Jika bukan first load, berarti ini navigasi (bukan login pertama)
+  // Jangan tampilkan push notification
+  if (!isFirstLoad.value) {
+    // Set flag untuk mencegah push notification muncul
+    hasShownInitialNotifications.value = true
+    setHasShownInitialNotifications(true)
+    loadNotificationsForBadge()
+    return
+  }
   
   loadingNotifications.value = true
   try {
@@ -407,84 +451,115 @@ const loadNotifications = async () => {
     
     // PENTING: Tampilkan push notification hanya jika in-app notifications enabled
     // Icon, dropdown, dan halaman notifikasi tetap berjalan normal meskipun in-app disabled
+    // PENTING: Push notification HANYA muncul saat login (first load), tidak setiap kali load notifications
+    
     if (inAppNotificationsEnabled.value) {
-      // PENTING: Saat first load setelah login (session baru), tampilkan SEMUA notifikasi unread sebagai push notification
-      if (isFirstLoad.value && !hasShownInitialNotifications.value) {
-        // Tampilkan semua notifikasi unread sebagai push notification (PENTING untuk reminder expired document)
-        if (unreadNotifs.length > 0) {
-          // Tampilkan maksimal 5 notifikasi unread (untuk menghindari spam berlebihan)
-          const notificationsToShow = unreadNotifs.slice(0, 5)
-          notificationsToShow.forEach((notif, index) => {
-            // Jangan tambahkan ke shownNotificationIds - biarkan muncul berulang sampai ditindak lanjuti
-            
-            // Tampilkan dengan delay berurutan (setiap 1000ms untuk visibility yang baik)
-            setTimeout(() => {
-              showPushNotification(notif)
-            }, index * 1000) // 1 detik delay
-          })
-          
-          // Tandai bahwa sudah menampilkan notifikasi awal
-          hasShownInitialNotifications.value = true
-        }
-        
-        // Reset isFirstLoad setelah beberapa detik
-        setTimeout(() => {
-          isFirstLoad.value = false
-        }, 3000)
+      // PENTING: Saat first load setelah login (session baru), tampilkan notifikasi unread sebagai push notification
+      // PENTING: Filter berdasarkan threshold - hanya notifikasi yang akan expired dalam threshold days atau sudah expired
+      
+      // PENTING: Cek kondisi dengan lebih ketat
+      // Hanya tampilkan push notification jika:
+      // 1. isFirstLoad = true (baru login)
+      // 2. hasShownInitialNotifications = false (belum pernah menampilkan)
+      // 3. inAppNotificationsEnabled = true (setting enabled)
+      
+      // PENTING: Double check sessionStorage lagi sebelum menampilkan push notification
+      // Ini untuk memastikan tidak ada race condition
+      const storedAgain = getHasShownInitialNotifications()
+      if (storedAgain) {
+        hasShownInitialNotifications.value = true
+        isFirstLoad.value = false
+        loadNotificationsForBadge()
         return
       }
       
-      // PENTING: Tampilkan push notification untuk notifikasi yang BELUM ditindak lanjuti (is_read = false)
-      // Push notification akan muncul berulang-ulang sampai user klik "Sudah ditindak lanjuti"
-      // Bahkan setelah expired date lewat, push notification tetap muncul sampai ditindak lanjuti
-      // Notifikasi yang diterima dari API sudah filtered unread_only: true, jadi semua seharusnya unread
-      // Tapi tetap filter untuk safety
-      const unresolvedNotifications = notifs.filter(notif => {
-        // Filter hanya notifikasi yang belum dibaca
-        if (notif.is_read) {
-          return false
-        }
+      if (isFirstLoad.value && !hasShownInitialNotifications.value) {
+        // Filter notifikasi berdasarkan threshold
+        // PENTING: Hanya notifikasi document_expiry dan director_term_expiry yang difilter berdasarkan threshold
+        // Notifikasi lain (non-expiry) tetap ditampilkan semua
         
-        // PENTING: Untuk notifikasi document_expiry, pastikan semua (baik sudah expired maupun akan expired) ditampilkan
-        // Backend sudah membuat notifikasi berdasarkan threshold, jadi kita hanya perlu memastikan semua document_expiry ditampilkan
-        if (notif.type === 'document_expiry') {
-          // Tampilkan semua notifikasi document_expiry (baik "Sudah Expired" maupun "Akan Expired")
-          // Backend sudah filter berdasarkan threshold, jadi kita hanya perlu memastikan semua ditampilkan
-          return true
-        }
-        
-        // Untuk notifikasi type lain, tampilkan juga
-        return true
-      })
-      
-      
-      // Tampilkan push notification untuk notifikasi yang belum ditindak lanjuti
-      // Jangan skip notifikasi yang sudah pernah ditampilkan - tampilkan lagi jika masih belum ditindak lanjuti
-      if (unresolvedNotifications.length > 0) {
-        // Prioritaskan notifikasi document_expiry (baik sudah expired maupun akan expired)
-        const documentExpiryNotifs = unresolvedNotifications.filter(n => n.type === 'document_expiry')
-        const otherNotifs = unresolvedNotifications.filter(n => n.type !== 'document_expiry')
-        
-        
-        // PENTING: Tampilkan SEMUA notifikasi document_expiry (baik sudah expired maupun akan expired)
-        // Jangan batasi hanya 5, karena kita perlu menampilkan semua document_expiry sebagai push notification
-        const allDocumentExpiryToShow = documentExpiryNotifs // Tampilkan semua, tidak dibatasi
-        const otherNotifsToShow = otherNotifs.slice(0, Math.max(0, 10 - allDocumentExpiryToShow.length))
-        
-        // Gabungkan: semua document_expiry dulu, baru yang lain
-        const notificationsToShow = [
-          ...allDocumentExpiryToShow,
-          ...otherNotifsToShow
-        ].slice(0, 10) // Maksimal 10 notifikasi untuk memastikan semua document_expiry masuk
-        
-        notificationsToShow.forEach((notif, index) => {
-          // Jangan tambahkan ke shownNotificationIds - biarkan muncul berulang sampai ditindak lanjuti
+        const filteredNotifs = unreadNotifs.filter(notif => {
+          // Jika bukan document_expiry atau director_term_expiry, tampilkan semua
+          if (notif.type !== 'document_expiry' && notif.type !== 'director_term_expiry') {
+            return true
+          }
           
-          // Tampilkan dengan delay berurutan (setiap 800ms untuk balance antara visibility dan performance)
-          setTimeout(() => {
-            showPushNotification(notif)
-          }, index * 800) // 800ms delay
+          // Untuk document_expiry, cek expiry_date dari document
+          if (notif.type === 'document_expiry') {
+            if (!notif.document?.expiry_date) {
+              // Jika tidak ada expiry_date, tampilkan (untuk safety)
+              return true
+            }
+            
+            const expiryDate = dayjs(notif.document.expiry_date)
+            const now = dayjs()
+            const diffDays = expiryDate.diff(now, 'day')
+            
+            // Tampilkan jika:
+            // 1. Sudah expired (diffDays < 0) - tetap muncul sampai ditindak lanjuti
+            // 2. Akan expired dalam threshold days (0 <= diffDays <= threshold)
+            if (diffDays < 0) {
+              // Sudah expired - selalu tampilkan
+              return true
+            } else if (diffDays >= 0 && diffDays <= expiryThresholdDays.value) {
+              // Akan expired dalam threshold days - tampilkan
+              return true
+            }
+            
+            // Tidak tampilkan jika masih lebih dari threshold days
+            return false
+          }
+          
+          // Untuk director_term_expiry, backend sudah membuat notifikasi berdasarkan threshold
+          // Jadi kita hanya perlu memastikan notifikasi yang sudah expired tetap ditampilkan
+          // Notifikasi director_term_expiry yang dikembalikan backend sudah sesuai threshold
+          // Tapi untuk safety, tetap tampilkan semua director_term_expiry yang unread
+          // (Backend sudah filter berdasarkan threshold saat membuat notifikasi)
+          return true
         })
+        
+        // Tampilkan notifikasi yang sudah difilter
+        if (filteredNotifs.length > 0) {
+          // Tampilkan maksimal 5 notifikasi unread (untuk menghindari spam berlebihan)
+          const notificationsToShow = filteredNotifs.slice(0, 5)
+          
+          // PENTING: Set hasShownInitialNotifications SEBELUM schedule setTimeout
+          // Ini untuk mencegah race condition jika ada multiple calls
+          hasShownInitialNotifications.value = true
+          setHasShownInitialNotifications(true)
+          
+          // PENTING: Delay 2 detik sebelum push notification muncul
+          const initialDelay = 2000 // 2 detik
+          
+          notificationsToShow.forEach((notif, index) => {
+            // Tampilkan dengan delay: 2 detik initial + (index * 1000ms) untuk spacing antar notifikasi
+            setTimeout(() => {
+              showPushNotification(notif)
+            }, initialDelay + (index * 1000)) // 2 detik + 1 detik per notifikasi
+          })
+        } else {
+          // Tidak ada notifikasi yang sesuai threshold
+          // Tetap set flag untuk mencegah muncul lagi
+          hasShownInitialNotifications.value = true
+          setHasShownInitialNotifications(true)
+        }
+        
+        // Reset isFirstLoad setelah beberapa detik (setelah delay + waktu untuk menampilkan semua notifikasi)
+        // PENTING: Jangan reset hasShownInitialNotifications - biarkan tetap true untuk mencegah push notification muncul lagi
+        // PENTING: Reset isFirstLoad dengan delay yang cukup untuk memastikan semua push notification sudah ditampilkan
+        setTimeout(() => {
+          isFirstLoad.value = false
+        }, 2000 + (filteredNotifs.length * 1000) + 2000) // 2 detik delay + waktu untuk semua notifikasi + buffer
+      } else {
+        // Jika bukan first load atau sudah pernah menampilkan, jangan tampilkan push notification
+        // Hanya update badge dan dropdown
+        
+        // PENTING: Pastikan hasShownInitialNotifications tetap true untuk mencegah muncul lagi
+        // PENTING: Simpan ke sessionStorage untuk persist across component remounts
+        if (!hasShownInitialNotifications.value) {
+          hasShownInitialNotifications.value = true
+          setHasShownInitialNotifications(true)
+        }
       }
     } else {
       // Jika in-app notifications disabled, skip push notifications tapi tetap update icon dan dropdown
@@ -497,7 +572,7 @@ const loadNotifications = async () => {
       }
     }
   } catch (error) {
-    logger.error('❌ [Notifications] Failed to load notifications:', error)
+    // Silent fail - notification mungkin tidak bisa di-load
   } finally {
     loadingNotifications.value = false
   }
@@ -510,44 +585,39 @@ const loadNotificationSettings = async (): Promise<void> => {
     inAppNotificationsEnabled.value = settings.in_app_enabled
     expiryThresholdDays.value = settings.expiry_threshold_days || 14 // Default 14 hari jika tidak ada
   } catch (error) {
-    logger.error('❌ [Notifications] Failed to load notification settings:', error)
     // Default to enabled jika gagal load
     inAppNotificationsEnabled.value = true
     expiryThresholdDays.value = 14 // Default 14 hari
   }
 }
 
-// Start polling for notifications
-const startNotificationPolling = () => {
-  // Prevent multiple polling instances
-  if (notificationPollingInterval.value) {
-    return // Already running
+// Load notifications untuk badge/icon (tanpa push notification)
+const loadNotificationsForBadge = async () => {
+  if (!authStore.isAuthenticated) return
+  
+  loadingNotifications.value = true
+  try {
+    const [notifsInbox, count] = await Promise.all([
+      notificationApi.getNotificationsInbox({
+        unread_only: true,
+        page: 1,
+        page_size: 5, // Hanya untuk badge
+      }),
+      notificationApi.getUnreadCount(),
+    ])
+    
+    const notifs = notifsInbox.data || []
+    notifications.value = notifs.slice(0, 5)
+    unreadCount.value = count
+  } catch (error) {
+    unreadCount.value = 0
+  } finally {
+    loadingNotifications.value = false
   }
-  
-  // Load notification settings first (async, tidak blocking)
-  loadNotificationSettings().then(() => {
-    // Load notifications setelah settings loaded
-    loadNotifications()
-  }).catch(() => {
-    // Jika gagal load settings, tetap load notifications dengan default (enabled)
-    loadNotifications()
-  })
-  
-  // Poll every 2 minutes untuk push notification berulang
-  notificationPollingInterval.value = setInterval(() => {
-    // Reload settings setiap polling untuk memastikan perubahan settings langsung terdeteksi
-    loadNotificationSettings()
-    loadNotifications()
-  }, 120000) // 2 menit (120000 ms)
 }
 
-// Stop polling
-const stopNotificationPolling = () => {
-  if (notificationPollingInterval.value) {
-    clearInterval(notificationPollingInterval.value)
-    notificationPollingInterval.value = null
-  }
-}
+// Catatan: startNotificationSystem dan stopNotificationPolling sudah tidak digunakan
+// karena push notification sekarang di-handle oleh watch authStore.isAuthenticated
 
 // Handle notification click
 // PENTING: Hanya navigate, TIDAK mark as read
@@ -613,33 +683,148 @@ const formatDynamicMessage = (notif: Notification): string => {
 }
 
 // Watch untuk detect login (session baru)
-// Saat user login, reset state untuk menampilkan semua unread notifications
-let previousAuthState = authStore.isAuthenticated
-watch(() => authStore.isAuthenticated, (isAuthenticated) => {
-  // Jika user baru login (berubah dari false ke true)
-  if (!previousAuthState && isAuthenticated) {
-    // Reset state untuk menampilkan semua unread notifications saat login
-    isFirstLoad.value = true
-    hasShownInitialNotifications.value = false
-    shownNotificationIds.value.clear()
-    
-    // Restart polling jika belum berjalan
-    if (!notificationPollingInterval.value) {
-      startNotificationPolling()
-    } else {
-      // Jika polling sudah berjalan, reload settings dan load notifications
-      loadNotificationSettings().then(() => {
-        loadNotifications()
-      }).catch(() => {
-        loadNotifications()
-      })
-    }
+// Saat user login, tampilkan push notification sekali saja
+// PENTING: Initialize dengan false untuk memastikan watch trigger saat login
+let previousAuthState = false
+
+// Flag untuk track apakah handleLoginAndLoadNotifications sedang diproses
+let isLoginProcessing = false
+
+// Function untuk handle login dan load push notifications
+const handleLoginAndLoadNotifications = () => {
+  // PENTING: Cek sessionStorage terlebih dahulu untuk mencegah dipanggil dua kali
+  const stored = getHasShownInitialNotifications()
+  if (stored) {
+    // Pastikan state sesuai
+    hasShownInitialNotifications.value = true
+    isFirstLoad.value = false
+    loadNotificationsForBadge()
+    return
   }
-  // Update previous state
-  previousAuthState = isAuthenticated
-})
+  
+  // Set flag untuk mencegah onMounted mengubah state
+  isLoginProcessing = true
+  
+  // PENTING: Reset state untuk menampilkan semua unread notifications saat login
+  // PENTING: Reset state SEBELUM load notifications
+  // PENTING: Clear sessionStorage untuk reset state saat login baru
+  // Ini adalah login baru, jadi pastikan state fresh
+  isFirstLoad.value = true
+  hasShownInitialNotifications.value = false
+  setHasShownInitialNotifications(false)
+  sessionStorage.removeItem('hasShownInitialNotifications') // Clear untuk memastikan reset
+  shownNotificationIds.value.clear()
+  
+  // Load settings dan notifications untuk push notification saat login
+  // PENTING: Pastikan settings di-load dulu sebelum load notifications
+  loadNotificationSettings().then(() => {
+    // Tunggu sedikit untuk memastikan settings sudah ter-load dan state sudah ter-set
+    setTimeout(() => {
+      // PENTING: Pastikan isFirstLoad masih true sebelum load
+      // Jangan biarkan onMounted mengubah isFirstLoad menjadi false
+      if (!isFirstLoad.value) {
+        isFirstLoad.value = true
+      }
+      
+      // PENTING: Pastikan hasShownInitialNotifications masih false
+      // Jangan biarkan onMounted mengubah hasShownInitialNotifications menjadi true
+      if (hasShownInitialNotifications.value) {
+        hasShownInitialNotifications.value = false
+        setHasShownInitialNotifications(false)
+      }
+      
+      // Pastikan state masih true sebelum load
+      // PENTING: Double check untuk mencegah push notification muncul lagi
+      if (isFirstLoad.value && !hasShownInitialNotifications.value && authStore.isAuthenticated) {
+        // Load notifications dan tampilkan push notification
+        loadNotifications()
+      }
+      
+      // Reset flag setelah loadNotifications dipanggil
+      isLoginProcessing = false
+    }, 200) // Small delay untuk memastikan settings sudah ter-set
+  }).catch(() => {
+    // Jika gagal load settings, tetap load notifications dengan default
+    setTimeout(() => {
+      // PENTING: Double check untuk mencegah push notification muncul lagi
+      if (isFirstLoad.value && !hasShownInitialNotifications.value && authStore.isAuthenticated) {
+        loadNotifications()
+      }
+      
+      // Reset flag setelah loadNotifications dipanggil
+      isLoginProcessing = false
+    }, 200)
+  })
+  
+  // Load notifications untuk badge (tanpa push notification) - bisa langsung tanpa delay
+  loadNotificationsForBadge()
+}
+
+watch(() => authStore.isAuthenticated, (isAuthenticated) => {
+  // PENTING: Hanya trigger jika benar-benar login (berubah dari false ke true)
+  // Jangan trigger jika previousAuthState sudah true (berarti ini bukan login pertama)
+  if (!previousAuthState && isAuthenticated) {
+    // PENTING: Update previousAuthState SEBELUM memanggil handleLoginAndLoadNotifications
+    // Ini untuk mencegah watch trigger lagi jika component remount
+    previousAuthState = true
+    handleLoginAndLoadNotifications()
+  }
+  // Update previous state hanya jika belum di-update di atas
+  if (previousAuthState !== isAuthenticated) {
+    previousAuthState = isAuthenticated
+  }
+}, { immediate: true }) // PENTING: immediate: true untuk handle case jika user sudah authenticated saat component mount
 
 onMounted(() => {
+  // PENTING: onMounted dipanggil setiap kali component mount (termasuk saat navigasi)
+  // Hanya load badge notifications di sini, JANGAN trigger push notification
+  if (authStore.isAuthenticated) {
+    const stored = getHasShownInitialNotifications()
+    
+    // PENTING: Load hasShownInitialNotifications dari sessionStorage
+    // Jika stored = true, berarti sudah pernah menampilkan push notification (navigasi)
+    // Jika stored = false, bisa berarti:
+    // 1. Login pertama (belum pernah menampilkan)
+    // 2. Navigasi tapi sessionStorage belum di-set (edge case)
+    
+    if (stored) {
+      // Sudah pernah menampilkan push notification = navigasi
+      hasShownInitialNotifications.value = true
+      isFirstLoad.value = false
+      loadNotificationsForBadge()
+      return
+    } else {
+      // Belum pernah menampilkan push notification (stored = false)
+      // PENTING: Cek apakah handleLoginAndLoadNotifications sedang diproses
+      // Jika ya, jangan ubah state
+      if (isLoginProcessing) {
+        return
+      }
+      
+      // PENTING: Jika previousAuthState sudah true, berarti ini navigasi (bukan login)
+      // Set flag untuk mencegah push notification muncul
+      if (previousAuthState === true) {
+        hasShownInitialNotifications.value = true
+        setHasShownInitialNotifications(true) // Simpan ke sessionStorage
+        isFirstLoad.value = false
+        loadNotificationsForBadge()
+        return
+      }
+      
+      // previousAuthState = false, berarti ini mungkin login pertama
+      // TAPI: Jangan trigger push notification di sini
+      // Biarkan watch authStore.isAuthenticated yang handle login
+      // Hanya update badge untuk sekarang
+      // Jangan ubah state, biarkan watch yang handle
+      loadNotificationsForBadge()
+    }
+  }
+  
+  // PENTING: Jangan handle push notification di onMounted karena:
+  // 1. Push notification sudah di-handle oleh watch authStore.isAuthenticated saat login
+  // 2. onMounted bisa dipanggil lagi saat navigasi, yang akan menyebabkan push notification muncul lagi
+  // 3. Hanya load badge notifications di sini, tanpa push notification
+  
   // Inject CSS untuk custom styling expired document notification
   const style = document.createElement('style')
   style.id = 'expired-document-notification-style'
@@ -711,13 +896,24 @@ onMounted(() => {
   document.head.appendChild(style)
   
   loadUserCompaniesCount()
-  startNotificationPolling()
   
-  // Listen untuk refresh notifications setelah navigate
+  // Load badge notifications (tanpa push notification)
+  // PENTING: Jangan panggil startNotificationSystem() di sini karena akan mengganggu state untuk push notification
+  // Push notification di-handle oleh watch authStore.isAuthenticated dan onMounted
+  // Badge bisa di-load langsung tanpa mengganggu state push notification
+  if (authStore.isAuthenticated) {
+    loadNotificationSettings().then(() => {
+      loadNotificationsForBadge()
+    }).catch(() => {
+      loadNotificationsForBadge()
+    })
+  }
+  
+  // Listen untuk refresh notifications setelah navigate (hanya untuk badge)
   const handleNotificationRead = () => {
-    // Refresh notifications setelah beberapa detik (untuk memberi waktu backend update)
+    // Refresh notifications untuk badge setelah beberapa detik (untuk memberi waktu backend update)
     setTimeout(() => {
-      loadNotifications()
+      loadNotificationsForBadge()
     }, 1000)
   }
   
@@ -774,9 +970,6 @@ onUnmounted(() => {
     document.removeEventListener('MSFullscreenChange', fullscreenHandler)
     delete (window as WindowWithScrollHandler).__fullscreenHandler
   }
-  
-  // Stop notification polling
-  stopNotificationPolling()
   
   // Clear shown notification IDs saat unmount
   shownNotificationIds.value.clear()

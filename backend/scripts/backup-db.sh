@@ -12,12 +12,24 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKUP_FILE="${BACKUP_DIR}/pedeve_db_backup_${TIMESTAMP}.sql"
 RETENTION_DAYS=7  # Hapus backup lebih dari 7 hari
 
-# Ambil konfigurasi dari environment atau gunakan default
-DB_HOST="${POSTGRES_HOST:-localhost}"
+# Ambil konfigurasi dari environment variables (required for security)
+# Never hardcode database credentials in source code
+DB_HOST="${POSTGRES_HOST}"
 DB_PORT="${POSTGRES_PORT:-5432}"
-DB_NAME="${POSTGRES_DB:-db_dms_pedeve}"
-DB_USER="${POSTGRES_USER:-postgres}"
-DB_PASSWORD="${POSTGRES_PASSWORD:-dms_password}"
+DB_NAME="${POSTGRES_DB}"
+DB_USER="${POSTGRES_USER}"
+DB_PASSWORD="${POSTGRES_PASSWORD}"
+
+# Validate required environment variables
+if [ -z "$DB_HOST" ] || [ -z "$DB_NAME" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASSWORD" ]; then
+    echo "❌ Error: Required environment variables are not set:" >&2
+    [ -z "$DB_HOST" ] && echo "   - POSTGRES_HOST" >&2
+    [ -z "$DB_NAME" ] && echo "   - POSTGRES_DB" >&2
+    [ -z "$DB_USER" ] && echo "   - POSTGRES_USER" >&2
+    [ -z "$DB_PASSWORD" ] && echo "   - POSTGRES_PASSWORD" >&2
+    echo "   Please set all required variables before running this script." >&2
+    exit 1
+fi
 
 # Buat direktori backup jika belum ada
 mkdir -p "$BACKUP_DIR"

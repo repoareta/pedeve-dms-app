@@ -31,7 +31,6 @@ const isMaximized = ref(false)
 const notifications = ref<Notification[]>([])
 const unreadCount = ref(0)
 const loadingNotifications = ref(false)
-const notificationPollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
 const shownNotificationIds = ref<Set<string>>(new Set()) // Track notifikasi yang sudah ditampilkan
 
 // PENTING: Simpan hasShownInitialNotifications di sessionStorage untuk persist across component remounts
@@ -373,7 +372,7 @@ const showPushNotification = (notif: Notification) => {
     
     // Gunakan openNotificationBox untuk menampilkan notification
     openNotificationBox(notif)
-  } catch (error) {
+  } catch {
     // Silent fail - notification mungkin tidak bisa ditampilkan
   }
 }
@@ -571,7 +570,7 @@ const loadNotifications = async () => {
         }, 1000)
       }
     }
-  } catch (error) {
+  } catch {
     // Silent fail - notification mungkin tidak bisa di-load
   } finally {
     loadingNotifications.value = false
@@ -584,7 +583,7 @@ const loadNotificationSettings = async (): Promise<void> => {
     const settings = await notificationSettingsApi.getSettings()
     inAppNotificationsEnabled.value = settings.in_app_enabled
     expiryThresholdDays.value = settings.expiry_threshold_days || 14 // Default 14 hari jika tidak ada
-  } catch (error) {
+  } catch {
     // Default to enabled jika gagal load
     inAppNotificationsEnabled.value = true
     expiryThresholdDays.value = 14 // Default 14 hari
@@ -609,7 +608,7 @@ const loadNotificationsForBadge = async () => {
     const notifs = notifsInbox.data || []
     notifications.value = notifs.slice(0, 5)
     unreadCount.value = count
-  } catch (error) {
+  } catch {
     unreadCount.value = 0
   } finally {
     loadingNotifications.value = false

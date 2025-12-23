@@ -26,17 +26,17 @@ echo ""
 # Get password from Vault
 echo "Retrieving superadmin password from Vault..."
 if docker ps | grep -q dms-vault-dev; then
-    VAULT_CMD="docker exec -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN=$VAULT_TOKEN dms-vault-dev vault"
+    VAULT_CMD_ARGS=("docker" "exec" "-e" "VAULT_ADDR=http://127.0.0.1:8200" "-e" "VAULT_TOKEN=${VAULT_TOKEN}" "dms-vault-dev" "vault")
 else
     if command -v vault &> /dev/null; then
-        VAULT_CMD="vault"
+        VAULT_CMD_ARGS=("vault")
     else
         echo "❌ Vault container not running and vault CLI not found!"
         exit 1
     fi
 fi
 
-SUPERADMIN_PASSWORD=$($VAULT_CMD kv get -field=superadmin_password "$VAULT_SECRET_PATH" 2>&1)
+SUPERADMIN_PASSWORD=$("${VAULT_CMD_ARGS[@]}" kv get -field=superadmin_password "$VAULT_SECRET_PATH" 2>&1)
 
 if [ $? -ne 0 ] || [ -z "$SUPERADMIN_PASSWORD" ]; then
     echo "❌ Failed to retrieve superadmin_password from Vault"

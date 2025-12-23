@@ -39,9 +39,25 @@ cp "$INPUT_DB" "$BACKUP_DB"
 echo "Backup created: $BACKUP_DB"
 echo ""
 
-# Convert to SQLCipher
+# Validate encryption key format (alphanumeric, dash, underscore only, no SQL injection)
+if [[ ! "$ENCRYPTION_KEY" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "❌ Error: Encryption key contains invalid characters. Only alphanumeric, dash, and underscore allowed."
+    exit 1
+fi
+
+# Validate output database path (no path traversal)
+if [[ "$OUTPUT_DB" =~ \.\./ ]] || [[ "$OUTPUT_DB" =~ ^/ ]]; then
+    echo "❌ Error: Output database path contains invalid characters or absolute path."
+    exit 1
+fi
+
+# Convert to SQLCipher using printf to safely escape the key
+# Note: sqlcipher expects the key as a string literal, so we use printf %q for safe quoting
+ENCRYPTION_KEY_ESCAPED=$(printf '%q' "$ENCRYPTION_KEY")
+OUTPUT_DB_ESCAPED=$(printf '%q' "$OUTPUT_DB")
+
 sqlcipher "$INPUT_DB" <<EOF
-ATTACH DATABASE '$OUTPUT_DB' AS encrypted KEY '$ENCRYPTION_KEY';
+ATTACH DATABASE $OUTPUT_DB_ESCAPED AS encrypted KEY $ENCRYPTION_KEY_ESCAPED;
 SELECT sqlcipher_export('encrypted');
 DETACH DATABASE encrypted;
 .quit

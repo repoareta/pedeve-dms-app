@@ -30,9 +30,8 @@ docker-compose -f docker-compose.dev.yml up --build
 
 **Dengan PostgreSQL:**
 ```bash
-docker-compose -f docker-compose.postgres.yml up --build
-
-# Atau set DATABASE_URL di docker-compose.dev.yml
+# docker-compose.dev.yml sudah include PostgreSQL
+# Set DATABASE_URL di docker-compose.dev.yml jika perlu
 ```
 
 **Hot Reload:**
@@ -93,7 +92,6 @@ pedeve-dms-app/
 ├── .github/
 │   └── workflows/             # CI/CD pipelines
 ├── scripts/                   # Deployment scripts
-├── documentations/            # Documentation files
 └── docker-compose.dev.yml     # Local development setup
 ```
 
@@ -562,8 +560,3 @@ Swagger UI menyediakan:
 ## Dokumentasi Tambahan
 
 - **API Documentation:** http://localhost:8080/swagger/index.html (hanya tersedia di development)
-- **TDE (Transparent Data Encryption)**: 
-  - `documentations/TDE_IMPLEMENTATION_GUIDE.md` - Panduan lengkap implementasi TDE untuk PostgreSQL dan SQLite
-- **PDP Compliance**: 
-  - `documentations/PDP_DATA_CLASSIFICATION.md` - Klasifikasi data pribadi berdasarkan UU No. 27 Tahun 2022
-  - `documentations/PDP_ENCRYPTION_BEST_PRACTICES.md` - Best practices enkripsi untuk compliance

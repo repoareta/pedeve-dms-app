@@ -11,9 +11,11 @@ import (
 )
 
 func main() {
-	// Set DATABASE_URL if not set
+	// DATABASE_URL must be set via environment variable for security
+	// Never hardcode database credentials in source code
 	if os.Getenv("DATABASE_URL") == "" {
-		os.Setenv("DATABASE_URL", "postgres://postgres:dms_password@localhost:5432/db_dms_pedeve?sslmode=disable")
+		fmt.Fprintf(os.Stderr, "❌ DATABASE_URL environment variable is required. Please set it before running this command.\n")
+		os.Exit(1)
 	}
 
 	fmt.Println("🔧 Fixing Company Levels")
@@ -32,7 +34,7 @@ func main() {
 
 	// Fix level menggunakan recursive update
 	fmt.Println("🔄 Updating company levels...")
-	
+
 	// First, set all companies with parent_id = NULL to level 0 (holding)
 	result := db.Exec(`
 		UPDATE companies 
@@ -91,4 +93,3 @@ func main() {
 	fmt.Println()
 	fmt.Printf("🎉 Company levels fixed successfully! Total: %d companies\n", len(companies))
 }
-

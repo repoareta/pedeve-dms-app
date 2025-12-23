@@ -9,9 +9,13 @@ set -e
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 BACKEND_DIR="$( cd "$SCRIPT_DIR/../.." && pwd )"
 
-# Set default DATABASE_URL if not set
+# DATABASE_URL must be set via environment variable for security
+# Never hardcode database credentials in source code
 if [ -z "$DATABASE_URL" ]; then
-    export DATABASE_URL="postgres://postgres:dms_password@localhost:5432/db_dms_pedeve?sslmode=disable"
+    echo "❌ Error: DATABASE_URL environment variable is required." >&2
+    echo "   Please set it before running this script." >&2
+    echo "   Example: export DATABASE_URL='postgres://user:password@host:port/dbname?sslmode=disable'" >&2
+    exit 1
 fi
 
 echo "🌱 Running Company Seeder..."

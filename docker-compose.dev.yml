@@ -5,9 +5,13 @@ services:
     image: postgres:16-alpine
     container_name: dms-postgres-dev
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=dms_password
-      - POSTGRES_DB=db_dms_pedeve
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      # POSTGRES_PASSWORD: For development, uses default if not set
+      # For production, MUST be set via environment variable
+      # Create .env file with POSTGRES_PASSWORD=your-password for custom password
+      # Note: Using default 'dms_password' for development to match existing volume
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dms_password}
+      - POSTGRES_DB=${POSTGRES_DB:-db_dms_pedeve}
     ports:
       - "5432:5432"
     volumes:
@@ -39,7 +43,11 @@ services:
       # SSL/TLS: sslmode=disable untuk development (aman di local network)
       # Production: ubah ke sslmode=require atau sslmode=verify-full
       # Format: postgres://user:pass@host:port/db?sslmode=require
-      - DATABASE_URL=postgres://postgres:dms_password@postgres:5432/db_dms_pedeve?sslmode=disable
+      # DATABASE_URL: For development, uses default if not set
+      # For production, MUST be set via environment variable
+      # Create .env file with DATABASE_URL=postgres://postgres:password@postgres:5432/db_dms_pedeve?sslmode=disable for custom URL
+      # Note: Using default 'dms_password' for development to match existing postgres volume
+      - DATABASE_URL=${DATABASE_URL:-postgres://postgres:dms_password@postgres:5432/db_dms_pedeve?sslmode=disable}
       # SQLCipher encryption untuk SQLite (optional, hanya jika DATABASE_URL tidak set)
       # Set ENABLE_SQLCIPHER=true untuk enable encryption pada SQLite database
       # Set SQLCIPHER_KEY dengan encryption key (min 32 karakter)

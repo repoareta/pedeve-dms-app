@@ -25,24 +25,36 @@ echo ""
 
 # Check if running in Docker
 if [ -f /.dockerenv ] || [ -n "$DOCKER_CONTAINER" ]; then
-    VAULT_CMD="vault"
+    VAULT_CMD_ARGS=("vault")
 else
     if docker ps | grep -q dms-vault-dev; then
-        VAULT_CMD="docker exec -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN=$VAULT_TOKEN dms-vault-dev vault"
+        VAULT_CMD_ARGS=("docker" "exec" "-e" "VAULT_ADDR=http://127.0.0.1:8200" "-e" "VAULT_TOKEN=${VAULT_TOKEN}" "dms-vault-dev" "vault")
         export VAULT_ADDR="http://127.0.0.1:8200"
     elif command -v vault &> /dev/null; then
-        VAULT_CMD="vault"
+        VAULT_CMD_ARGS=("vault")
     else
         echo "❌ Vault container not running and vault CLI not found!"
         exit 1
     fi
 fi
 
-# Secrets configuration (dengan default values)
+# Secrets configuration
+# WARNING: Default values are for DEVELOPMENT ONLY
+# For production, all secrets MUST be set via environment variables or secret manager
+# Never commit production secrets to source code
 ENCRYPTION_KEY="${ENCRYPTION_KEY:-default-encryption-key-32-chars!}"
 JWT_SECRET="${JWT_SECRET:-your-secret-key-change-in-production-min-32-chars}"
-DATABASE_URL="${DATABASE_URL:-postgres://postgres:dms_password@postgres:5432/db_dms_pedeve?sslmode=disable}"
-DATABASE_PASSWORD="${DATABASE_PASSWORD:-dms_password}"
+# DATABASE_URL and DATABASE_PASSWORD must be set via environment for security
+if [ -z "$DATABASE_URL" ]; then
+    echo "⚠️  Warning: DATABASE_URL not set. Using default for development only." >&2
+    echo "   For production, set DATABASE_URL environment variable." >&2
+    DATABASE_URL="postgres://postgres:CHANGE_ME_IN_PRODUCTION@postgres:5432/db_dms_pedeve?sslmode=disable"
+fi
+if [ -z "$DATABASE_PASSWORD" ]; then
+    echo "⚠️  Warning: DATABASE_PASSWORD not set. Using placeholder." >&2
+    echo "   For production, set DATABASE_PASSWORD environment variable." >&2
+    DATABASE_PASSWORD="CHANGE_ME_IN_PRODUCTION"
+fi
 CSRF_SECRET="${CSRF_SECRET:-csrf-secret-key-for-token-generation-32!}"
 SUPERADMIN_PASSWORD="${SUPERADMIN_PASSWORD:-Pedeve123}"
 
@@ -76,28 +88,27 @@ echo "Storing all secrets to Vault..."
 echo "  Path: $VAULT_SECRET_PATH"
 echo ""
 
+# Build vault kv put command using array for safe execution
 # Store all secrets - KV v2 format uses /data/ in path
 # Vault kv put automatically handles KV v2 format when path contains /data/
-VAULT_PUT_CMD="$VAULT_CMD kv put \"$VAULT_SECRET_PATH\" \
-    encryption_key=\"$ENCRYPTION_KEY\" \
-    jwt_secret=\"$JWT_SECRET\" \
-    database_url=\"$DATABASE_URL\" \
-    database_password=\"$DATABASE_PASSWORD\" \
-    csrf_secret=\"$CSRF_SECRET\" \
-    superadmin_password=\"$SUPERADMIN_PASSWORD\" \
-    rate_limit=\"$RATE_LIMIT_CONFIG\""
+VAULT_PUT_ARGS=("${VAULT_CMD_ARGS[@]}" "kv" "put" "$VAULT_SECRET_PATH" \
+    "encryption_key=$ENCRYPTION_KEY" \
+    "jwt_secret=$JWT_SECRET" \
+    "database_url=$DATABASE_URL" \
+    "database_password=$DATABASE_PASSWORD" \
+    "csrf_secret=$CSRF_SECRET" \
+    "superadmin_password=$SUPERADMIN_PASSWORD" \
+    "rate_limit=$RATE_LIMIT_CONFIG")
 
 # Add SonarCloud secrets if provided
 if [ -n "$SONARCLOUD_TOKEN" ] && [ -n "$SONARCLOUD_PROJECT_KEY" ]; then
-    VAULT_PUT_CMD="$VAULT_PUT_CMD \
-    SONARCLOUD_URL=\"$SONARCLOUD_URL\" \
-    SONARCLOUD_TOKEN=\"$SONARCLOUD_TOKEN\" \
-    SONARCLOUD_PROJECT_KEY=\"$SONARCLOUD_PROJECT_KEY\""
+    VAULT_PUT_ARGS+=("SONARCLOUD_URL=$SONARCLOUD_URL")
+    VAULT_PUT_ARGS+=("SONARCLOUD_TOKEN=$SONARCLOUD_TOKEN")
+    VAULT_PUT_ARGS+=("SONARCLOUD_PROJECT_KEY=$SONARCLOUD_PROJECT_KEY")
 fi
 
-eval $VAULT_PUT_CMD 2>&1
-
-if [ $? -eq 0 ]; then
+# Execute vault command safely using array
+if "${VAULT_PUT_ARGS[@]}" 2>&1; then
     echo "✅ All secrets stored successfully"
 else
     echo "❌ Failed to store secrets"
@@ -106,7 +117,7 @@ fi
 
 echo ""
 echo "Verifying stored secrets..."
-$VAULT_CMD kv get "$VAULT_SECRET_PATH" 2>&1 | head -30
+"${VAULT_CMD_ARGS[@]}" kv get "$VAULT_SECRET_PATH" 2>&1 | head -30
 
 echo ""
 echo "=========================================="

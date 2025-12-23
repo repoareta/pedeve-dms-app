@@ -1324,25 +1324,22 @@ func (h *FinancialReportHandler) ValidateBulkExcelFile(c *fiber.Ctx) error {
 			return parsed, true
 		}
 
-		// Neraca fields (all required, but allow 0)
+		// Neraca fields (optional, but allow 0)
 		neracaFields := []string{"Current Assets", "Non Current Assets", "Short Term Liabilities", "Long Term Liabilities", "Equity"}
 		for _, fieldName := range neracaFields {
 			if len(row) > colIndex {
-				value, ok := parseInt64Field(strings.TrimSpace(row[colIndex]), fieldName, true, true)
-				if ok {
-					rowData[strings.ToLower(strings.ReplaceAll(fieldName, " ", "_"))] = value
+				valueStr := strings.TrimSpace(row[colIndex])
+				if valueStr != "" {
+					value, ok := parseInt64Field(valueStr, fieldName, false, true)
+					if ok {
+						rowData[strings.ToLower(strings.ReplaceAll(fieldName, " ", "_"))] = value
+					}
 				}
-			} else {
-				rowErrors = append(rowErrors, map[string]interface{}{
-					"row":     rowNum,
-					"column":  fieldName,
-					"message": fmt.Sprintf("%s wajib diisi", fieldName),
-				})
 			}
 			colIndex++
 		}
 
-		// Laba Rugi fields (all required, allow negative for expenses and tax)
+		// Laba Rugi fields (optional, allow negative for expenses and tax)
 		labaRugiFields := []struct {
 			name          string
 			allowNegative bool
@@ -1357,34 +1354,28 @@ func (h *FinancialReportHandler) ValidateBulkExcelFile(c *fiber.Ctx) error {
 		for _, field := range labaRugiFields {
 			fieldKey := strings.ToLower(strings.ReplaceAll(field.name, " ", "_"))
 			if len(row) > colIndex {
-				value, ok := parseInt64Field(strings.TrimSpace(row[colIndex]), field.name, true, field.allowNegative)
-				if ok {
-					rowData[fieldKey] = value
+				valueStr := strings.TrimSpace(row[colIndex])
+				if valueStr != "" {
+					value, ok := parseInt64Field(valueStr, field.name, false, field.allowNegative)
+					if ok {
+						rowData[fieldKey] = value
+					}
 				}
-			} else {
-				rowErrors = append(rowErrors, map[string]interface{}{
-					"row":     rowNum,
-					"column":  field.name,
-					"message": fmt.Sprintf("%s wajib diisi", field.name),
-				})
 			}
 			colIndex++
 		}
 
-		// Cashflow fields (all required, allow negative)
+		// Cashflow fields (optional, allow negative)
 		cashflowFields := []string{"Operating Cashflow", "Investing Cashflow", "Financing Cashflow", "Ending Balance"}
 		for _, fieldName := range cashflowFields {
 			if len(row) > colIndex {
-				value, ok := parseInt64Field(strings.TrimSpace(row[colIndex]), fieldName, true, true)
-				if ok {
-					rowData[strings.ToLower(strings.ReplaceAll(fieldName, " ", "_"))] = value
+				valueStr := strings.TrimSpace(row[colIndex])
+				if valueStr != "" {
+					value, ok := parseInt64Field(valueStr, fieldName, false, true)
+					if ok {
+						rowData[strings.ToLower(strings.ReplaceAll(fieldName, " ", "_"))] = value
+					}
 				}
-			} else {
-				rowErrors = append(rowErrors, map[string]interface{}{
-					"row":     rowNum,
-					"column":  fieldName,
-					"message": fmt.Sprintf("%s wajib diisi", fieldName),
-				})
 			}
 			colIndex++
 		}
@@ -1866,35 +1857,38 @@ func (h *FinancialReportHandler) UploadBulkFinancialReports(c *fiber.Ctx) error 
 			IsRKAP:    isRKAP,
 		}
 
-		// Parse Neraca fields
+		// Parse Neraca fields (optional)
 		for i, fieldName := range []string{"Current Assets", "Non Current Assets", "Short Term Liabilities", "Long Term Liabilities", "Equity"} {
 			if len(row) > colIndex {
-				value, err := parseInt64Field(strings.TrimSpace(row[colIndex]), true)
-				if err != nil {
-					rowErrors = append(rowErrors, map[string]interface{}{
-						"row":     rowNum,
-						"column":  fieldName,
-						"message": fmt.Sprintf("%s: %v", fieldName, err),
-					})
-				} else {
-					switch i {
-					case 0:
-						req.CurrentAssets = value
-					case 1:
-						req.NonCurrentAssets = value
-					case 2:
-						req.ShortTermLiabilities = value
-					case 3:
-						req.LongTermLiabilities = value
-					case 4:
-						req.Equity = value
+				valueStr := strings.TrimSpace(row[colIndex])
+				if valueStr != "" {
+					value, err := parseInt64Field(valueStr, true)
+					if err != nil {
+						rowErrors = append(rowErrors, map[string]interface{}{
+							"row":     rowNum,
+							"column":  fieldName,
+							"message": fmt.Sprintf("%s: %v", fieldName, err),
+						})
+					} else {
+						switch i {
+						case 0:
+							req.CurrentAssets = value
+						case 1:
+							req.NonCurrentAssets = value
+						case 2:
+							req.ShortTermLiabilities = value
+						case 3:
+							req.LongTermLiabilities = value
+						case 4:
+							req.Equity = value
+						}
 					}
 				}
 			}
 			colIndex++
 		}
 
-		// Parse Laba Rugi fields (headers sudah dalam Bahasa Indonesia)
+		// Parse Laba Rugi fields (optional, headers sudah dalam Bahasa Indonesia)
 		labaRugiFields := []struct {
 			name          string
 			allowNegative bool
@@ -1909,40 +1903,46 @@ func (h *FinancialReportHandler) UploadBulkFinancialReports(c *fiber.Ctx) error 
 		}
 		for _, field := range labaRugiFields {
 			if len(row) > colIndex {
-				value, err := parseInt64Field(strings.TrimSpace(row[colIndex]), field.allowNegative)
-				if err != nil {
-					rowErrors = append(rowErrors, map[string]interface{}{
-						"row":     rowNum,
-						"column":  field.name,
-						"message": fmt.Sprintf("%s: %v", field.name, err),
-					})
-				} else {
-					*field.target = value
+				valueStr := strings.TrimSpace(row[colIndex])
+				if valueStr != "" {
+					value, err := parseInt64Field(valueStr, field.allowNegative)
+					if err != nil {
+						rowErrors = append(rowErrors, map[string]interface{}{
+							"row":     rowNum,
+							"column":  field.name,
+							"message": fmt.Sprintf("%s: %v", field.name, err),
+						})
+					} else {
+						*field.target = value
+					}
 				}
 			}
 			colIndex++
 		}
 
-		// Parse Cashflow fields (headers sudah dalam Bahasa Indonesia)
+		// Parse Cashflow fields (optional, headers sudah dalam Bahasa Indonesia)
 		for i, fieldName := range []string{"Arus Kas Operasi", "Arus Kas Investasi", "Arus Kas Pendanaan", "Saldo Akhir"} {
 			if len(row) > colIndex {
-				value, err := parseInt64Field(strings.TrimSpace(row[colIndex]), true)
-				if err != nil {
-					rowErrors = append(rowErrors, map[string]interface{}{
-						"row":     rowNum,
-						"column":  fieldName,
-						"message": fmt.Sprintf("%s: %v", fieldName, err),
-					})
-				} else {
-					switch i {
-					case 0:
-						req.OperatingCashflow = value
-					case 1:
-						req.InvestingCashflow = value
-					case 2:
-						req.FinancingCashflow = value
-					case 3:
-						req.EndingBalance = value
+				valueStr := strings.TrimSpace(row[colIndex])
+				if valueStr != "" {
+					value, err := parseInt64Field(valueStr, true)
+					if err != nil {
+						rowErrors = append(rowErrors, map[string]interface{}{
+							"row":     rowNum,
+							"column":  fieldName,
+							"message": fmt.Sprintf("%s: %v", fieldName, err),
+						})
+					} else {
+						switch i {
+						case 0:
+							req.OperatingCashflow = value
+						case 1:
+							req.InvestingCashflow = value
+						case 2:
+							req.FinancingCashflow = value
+						case 3:
+							req.EndingBalance = value
+						}
 					}
 				}
 			}

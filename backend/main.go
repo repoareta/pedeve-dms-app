@@ -72,16 +72,30 @@ func main() {
 				code = e.Code
 			}
 
-			// Log error ke audit log
+			// Log error ke audit log (dengan detail lengkap untuk debugging)
 			details := map[string]interface{}{
 				"status_code": code,
 				"error":       err.Error(),
 			}
 			LogTechnicalError(err, c, details)
 
+			// Sanitize error message untuk production
+			// Di production, jangan expose error detail ke client
+			env := os.Getenv("ENV")
+			isProduction := env == "production" || env == "prod"
+
+			var errorMessage string
+			if isProduction {
+				// Di production, gunakan generic message
+				errorMessage = "An unexpected error occurred. Please try again later."
+			} else {
+				// Di development, tampilkan error detail untuk debugging
+				errorMessage = err.Error()
+			}
+
 			return c.Status(code).JSON(ErrorResponse{
 				Error:   "internal_error",
-				Message: err.Error(),
+				Message: errorMessage,
 			})
 		},
 	})
@@ -95,8 +109,17 @@ func main() {
 	app.Use(RateLimitMiddleware(generalRateLimiter)) // Rate limiting umum
 
 	// CORS dengan peningkatan keamanan
+	// Ambil CORS origin dari environment variable, fallback ke localhost untuk development
+	corsOrigin := os.Getenv("CORS_ORIGIN")
+	if corsOrigin == "" {
+		corsOrigin = "http://localhost:5173,http://localhost:3000"
+		log.Printf("CORS origin not set, using default localhost origins")
+	} else {
+		log.Printf("CORS origin configured: %s", corsOrigin)
+	}
+
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:5173,http://localhost:3000",
+		AllowOrigins:     corsOrigin, // Comma-separated string didukung oleh Fiber CORS
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS,PATCH",
 		AllowHeaders:     "Accept,Authorization,Content-Type,X-CSRF-Token,X-Requested-With",
 		ExposeHeaders:    "Link,X-Total-Count",
@@ -165,23 +188,23 @@ func main() {
 	// Route financial reports (dilindungi)
 	// NOTE: Routes yang lebih spesifik harus diletakkan SEBELUM routes yang lebih umum (dengan :param)
 	financialReportHandler := http.NewFinancialReportHandler(usecase.NewFinancialReportUseCase())
-	
+
 	// Bulk upload endpoints (harus sebelum /financial-reports/:id karena lebih spesifik)
-	protected.Get("/financial-reports/bulk-upload/template", financialReportHandler.GenerateBulkUploadTemplate)    // Download bulk upload template
-	protected.Post("/financial-reports/bulk-upload/validate", financialReportHandler.ValidateBulkExcelFile)        // Validate bulk upload Excel file
-	protected.Post("/financial-reports/bulk-upload", financialReportHandler.UploadBulkFinancialReports)             // Upload bulk financial reports
-	
+	protected.Get("/financial-reports/bulk-upload/template", financialReportHandler.GenerateBulkUploadTemplate) // Download bulk upload template
+	protected.Post("/financial-reports/bulk-upload/validate", financialReportHandler.ValidateBulkExcelFile)     // Validate bulk upload Excel file
+	protected.Post("/financial-reports/bulk-upload", financialReportHandler.UploadBulkFinancialReports)         // Upload bulk financial reports
+
 	// Other specific routes (harus sebelum /financial-reports/:id)
 	protected.Get("/financial-reports/company/:company_id", financialReportHandler.GetFinancialReportsByCompanyID) // Get all financial reports for a company
-	protected.Get("/financial-reports/compare", financialReportHandler.GetComparison)                            // Get comparison RKAP vs Realisasi YTD
-	protected.Get("/financial-reports/rkap-years/:company_id", financialReportHandler.GetRKAPYearsByCompanyID) // Get RKAP years for a company
-	
+	protected.Get("/financial-reports/compare", financialReportHandler.GetComparison)                              // Get comparison RKAP vs Realisasi YTD
+	protected.Get("/financial-reports/rkap-years/:company_id", financialReportHandler.GetRKAPYearsByCompanyID)     // Get RKAP years for a company
+
 	// General CRUD routes (dengan :id parameter - harus di akhir)
-	protected.Post("/financial-reports", financialReportHandler.CreateFinancialReport)                           // Create financial report
-	protected.Get("/financial-reports/:id", financialReportHandler.GetFinancialReportByID)                      // Get financial report by ID
-	protected.Put("/financial-reports/:id", financialReportHandler.UpdateFinancialReport)                       // Update financial report
-	protected.Delete("/financial-reports/:id", financialReportHandler.DeleteFinancialReport)                    // Delete financial report
-	
+	protected.Post("/financial-reports", financialReportHandler.CreateFinancialReport)       // Create financial report
+	protected.Get("/financial-reports/:id", financialReportHandler.GetFinancialReportByID)   // Get financial report by ID
+	protected.Put("/financial-reports/:id", financialReportHandler.UpdateFinancialReport)    // Update financial report
+	protected.Delete("/financial-reports/:id", financialReportHandler.DeleteFinancialReport) // Delete financial report
+
 	protected.Get("/companies/:company_id/performance/export/excel", financialReportHandler.ExportPerformanceExcel) // Export performance Excel
 
 	// Swagger

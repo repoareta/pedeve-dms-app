@@ -15,9 +15,11 @@ import (
 )
 
 func main() {
-	// Set DATABASE_URL if not set
+	// DATABASE_URL must be set via environment variable for security
+	// Never hardcode database credentials in source code
 	if os.Getenv("DATABASE_URL") == "" {
-		os.Setenv("DATABASE_URL", "postgres://postgres:dms_password@localhost:5432/db_dms_pedeve?sslmode=disable")
+		fmt.Fprintf(os.Stderr, "❌ DATABASE_URL environment variable is required. Please set it before running this command.\n")
+		os.Exit(1)
 	}
 
 	fmt.Println("📁 Generating Document Folders for Existing Companies")

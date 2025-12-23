@@ -159,7 +159,6 @@ jobs:
       # Priority: GitHub Secrets > sonar-project.properties
       - name: Prepare SonarCloud args
         id: sonar-args
-        if: ${{ secrets.SONARCLOUD_TOKEN != '' }}
         run: |
           ARGS=""
           if [ -n "${{ secrets.SONARCLOUD_PROJECT_KEY }}" ]; then
@@ -172,7 +171,6 @@ jobs:
           echo "SonarCloud args: $ARGS"
 
       - name: SonarCloud Scan
-        if: ${{ secrets.SONARCLOUD_TOKEN != '' }}
         uses: SonarSource/sonarcloud-github-action@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -183,6 +181,7 @@ jobs:
           # Jika tidak di-set, akan menggunakan default dari sonar-project.properties
           args: ${{ steps.sonar-args.outputs.args }}
         continue-on-error: true  # Don't fail pipeline on code quality issues, just report
+        # Note: Step ini akan skip otomatis jika SONAR_TOKEN kosong oleh SonarCloud action
 
       - name: Compute image metadata
         id: meta

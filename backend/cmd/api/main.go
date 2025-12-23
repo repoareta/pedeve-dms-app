@@ -111,16 +111,30 @@ func main() {
 				})
 			}
 
-			// Log error ke audit log
+			// Log error ke audit log (dengan detail lengkap untuk debugging)
 			details := map[string]interface{}{
 				"status_code": code,
 				"error":       err.Error(),
 			}
 			middleware.LogTechnicalError(err, c, details)
 
+			// Sanitize error message untuk production
+			// Di production, jangan expose error detail ke client
+			env := os.Getenv("ENV")
+			isProduction := env == "production" || env == "prod"
+
+			var errorMessage string
+			if isProduction {
+				// Di production, gunakan generic message
+				errorMessage = "An unexpected error occurred. Please try again later."
+			} else {
+				// Di development, tampilkan error detail untuk debugging
+				errorMessage = err.Error()
+			}
+
 			return c.Status(code).JSON(fiber.Map{
 				"error":   "internal_error",
-				"message": err.Error(),
+				"message": errorMessage,
 			})
 		},
 	})

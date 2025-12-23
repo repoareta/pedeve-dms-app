@@ -7,7 +7,26 @@ set -euo pipefail
 # Jika DOMAIN tidak diberikan, akan menggunakan default untuk development
 # Atau bisa set via environment variable: DOMAIN=dms.pertamina-pedeve.co.id
 
+# Security: Domain validation function
+validate_domain() {
+  local domain=$1
+  # Domain format: alphanumeric, dots, hyphens, max 253 chars
+  # Reject path traversal characters
+  if [[ "$domain" =~ [\/\\\$\`\;] ]] || [[ "$domain" =~ \.\. ]]; then
+    echo "❌ ERROR: Invalid DOMAIN format. Contains dangerous characters"
+    exit 1
+  fi
+  # Basic domain format validation
+  if [[ ! "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$ ]]; then
+    echo "❌ ERROR: Invalid DOMAIN format"
+    exit 1
+  fi
+}
+
 DOMAIN=${1:-${DOMAIN:-"pedeve-dev.aretaamany.com"}}
+
+# Security: Validate domain
+validate_domain "${DOMAIN}"
 
 echo "🔧 Setting up Nginx for frontend..."
 echo "   Domain: ${DOMAIN}"

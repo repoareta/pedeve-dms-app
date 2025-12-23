@@ -21,6 +21,10 @@ build-errors.log
 uploads/*
 !uploads/README.md
 
+# Test uploads (files generated during tests)
+internal/**/uploads/
+**/uploads/documents/
+
 # Temporary files
 *.tmp
 *.temp

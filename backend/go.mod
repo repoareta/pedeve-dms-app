@@ -136,3 +136,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.5.6 // indirect
 )
+
+// Force all dependencies to use the patched version of golang.org/x/crypto
+// This ensures all transitive dependencies use v0.45.0 which fixes CVE-2025-58181 and CVE-2025-47914
+replace golang.org/x/crypto => golang.org/x/crypto v0.45.0

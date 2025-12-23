@@ -17,6 +17,7 @@ jobs:
       contents: write
       packages: write
       security-events: write
+      pull-requests: write  # Required for SonarCloud PR comments
 
     steps:
       - name: Checkout repository
@@ -145,6 +146,43 @@ jobs:
             exit 1
           fi
           echo "✅ All tests passed!"
+
+      # ===== SONARCLOUD CODE ANALYSIS =====
+      # Menggunakan credentials yang sama dengan backend integration
+      # Fleksibel: bisa menggunakan GitHub Secrets atau default dari sonar-project.properties
+      # 
+      # GitHub Secrets (opsional, akan override sonar-project.properties jika di-set):
+      #   - SONARCLOUD_TOKEN: Token dari SonarCloud (required)
+      #   - SONARCLOUD_PROJECT_KEY: (opsional) Project key, format: organization_project-key
+      #   - SONARCLOUD_ORGANIZATION: (opsional) Organization name
+      #
+      # Priority: GitHub Secrets > sonar-project.properties
+      - name: Prepare SonarCloud args
+        id: sonar-args
+        if: ${{ secrets.SONARCLOUD_TOKEN != '' }}
+        run: |
+          ARGS=""
+          if [ -n "${{ secrets.SONARCLOUD_PROJECT_KEY }}" ]; then
+            ARGS="$ARGS -Dsonar.projectKey=${{ secrets.SONARCLOUD_PROJECT_KEY }}"
+          fi
+          if [ -n "${{ secrets.SONARCLOUD_ORGANIZATION }}" ]; then
+            ARGS="$ARGS -Dsonar.organization=${{ secrets.SONARCLOUD_ORGANIZATION }}"
+          fi
+          echo "args=$ARGS" >> $GITHUB_OUTPUT
+          echo "SonarCloud args: $ARGS"
+
+      - name: SonarCloud Scan
+        if: ${{ secrets.SONARCLOUD_TOKEN != '' }}
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
+        with:
+          projectBaseDir: backend
+          # Override project key dan organization jika ada di GitHub Secrets
+          # Jika tidak di-set, akan menggunakan default dari sonar-project.properties
+          args: ${{ steps.sonar-args.outputs.args }}
+        continue-on-error: true  # Don't fail pipeline on code quality issues, just report
 
       - name: Compute image metadata
         id: meta

@@ -395,22 +395,6 @@ const loadNotifications = async () => {
     // Extract notifications dari inbox response
     const notifs = notifsInbox.data || []
     
-    // Debug: Log semua notifikasi yang diterima untuk superadmin
-    if (authStore.user?.role?.toLowerCase() === 'superadmin' || authStore.user?.role?.toLowerCase() === 'administrator') {
-      const unreadCount = notifs.filter(n => !n.is_read).length
-      console.log(`[PushNotification] Superadmin/Administrator - Total notifications received: ${notifs.length}, Unread: ${unreadCount}, UnreadCount from API: ${count}`)
-      if (notifs.length > 0) {
-        console.log(`[PushNotification] Sample notifications (first 5):`, 
-          notifs.slice(0, 5).map(n => ({ 
-            id: n.id, 
-            title: n.title, 
-            type: n.type,
-            is_read: n.is_read,
-            user_id: n.user_id
-          }))
-        )
-      }
-    }
     
     // Notifikasi yang diterima dari API sudah filtered unread_only: true, jadi semua seharusnya unread
     // Tapi tetap filter untuk safety
@@ -473,17 +457,6 @@ const loadNotifications = async () => {
         return true
       })
       
-      // Debug: Log semua notifikasi yang akan ditampilkan untuk superadmin
-      if (authStore.user?.role?.toLowerCase() === 'superadmin' || authStore.user?.role?.toLowerCase() === 'administrator') {
-        console.log(`[PushNotification] Superadmin/Administrator - Unresolved notifications: ${unresolvedNotifications.length}`, 
-          unresolvedNotifications.map(n => ({ 
-            id: n.id, 
-            title: n.title, 
-            type: n.type,
-            is_read: n.is_read
-          }))
-        )
-      }
       
       // Tampilkan push notification untuk notifikasi yang belum ditindak lanjuti
       // Jangan skip notifikasi yang sudah pernah ditampilkan - tampilkan lagi jika masih belum ditindak lanjuti
@@ -492,17 +465,6 @@ const loadNotifications = async () => {
         const documentExpiryNotifs = unresolvedNotifications.filter(n => n.type === 'document_expiry')
         const otherNotifs = unresolvedNotifications.filter(n => n.type !== 'document_expiry')
         
-        // Debug: Log semua notifikasi document_expiry untuk memastikan semua masuk
-        if (documentExpiryNotifs.length > 0) {
-          console.log(`[PushNotification] Found ${documentExpiryNotifs.length} document_expiry notifications:`, 
-            documentExpiryNotifs.map(n => ({ 
-              id: n.id, 
-              title: n.title, 
-              is_read: n.is_read,
-              type: n.type 
-            }))
-          )
-        }
         
         // PENTING: Tampilkan SEMUA notifikasi document_expiry (baik sudah expired maupun akan expired)
         // Jangan batasi hanya 5, karena kita perlu menampilkan semua document_expiry sebagai push notification

@@ -11,8 +11,52 @@ set -euo pipefail
 #   - CORS_ORIGIN: CORS origin (default: dev domain)
 #   - DISABLE_RATE_LIMIT: disable rate limit (default: "false" - rate limit aktif untuk testing)
 
+# Security: Input validation functions
+validate_project_id() {
+  local project_id=$1
+  # GCP project ID: lowercase letters, numbers, hyphens, max 30 chars
+  if [[ ! "$project_id" =~ ^[a-z0-9-]{1,30}$ ]]; then
+    echo "❌ ERROR: Invalid PROJECT_ID format. Must be lowercase alphanumeric with hyphens, max 30 chars"
+    exit 1
+  fi
+}
+
+validate_docker_image() {
+  local image=$1
+  # Docker image: alphanumeric, slash, colon, dash, underscore, dot
+  if [[ ! "$image" =~ ^[a-zA-Z0-9._/-]+:[a-zA-Z0-9._-]+$ ]] && [[ ! "$image" =~ ^[a-zA-Z0-9._/-]+$ ]]; then
+    echo "❌ ERROR: Invalid BACKEND_IMAGE format"
+    exit 1
+  fi
+  # Reject dangerous characters
+  if [[ "$image" =~ [\;\|\&\`\$\(\)] ]]; then
+    echo "❌ ERROR: BACKEND_IMAGE contains dangerous characters"
+    exit 1
+  fi
+}
+
+validate_secret_name() {
+  local secret_name=$1
+  # Secret name: alphanumeric, underscore, dash only
+  if [[ ! "$secret_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "❌ ERROR: Invalid secret name format"
+    exit 1
+  fi
+}
+
+# Validate inputs
+if [ $# -lt 2 ]; then
+  echo "❌ ERROR: Missing required arguments"
+  echo "Usage: $0 <PROJECT_ID> <BACKEND_IMAGE>"
+  exit 1
+fi
+
 PROJECT_ID=$1
 BACKEND_IMAGE=$2
+
+# Security: Validate inputs
+validate_project_id "${PROJECT_ID}"
+validate_docker_image "${BACKEND_IMAGE}"
 
 # Set defaults untuk development
 DB_SECRET_SUFFIX=${DB_SECRET_SUFFIX:-""}
@@ -29,7 +73,7 @@ if ! command -v docker &> /dev/null; then
   echo "📦 Installing Docker..."
   curl -fsSL https://get.docker.com -o get-docker.sh
   sudo sh get-docker.sh
-  sudo usermod -aG docker $USER || true
+  sudo usermod -aG docker "${USER}" || true
   rm -f get-docker.sh
 fi
 
@@ -159,8 +203,18 @@ echo "   Project: ${PROJECT_ID}"
 # Function to get secret with fallback
 get_secret() {
   local secret_name=$1
+  
+  # Security: Validate secret name
+  validate_secret_name "${secret_name}"
+  
   local secret_name_with_suffix="${secret_name}${DB_SECRET_SUFFIX}"
   local value=""
+  
+  # Security: Validate secret_name_with_suffix
+  if [[ ! "${secret_name_with_suffix}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "❌ ERROR: Invalid secret name with suffix format" >&2
+    return 1
+  fi
   
   # Try with suffix first (if suffix is not empty)
   if [ -n "${DB_SECRET_SUFFIX}" ]; then
@@ -169,7 +223,8 @@ get_secret() {
     local temp_output=$(mktemp)
     local temp_error=$(mktemp)
     
-    if gcloud secrets versions access latest --secret=${secret_name_with_suffix} --project=${PROJECT_ID} >"${temp_output}" 2>"${temp_error}"; then
+    # Security: Quote all variables in gcloud command
+    if gcloud secrets versions access latest --secret="${secret_name_with_suffix}" --project="${PROJECT_ID}" >"${temp_output}" 2>"${temp_error}"; then
       if [ -s "${temp_output}" ]; then
         value=$(cat "${temp_output}")
         rm -f "${temp_output}" "${temp_error}"
@@ -197,7 +252,8 @@ get_secret() {
     local temp_output=$(mktemp)
     local temp_error=$(mktemp)
     
-    if gcloud secrets versions access latest --secret=${secret_name} --project=${PROJECT_ID} >"${temp_output}" 2>"${temp_error}"; then
+    # Security: Quote all variables in gcloud command
+    if gcloud secrets versions access latest --secret="${secret_name}" --project="${PROJECT_ID}" >"${temp_output}" 2>"${temp_error}"; then
       if [ -s "${temp_output}" ]; then
         value=$(cat "${temp_output}")
         rm -f "${temp_output}" "${temp_error}"

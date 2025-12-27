@@ -83,6 +83,10 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+      - name: Type-check frontend
+        working-directory: frontend
+        run: npm run type-check
+
       - name: Build frontend static files
         working-directory: frontend
         env:
@@ -237,7 +241,7 @@ jobs:
       # Jadi kita hanya scan backend image saja
       - name: Run Trivy vulnerability scanner on backend image
         id: trivy-backend
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.29.0
         with:
           image-ref: ${{ steps.build-backend.outputs.image }}
           format: 'sarif'
@@ -342,7 +346,7 @@ jobs:
 
       - name: Create GitHub Release
         if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ github.ref_name }}
           body_path: CHANGELOG.md

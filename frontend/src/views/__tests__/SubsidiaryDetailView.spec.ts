@@ -208,9 +208,6 @@ describe('SubsidiaryDetailView - Logic Tests', () => {
   describe('Financial Data Loading Logic', () => {
     it('should handle financial data loading', async () => {
       // Test financial data loading
-      const companyId = 'company-123'
-      const period = '2024-01'
-
       const loadFinancialData = async () => {
         return {
           revenue: 1000000,
@@ -219,7 +216,7 @@ describe('SubsidiaryDetailView - Logic Tests', () => {
         }
       }
 
-      const result = await loadFinancialData(companyId, period) as { revenue: number; opex: number; npat: number }
+      const result = await loadFinancialData() as { revenue: number; opex: number; npat: number }
 
       expect(result.revenue).toBe(1000000)
       expect(result.opex).toBe(500000)

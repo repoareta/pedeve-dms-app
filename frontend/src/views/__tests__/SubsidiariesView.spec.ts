@@ -143,7 +143,7 @@ describe('SubsidiariesView - Logic Tests', () => {
       const searchText = ''
 
       const filtered = companies.filter(company =>
-        searchText === '' || company.name.toLowerCase().includes(searchText.toLowerCase())
+        searchText === '' || ((company.name as string | undefined)?.toLowerCase() ?? '').includes((searchText as string).toLowerCase())
       )
 
       expect(filtered.length).toBe(2)

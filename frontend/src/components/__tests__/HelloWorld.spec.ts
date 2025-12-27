@@ -19,7 +19,7 @@ describe('HelloWorld - Logic Tests', () => {
       // Test empty message
       const msg = ''
 
-      const isValid = !!msg && msg.length > 0
+      const isValid = !!msg && (msg as string).length > 0
 
       expect(isValid).toBe(false)
     })

@@ -219,7 +219,7 @@ describe('SubsidiaryDetailView - Logic Tests', () => {
         }
       }
 
-      const result = await loadFinancialData(companyId, period)
+      const result = await loadFinancialData(companyId, period) as { revenue: number; opex: number; npat: number }
 
       expect(result.revenue).toBe(1000000)
       expect(result.opex).toBe(500000)

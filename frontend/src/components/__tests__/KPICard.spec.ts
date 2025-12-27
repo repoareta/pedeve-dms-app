@@ -29,7 +29,7 @@ describe('KPICard - Logic Tests', () => {
         return data
       }
 
-      const effectiveChartData = chartData && chartData.length > 0 ? chartData : generateFallback()
+      const effectiveChartData: number[] = chartData && (chartData as number[]).length > 0 ? (chartData as number[]) : generateFallback()
 
       expect(effectiveChartData.length).toBe(10)
       expect(effectiveChartData[0]).toBeGreaterThanOrEqual(30)
@@ -127,7 +127,7 @@ describe('KPICard - Logic Tests', () => {
       // Test decrease color
       const changeType = 'decrease'
 
-      const chartColor = changeType === 'increase' ? '#52c41a' : '#ff4d4f'
+      const chartColor: string = (changeType as string) === 'increase' ? '#52c41a' : '#ff4d4f'
 
       expect(chartColor).toBe('#ff4d4f')
     })

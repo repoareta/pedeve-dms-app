@@ -27,7 +27,8 @@ describe('ReportFormView - Logic Tests', () => {
       // Test create mode detection
       const routeParams = {}
 
-      const isEditMode = !!routeParams.id
+      const routeParamsTyped = routeParams as { id?: string }
+      const isEditMode: boolean = !!routeParamsTyped.id
 
       expect(isEditMode).toBe(false)
     })
@@ -272,7 +273,7 @@ describe('ReportFormView - Logic Tests', () => {
       }] : []
 
       expect(fileList.length).toBe(1)
-      expect(fileList[0].name).toBe('file.pdf')
+      expect(fileList[0]?.name).toBe('file.pdf')
     })
   })
 })

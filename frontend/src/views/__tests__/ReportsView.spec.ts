@@ -143,12 +143,12 @@ describe('ReportsView - Logic Tests', () => {
       const searchText = 'Company'
 
       const filtered = subsidiaries.filter(sub =>
-        sub.company.name.toLowerCase().includes(searchText.toLowerCase())
+        (sub.company.name as string).toLowerCase().includes(searchText.toLowerCase())
       )
 
       expect(filtered.length).toBe(2)
-      expect(filtered[0].company.name).toBe('Company A')
-      expect(filtered[1].company.name).toBe('Company B')
+      expect(filtered[0]?.company.name).toBe('Company A')
+      expect(filtered[1]?.company.name).toBe('Company B')
     })
 
     it('should handle empty search text', () => {
@@ -160,7 +160,7 @@ describe('ReportsView - Logic Tests', () => {
       const searchText = ''
 
       const filtered = subsidiaries.filter(sub =>
-        searchText === '' || sub.company.name.toLowerCase().includes(searchText.toLowerCase())
+        searchText === '' || ((sub.company.name as string | undefined)?.toLowerCase() ?? '').includes((searchText as string).toLowerCase())
       )
 
       expect(filtered.length).toBe(2)
@@ -180,8 +180,8 @@ describe('ReportsView - Logic Tests', () => {
       )
 
       expect(filtered.length).toBe(2)
-      expect(filtered[0].company.id).toBe('1')
-      expect(filtered[1].company.id).toBe('3')
+      expect(filtered[0]?.company.id).toBe('1')
+      expect(filtered[1]?.company.id).toBe('3')
     })
   })
 

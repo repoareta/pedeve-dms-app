@@ -68,9 +68,9 @@ describe('DocumentDetailView - ExcelJS Conversion Tests', () => {
         let maxCol = 0
 
         ws.eachRow((row) => {
-          row.eachCell((cell) => {
-            if (cell.colNumber > maxCol) {
-              maxCol = cell.colNumber
+          row.eachCell((cell, colNumber) => {
+            if (colNumber > maxCol) {
+              maxCol = colNumber
             }
           })
         })

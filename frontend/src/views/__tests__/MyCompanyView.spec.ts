@@ -184,9 +184,9 @@ describe('MyCompanyView - Logic Tests', () => {
         a.company.name.localeCompare(b.company.name)
       )
 
-      expect(sorted[0].company.name).toBe('Company A')
-      expect(sorted[1].company.name).toBe('Company B')
-      expect(sorted[2].company.name).toBe('Company C')
+      expect(sorted[0]?.company.name).toBe('Company A')
+      expect(sorted[1]?.company.name).toBe('Company B')
+      expect(sorted[2]?.company.name).toBe('Company C')
     })
   })
 
@@ -268,7 +268,7 @@ describe('MyCompanyView - Logic Tests', () => {
       const searchText = ''
 
       const filtered = data.filter(item =>
-        searchText === '' || item.name.toLowerCase().includes(searchText.toLowerCase())
+        searchText === '' || ((item.name as string | undefined)?.toLowerCase() ?? '').includes((searchText as string).toLowerCase())
       )
 
       expect(filtered.length).toBe(2)

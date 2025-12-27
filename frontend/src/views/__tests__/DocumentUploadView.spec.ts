@@ -29,7 +29,8 @@ describe('DocumentUploadView - Logic Tests', () => {
       // Test create mode detection
       const routeParams = {}
 
-      const isEditMode = !!routeParams.id
+      const routeParamsTyped = routeParams as { id?: string }
+      const isEditMode: boolean = !!routeParamsTyped.id
 
       expect(isEditMode).toBe(false)
     })

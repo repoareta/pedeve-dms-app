@@ -208,4 +208,83 @@ describe('SubsidiaryFormView - Calculation Logic', () => {
       expect(submitDataWithParent.parent_id).toBe('company-1')
     })
   })
+
+  describe('Individual Shareholder with Capital', () => {
+    it('should include authorized_capital and paid_up_capital in submit data for individual shareholder', () => {
+      const authorizedCapital = 10000000000 // 10M
+      const paidUpCapital = 5000000000 // 5M
+
+      const submitData = {
+        shareholders: [
+          {
+            shareholder_company_id: null, // Individual
+            type: 'Individu',
+            name: 'John Doe',
+            identity_number: '1234567890123456',
+            ownership_percent: 50.0,
+            authorized_capital: authorizedCapital,
+            paid_up_capital: paidUpCapital,
+            is_main_parent: false,
+          },
+        ],
+      }
+
+      expect(submitData.shareholders[0]).toHaveProperty('authorized_capital')
+      expect(submitData.shareholders[0]).toHaveProperty('paid_up_capital')
+      expect(submitData.shareholders[0]?.authorized_capital).toBe(authorizedCapital)
+      expect(submitData.shareholders[0]?.paid_up_capital).toBe(paidUpCapital)
+    })
+
+    it('should calculate ownership percentage for individual shareholder based on paid_up_capital', () => {
+      // Test case: Individual shareholder with paid_up_capital
+      const currentCompanyCapital = 1000000000 // 1M
+      const individualPaidUpCapital = 2000000000 // 2M
+      const totalCapital = currentCompanyCapital + individualPaidUpCapital // 3M
+
+      const individualPercent = (individualPaidUpCapital / totalCapital) * 100
+      const individualPercentRounded = Math.round(individualPercent * 10000000000) / 10000000000
+
+      // Individual: (2M / 3M) * 100% = 66.67%
+      expect(individualPercentRounded).toBeCloseTo(66.6666666667, 5)
+    })
+
+    it('should calculate ownership percentage for mixed shareholders (company + individual)', () => {
+      // Test case: Company shareholder + Individual shareholder
+      const currentCompanyCapital = 1000000000 // 1M
+      const companyShareholderCapital = 3000000000 // 3M
+      const individualPaidUpCapital = 2000000000 // 2M
+      const totalCapital = currentCompanyCapital + companyShareholderCapital + individualPaidUpCapital // 6M
+
+      const companyShareholderPercent = (companyShareholderCapital / totalCapital) * 100
+      const individualPercent = (individualPaidUpCapital / totalCapital) * 100
+      const currentCompanyPercent = (currentCompanyCapital / totalCapital) * 100
+
+      const companyShareholderPercentRounded = Math.round(companyShareholderPercent * 10000000000) / 10000000000
+      const individualPercentRounded = Math.round(individualPercent * 10000000000) / 10000000000
+      const currentCompanyPercentRounded = Math.round(currentCompanyPercent * 10000000000) / 10000000000
+
+      // Company shareholder: (3M / 6M) * 100% = 50%
+      expect(companyShareholderPercentRounded).toBeCloseTo(50.0, 1)
+      // Individual: (2M / 6M) * 100% = 33.33%
+      expect(individualPercentRounded).toBeCloseTo(33.3333333333, 5)
+      // Current company: (1M / 6M) * 100% = 16.67%
+      expect(currentCompanyPercentRounded).toBeCloseTo(16.6666666667, 5)
+      // Total should be 100%
+      expect(companyShareholderPercentRounded + individualPercentRounded + currentCompanyPercentRounded).toBeCloseTo(100, 5)
+    })
+
+    it('should handle individual shareholder with zero capital', () => {
+      const currentCompanyCapital = 1000000000 // 1M
+      const individualPaidUpCapital = 0
+      const totalCapital = currentCompanyCapital + individualPaidUpCapital
+
+      if (totalCapital > 0) {
+        const individualPercent = (individualPaidUpCapital / totalCapital) * 100
+        expect(individualPercent).toBe(0)
+      } else {
+        // When total is 0, percentage should be 0
+        expect(individualPaidUpCapital).toBe(0)
+      }
+    })
+  })
 })

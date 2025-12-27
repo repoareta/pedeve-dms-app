@@ -207,6 +207,19 @@ func main() {
 
 	protected.Get("/companies/:company_id/performance/export/excel", financialReportHandler.ExportPerformanceExcel) // Export performance Excel
 
+	// Route companies (dilindungi)
+	companyHandler := http.NewCompanyHandler(usecase.NewCompanyUseCase())
+	protected.Get("/companies", companyHandler.GetAllCompanies)                  // List all companies
+	protected.Post("/companies", companyHandler.CreateCompany)                   // Create company
+	protected.Post("/companies/full", companyHandler.CreateCompanyFull)          // Create company with full data
+	// CRITICAL: More specific routes with path segments MUST come before general routes with :id parameter
+	// Fiber matches routes in order, so /companies/:id/status and /companies/:id/full must be before /companies/:id
+	protected.Put("/companies/:id/status", companyHandler.UpdateCompanyStatus)   // Update company status (activate/deactivate)
+	protected.Put("/companies/:id/full", companyHandler.UpdateCompanyFull)       // Update company with full data
+	protected.Get("/companies/:id", companyHandler.GetCompany)                   // Get company by ID
+	protected.Put("/companies/:id", companyHandler.UpdateCompany)                // Update company
+	protected.Delete("/companies/:id", companyHandler.DeleteCompany)             // Delete company (soft delete)
+
 	// Swagger
 	app.Get("/swagger/*", swagger.HandlerDefault)
 

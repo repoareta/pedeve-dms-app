@@ -49,7 +49,7 @@ func main() {
 	fmt.Println()
 
 	// Get all companies (excluding holding/level 0)
-	allCompanies, err := companyRepo.GetAll()
+	allCompanies, err := companyRepo.GetAll(false)
 	if err != nil {
 		fmt.Printf("❌ Failed to get companies: %v\n", err)
 		return

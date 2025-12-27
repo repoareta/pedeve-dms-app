@@ -42,9 +42,49 @@
         <!-- Subsidiary Cards Grid -->
         <a-row :gutter="[24, 24]" v-if="viewMode === 'grid' && !companiesLoading && filteredCompanies.length > 0">
           <a-col v-for="company in paginatedCompanies" :key="company.id" :xs="24" :sm="12" :md="12" :lg="8" :xl="6">
-            <div class="subsidiary-card" @click="handleViewDetail(company.id)">
+            <div class="subsidiary-card" :class="{ 'inactive-company': ENABLE_ACTIVATE_DEACTIVATE_FEATURE && !company.is_active }">
+            <!-- Card Actions Dropdown -->
+            <div class="card-actions" v-if="hasAnyMenuOption" @click.stop>
+              <a-dropdown>
+                <a-button type="text" size="small" class="card-action-button">
+                  <IconifyIcon icon="mdi:dots-vertical" width="20" />
+                </a-button>
+                <template #overlay>
+                  <a-menu @click="(e: { key: string }) => handleCardMenuClick(e.key, company)">
+                    <a-menu-item key="view">
+                      <IconifyIcon icon="mdi:eye" width="16" style="margin-right: 8px;" />
+                      Lihat Detail
+                    </a-menu-item>
+                    <a-menu-item v-if="canEdit" key="edit">
+                      <IconifyIcon icon="mdi:pencil" width="16" style="margin-right: 8px;" />
+                      Edit
+                    </a-menu-item>
+                    <a-menu-item v-if="canAssignRole" key="assign-role">
+                      <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
+                      Assign Role
+                    </a-menu-item>
+                    <a-menu-divider v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator) && (canEdit || canAssignRole)" />
+                    <a-menu-item 
+                      v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator)" 
+                      :key="company.is_active ? 'deactivate' : 'activate'"
+                      :danger="company.is_active"
+                      @click.stop="() => handleToggleCompanyStatusFromMenu(company.id, company.name, company.is_active)"
+                    >
+                      <IconifyIcon :icon="company.is_active ? 'mdi:power-off' : 'mdi:power-on'" width="16" style="margin-right: 8px;" />
+                      {{ company.is_active ? 'Nonaktifkan' : 'Aktifkan' }}
+                    </a-menu-item>
+                    <a-menu-divider v-if="canDelete && (canEdit || canAssignRole || (ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator)))" />
+                    <a-menu-item v-if="canDelete" key="delete" danger>
+                      <IconifyIcon icon="mdi:delete" width="16" style="margin-right: 8px;" />
+                      Hapus
+                    </a-menu-item>
+                  </a-menu>
+                </template>
+              </a-dropdown>
+            </div>
+            
             <!-- Card Header -->
-            <div class="card-header">
+            <div class="card-header" @click="handleViewDetail(company.id)">
               <div class="company-icon">
                 <img v-if="getCompanyLogo(company)" :src="getCompanyLogo(company)" :alt="company.name"
                   class="logo-image" />
@@ -53,7 +93,12 @@
                 </div>
               </div>
               <div class="company-info">
-                <h3 class="company-name">{{ company.name }}</h3>
+                <h3 class="company-name">
+                  {{ company.name }}
+                  <a-tag v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && !company.is_active" color="red" style="margin-left: 8px; font-size: 10px;">
+                    Nonaktif
+                  </a-tag>
+                </h3>
                 <p class="company-reg">No Reg {{ company.nib || 'N/A' }}</p>
               </div>
             </div>
@@ -62,7 +107,7 @@
             <div class="card-divider"></div>
 
             <!-- Card Content -->
-            <div class="card-content">
+            <div class="card-content" @click="handleViewDetail(company.id)">
               <div class="latest-month-header">
                 <a-popover :title="getPopoverTitle(company.id)" placement="top" trigger="hover">
                   <template #content>
@@ -131,7 +176,6 @@
               :pagination="{
                 current: tablePagination.current,
                 pageSize: tablePagination.pageSize,
-                total: tablePagination.total,
                 showSizeChanger: true,
                 showTotal: (total: number) => `Total ${total} subsidiaries`,
                 pageSizeOptions: ['10', '20', '50', '100'],
@@ -163,8 +207,16 @@
                   </a-tag>
                 </template>
                 <template v-if="column.key === 'status'">
-                  <a-tag :color="record.is_active ? 'green' : 'red'">
-                    {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
+                  <a-switch
+                    v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator)"
+                    :checked="record.is_active"
+                    :loading="statusUpdatingIds.has(record.id)"
+                    @change="(checked: boolean) => handleToggleCompanyStatus(record.id, record.name, checked)"
+                    checked-children="Aktif"
+                    un-checked-children="Nonaktif"
+                  />
+                  <a-tag v-else-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE" :color="record.is_active ? 'green' : 'red'">
+                    {{ record.is_active ? 'Aktif' : 'Nonaktif' }}
                   </a-tag>
                 </template>
                 <template v-if="column.key === 'actions'">
@@ -187,7 +239,17 @@
                           <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
                           Assign Role
                         </a-menu-item>
-                        <a-menu-divider v-if="canDelete && (canEdit || canAssignRole)" />
+                        <a-menu-divider v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator) && (canEdit || canAssignRole)" />
+                        <a-menu-item 
+                          v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator)" 
+                          :key="record.is_active ? 'deactivate' : 'activate'"
+                          :danger="record.is_active"
+                          @click.stop="() => handleToggleCompanyStatusFromMenu(record.id, record.name, record.is_active)"
+                        >
+                          <IconifyIcon :icon="record.is_active ? 'mdi:power-off' : 'mdi:power-on'" width="16" style="margin-right: 8px;" />
+                          {{ record.is_active ? 'Nonaktifkan' : 'Aktifkan' }}
+                        </a-menu-item>
+                        <a-menu-divider v-if="canDelete && (canEdit || canAssignRole || (ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator)))" />
                         <a-menu-item v-if="canDelete" key="delete" danger @click="handleDeleteCompany(record.id)">
                           <IconifyIcon icon="mdi:delete" width="16" style="margin-right: 8px;" />
                           Hapus
@@ -305,8 +367,16 @@
                   <span v-else class="text-muted">-</span>
                 </template>
                 <template v-if="column.key === 'status'">
-                  <a-tag :color="record.is_active ? 'green' : 'red'">
-                    {{ record.is_active ? 'Aktif' : 'Tidak Aktif' }}
+                  <a-switch
+                    v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator)"
+                    :checked="record.is_active"
+                    :loading="statusUpdatingIds.has(record.id)"
+                    @change="(checked: boolean) => handleToggleCompanyStatus(record.id, record.name, checked)"
+                    checked-children="Aktif"
+                    un-checked-children="Nonaktif"
+                  />
+                  <a-tag v-else-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE" :color="record.is_active ? 'green' : 'red'">
+                    {{ record.is_active ? 'Aktif' : 'Nonaktif' }}
                   </a-tag>
                 </template>
                 <template v-if="column.key === 'action'">
@@ -363,6 +433,9 @@ import type { TableColumnsType, TableProps } from 'ant-design-vue'
 const router = useRouter()
 const authStore = useAuthStore()
 
+// Feature flag untuk enable/disable activate/deactivate subsidiary feature
+const ENABLE_ACTIVATE_DEACTIVATE_FEATURE = false
+
 // Computed: Check user roles
 const userRole = computed(() => {
   return authStore.user?.role?.toLowerCase() || ''
@@ -382,6 +455,8 @@ const canDelete = computed(() => isAdmin.value || isSuperAdmin.value || isAdmini
 
 // RBAC: Edit untuk semua role (staff, manager, admin, superadmin, administrator)
 const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value || isAdministrator.value)
+
+const hasAnyMenuOption = computed(() => canEdit.value || canAssignRole.value || canDelete.value || (ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin.value || isAdministrator.value)))
 
 // Note: Actions dropdown always shown because "Lihat Detail" menu is always available
 
@@ -458,8 +533,13 @@ const filteredCompanies = computed(() => {
     )
   }
 
-  // Sort by updated_at (most recent first), fallback to created_at
+  // Sort: active companies first, then by updated_at (most recent first), fallback to created_at
   return filtered.sort((a, b) => {
+    // Active companies come first
+    if (a.is_active && !b.is_active) return -1
+    if (!a.is_active && b.is_active) return 1
+    
+    // Then sort by date (newest first)
     const dateA = new Date(a.updated_at || a.created_at || 0).getTime()
     const dateB = new Date(b.updated_at || b.created_at || 0).getTime()
     return dateB - dateA // Descending order (newest first)
@@ -1130,10 +1210,12 @@ const getIconColor = (name: string): string => {
 const loadCompanies = async () => {
   companiesLoading.value = true
   try {
-    // Superadmin/Administrator melihat semua companies
+    // Superadmin/Administrator melihat semua companies (termasuk yang nonaktif)
     // User lain hanya melihat companies yang di-assign ke mereka
+    // Backend akan selalu include inactive companies in listing
+    // But calculations/aggregations tetap exclude inactive companies
     if (isSuperAdmin.value || isAdministrator.value) {
-      companies.value = await companyApi.getAll()
+      companies.value = await companyApi.getAll(true) // Always include inactive for listing
     } else {
       // Get companies assigned to current user
       const userCompanies = await userApi.getMyCompanies()
@@ -1220,17 +1302,19 @@ const handleViewModeChange = async (mode: 'grid' | 'list') => {
   if (mode === 'list' && companies.value.length === 0) {
     await loadTableData()
   } else if (mode === 'list') {
-    // If companies are already loaded, just update pagination
-    tablePagination.value.total = filteredCompanies.value.length
+    // If companies are already loaded, just reset pagination
+    // Note: Ant Design Table will handle pagination after filtering
     tablePagination.value.current = 1
   }
 }
 
-// Computed untuk table data dengan pagination
+// Computed untuk table data
+// IMPORTANT: Ant Design Table akan melakukan filtering sendiri berdasarkan onFilter di columns
+// Jadi kita gunakan companies.value langsung (semua data), bukan filteredCompanies
+// filteredCompanies hanya untuk search text filter di grid view
+// Ant Design Table akan handle pagination secara internal setelah filtering
 const tableData = computed(() => {
-  const start = (tablePagination.value.current - 1) * tablePagination.value.pageSize
-  const end = start + tablePagination.value.pageSize
-  return filteredCompanies.value.slice(start, end)
+  return companies.value
 })
 
 // Load table data (lazy loading) - hanya set loading state
@@ -1241,9 +1325,8 @@ const loadTableData = async () => {
 
   tableDataLoading.value = true
   try {
-    // Update pagination total
-    tablePagination.value.total = filteredCompanies.value.length
     // Reset to first page
+    // Note: Ant Design Table will handle pagination and total count after filtering
     tablePagination.value.current = 1
   } catch {
     message.error('Gagal memuat data table')
@@ -1252,83 +1335,93 @@ const loadTableData = async () => {
   }
 }
 
-// Watch for changes in filtered companies to update table pagination
-watch([filteredCompanies, viewMode], () => {
+// Watch for changes in companies to reset table pagination
+// Note: Ant Design Table will handle pagination and total count after filtering internally
+watch([companies, viewMode], () => {
   if (viewMode.value === 'list') {
-    tablePagination.value.total = filteredCompanies.value.length
-    // Reset to first page if current page is out of bounds
-    const maxPage = Math.ceil(filteredCompanies.value.length / tablePagination.value.pageSize)
-    if (tablePagination.value.current > maxPage && maxPage > 0) {
-      tablePagination.value.current = 1
-    }
+    // Reset to first page when companies change
+    tablePagination.value.current = 1
   }
 })
 
+
 // Table Columns
-const tableColumns: TableColumnsType = [
-  {
-    title: 'Logo',
-    key: 'logo',
-    width: 80,
-    fixed: 'left',
-  },
-  {
-    title: 'Nama Perusahaan',
-    dataIndex: 'name',
-    key: 'name',
-    sorter: (a: Company, b: Company) => a.name.localeCompare(b.name),
-    width: 250,
-  },
-  {
-    title: 'Kode',
-    dataIndex: 'code',
-    key: 'code',
-    sorter: (a: Company, b: Company) => a.code.localeCompare(b.code),
-    width: 120,
-  },
-  {
-    title: 'NIB',
-    dataIndex: 'nib',
-    key: 'nib',
-    sorter: (a: Company, b: Company) => (a.nib || '').localeCompare(b.nib || ''),
-    width: 150,
-  },
-  {
-    title: 'Tingkat',
-    dataIndex: 'level',
-    key: 'level',
-    sorter: (a: Company, b: Company) => a.level - b.level,
-    width: 150,
-    filters: [
-      { text: 'Holding', value: 0 },
-      { text: 'Level 1', value: 1 },
-      { text: 'Level 2', value: 2 },
-      { text: 'Level 3', value: 3 },
-    ],
-    onFilter: (value: string | number | boolean, record: Company) => {
-      if (typeof value === 'number') {
-        return record.level === value
-      }
-      return false
+const tableColumns = computed<TableColumnsType>(() => {
+  const baseColumns: TableColumnsType = [
+    {
+      title: 'Logo',
+      key: 'logo',
+      width: 80,
+      fixed: 'left',
     },
-  },
-  {
-    title: 'Status',
-    dataIndex: 'is_active',
-    key: 'status',
-    width: 120,
-    filters: [
-      { text: 'Aktif', value: true },
-      { text: 'Tidak Aktif', value: false },
-    ],
-    onFilter: (value: string | number | boolean, record: Company) => {
-      if (typeof value === 'boolean') {
-        return record.is_active === value
-      }
-      return false
+    {
+      title: 'Nama Perusahaan',
+      dataIndex: 'name',
+      key: 'name',
+      sorter: (a: Company, b: Company) => a.name.localeCompare(b.name),
+      width: 250,
     },
-  },
-  {
+    {
+      title: 'Kode',
+      dataIndex: 'code',
+      key: 'code',
+      sorter: (a: Company, b: Company) => a.code.localeCompare(b.code),
+      width: 120,
+    },
+    {
+      title: 'NIB',
+      dataIndex: 'nib',
+      key: 'nib',
+      sorter: (a: Company, b: Company) => (a.nib || '').localeCompare(b.nib || ''),
+      width: 150,
+    },
+    {
+      title: 'Tingkat',
+      dataIndex: 'level',
+      key: 'level',
+      sorter: (a: Company, b: Company) => a.level - b.level,
+      width: 150,
+      filters: [
+        { text: 'Holding', value: 0 },
+        { text: 'Level 1', value: 1 },
+        { text: 'Level 2', value: 2 },
+        { text: 'Level 3', value: 3 },
+      ],
+      onFilter: (value: string | number | boolean, record: Company) => {
+        if (typeof value === 'number') {
+          return record.level === value
+        }
+        return false
+      },
+    },
+  ]
+
+  // Add Status column only if feature is enabled
+  if (ENABLE_ACTIVATE_DEACTIVATE_FEATURE) {
+    baseColumns.push({
+      title: 'Status',
+      dataIndex: 'is_active',
+      key: 'status',
+      width: 150,
+      filters: [
+        { text: 'Aktif', value: true },
+        { text: 'Nonaktif', value: false },
+      ],
+      onFilter: (value: string | number | boolean, record: Company) => {
+        // Ant Design Table passes the filter value directly
+        // Ensure value is boolean
+        const filterValue = typeof value === 'boolean' ? value : Boolean(value)
+        
+        // Ensure record.is_active is a boolean (default to true if undefined)
+        const recordIsActive = record.is_active !== undefined ? Boolean(record.is_active) : true
+        
+        return recordIsActive === filterValue
+      },
+      filterMultiple: false, // Allow only one filter at a time
+    })
+  }
+
+  baseColumns.push({
     title: 'Tanggal Dibuat',
     dataIndex: 'created_at',
     key: 'created_at',
@@ -1347,14 +1440,17 @@ const tableColumns: TableColumnsType = [
         day: 'numeric',
       })
     },
-  },
-  {
+  })
+
+  baseColumns.push({
     title: 'Aksi',
     key: 'actions',
     width: 120,
     fixed: 'right',
-  },
-]
+  })
+
+  return baseColumns
+})
 
 // Table Change Handler
 const handleTableChange: TableProps['onChange'] = (pagination) => {
@@ -1480,6 +1576,62 @@ const handleDeleteCompany = (id: string) => {
       }
     },
   })
+}
+
+// Status updating state
+const statusUpdatingIds = ref<Set<string>>(new Set())
+
+// Handle toggle company status from switch
+const handleToggleCompanyStatus = async (id: string, name: string, newStatus: boolean) => {
+  const actionText = newStatus ? 'mengaktifkan' : 'menonaktifkan'
+  
+  Modal.confirm({
+    title: `${newStatus ? 'Aktifkan' : 'Nonaktifkan'} Subsidiary?`,
+    content: `Apakah Anda yakin ingin ${actionText} subsidiary "${name}"? Subsidiary yang dinonaktifkan tidak akan muncul di perhitungan, dashboard, dan aggregasi data.`,
+    okText: 'Ya',
+    cancelText: 'Batal',
+      onOk: async () => {
+      statusUpdatingIds.value.add(id)
+      try {
+        const updatedCompany = await companyApi.updateStatus(id, newStatus)
+        // Update company in list
+        const index = companies.value.findIndex(c => c.id === id)
+        if (index !== -1) {
+          companies.value[index] = updatedCompany
+        } else {
+          // If company not found in list, reload to ensure data consistency
+          await loadCompanies()
+        }
+        message.success(`Subsidiary berhasil ${actionText}`)
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+        message.error(`Gagal ${actionText} subsidiary: ${axiosError.response?.data?.message || axiosError.message || 'Unknown error'}`)
+        // Reload companies to get correct state
+        await loadCompanies()
+      } finally {
+        statusUpdatingIds.value.delete(id)
+      }
+    },
+  })
+}
+
+// Handle toggle company status from menu
+const handleToggleCompanyStatusFromMenu = async (id: string, name: string, currentStatus: boolean) => {
+  await handleToggleCompanyStatus(id, name, !currentStatus)
+}
+
+// Handle card menu click
+const handleCardMenuClick = (key: string, company: Company) => {
+  if (key === 'view') {
+    handleViewDetail(company.id)
+  } else if (key === 'edit') {
+    handleEditCompany(company.id)
+  } else if (key === 'assign-role') {
+    handleAssignRole(company.id)
+  } else if (key === 'delete') {
+    handleDeleteCompany(company.id)
+  }
+  // activate/deactivate handled directly in menu item with @click
 }
 
 // Assign Role Modal Functions
@@ -1840,6 +1992,15 @@ onActivated(async () => {
 
 /* Cards Grid - Now using Ant Design Row/Col */
 
+.subsidiary-card.inactive-company {
+  opacity: 0.6;
+  border: 1px dashed #d9d9d9;
+}
+
+.subsidiary-card.inactive-company:hover {
+  opacity: 0.8;
+}
+
 .subsidiary-card {
   background: white;
   border-radius: 12px;
@@ -1850,11 +2011,31 @@ onActivated(async () => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  position: relative;
 }
 
 .subsidiary-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.card-actions {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+}
+
+.card-action-button {
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(4px);
+}
+
+.subsidiary-card:hover .card-action-button {
+  opacity: 1;
+  background: rgba(255, 255, 255, 1);
 }
 
 /* Card Header */

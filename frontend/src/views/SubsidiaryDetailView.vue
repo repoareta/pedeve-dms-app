@@ -76,7 +76,16 @@
                         <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
                         Assign Role Pengurus
                       </a-menu-item>
-                      <a-menu-divider v-if="canDelete && (canEdit || canAssignRole)" />
+                      <a-menu-divider v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdmin) && (canEdit || canAssignRole)" />
+                      <a-menu-item 
+                        v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdmin) && company" 
+                        :key="company.is_active ? 'deactivate' : 'activate'"
+                        :danger="company.is_active"
+                      >
+                        <IconifyIcon :icon="company.is_active ? 'mdi:power-off' : 'mdi:power-on'" width="16" style="margin-right: 8px;" />
+                        {{ company.is_active ? 'Nonaktifkan Subsidiary' : 'Aktifkan Subsidiary' }}
+                      </a-menu-item>
+                      <a-menu-divider v-if="canDelete && (canEdit || canAssignRole || (ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdmin)))" />
                       <a-menu-item v-if="canDelete" key="delete" danger>
                         <IconifyIcon icon="mdi:delete" width="16" style="margin-right: 8px;" />
                         Hapus Profile Perusahaan
@@ -105,31 +114,63 @@
               <div class="performance-content">
                 <!-- Filter Periode dengan RangePicker -->
                 <a-card class="filter-card" :bordered="false" style="margin-bottom: 24px;">
-                  <a-space>
-                    <span style="font-weight: 500;">Periode:</span>
-                    <a-range-picker
-                      v-model:value="periodRange"
-                      picker="month"
-                      format="MMMM YYYY"
-                      :placeholder="['Dari Bulan', 'Sampai Bulan']"
-                      style="width: 400px;"
-                      @change="handleFinancialPeriodChange"
-                    />
-                    <a-button type="primary" @click="handleFinancialPeriodChange" :loading="financialComparisonLoading">
-                      <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
-                      Refresh
-                    </a-button>
+                  <a-space direction="vertical" style="width: 100%;">
+                    <a-space>
+                      <span style="font-weight: 500;">Periode 1:</span>
+                      <a-range-picker
+                        v-model:value="periodRange"
+                        picker="month"
+                        format="MMMM YYYY"
+                        :placeholder="['Dari Bulan', 'Sampai Bulan']"
+                        style="width: 400px;"
+                        @change="handleFinancialPeriodChange"
+                      />
+                      <a-button 
+                        v-if="ENABLE_COMPARISON_FEATURE"
+                        :type="compareMode ? 'default' : 'primary'" 
+                        @click="toggleCompareMode"
+                      >
+                        <IconifyIcon icon="mdi:compare" width="16" style="margin-right: 4px;" />
+                        {{ compareMode ? 'Batal Compare' : 'Compare' }}
+                      </a-button>
+                      <a-button type="primary" @click="handleFinancialPeriodChange" :loading="financialComparisonLoading">
+                        <IconifyIcon icon="mdi:refresh" width="16" style="margin-right: 4px;" />
+                        Refresh
+                      </a-button>
+                    </a-space>
+                    
+                    <!-- Periode 2 untuk Compare -->
+                    <a-space v-if="ENABLE_COMPARISON_FEATURE && compareMode" style="margin-top: 12px;">
+                      <span style="font-weight: 500;">Periode 2:</span>
+                      <a-range-picker
+                        v-model:value="periodRange2"
+                        picker="month"
+                        format="MMMM YYYY"
+                        :placeholder="['Dari Bulan', 'Sampai Bulan']"
+                        style="width: 400px;"
+                        @change="handleFinancialPeriodChange"
+                      />
+                    </a-space>
+                    
+                    <div style="margin-top: 8px; color: #666; font-size: 12px;">
+                      <IconifyIcon icon="mdi:information-outline" width="14" style="margin-right: 4px;" />
+                      <span v-if="periodRange && periodRange[0] && periodRange[1]">
+                        Data ditampilkan apa adanya dari input: RKAP (nilai tahunan) dan Realisasi (nilai bulanan).
+                        <template v-if="!ENABLE_COMPARISON_FEATURE || !compareMode">
+                          Periode: {{ periodRange[0].format('MMMM YYYY') }} - {{ periodRange[1].format('MMMM YYYY') }}.
+                        </template>
+                        <template v-else-if="ENABLE_COMPARISON_FEATURE && compareMode">
+                          Periode 1: {{ periodRange[0].format('MMMM YYYY') }} - {{ periodRange[1].format('MMMM YYYY') }}.
+                          <span v-if="periodRange2 && periodRange2[0] && periodRange2[1]">
+                            Periode 2: {{ periodRange2[0].format('MMMM YYYY') }} - {{ periodRange2[1].format('MMMM YYYY') }}.
+                          </span>
+                        </template>
+                      </span>
+                      <span v-else>
+                        Silakan pilih periode untuk melihat data.
+                      </span>
+                    </div>
                   </a-space>
-                  <div style="margin-top: 8px; color: #666; font-size: 12px;">
-                    <IconifyIcon icon="mdi:information-outline" width="14" style="margin-right: 4px;" />
-                    <span v-if="periodRange && periodRange[0] && periodRange[1]">
-                      Data ditampilkan apa adanya dari input: RKAP (nilai tahunan) dan Realisasi (nilai bulanan). 
-                      Periode: {{ periodRange[0].format('MMMM YYYY') }} - {{ periodRange[1].format('MMMM YYYY') }}.
-                    </span>
-                    <span v-else>
-                      Silakan pilih periode untuk melihat data.
-                    </span>
-                  </div>
                 </a-card>
 
                 <a-spin :spinning="financialComparisonLoading">
@@ -169,11 +210,34 @@
                             <template v-if="column.key === 'month'">
                               <strong>{{ record.month }}</strong>
                             </template>
-                            <template v-else-if="column.key?.endsWith('_rkap')">
+                            <template v-else-if="column.key?.endsWith('_rkap') && !column.key?.endsWith('_rkap_p2')">
                               {{ getCellValue(column.key, record, balanceSheetItems, 'rkap') }}
                             </template>
-                            <template v-else-if="column.key?.endsWith('_realisasi')">
+                            <template v-else-if="column.key?.endsWith('_realisasi') && !column.key?.endsWith('_realisasi_p2')">
                               {{ getCellValue(column.key, record, balanceSheetItems, 'realisasi') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_rkap_p2')">
+                              {{ getCellValue(column.key, record, balanceSheetItems, 'rkap_p2') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_realisasi_p2')">
+                              {{ getCellValue(column.key, record, balanceSheetItems, 'realisasi_p2') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_difference')">
+                              <span :style="{ color: getComparisonCellValue(column.key, record, balanceSheetItems).direction === 'up' ? '#52c41a' : getComparisonCellValue(column.key, record, balanceSheetItems).direction === 'down' ? '#ff4d4f' : '#666' }">
+                                <IconifyIcon 
+                                  v-if="getComparisonCellValue(column.key, record, balanceSheetItems).direction === 'up'"
+                                  icon="mdi:trending-up" 
+                                  width="16" 
+                                  style="margin-right: 4px; vertical-align: middle;" 
+                                />
+                                <IconifyIcon 
+                                  v-else-if="getComparisonCellValue(column.key, record, balanceSheetItems).direction === 'down'"
+                                  icon="mdi:trending-down" 
+                                  width="16" 
+                                  style="margin-right: 4px; vertical-align: middle;" 
+                                />
+                                {{ getComparisonCellValue(column.key, record, balanceSheetItems).value }}
+                              </span>
                             </template>
                           </template>
                         </a-table>
@@ -217,11 +281,34 @@
                             <template v-if="column.key === 'month'">
                               <strong>{{ record.month }}</strong>
                             </template>
-                            <template v-else-if="column.key?.endsWith('_rkap')">
+                            <template v-else-if="column.key?.endsWith('_rkap') && !column.key?.endsWith('_rkap_p2')">
                               {{ getCellValue(column.key, record, profitLossItems, 'rkap') }}
                             </template>
-                            <template v-else-if="column.key?.endsWith('_realisasi')">
+                            <template v-else-if="column.key?.endsWith('_realisasi') && !column.key?.endsWith('_realisasi_p2')">
                               {{ getCellValue(column.key, record, profitLossItems, 'realisasi') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_rkap_p2')">
+                              {{ getCellValue(column.key, record, profitLossItems, 'rkap_p2') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_realisasi_p2')">
+                              {{ getCellValue(column.key, record, profitLossItems, 'realisasi_p2') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_difference')">
+                              <span :style="{ color: getComparisonCellValue(column.key, record, profitLossItems).direction === 'up' ? '#52c41a' : getComparisonCellValue(column.key, record, profitLossItems).direction === 'down' ? '#ff4d4f' : '#666' }">
+                                <IconifyIcon 
+                                  v-if="getComparisonCellValue(column.key, record, profitLossItems).direction === 'up'"
+                                  icon="mdi:trending-up" 
+                                  width="16" 
+                                  style="margin-right: 4px; vertical-align: middle;" 
+                                />
+                                <IconifyIcon 
+                                  v-else-if="getComparisonCellValue(column.key, record, profitLossItems).direction === 'down'"
+                                  icon="mdi:trending-down" 
+                                  width="16" 
+                                  style="margin-right: 4px; vertical-align: middle;" 
+                                />
+                                {{ getComparisonCellValue(column.key, record, profitLossItems).value }}
+                              </span>
                             </template>
                           </template>
                         </a-table>
@@ -265,11 +352,34 @@
                             <template v-if="column.key === 'month'">
                               <strong>{{ record.month }}</strong>
                             </template>
-                            <template v-else-if="column.key?.endsWith('_rkap')">
+                            <template v-else-if="column.key?.endsWith('_rkap') && !column.key?.endsWith('_rkap_p2')">
                               {{ getCellValue(column.key, record, cashflowItems, 'rkap') }}
                             </template>
-                            <template v-else-if="column.key?.endsWith('_realisasi')">
+                            <template v-else-if="column.key?.endsWith('_realisasi') && !column.key?.endsWith('_realisasi_p2')">
                               {{ getCellValue(column.key, record, cashflowItems, 'realisasi') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_rkap_p2')">
+                              {{ getCellValue(column.key, record, cashflowItems, 'rkap_p2') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_realisasi_p2')">
+                              {{ getCellValue(column.key, record, cashflowItems, 'realisasi_p2') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_difference')">
+                              <span :style="{ color: getComparisonCellValue(column.key, record, cashflowItems).direction === 'up' ? '#52c41a' : getComparisonCellValue(column.key, record, cashflowItems).direction === 'down' ? '#ff4d4f' : '#666' }">
+                                <IconifyIcon 
+                                  v-if="getComparisonCellValue(column.key, record, cashflowItems).direction === 'up'"
+                                  icon="mdi:trending-up" 
+                                  width="16" 
+                                  style="margin-right: 4px; vertical-align: middle;" 
+                                />
+                                <IconifyIcon 
+                                  v-else-if="getComparisonCellValue(column.key, record, cashflowItems).direction === 'down'"
+                                  icon="mdi:trending-down" 
+                                  width="16" 
+                                  style="margin-right: 4px; vertical-align: middle;" 
+                                />
+                                {{ getComparisonCellValue(column.key, record, cashflowItems).value }}
+                              </span>
                             </template>
                           </template>
                         </a-table>
@@ -313,11 +423,34 @@
                             <template v-if="column.key === 'month'">
                               <strong>{{ record.month }}</strong>
                             </template>
-                            <template v-else-if="column.key?.endsWith('_rkap')">
+                            <template v-else-if="column.key?.endsWith('_rkap') && !column.key?.endsWith('_rkap_p2')">
                               {{ getCellValue(column.key, record, ratioItems, 'rkap') }}
                             </template>
-                            <template v-else-if="column.key?.endsWith('_realisasi')">
+                            <template v-else-if="column.key?.endsWith('_realisasi') && !column.key?.endsWith('_realisasi_p2')">
                               {{ getCellValue(column.key, record, ratioItems, 'realisasi') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_rkap_p2')">
+                              {{ getCellValue(column.key, record, ratioItems, 'rkap_p2') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_realisasi_p2')">
+                              {{ getCellValue(column.key, record, ratioItems, 'realisasi_p2') }}
+                            </template>
+                            <template v-else-if="column.key?.endsWith('_difference')">
+                              <span :style="{ color: getComparisonCellValue(column.key, record, ratioItems).direction === 'up' ? '#52c41a' : getComparisonCellValue(column.key, record, ratioItems).direction === 'down' ? '#ff4d4f' : '#666' }">
+                                <IconifyIcon 
+                                  v-if="getComparisonCellValue(column.key, record, ratioItems).direction === 'up'"
+                                  icon="mdi:trending-up" 
+                                  width="16" 
+                                  style="margin-right: 4px; vertical-align: middle;" 
+                                />
+                                <IconifyIcon 
+                                  v-else-if="getComparisonCellValue(column.key, record, ratioItems).direction === 'down'"
+                                  icon="mdi:trending-down" 
+                                  width="16" 
+                                  style="margin-right: 4px; vertical-align: middle;" 
+                                />
+                                {{ getComparisonCellValue(column.key, record, ratioItems).value }}
+                              </span>
                             </template>
                           </template>
                         </a-table>
@@ -414,6 +547,31 @@
                       <span class="info-label">Status</span>
                       <span class="info-value">
                         <a-tag :color="company!.status === 'Aktif' ? 'green' : 'red'">{{ company!.status || '-' }}</a-tag>
+                        <a-tag v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE" :color="company!.is_active ? 'green' : 'red'" style="margin-left: 8px;">
+                          {{ company!.is_active ? 'Aktif' : 'Nonaktif' }}
+                        </a-tag>
+                      </span>
+                    </div>
+                    <div v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (canEdit || isSuperAdmin)" class="info-item full-width">
+                      <span class="info-label">Aktivasi Subsidiary</span>
+                      <span class="info-value">
+                        <a-button 
+                          :type="company!.is_active ? 'default' : 'primary'"
+                          :danger="company!.is_active"
+                          :loading="updatingStatus"
+                          @click="handleToggleCompanyStatus"
+                        >
+                          <IconifyIcon 
+                            :icon="company!.is_active ? 'mdi:close-circle' : 'mdi:check-circle'" 
+                            width="16" 
+                            style="margin-right: 4px;" 
+                          />
+                          {{ company!.is_active ? 'Nonaktifkan Subsidiary' : 'Aktifkan Subsidiary' }}
+                        </a-button>
+                        <span style="margin-left: 12px; color: #666; font-size: 12px;">
+                          <IconifyIcon icon="mdi:information-outline" width="14" style="margin-right: 4px;" />
+                          Subsidiary yang dinonaktifkan tidak akan muncul di perhitungan dan dashboard
+                        </span>
                       </span>
                     </div>
                     <div class="info-item">
@@ -952,6 +1110,15 @@ const periodRange = ref<[Dayjs, Dayjs] | null>([
   dayjs().startOf('year'), // Januari tahun ini
   dayjs(), // Bulan saat ini
 ])
+// State untuk mode compare
+// Feature flag untuk enable/disable comparison feature
+const ENABLE_COMPARISON_FEATURE = false
+
+// Feature flag untuk enable/disable activate/deactivate subsidiary feature
+const ENABLE_ACTIVATE_DEACTIVATE_FEATURE = false
+
+const compareMode = ref(false)
+const periodRange2 = ref<[Dayjs, Dayjs] | null>(null)
 // Computed untuk backward compatibility dengan fungsi yang masih menggunakan selectedYear, startMonth, endMonth
 const selectedYear = computed(() => {
   if (!periodRange.value || !periodRange.value[0]) return dayjs().format('YYYY')
@@ -1001,6 +1168,7 @@ const editingRoleLoading = ref(false)
 // Director documents state
 const directorDocumentsMap = ref<Map<string, DocumentItem[]>>(new Map())
 const loadingDirectorDocuments = ref<Record<string, boolean>>({})
+const updatingStatus = ref(false)
 
 // Document categories
 const documentCategories = [
@@ -2628,31 +2796,82 @@ const loadFinancialComparison = async (companyId: string) => {
 }
 
 
+// Toggle compare mode
+const toggleCompareMode = () => {
+  // Only allow toggling if feature is enabled
+  if (!ENABLE_COMPARISON_FEATURE) return
+  
+  compareMode.value = !compareMode.value
+  if (!compareMode.value) {
+    // Reset periodRange2 when disabling compare mode
+    periodRange2.value = null
+  } else {
+    // Initialize periodRange2 with default value (same as periodRange or last year)
+    if (periodRange.value && periodRange.value[0] && periodRange.value[1]) {
+      periodRange2.value = [
+        periodRange.value[0].subtract(1, 'year'),
+        periodRange.value[1].subtract(1, 'year')
+      ]
+    }
+  }
+  // Reload data when toggling compare mode
+  if (company.value) {
+    handleFinancialPeriodChange()
+  }
+}
+
 // Handle period change for financial comparison
 const handleFinancialPeriodChange = async () => {
-  // Validate date range
+  // Validate date range for period 1
   if (!periodRange.value || !periodRange.value[0] || !periodRange.value[1]) {
-    message.warning('Silakan pilih periode yang valid')
+    message.warning('Silakan pilih periode 1 yang valid')
     return
   }
   
-  // Validate that start month is before or equal to end month
+  // Validate that start month is before or equal to end month for period 1
   if (periodRange.value[0].isAfter(periodRange.value[1])) {
-    message.warning('Bulan awal harus lebih kecil atau sama dengan bulan akhir')
+    message.warning('Bulan awal periode 1 harus lebih kecil atau sama dengan bulan akhir')
     return
   }
   
-  // Validate that both months are in the same year
+  // Validate period 2 if compare mode is active
+  if (compareMode.value) {
+    if (!periodRange2.value || !periodRange2.value[0] || !periodRange2.value[1]) {
+      message.warning('Silakan pilih periode 2 yang valid untuk compare')
+      return
+    }
+    
+    if (periodRange2.value[0].isAfter(periodRange2.value[1])) {
+      message.warning('Bulan awal periode 2 harus lebih kecil atau sama dengan bulan akhir')
+      return
+    }
+  }
+  
+  // Validate that both months are in the same year for period 1
   if (periodRange.value[0].format('YYYY') !== periodRange.value[1].format('YYYY')) {
-    message.warning('Periode harus dalam tahun yang sama')
+    message.warning('Periode 1 harus dalam tahun yang sama')
     // Auto-correct: set end month to same year as start month
     periodRange.value = [periodRange.value[0], periodRange.value[0].endOf('year')]
   }
   
+  // Validate that both months are in the same year for period 2
+  if (ENABLE_COMPARISON_FEATURE && compareMode.value && periodRange2.value && periodRange2.value[0] && periodRange2.value[1]) {
+    if (periodRange2.value[0].format('YYYY') !== periodRange2.value[1].format('YYYY')) {
+      message.warning('Periode 2 harus dalam tahun yang sama')
+      // Auto-correct: set end month to same year as start month
+      periodRange2.value = [periodRange2.value[0], periodRange2.value[0].endOf('year')]
+    }
+  }
+  
   if (company.value) {
-    // Reload financial reports to get monthly data for the selected year
+    // Reload financial reports to get monthly data for the selected year(s)
     await loadFinancialReports(company.value.id)
-    await loadFinancialComparison(company.value.id)
+    if (compareMode.value) {
+      // For compare mode, we'll load data for both periods in chart computed properties
+      // The comparison API call is not needed here as we'll compute comparison from raw data
+    } else {
+      await loadFinancialComparison(company.value.id)
+    }
   }
 }
 
@@ -2720,6 +2939,33 @@ const handleFinancialReportSaved = async () => {
   }
 }
 
+const handleToggleCompanyStatus = async () => {
+  if (!ENABLE_ACTIVATE_DEACTIVATE_FEATURE || !company.value) return
+
+  const newStatus = !company.value.is_active
+  const actionText = newStatus ? 'mengaktifkan' : 'menonaktifkan'
+  
+  Modal.confirm({
+    title: `${newStatus ? 'Aktifkan' : 'Nonaktifkan'} Subsidiary?`,
+    content: `Apakah Anda yakin ingin ${actionText} subsidiary "${company.value.name}"? Subsidiary yang dinonaktifkan tidak akan muncul di perhitungan, dashboard, dan aggregasi data.`,
+    okText: 'Ya',
+    cancelText: 'Batal',
+    onOk: async () => {
+      try {
+        updatingStatus.value = true
+        const updatedCompany = await companyApi.updateStatus(company.value!.id, newStatus)
+        company.value = updatedCompany
+        message.success(`Subsidiary berhasil ${actionText}`)
+      } catch (error) {
+        console.error('Failed to update company status:', error)
+        message.error(`Gagal ${actionText} subsidiary`)
+      } finally {
+        updatingStatus.value = false
+      }
+    },
+  })
+}
+
 
 
 // Helper function to get formatted cell value
@@ -2727,12 +2973,24 @@ const getCellValue = (
   columnKey: string | undefined,
   record: Record<string, unknown>,
   items: Array<{ key: string; isRatio: boolean }>,
-  valueType: 'rkap' | 'realisasi' | 'difference'
+  valueType: 'rkap' | 'realisasi' | 'difference' | 'rkap_p2' | 'realisasi_p2'
 ): string => {
   if (!columnKey) return '-'
   
-  // Extract item key from column key (e.g., "current_assets_rkap" -> "current_assets")
-  const itemKey = columnKey.replace(`_${valueType}`, '')
+  // Extract item key from column key
+  let itemKey = columnKey
+  if (valueType === 'rkap') {
+    itemKey = columnKey.replace('_rkap', '')
+  } else if (valueType === 'realisasi') {
+    itemKey = columnKey.replace('_realisasi', '')
+  } else if (valueType === 'rkap_p2') {
+    itemKey = columnKey.replace('_rkap_p2', '')
+  } else if (valueType === 'realisasi_p2') {
+    itemKey = columnKey.replace('_realisasi_p2', '')
+  } else if (valueType === 'difference') {
+    itemKey = columnKey.replace('_difference', '')
+  }
+  
   const item = items.find(i => i.key === itemKey)
   
   if (!item) return '-'
@@ -2757,6 +3015,54 @@ const getCellValue = (
   }
 }
 
+// Helper function to get comparison cell value with indicator
+const getComparisonCellValue = (
+  columnKey: string | undefined,
+  record: Record<string, unknown>,
+  items: Array<{ key: string; isRatio: boolean }>
+): { value: string; direction: 'up' | 'down' | 'equal' } => {
+  if (!columnKey || !columnKey.endsWith('_difference')) {
+    return { value: '-', direction: 'equal' }
+  }
+  
+  const itemKey = columnKey.replace('_difference', '')
+  const item = items.find(i => i.key === itemKey)
+  
+  if (!item) return { value: '-', direction: 'equal' }
+  
+  const value = record[columnKey]
+  const direction = record[`${itemKey}_difference_direction`] as 'up' | 'down' | 'equal' | undefined || 'equal'
+  
+  if (value === undefined || value === null) {
+    return { value: '-', direction: 'equal' }
+  }
+  
+  // Convert to number safely
+  if (typeof value !== 'number' && typeof value !== 'string') {
+    return { value: '-', direction: 'equal' }
+  }
+  
+  const numValue = typeof value === 'number' ? value : parseFloat(value)
+  
+  if (isNaN(numValue)) {
+    return { value: '-', direction: 'equal' }
+  }
+  
+  let formattedValue: string
+  if (item.isRatio) {
+    formattedValue = formatRatioValue(numValue)
+  } else {
+    formattedValue = formatCurrencyValue(numValue)
+  }
+  
+  // Add sign prefix for difference
+  if (numValue > 0) {
+    formattedValue = `+${formattedValue}`
+  }
+  
+  return { value: formattedValue, direction }
+}
+
 // Generate columns with merged headers for financial items
 const generateMergedColumns = (items: Array<{ key: string; label: string; field: string; isRatio: boolean }>) => {
   const baseColumns = [
@@ -2770,11 +3076,8 @@ const generateMergedColumns = (items: Array<{ key: string; label: string; field:
     },
   ]
 
-  const itemColumns = items.map((item) => ({
-    title: item.label,
-    key: item.key,
-    align: 'center' as const,
-    children: [
+  const itemColumns = items.map((item) => {
+    const children = [
       {
         title: 'RKAP',
         key: `${item.key}_rkap`,
@@ -2789,8 +3092,42 @@ const generateMergedColumns = (items: Array<{ key: string; label: string; field:
         align: 'right' as const,
         width: 120,
       },
-    ],
-  }))
+    ]
+
+    // Jika compare mode aktif dan feature enabled, tambahkan kolom Periode 2 dan Selisih
+    if (ENABLE_COMPARISON_FEATURE && compareMode.value && periodRange2.value && periodRange2.value[0] && periodRange2.value[1]) {
+      children.push(
+        {
+          title: 'RKAP (P2)',
+          key: `${item.key}_rkap_p2`,
+          dataIndex: `${item.key}_rkap_p2`,
+          align: 'right' as const,
+          width: 120,
+        },
+        {
+          title: 'Realisasi (P2)',
+          key: `${item.key}_realisasi_p2`,
+          dataIndex: `${item.key}_realisasi_p2`,
+          align: 'right' as const,
+          width: 120,
+        },
+        {
+          title: 'Selisih Realisasi',
+          key: `${item.key}_difference`,
+          dataIndex: `${item.key}_difference`,
+          align: 'right' as const,
+          width: 140,
+        }
+      )
+    }
+
+    return {
+      title: item.label,
+      key: item.key,
+      align: 'center' as const,
+      children,
+    }
+  })
 
   return [...baseColumns, ...itemColumns]
 }
@@ -2811,15 +3148,114 @@ const generateMonthlyDataWithAllItems = (items: Array<{ key: string; label: stri
   
   const filteredMonths = allMonths.slice(startIndex, endIndex + 1)
   
-  // Get RKAP for the year
+  // Get RKAP for the year (Period 1)
   const rkap = financialReports.value.find(r => r.is_rkap && r.year === selectedYear.value)
   const rkapRecord = rkap ? (rkap as unknown as Record<string, unknown>) : undefined
   
-  // Generate data for each month
+  // Get RKAP for Period 2 if compare mode is active
+  let rkapRecordP2: Record<string, unknown> | undefined = undefined
+  let period2FilteredMonths: string[] = []
+  let period2Year = ''
+  if (ENABLE_COMPARISON_FEATURE && compareMode.value && periodRange2.value && periodRange2.value[0] && periodRange2.value[1]) {
+    period2Year = periodRange2.value[0].format('YYYY')
+    const period2StartMonth = periodRange2.value[0].format('MM')
+    const period2EndMonth = periodRange2.value[1].format('MM')
+    const period2StartIndex = allMonths.indexOf(period2StartMonth)
+    const period2EndIndex = allMonths.indexOf(period2EndMonth)
+    
+    if (period2StartIndex !== -1 && period2EndIndex !== -1) {
+      period2FilteredMonths = allMonths.slice(period2StartIndex, period2EndIndex + 1)
+      const rkapP2 = financialReports.value.find(r => r.is_rkap && r.year === period2Year)
+      rkapRecordP2 = rkapP2 ? (rkapP2 as unknown as Record<string, unknown>) : undefined
+    }
+  }
+  
+  // If compare mode and periods have different months, show all months separately
+  if (ENABLE_COMPARISON_FEATURE && compareMode.value && periodRange2.value && periodRange2.value[0] && periodRange2.value[1] && period2FilteredMonths.length > 0) {
+    // Check if periods have overlapping months
+    const hasOverlappingMonths = filteredMonths.some(m => period2FilteredMonths.includes(m))
+    
+    if (!hasOverlappingMonths) {
+      // No overlapping months - show all months from both periods separately
+      const allPeriodMonths: Array<{ month: string; period: string; periodType: 'p1' | 'p2'; year: string }> = []
+      
+      // Add Period 1 months
+      filteredMonths.forEach(month => {
+        allPeriodMonths.push({
+          month,
+          period: `${selectedYear.value}-${month}`,
+          periodType: 'p1',
+          year: selectedYear.value,
+        })
+      })
+      
+      // Add Period 2 months
+      period2FilteredMonths.forEach(month => {
+        allPeriodMonths.push({
+          month,
+          period: `${period2Year}-${month}`,
+          periodType: 'p2',
+          year: period2Year,
+        })
+      })
+      
+      return allPeriodMonths.map(({ month, period, periodType, year }) => {
+        const realisasi = financialReports.value.find(r => !r.is_rkap && r.period === period)
+        const realisasiRecord = realisasi ? (realisasi as unknown as Record<string, unknown>) : undefined
+        
+        const monthIndex = allMonths.indexOf(month)
+        const rowData: Record<string, unknown> = {
+          key: `${periodType}-${month}`,
+          month: `${monthNames[monthIndex] || month} ${year} (${periodType === 'p1' ? 'P1' : 'P2'})`,
+          periodType,
+        }
+        
+        items.forEach((item) => {
+          if (periodType === 'p1') {
+            const rkapAnnualValue = rkapRecord ? ((rkapRecord[item.field] as number | undefined) ?? 0) : 0
+            const realisasiValue = realisasiRecord ? ((realisasiRecord[item.field] as number | undefined) ?? 0) : 0
+            rowData[`${item.key}_rkap`] = rkapAnnualValue
+            rowData[`${item.key}_realisasi`] = realisasiValue
+            // P2 columns will be empty for P1 rows
+            rowData[`${item.key}_rkap_p2`] = 0
+            rowData[`${item.key}_realisasi_p2`] = 0
+            rowData[`${item.key}_difference`] = 0
+            rowData[`${item.key}_difference_direction`] = 'equal'
+          } else {
+            const rkapAnnualValueP2 = rkapRecordP2 ? ((rkapRecordP2[item.field] as number | undefined) ?? 0) : 0
+            const realisasiValueP2 = realisasiRecord ? ((realisasiRecord[item.field] as number | undefined) ?? 0) : 0
+            // P1 columns will be empty for P2 rows
+            rowData[`${item.key}_rkap`] = 0
+            rowData[`${item.key}_realisasi`] = 0
+            rowData[`${item.key}_rkap_p2`] = rkapAnnualValueP2
+            rowData[`${item.key}_realisasi_p2`] = realisasiValueP2
+            rowData[`${item.key}_difference`] = 0
+            rowData[`${item.key}_difference_direction`] = 'equal'
+          }
+        })
+        
+        return rowData
+      })
+    }
+  }
+  
+  // Original logic for same months or overlapping months
   return filteredMonths.map((month) => {
     const period = `${selectedYear.value}-${month}`
     const realisasi = financialReports.value.find(r => !r.is_rkap && r.period === period)
     const realisasiRecord = realisasi ? (realisasi as unknown as Record<string, unknown>) : undefined
+    
+    // Get Period 2 data if compare mode is active
+    let realisasiRecordP2: Record<string, unknown> | undefined = undefined
+    if (ENABLE_COMPARISON_FEATURE && compareMode.value && periodRange2.value && periodRange2.value[0] && periodRange2.value[1] && period2FilteredMonths.length > 0) {
+      // Try to find matching month in Period 2
+      if (period2FilteredMonths.includes(month)) {
+        // Same month exists in Period 2
+        const period2Period = `${period2Year}-${month}`
+        const realisasiP2 = financialReports.value.find(r => !r.is_rkap && r.period === period2Period)
+        realisasiRecordP2 = realisasiP2 ? (realisasiP2 as unknown as Record<string, unknown>) : undefined
+      }
+    }
     
     const monthIndex = allMonths.indexOf(month)
     const rowData: Record<string, unknown> = {
@@ -2829,15 +3265,37 @@ const generateMonthlyDataWithAllItems = (items: Array<{ key: string; label: stri
     
     // Add data for each item - tampilkan data apa adanya tanpa perhitungan
     items.forEach((item) => {
-      // RKAP: tampilkan nilai tahunan langsung (tidak dibagi 12)
+      // Period 1: RKAP - tampilkan nilai tahunan langsung (tidak dibagi 12)
       const rkapAnnualValue = rkapRecord ? ((rkapRecord[item.field] as number | undefined) ?? 0) : 0
       
-      // Realisasi: tampilkan nilai bulanan apa adanya
+      // Period 1: Realisasi - tampilkan nilai bulanan apa adanya
       const realisasiValue = realisasiRecord ? ((realisasiRecord[item.field] as number | undefined) ?? 0) : 0
       
       // Tampilkan data apa adanya - tidak ada perhitungan otomatis
       rowData[`${item.key}_rkap`] = rkapAnnualValue
       rowData[`${item.key}_realisasi`] = realisasiValue
+      
+      // Period 2 data if compare mode is active
+      if (ENABLE_COMPARISON_FEATURE && compareMode.value && periodRange2.value && periodRange2.value[0] && periodRange2.value[1] && realisasiRecordP2 !== undefined) {
+        // Period 2: RKAP
+        const rkapAnnualValueP2 = rkapRecordP2 ? ((rkapRecordP2[item.field] as number | undefined) ?? 0) : 0
+        rowData[`${item.key}_rkap_p2`] = rkapAnnualValueP2
+        
+        // Period 2: Realisasi
+        const realisasiValueP2 = realisasiRecordP2 ? ((realisasiRecordP2[item.field] as number | undefined) ?? 0) : 0
+        rowData[`${item.key}_realisasi_p2`] = realisasiValueP2
+        
+        // Calculate difference (P1 Realisasi - P2 Realisasi)
+        const difference = realisasiValue - realisasiValueP2
+        rowData[`${item.key}_difference`] = difference
+        rowData[`${item.key}_difference_direction`] = difference > 0 ? 'up' : difference < 0 ? 'down' : 'equal'
+      } else if (compareMode.value) {
+        // Period 2 data not available for this month
+        rowData[`${item.key}_rkap_p2`] = 0
+        rowData[`${item.key}_realisasi_p2`] = 0
+        rowData[`${item.key}_difference`] = 0
+        rowData[`${item.key}_difference_direction`] = 'equal'
+      }
     })
     
     return rowData
@@ -2894,34 +3352,43 @@ const cashflowMonthlyData = computed(() => generateMonthlyDataWithAllItems(cashf
 const ratioColumns = computed(() => generateMergedColumns(ratioItems))
 const ratioMonthlyData = computed(() => generateMonthlyDataWithAllItems(ratioItems))
 
-// Chart data for Balance Sheet Overview (main chart)
-const balanceSheetOverviewChartData = computed(() => {
-  if (!financialReports.value || !selectedYear.value || !startMonth.value || !endMonth.value) return []
+// Helper function to generate balance sheet chart data for a specific period
+const generateBalanceSheetChartDataForPeriod = (
+  year: string,
+  startMonthValue: string,
+  endMonthValue: string,
+  labelSuffix: string = ''
+): Array<{
+  label: string
+  totalAssets: { rkap: number; realisasi: number }
+  totalLiabilities: { rkap: number; realisasi: number }
+  equity: { rkap: number; realisasi: number }
+}> => {
+  if (!financialReports.value) return []
   
   const allMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
   
-  const startIndex = allMonths.indexOf(startMonth.value)
-  const endIndex = allMonths.indexOf(endMonth.value)
+  const startIndex = allMonths.indexOf(startMonthValue)
+  const endIndex = allMonths.indexOf(endMonthValue)
   
   if (startIndex === -1 || endIndex === -1 || startIndex > endIndex) return []
   
   const filteredMonths = allMonths.slice(startIndex, endIndex + 1)
   
   // Get RKAP for the year
-  const rkap = financialReports.value.find(r => r.is_rkap && r.year === selectedYear.value)
+  const rkap = financialReports.value.find(r => r.is_rkap && r.year === year)
   const rkapRecord = rkap ? (rkap as unknown as Record<string, unknown>) : undefined
   
   // Calculate monthly values for Total Assets, Total Liabilities, and Equity
   return filteredMonths.map((month) => {
-    const period = `${selectedYear.value}-${month}`
+    const period = `${year}-${month}`
     const realisasi = financialReports.value.find(r => !r.is_rkap && r.period === period)
     const realisasiRecord = realisasi ? (realisasi as unknown as Record<string, unknown>) : undefined
     
     const monthIndex = allMonths.indexOf(month)
     
     // Calculate Total Assets = current_assets + non_current_assets
-    // RKAP: tampilkan nilai tahunan langsung (tidak dibagi 12)
     const rkapTotalAssets = rkapRecord 
       ? ((rkapRecord['current_assets'] as number | undefined) ?? 0) + ((rkapRecord['non_current_assets'] as number | undefined) ?? 0)
       : 0
@@ -2944,97 +3411,203 @@ const balanceSheetOverviewChartData = computed(() => {
     const realisasiEquity = realisasiRecord ? ((realisasiRecord['equity'] as number | undefined) ?? 0) : 0
     
     return {
-      label: monthNames[monthIndex] || month,
+      label: `${monthNames[monthIndex] || month} ${labelSuffix}`.trim(),
       totalAssets: {
-        rkap: rkapTotalAssets, // Nilai tahunan langsung
+        rkap: rkapTotalAssets,
         realisasi: realisasiTotalAssets,
       },
       totalLiabilities: {
-        rkap: rkapTotalLiabilities, // Nilai tahunan langsung
+        rkap: rkapTotalLiabilities,
         realisasi: realisasiTotalLiabilities,
       },
       equity: {
-        rkap: rkapEquity, // Nilai tahunan langsung
+        rkap: rkapEquity,
         realisasi: realisasiEquity,
       },
     }
   })
+}
+
+// Chart data for Balance Sheet Overview (main chart)
+const balanceSheetOverviewChartData = computed(() => {
+  if (!financialReports.value || !selectedYear.value || !startMonth.value || !endMonth.value) return []
+  
+  // Generate data for period 1
+  const period1Data = generateBalanceSheetChartDataForPeriod(
+    selectedYear.value,
+    startMonth.value,
+    endMonth.value,
+    ENABLE_COMPARISON_FEATURE && compareMode.value ? '(P1)' : ''
+  )
+  
+  // If compare mode is active and periodRange2 is set, generate data for period 2
+  if (ENABLE_COMPARISON_FEATURE && compareMode.value && periodRange2.value && periodRange2.value[0] && periodRange2.value[1]) {
+    const period2Year = periodRange2.value[0].format('YYYY')
+    const period2StartMonth = periodRange2.value[0].format('MM')
+    const period2EndMonth = periodRange2.value[1].format('MM')
+    
+    const period2Data = generateBalanceSheetChartDataForPeriod(
+      period2Year,
+      period2StartMonth,
+      period2EndMonth,
+      '(P2)'
+    )
+    
+    // Combine both periods - alternating months for better comparison
+    const combinedData: Array<{
+      label: string
+      totalAssets: { rkap: number; realisasi: number }
+      totalLiabilities: { rkap: number; realisasi: number }
+      equity: { rkap: number; realisasi: number }
+    }> = []
+    
+    const maxLength = Math.max(period1Data.length, period2Data.length)
+    for (let i = 0; i < maxLength; i++) {
+      if (i < period1Data.length) {
+        combinedData.push(period1Data[i]!)
+      }
+      if (i < period2Data.length) {
+        combinedData.push(period2Data[i]!)
+      }
+    }
+    
+    return combinedData
+  }
+  
+  return period1Data
 })
+
+// Helper function to generate profit loss chart data for a specific period
+const generateProfitLossChartDataForPeriod = (
+  year: string,
+  startMonthValue: string,
+  endMonthValue: string,
+  labelSuffix: string = ''
+): Array<{
+  label: string
+  revenue: { rkap: number; realisasi: number }
+  netProfit: { rkap: number; realisasi: number }
+}> => {
+  if (!financialReports.value) return []
+  
+  const allMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+  
+  const startIndex = allMonths.indexOf(startMonthValue)
+  const endIndex = allMonths.indexOf(endMonthValue)
+  
+  if (startIndex === -1 || endIndex === -1 || startIndex > endIndex) return []
+  
+  const filteredMonths = allMonths.slice(startIndex, endIndex + 1)
+  
+  const rkap = financialReports.value.find(r => r.is_rkap && r.year === year)
+  const rkapRecord = rkap ? (rkap as unknown as Record<string, unknown>) : undefined
+  
+  return filteredMonths.map((month) => {
+    const period = `${year}-${month}`
+    const realisasi = financialReports.value.find(r => !r.is_rkap && r.period === period)
+    const realisasiRecord = realisasi ? (realisasi as unknown as Record<string, unknown>) : undefined
+    
+    const monthIndex = allMonths.indexOf(month)
+    
+    const rkapRevenue = rkapRecord ? ((rkapRecord['revenue'] as number | undefined) ?? 0) : 0
+    const realisasiRevenue = realisasiRecord ? ((realisasiRecord['revenue'] as number | undefined) ?? 0) : 0
+    
+    const rkapNetProfit = rkapRecord ? ((rkapRecord['net_profit'] as number | undefined) ?? 0) : 0
+    const realisasiNetProfit = realisasiRecord ? ((realisasiRecord['net_profit'] as number | undefined) ?? 0) : 0
+    
+    return {
+      label: `${monthNames[monthIndex] || month} ${labelSuffix}`.trim(),
+      revenue: {
+        rkap: rkapRevenue,
+        realisasi: realisasiRevenue,
+      },
+      netProfit: {
+        rkap: rkapNetProfit,
+        realisasi: realisasiNetProfit,
+      },
+    }
+  })
+}
 
 // Chart data for Profit Loss Overview (Revenue vs Net Profit)
 const profitLossOverviewChartData = computed(() => {
   if (!financialReports.value || !selectedYear.value || !startMonth.value || !endMonth.value) return []
   
-  const allMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+  const period1Data = generateProfitLossChartDataForPeriod(
+    selectedYear.value,
+    startMonth.value,
+    endMonth.value,
+    ENABLE_COMPARISON_FEATURE && compareMode.value ? '(P1)' : ''
+  )
   
-  const startIndex = allMonths.indexOf(startMonth.value)
-  const endIndex = allMonths.indexOf(endMonth.value)
-  
-  if (startIndex === -1 || endIndex === -1 || startIndex > endIndex) return []
-  
-  const filteredMonths = allMonths.slice(startIndex, endIndex + 1)
-  
-  // Get RKAP for the year
-  const rkap = financialReports.value.find(r => r.is_rkap && r.year === selectedYear.value)
-  const rkapRecord = rkap ? (rkap as unknown as Record<string, unknown>) : undefined
-  
-  return filteredMonths.map((month) => {
-    const period = `${selectedYear.value}-${month}`
-    const realisasi = financialReports.value.find(r => !r.is_rkap && r.period === period)
-    const realisasiRecord = realisasi ? (realisasi as unknown as Record<string, unknown>) : undefined
+  if (ENABLE_COMPARISON_FEATURE && compareMode.value && periodRange2.value && periodRange2.value[0] && periodRange2.value[1]) {
+    const period2Year = periodRange2.value[0].format('YYYY')
+    const period2StartMonth = periodRange2.value[0].format('MM')
+    const period2EndMonth = periodRange2.value[1].format('MM')
     
-    const monthIndex = allMonths.indexOf(month)
+    const period2Data = generateProfitLossChartDataForPeriod(
+      period2Year,
+      period2StartMonth,
+      period2EndMonth,
+      '(P2)'
+    )
     
-    // Revenue - RKAP: nilai tahunan langsung
-    const rkapRevenue = rkapRecord ? ((rkapRecord['revenue'] as number | undefined) ?? 0) : 0
-    const realisasiRevenue = realisasiRecord ? ((realisasiRecord['revenue'] as number | undefined) ?? 0) : 0
+    const combinedData: Array<{
+      label: string
+      revenue: { rkap: number; realisasi: number }
+      netProfit: { rkap: number; realisasi: number }
+    }> = []
     
-    // Net Profit - RKAP: nilai tahunan langsung
-    const rkapNetProfit = rkapRecord ? ((rkapRecord['net_profit'] as number | undefined) ?? 0) : 0
-    const realisasiNetProfit = realisasiRecord ? ((realisasiRecord['net_profit'] as number | undefined) ?? 0) : 0
-    
-    return {
-      label: monthNames[monthIndex] || month,
-      revenue: {
-        rkap: rkapRevenue, // Nilai tahunan langsung
-        realisasi: realisasiRevenue,
-      },
-      netProfit: {
-        rkap: rkapNetProfit, // Nilai tahunan langsung
-        realisasi: realisasiNetProfit,
-      },
+    const maxLength = Math.max(period1Data.length, period2Data.length)
+    for (let i = 0; i < maxLength; i++) {
+      if (i < period1Data.length) {
+        combinedData.push(period1Data[i]!)
+      }
+      if (i < period2Data.length) {
+        combinedData.push(period2Data[i]!)
+      }
     }
-  })
+    
+    return combinedData
+  }
+  
+  return period1Data
 })
 
-// Chart data for Cashflow Overview (Net Cashflow vs Ending Balance)
-const cashflowOverviewChartData = computed(() => {
-  if (!financialReports.value || !selectedYear.value || !startMonth.value || !endMonth.value) return []
+// Helper function to generate cashflow chart data for a specific period
+const generateCashflowChartDataForPeriod = (
+  year: string,
+  startMonthValue: string,
+  endMonthValue: string,
+  labelSuffix: string = ''
+): Array<{
+  label: string
+  netCashflow: { rkap: number; realisasi: number }
+  endingBalance: { rkap: number; realisasi: number }
+}> => {
+  if (!financialReports.value) return []
   
   const allMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
   
-  const startIndex = allMonths.indexOf(startMonth.value)
-  const endIndex = allMonths.indexOf(endMonth.value)
+  const startIndex = allMonths.indexOf(startMonthValue)
+  const endIndex = allMonths.indexOf(endMonthValue)
   
   if (startIndex === -1 || endIndex === -1 || startIndex > endIndex) return []
   
   const filteredMonths = allMonths.slice(startIndex, endIndex + 1)
   
-  // Get RKAP for the year
-  const rkap = financialReports.value.find(r => r.is_rkap && r.year === selectedYear.value)
+  const rkap = financialReports.value.find(r => r.is_rkap && r.year === year)
   const rkapRecord = rkap ? (rkap as unknown as Record<string, unknown>) : undefined
   
   return filteredMonths.map((month) => {
-    const period = `${selectedYear.value}-${month}`
+    const period = `${year}-${month}`
     const realisasi = financialReports.value.find(r => !r.is_rkap && r.period === period)
     const realisasiRecord = realisasi ? (realisasi as unknown as Record<string, unknown>) : undefined
     
     const monthIndex = allMonths.indexOf(month)
     
-    // Net Cashflow = Operating + Investing + Financing
-    // RKAP: nilai tahunan langsung
     const rkapOperating = rkapRecord ? ((rkapRecord['operating_cashflow'] as number | undefined) ?? 0) : 0
     const rkapInvesting = rkapRecord ? ((rkapRecord['investing_cashflow'] as number | undefined) ?? 0) : 0
     const rkapFinancing = rkapRecord ? ((rkapRecord['financing_cashflow'] as number | undefined) ?? 0) : 0
@@ -3045,67 +3618,117 @@ const cashflowOverviewChartData = computed(() => {
     const realisasiFinancing = realisasiRecord ? ((realisasiRecord['financing_cashflow'] as number | undefined) ?? 0) : 0
     const realisasiNetCashflow = realisasiOperating + realisasiInvesting + realisasiFinancing
     
-    // Ending Balance - RKAP: nilai tahunan langsung
     const rkapEndingBalance = rkapRecord ? ((rkapRecord['ending_balance'] as number | undefined) ?? 0) : 0
     const realisasiEndingBalance = realisasiRecord ? ((realisasiRecord['ending_balance'] as number | undefined) ?? 0) : 0
     
     return {
-      label: monthNames[monthIndex] || month,
+      label: `${monthNames[monthIndex] || month} ${labelSuffix}`.trim(),
       netCashflow: {
-        rkap: rkapNetCashflow, // Nilai tahunan langsung
+        rkap: rkapNetCashflow,
         realisasi: realisasiNetCashflow,
       },
       endingBalance: {
-        rkap: rkapEndingBalance, // Nilai tahunan langsung
+        rkap: rkapEndingBalance,
         realisasi: realisasiEndingBalance,
       },
     }
   })
+}
+
+// Chart data for Cashflow Overview (Net Cashflow vs Ending Balance)
+const cashflowOverviewChartData = computed(() => {
+  if (!financialReports.value || !selectedYear.value || !startMonth.value || !endMonth.value) return []
+  
+  const period1Data = generateCashflowChartDataForPeriod(
+    selectedYear.value,
+    startMonth.value,
+    endMonth.value,
+    ENABLE_COMPARISON_FEATURE && compareMode.value ? '(P1)' : ''
+  )
+  
+  if (ENABLE_COMPARISON_FEATURE && compareMode.value && periodRange2.value && periodRange2.value[0] && periodRange2.value[1]) {
+    const period2Year = periodRange2.value[0].format('YYYY')
+    const period2StartMonth = periodRange2.value[0].format('MM')
+    const period2EndMonth = periodRange2.value[1].format('MM')
+    
+    const period2Data = generateCashflowChartDataForPeriod(
+      period2Year,
+      period2StartMonth,
+      period2EndMonth,
+      '(P2)'
+    )
+    
+    const combinedData: Array<{
+      label: string
+      netCashflow: { rkap: number; realisasi: number }
+      endingBalance: { rkap: number; realisasi: number }
+    }> = []
+    
+    const maxLength = Math.max(period1Data.length, period2Data.length)
+    for (let i = 0; i < maxLength; i++) {
+      if (i < period1Data.length) {
+        combinedData.push(period1Data[i]!)
+      }
+      if (i < period2Data.length) {
+        combinedData.push(period2Data[i]!)
+      }
+    }
+    
+    return combinedData
+  }
+  
+  return period1Data
 })
 
-// Chart data for Ratio Overview (ROE, ROI, Current Ratio, Debt-to-Equity)
-const ratioOverviewChartData = computed(() => {
-  if (!financialReports.value || !selectedYear.value || !startMonth.value || !endMonth.value) return []
+// Helper function to generate ratio chart data for a specific period
+const generateRatioChartDataForPeriod = (
+  year: string,
+  startMonthValue: string,
+  endMonthValue: string,
+  labelSuffix: string = ''
+): Array<{
+  label: string
+  roe: { rkap: number; realisasi: number }
+  roi: { rkap: number; realisasi: number }
+  currentRatio: { rkap: number; realisasi: number }
+  debtToEquity: { rkap: number; realisasi: number }
+}> => {
+  if (!financialReports.value) return []
   
   const allMonths = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
   
-  const startIndex = allMonths.indexOf(startMonth.value)
-  const endIndex = allMonths.indexOf(endMonth.value)
+  const startIndex = allMonths.indexOf(startMonthValue)
+  const endIndex = allMonths.indexOf(endMonthValue)
   
   if (startIndex === -1 || endIndex === -1 || startIndex > endIndex) return []
   
   const filteredMonths = allMonths.slice(startIndex, endIndex + 1)
   
-  // Get RKAP for the year
-  const rkap = financialReports.value.find(r => r.is_rkap && r.year === selectedYear.value)
+  const rkap = financialReports.value.find(r => r.is_rkap && r.year === year)
   const rkapRecord = rkap ? (rkap as unknown as Record<string, unknown>) : undefined
   
   return filteredMonths.map((month) => {
-    const period = `${selectedYear.value}-${month}`
+    const period = `${year}-${month}`
     const realisasi = financialReports.value.find(r => !r.is_rkap && r.period === period)
     const realisasiRecord = realisasi ? (realisasi as unknown as Record<string, unknown>) : undefined
     
     const monthIndex = allMonths.indexOf(month)
     
-    // ROE
     const rkapROE = rkapRecord ? ((rkapRecord['roe'] as number | undefined) ?? 0) : 0
     const realisasiROE = realisasiRecord ? ((realisasiRecord['roe'] as number | undefined) ?? 0) : 0
     
-    // ROI
     const rkapROI = rkapRecord ? ((rkapRecord['roi'] as number | undefined) ?? 0) : 0
     const realisasiROI = realisasiRecord ? ((realisasiRecord['roi'] as number | undefined) ?? 0) : 0
     
-    // Current Ratio
     const rkapCurrentRatio = rkapRecord ? ((rkapRecord['current_ratio'] as number | undefined) ?? 0) : 0
     const realisasiCurrentRatio = realisasiRecord ? ((realisasiRecord['current_ratio'] as number | undefined) ?? 0) : 0
     
-    // Debt to Equity
     const rkapDebtToEquity = rkapRecord ? ((rkapRecord['debt_to_equity'] as number | undefined) ?? 0) : 0
     const realisasiDebtToEquity = realisasiRecord ? ((realisasiRecord['debt_to_equity'] as number | undefined) ?? 0) : 0
     
     return {
-      label: monthNames[monthIndex] || month,
+      label: `${monthNames[monthIndex] || month} ${labelSuffix}`.trim(),
       roe: {
         rkap: rkapROE,
         realisasi: realisasiROE,
@@ -3124,6 +3747,53 @@ const ratioOverviewChartData = computed(() => {
       },
     }
   })
+}
+
+// Chart data for Ratio Overview (ROE, ROI, Current Ratio, Debt-to-Equity)
+const ratioOverviewChartData = computed(() => {
+  if (!financialReports.value || !selectedYear.value || !startMonth.value || !endMonth.value) return []
+  
+  const period1Data = generateRatioChartDataForPeriod(
+    selectedYear.value,
+    startMonth.value,
+    endMonth.value,
+    ENABLE_COMPARISON_FEATURE && compareMode.value ? '(P1)' : ''
+  )
+  
+  if (ENABLE_COMPARISON_FEATURE && compareMode.value && periodRange2.value && periodRange2.value[0] && periodRange2.value[1]) {
+    const period2Year = periodRange2.value[0].format('YYYY')
+    const period2StartMonth = periodRange2.value[0].format('MM')
+    const period2EndMonth = periodRange2.value[1].format('MM')
+    
+    const period2Data = generateRatioChartDataForPeriod(
+      period2Year,
+      period2StartMonth,
+      period2EndMonth,
+      '(P2)'
+    )
+    
+    const combinedData: Array<{
+      label: string
+      roe: { rkap: number; realisasi: number }
+      roi: { rkap: number; realisasi: number }
+      currentRatio: { rkap: number; realisasi: number }
+      debtToEquity: { rkap: number; realisasi: number }
+    }> = []
+    
+    const maxLength = Math.max(period1Data.length, period2Data.length)
+    for (let i = 0; i < maxLength; i++) {
+      if (i < period1Data.length) {
+        combinedData.push(period1Data[i]!)
+      }
+      if (i < period2Data.length) {
+        combinedData.push(period2Data[i]!)
+      }
+    }
+    
+    return combinedData
+  }
+  
+  return period1Data
 })
 
 onMounted(() => {
@@ -4013,3 +4683,4 @@ onMounted(() => {
   gap: 8px;
 }
 </style>
+

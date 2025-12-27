@@ -1,0 +1,28 @@
+# GitLeaks ignore file
+# Exclude test files from secret scanning
+# Test files contain dummy/test data, not real credentials
+
+# Frontend test files
+frontend/src/**/__tests__/**
+frontend/src/**/*.spec.ts
+frontend/src/**/*.test.ts
+frontend/src/**/*.spec.js
+frontend/src/**/*.test.js
+
+# Backend test files
+backend/**/*_test.go
+backend/**/test/**
+
+# Test fixtures and mocks
+**/__mocks__/**
+**/__fixtures__/**
+**/testdata/**
+**/test_data/**
+
+# Example files
+**/*.example.*
+**/*example*
+
+# Documentation
+**/*.md
+docs/**

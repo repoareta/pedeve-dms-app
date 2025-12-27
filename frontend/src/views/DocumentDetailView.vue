@@ -11,7 +11,7 @@ import DocumentSidebarActivityCard from '../components/DocumentSidebarActivityCa
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import mammoth from 'mammoth'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import { logger } from '../utils/logger'
 
 dayjs.extend(relativeTime)
@@ -46,15 +46,6 @@ const loadDocument = async () => {
     document.value = data
     documentStatus.value = data.status || 'active'
     metadata.value = data.metadata || {}
-    
-    // Debug: log data dokumen
-    logger.debug('Document loaded:', {
-      id: data.id,
-      name: data.name,
-      file_path: data.file_path,
-      file_name: data.file_name,
-      mime_type: data.mime_type
-    })
     
     // Load file dengan authentication setelah data dokumen ter-load
     await loadDocumentFile()
@@ -290,7 +281,6 @@ const loadDocumentFile = async () => {
       URL.revokeObjectURL(documentBlobUrl.value)
     }
     documentBlobUrl.value = URL.createObjectURL(blob)
-    logger.debug('File downloaded and blob URL created:', documentBlobUrl.value)
 
     // For Office documents, convert to HTML for preview
     if (isOfficeDoc.value) {
@@ -325,22 +315,25 @@ const convertOfficeToHtml = async (blob: Blob) => {
     // Excel documents (.xlsx, .xls)
     else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || mimeType.includes('spreadsheetml')) {
       const arrayBuffer = await blob.arrayBuffer()
-      const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+      const workbook = new ExcelJS.Workbook()
+      await workbook.xlsx.load(arrayBuffer)
       
       // Convert first sheet to HTML table
-      const firstSheetName: string = workbook.SheetNames[0] || ''
-      if (!firstSheetName) {
+      if (workbook.worksheets.length === 0) {
         officeHtmlContent.value = null
         message.info('Sheet kosong, tidak ada data untuk ditampilkan.')
         return
       }
-      const worksheet = workbook.Sheets[firstSheetName as string] as XLSX.WorkSheet | undefined
+      
+      const worksheet = workbook.worksheets[0]
       if (!worksheet) {
         officeHtmlContent.value = null
         message.info('Sheet tidak ditemukan.')
         return
       }
-      const html = XLSX.utils.sheet_to_html(worksheet)
+      
+      // Convert worksheet to HTML table manually
+      const html = convertExcelToHtml(worksheet)
       officeHtmlContent.value = html
     }
     // PowerPoint documents (.pptx, .ppt)
@@ -361,6 +354,96 @@ const convertOfficeToHtml = async (blob: Blob) => {
   } finally {
     officePreviewLoading.value = false
   }
+}
+
+// Convert ExcelJS worksheet to HTML table
+const convertExcelToHtml = (worksheet: ExcelJS.Worksheet): string => {
+  let html = '<table style="border-collapse: collapse; width: 100%;">'
+  
+  // Check if worksheet has data
+  if (!worksheet || worksheet.rowCount === 0) {
+    return '<p>Sheet kosong, tidak ada data untuk ditampilkan.</p>'
+  }
+  
+  // Track max column to ensure table structure
+  let maxCol = 0
+  worksheet.eachRow((row) => {
+    row.eachCell((cell, colNumber) => {
+      if (colNumber > maxCol) {
+        maxCol = colNumber
+      }
+    })
+  })
+  
+  // Iterate through rows
+  worksheet.eachRow((row, rowNumber) => {
+    html += '<tr>'
+    
+    // Track which columns have been rendered
+    const renderedCols = new Set<number>()
+    
+    // Iterate through cells in the row
+    row.eachCell((cell, colNumber) => {
+      renderedCols.add(colNumber)
+      
+      const cellValue = cell.value
+      let displayValue = ''
+      
+      // Handle different cell value types
+      if (cellValue === null || cellValue === undefined) {
+        displayValue = ''
+      } else if (typeof cellValue === 'object') {
+        // Handle rich text, formula result, or date
+        if ('text' in cellValue) {
+          displayValue = (cellValue as { text: string }).text
+        } else if ('result' in cellValue) {
+          // Formula result
+          const result = (cellValue as { result: unknown }).result
+          displayValue = result !== null && result !== undefined ? String(result) : ''
+        } else if ('richText' in cellValue) {
+          // Rich text array
+          const richText = (cellValue as { richText: Array<{ text: string }> }).richText
+          displayValue = richText.map(rt => rt.text).join('')
+        } else {
+          displayValue = String(cellValue)
+        }
+      } else {
+        displayValue = String(cellValue)
+      }
+      
+      // Escape HTML
+      displayValue = displayValue
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
+      
+      // Get cell style
+      const isHeader = rowNumber === 1
+      const style = isHeader 
+        ? 'font-weight: bold; background-color: #f0f0f0; padding: 8px; border: 1px solid #ddd;'
+        : 'padding: 8px; border: 1px solid #ddd;'
+      
+      html += `<td style="${style}">${displayValue}</td>`
+    })
+    
+    // Fill empty cells to maintain table structure
+    for (let col = 1; col <= maxCol; col++) {
+      if (!renderedCols.has(col)) {
+        const isHeader = rowNumber === 1
+        const style = isHeader 
+          ? 'font-weight: bold; background-color: #f0f0f0; padding: 8px; border: 1px solid #ddd;'
+          : 'padding: 8px; border: 1px solid #ddd;'
+        html += `<td style="${style}"></td>`
+      }
+    }
+    
+    html += '</tr>'
+  })
+  
+  html += '</table>'
+  return html
 }
 
 // Get document file URL (now returns blob URL for security)
@@ -650,7 +733,6 @@ onBeforeUnmount(() => {
                   class="pdf-iframe"
                   frameborder="0"
                   @error="(e) => logger.error('PDF iframe error:', e)"
-                  @load="() => logger.debug('PDF iframe loaded:', getDocumentUrl)"
                 ></iframe>
               </div>
               <div v-else-if="isPDF" class="unsupported-viewer">

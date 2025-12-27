@@ -17,8 +17,6 @@ describe('LoginView - Logic Tests', () => {
   describe('Login Logic', () => {
     it('should handle successful login flow', async () => {
       // Test login logic flow
-      const email = 'test@example.com'
-      const password = 'password123'
       const mockLoginResponse = { requires_2fa: false }
       
       // Simulate login call
@@ -33,8 +31,6 @@ describe('LoginView - Logic Tests', () => {
 
     it('should handle 2FA requirement', async () => {
       // Test 2FA requirement logic
-      const email = 'test@example.com'
-      const password = 'password123'
       const mockLoginResponse = { 
         requires_2fa: true,
         message: 'Masukkan kode 2FA'

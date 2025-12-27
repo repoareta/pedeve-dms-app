@@ -48,7 +48,6 @@ describe('ProfileView - Logic Tests', () => {
   describe('Email Update', () => {
     it('should handle successful email update', async () => {
       // Test email update logic
-      const emailForm = { email: 'newemail@example.com' }
       const updatedUser = { ...mockUser, email: 'newemail@example.com' }
       
       // Simulate update

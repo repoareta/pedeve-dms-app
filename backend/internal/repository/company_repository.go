@@ -11,7 +11,7 @@ type CompanyRepository interface {
 	Create(company *domain.CompanyModel) error
 	GetByID(id string) (*domain.CompanyModel, error)
 	GetByCode(code string) (*domain.CompanyModel, error)
-	GetAll() ([]domain.CompanyModel, error)
+	GetAll(includeInactive bool) ([]domain.CompanyModel, error)
 	GetByParentID(parentID string) ([]domain.CompanyModel, error)
 	GetChildren(companyID string) ([]domain.CompanyModel, error)
 	GetDescendants(companyID string) ([]domain.CompanyModel, error) // Get all descendants (children, grandchildren, etc)
@@ -61,15 +61,19 @@ func (r *companyRepository) GetByCode(code string) (*domain.CompanyModel, error)
 	return &company, nil
 }
 
-func (r *companyRepository) GetAll() ([]domain.CompanyModel, error) {
+func (r *companyRepository) GetAll(includeInactive bool) ([]domain.CompanyModel, error) {
 	var companies []domain.CompanyModel
-	err := r.db.Where("is_active = ?", true).Find(&companies).Error
+	query := r.db
+	if !includeInactive {
+		query = query.Where("is_active = ?", true)
+	}
+	err := query.Find(&companies).Error
 	return companies, err
 }
 
 func (r *companyRepository) GetByParentID(parentID string) ([]domain.CompanyModel, error) {
 	var companies []domain.CompanyModel
-	err := r.db.Where("parent_id = ?", parentID).Find(&companies).Error
+	err := r.db.Where("parent_id = ? AND is_active = ?", parentID, true).Find(&companies).Error
 	return companies, err
 }
 

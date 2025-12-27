@@ -50,7 +50,7 @@ func main() {
 	fmt.Println()
 
 	// Get all active companies
-	allCompanies, err := companyRepo.GetAll()
+	allCompanies, err := companyRepo.GetAll(false)
 	if err != nil {
 		fmt.Printf("❌ Failed to get companies: %v\n", err)
 		zapLog.Error("Failed to get companies", zap.Error(err))

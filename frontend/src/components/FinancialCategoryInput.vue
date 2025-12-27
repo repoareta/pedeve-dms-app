@@ -230,6 +230,11 @@ const handleSubmit = async () => {
       }
     })
 
+    // Pastikan ebitda adalah integer (bukan float)
+    if ('ebitda' in requestData && requestData.ebitda !== undefined && requestData.ebitda !== null) {
+      requestData.ebitda = Math.round(Number(requestData.ebitda))
+    }
+
     if (formData.value.remark) {
       requestData.remark = formData.value.remark
     }
@@ -390,7 +395,12 @@ const handleSave = async (key: string, record: Record<string, unknown>) => {
     props.items.forEach((item) => {
       const fieldKey = `${item.key}_realisasi`
       if (fieldKey in record) {
-        updateData[item.field] = record[fieldKey] ?? 0
+        let value = record[fieldKey] ?? 0
+        // Pastikan ebitda adalah integer (bukan float)
+        if (item.field === 'ebitda' && value !== undefined && value !== null) {
+          value = Math.round(Number(value))
+        }
+        updateData[item.field] = value
       }
     })
 

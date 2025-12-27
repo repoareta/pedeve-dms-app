@@ -178,8 +178,10 @@ export interface CompanyUpdateRequest {
 
 // Company API
 export const companyApi = {
-  getAll: async (): Promise<Company[]> => {
-    const response = await apiClient.get<Company[]>('/companies')
+  getAll: async (includeInactive = false): Promise<Company[]> => {
+    const response = await apiClient.get<Company[]>('/companies', {
+      params: { include_inactive: includeInactive },
+    })
     return response.data
   },
 
@@ -195,6 +197,20 @@ export const companyApi = {
 
   getAncestors: async (id: string): Promise<Company[]> => {
     const response = await apiClient.get<Company[]>(`/companies/${id}/ancestors`)
+    return response.data
+  },
+
+  updateStatus: async (id: string, isActive: boolean): Promise<Company> => {
+    const csrfToken = await getCSRFToken()
+    const response = await apiClient.put<Company>(
+      `/companies/${id}/status`,
+      { is_active: isActive },
+      {
+        headers: {
+          'X-CSRF-Token': csrfToken,
+        },
+      }
+    )
     return response.data
   },
 

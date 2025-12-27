@@ -343,6 +343,8 @@ type ShareholderModel struct {
 	ShareCount           int64     `json:"share_count"`                                           // Jumlah saham
 	ShareSheetCount      *int64    `json:"share_sheet_count"`                                     // Jumlah lembar saham
 	ShareValuePerSheet   *int64    `json:"share_value_per_sheet"`                                 // Nilai Rupiah per lembar
+	AuthorizedCapital    *int64    `json:"authorized_capital"`                                    // Modal Dasar untuk individu
+	PaidUpCapital        *int64    `json:"paid_up_capital"`                                       // Modal Disetor untuk individu
 	IsMainParent         bool      `gorm:"default:false" json:"is_main_parent"`                   // Apakah perusahaan induk utama
 	CreatedAt            time.Time `json:"created_at"`
 	UpdatedAt            time.Time `json:"updated_at"`
@@ -645,6 +647,8 @@ type ShareholderRequest struct {
 	ShareCount           int64   `json:"share_count"`            // Jumlah saham
 	ShareSheetCount      *int64  `json:"share_sheet_count"`      // Jumlah lembar saham
 	ShareValuePerSheet   *int64  `json:"share_value_per_sheet"`  // Nilai Rupiah per lembar
+	AuthorizedCapital    *int64  `json:"authorized_capital"`     // Modal Dasar untuk individu
+	PaidUpCapital        *int64  `json:"paid_up_capital"`        // Modal Disetor untuk individu
 	IsMainParent         bool    `json:"is_main_parent"`         // Apakah perusahaan induk utama
 }
 

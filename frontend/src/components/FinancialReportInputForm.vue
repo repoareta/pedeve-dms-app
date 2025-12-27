@@ -313,6 +313,8 @@
                 <a-input-number
                   v-model:value="formData.ebitda"
                   style="width: 100%;"
+                  :precision="0"
+                  :min="0"
                   :formatter="(value: number | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
                   :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
                 />
@@ -733,13 +735,20 @@ const handleSubmit = async () => {
 const performSubmit = async () => {
   loading.value = true
   try {
+    // Prepare submit data dengan konversi ebitda ke integer
+    const submitData = { ...formData.value }
+    // Pastikan ebitda adalah integer (bukan float)
+    if (submitData.ebitda !== undefined && submitData.ebitda !== null) {
+      submitData.ebitda = Math.round(Number(submitData.ebitda))
+    }
+    
     if (existingReport.value) {
       // Update existing report
-      await financialReportsApi.update(existingReport.value.id, formData.value)
+      await financialReportsApi.update(existingReport.value.id, submitData)
       message.success('Laporan keuangan berhasil diupdate')
     } else {
       // Create new report
-      await financialReportsApi.create(formData.value)
+      await financialReportsApi.create(submitData)
       message.success('Laporan keuangan berhasil disimpan')
     }
     

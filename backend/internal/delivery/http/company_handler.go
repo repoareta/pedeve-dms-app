@@ -714,12 +714,16 @@ func (h *CompanyHandler) GetAllCompanies(c *fiber.Ctx) error {
 	roleName := c.Locals("roleName").(string)
 	companyID := c.Locals("companyID")
 
+	// Always include inactive companies in listing (default: true)
+	// Inactive companies will be excluded in calculations/aggregations by repository filters
+	includeInactive := c.QueryBool("include_inactive", true)
+
 	var companies []domain.CompanyModel
 	var err error
 
 	// Superadmin/administrator sees all companies
 	if utils.IsSuperAdminLike(roleName) {
-		companies, err = h.companyUseCase.GetAllCompanies()
+		companies, err = h.companyUseCase.GetAllCompanies(includeInactive)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
 				Error:   "internal_error",
@@ -1054,6 +1058,89 @@ func (h *CompanyHandler) UpdateCompany(c *fiber.Ctx) error {
 	userID := c.Locals("userID").(string)
 	username := c.Locals("username").(string)
 	audit.LogAction(userID, username, audit.ActionUpdateCompany, audit.ResourceCompany, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+
+	return c.Status(fiber.StatusOK).JSON(company)
+}
+
+// UpdateCompanyStatus handles company status update (activate/deactivate)
+// @Summary      Update Company Status
+// @Description  Mengupdate status aktif/nonaktif company. Hanya superadmin/admin yang bisa update status.
+// @Tags         Company Management
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id       path      string  true  "Company ID"
+// @Param        status   body      object  true  "Status data (is_active: boolean)"
+// @Success      200      {object}  domain.CompanyModel
+// @Failure      400      {object}  domain.ErrorResponse
+// @Failure      403      {object}  domain.ErrorResponse
+// @Router       /api/v1/companies/{id}/status [put]
+func (h *CompanyHandler) UpdateCompanyStatus(c *fiber.Ctx) error {
+	id := c.Params("id")
+	zapLog := logger.GetLogger()
+	zapLog.Info("UpdateCompanyStatus called", zap.String("company_id", id))
+	
+	var req struct {
+		IsActive bool `json:"is_active"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		zapLog.Error("Failed to parse request body in UpdateCompanyStatus", zap.Error(err))
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_request",
+			Message: "Invalid request body",
+		})
+	}
+
+	companyID := c.Locals("companyID")
+	roleName := c.Locals("roleName").(string)
+
+	// Check access - hanya superadmin/admin yang bisa update status
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "You don't have permission to update company status",
+		})
+	}
+
+	// Admin hanya bisa update status company sendiri atau descendants
+	if roleName == "admin" && companyID != nil {
+		var userCompanyID string
+		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
+			userCompanyID = *companyIDPtr
+		} else if companyIDStr, ok := companyID.(string); ok {
+			userCompanyID = companyIDStr
+		} else {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Invalid company ID format",
+			})
+		}
+		hasAccess, err := h.companyUseCase.ValidateCompanyAccess(userCompanyID, id)
+		if err != nil || !hasAccess {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "You don't have access to update status of this company",
+			})
+		}
+	}
+
+	company, err := h.companyUseCase.UpdateCompanyStatus(id, req.IsActive)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "update_failed",
+			Message: err.Error(),
+		})
+	}
+
+	// Audit log
+	userID := c.Locals("userID").(string)
+	username := c.Locals("username").(string)
+	action := "deactivate_company"
+	if req.IsActive {
+		action = "activate_company"
+	}
+	audit.LogAction(userID, username, action, audit.ResourceCompany, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
 
 	return c.Status(fiber.StatusOK).JSON(company)
 }

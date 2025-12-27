@@ -83,6 +83,10 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+      - name: Type-check frontend
+        working-directory: frontend
+        run: npm run type-check
+
       - name: Build frontend static files
         working-directory: frontend
         env:
@@ -167,6 +171,8 @@ jobs:
           if [ -n "${{ secrets.SONARCLOUD_ORGANIZATION }}" ]; then
             ARGS="$ARGS -Dsonar.organization=${{ secrets.SONARCLOUD_ORGANIZATION }}"
           fi
+          # PENTING: Disable automatic analysis untuk mencegah konflik dengan CI analysis
+          ARGS="$ARGS -Dsonar.ci.autoscan.disabled=true"
           echo "args=$ARGS" >> $GITHUB_OUTPUT
           echo "SonarCloud args: $ARGS"
 
@@ -179,11 +185,21 @@ jobs:
           projectBaseDir: backend
           # Override project key dan organization jika ada di GitHub Secrets
           # Jika tidak di-set, akan menggunakan default dari sonar-project.properties
+          # PENTING: Flag -Dsonar.ci.autoscan.disabled=true sudah ditambahkan di Prepare SonarCloud args
           args: >
             ${{ steps.sonar-args.outputs.args }}
-            -Dsonar.ci.autoscan.disabled=true
         continue-on-error: true  # Don't fail pipeline on code quality issues, just report
         # Note: Step ini akan skip otomatis jika SONAR_TOKEN kosong oleh SonarCloud action
+        # 
+        # PENTING: Jika muncul error "You are running CI analysis while Automatic Analysis is enabled":
+        # 1. Buka SonarCloud dashboard: https://sonarcloud.io
+        # 2. Pilih project: repoareta_pedeve-dms-app
+        # 3. Pergi ke: Project Settings > Analysis Method
+        # 4. Disable "Automatic Analysis"
+        # 5. Atau gunakan "Manual Analysis" saja
+        #
+        # Error ini tidak critical karena continue-on-error: true, tapi lebih baik di-disable
+        # untuk menghindari konflik antara CI analysis dan Automatic Analysis
 
       - name: Compute image metadata
         id: meta
@@ -225,7 +241,7 @@ jobs:
       # Jadi kita hanya scan backend image saja
       - name: Run Trivy vulnerability scanner on backend image
         id: trivy-backend
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.29.0
         with:
           image-ref: ${{ steps.build-backend.outputs.image }}
           format: 'sarif'
@@ -330,7 +346,7 @@ jobs:
 
       - name: Create GitHub Release
         if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ github.ref_name }}
           body_path: CHANGELOG.md

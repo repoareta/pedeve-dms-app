@@ -13,6 +13,8 @@ export default mergeConfig(
       include: ['**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
       // Glob pattern untuk mencari semua test files
       globals: true,
+      // Enable UI mode
+      ui: true,
     },
   }),
 )

@@ -550,7 +550,7 @@ func (h *FinancialReportHandler) GenerateBulkUploadTemplate(c *fiber.Ctx) error 
 	// Ambil companies yang bisa diakses berdasarkan role user
 	if roleName == "superadmin" || roleName == "administrator" {
 		// Superadmin/Administrator can access all companies
-		accessibleCompanies, err = h.companyUseCase.GetAllCompanies()
+		accessibleCompanies, err = h.companyUseCase.GetAllCompanies(false)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
 				Error:   "template_failed",
@@ -938,13 +938,12 @@ func (h *FinancialReportHandler) ValidateBulkExcelFile(c *fiber.Ctx) error {
 	// Get accessible company codes
 	var accessibleCompanyCodes map[string]bool
 	if roleName == "superadmin" || roleName == "administrator" {
-		companies, err := h.companyUseCase.GetAllCompanies()
+		companies, err := h.companyUseCase.GetAllCompanies(false) // Only active companies for calculations
 		if err == nil {
 			accessibleCompanyCodes = make(map[string]bool)
 			for _, company := range companies {
-				if company.IsActive {
-					accessibleCompanyCodes[company.Code] = true
-				}
+				// Company is already filtered by repository to only include active
+				accessibleCompanyCodes[company.Code] = true
 			}
 		}
 	} else if companyID != nil {
@@ -1518,13 +1517,12 @@ func (h *FinancialReportHandler) UploadBulkFinancialReports(c *fiber.Ctx) error 
 	// Determine accessible company codes
 	var accessibleCompanyCodes map[string]bool
 	if roleName == "superadmin" || roleName == "administrator" {
-		companies, err := h.companyUseCase.GetAllCompanies()
+		companies, err := h.companyUseCase.GetAllCompanies(false) // Only active companies for calculations
 		if err == nil {
 			accessibleCompanyCodes = make(map[string]bool)
 			for _, company := range companies {
-				if company.IsActive {
-					accessibleCompanyCodes[company.Code] = true
-				}
+				// Company is already filtered by repository to only include active
+				accessibleCompanyCodes[company.Code] = true
 			}
 		}
 	} else if companyID != nil {

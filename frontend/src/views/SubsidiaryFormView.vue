@@ -68,7 +68,7 @@
                   <a-textarea v-model:value="formData.description" :rows="1" placeholder="Deskripsi perusahaan" />
                 </a-form-item>
               </a-col>
-              <a-col :xs="24" :md="8">
+              <a-col v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE" :xs="24" :md="8">
                 <a-form-item label="Status">
                   <a-select v-model:value="formData.status" placeholder="Pilih status">
                     <a-select-option value="Aktif">Aktif</a-select-option>
@@ -243,25 +243,58 @@
                       >
                         <template #content>
                           <div style="font-size: 12px; line-height: 1.6;">
-                            <div style="margin-bottom: 8px;">
-                              <strong>Persentase ini dihitung otomatis berdasarkan Modal Disetor:</strong>
+                            <div style="margin-bottom: 12px;">
+                              <strong>Persentase Kepemilikan Sendiri dihitung otomatis berdasarkan Modal Disetor</strong>
                             </div>
-                            <div style="margin-bottom: 4px;">
-                              Modal Disetor perusahaan sendiri: {{ formData.currency || 'IDR' }} {{ (formData.paid_up_capital || 0).toLocaleString('id-ID') }}
+
+                            <!-- Informasi Perusahaan Ini -->
+                            <div style="margin-bottom: 12px; padding: 8px; background-color: #f6ffed; border-left: 3px solid #52c41a; border-radius: 4px;">
+                              <div style="margin-bottom: 6px;">
+                                <strong style="color: #52c41a;">
+                                  <IconifyIcon icon="mdi:office-building" width="14" style="margin-right: 4px;" />
+                                  Perusahaan Ini ({{ formData.name || 'Perusahaan yang sedang dibuat/diedit' }}):
+                                </strong>
+                              </div>
+                              <div style="margin-left: 18px; margin-bottom: 4px;">
+                                <strong>Modal Disetor:</strong> {{ formData.currency || 'IDR' }} {{ (formData.paid_up_capital || 0).toLocaleString('id-ID') }}
+                              </div>
                             </div>
-                            <div style="margin-bottom: 4px;">
-                              Total Modal Disetor semua pemegang saham: {{ formData.currency || 'IDR' }} {{ getTotalShareholderCapital().toLocaleString('id-ID') }}
+
+                            <!-- Ringkasan Total -->
+                            <div style="margin-bottom: 12px; padding: 8px; background-color: #fff7e6; border-left: 3px solid #faad14; border-radius: 4px;">
+                              <div style="margin-bottom: 6px;">
+                                <strong style="color: #faad14;">
+                                  <IconifyIcon icon="mdi:calculator" width="14" style="margin-right: 4px;" />
+                                  Ringkasan Perhitungan:
+                                </strong>
+                              </div>
+                              <div style="margin-left: 18px; margin-bottom: 4px;">
+                                Total Modal Disetor semua pemegang saham: {{ formData.currency || 'IDR' }} {{ getTotalShareholderCapital().toLocaleString('id-ID') }}
+                              </div>
+                              <div style="margin-left: 18px; margin-bottom: 4px;">
+                                <strong>Total Modal (Perusahaan Ini + Semua Pemegang Saham):</strong> {{ formData.currency || 'IDR' }} {{ ((formData.paid_up_capital || 0) + getTotalShareholderCapital()).toLocaleString('id-ID') }}
+                              </div>
                             </div>
-                            <div style="margin-bottom: 4px;">
-                              Total modal: {{ formData.currency || 'IDR' }} {{ ((formData.paid_up_capital || 0) + getTotalShareholderCapital()).toLocaleString('id-ID') }}
+
+                            <!-- Hasil Persentase -->
+                            <div style="margin-bottom: 12px; padding: 8px; background-color: #fff1f0; border-left: 3px solid #ff4d4f; border-radius: 4px;">
+                              <div style="margin-bottom: 4px;">
+                                <strong style="color: #ff4d4f; font-size: 13px;">
+                                  <IconifyIcon icon="mdi:percent" width="14" style="margin-right: 4px;" />
+                                  Persentase Kepemilikan Sendiri: {{ formatOwnershipPercent(currentCompanyOwnershipPercent) }}
+                                </strong>
+                              </div>
                             </div>
-                            <div style="margin-bottom: 4px;">
-                              <strong>Persentase Kepemilikan Sendiri: {{ formatOwnershipPercent(currentCompanyOwnershipPercent) }}</strong>
-                            </div>
-                            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e8e8e8;">
-                              <strong>Rumus perhitungan:</strong><br/>
-                              Total modal = Modal perusahaan sendiri + Total modal semua pemegang saham<br/>
-                              Persentase kepemilikan sendiri = (Modal perusahaan sendiri ÷ Total modal) × 100%
+
+                            <!-- Rumus -->
+                            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e8e8e8;">
+                              <div style="margin-bottom: 6px;">
+                                <strong>Rumus Perhitungan:</strong>
+                              </div>
+                              <div style="margin-left: 8px; font-size: 11px; color: #666;">
+                                Total Modal = Modal Disetor Perusahaan Ini + Total Modal Disetor Semua Pemegang Saham<br/>
+                                Persentase Kepemilikan Sendiri = (Modal Disetor Perusahaan Ini ÷ Total Modal) × 100%
+                              </div>
                             </div>
                           </div>
                         </template>
@@ -308,153 +341,117 @@
                 row-key="id"
               >
               <template #bodyCell="{ column, record, index }">
+                <template v-if="column.key === 'shareholder_type'">
+                  <a-tag :color="record.isCompany ? 'blue' : 'green'">
+                    <IconifyIcon :icon="record.isCompany ? 'mdi:office-building' : 'mdi:account'" width="14" style="margin-right: 4px;" />
+                    {{ record.isCompany ? 'Perusahaan' : 'Individu' }}
+                  </a-tag>
+                </template>
                 <template v-if="column.key === 'type'">
-                  <div class="shareholder-type-select-wrapper">
-                    <a-select
-                      v-model:value="record.type"
-                      mode="multiple"
-                      placeholder="Pilih atau ketik jenis pemegang saham baru"
-                      show-search
-                      allow-clear
-                      :filter-option="false"
-                      :loading="loadingShareholderTypes"
-                      :search-value="shareholderTypeSearchValue"
-                      :max-tag-count="1"
-                      :max-tag-placeholder="(omittedValues: string[]) => `+${omittedValues.length} lainnya`"
-                      style="width: 100%; min-width: 200px;"
-                      @search="handleShareholderTypeSearch"
-                      @change="handleShareholderTypeChange(record, $event)"
-                      @select="handleShareholderTypeSelect(record, $event)"
-                    >
-                      <a-select-option
-                        v-for="shareholderType in filteredShareholderTypes"
-                        :key="shareholderType.id"
-                        :value="shareholderType.name"
-                        :disabled="!shareholderType.is_active && !record.type.includes(shareholderType.name)"
-                      >
-                        <span :style="{ opacity: shareholderType.is_active ? 1 : 0.6 }">
-                          {{ shareholderType.name }}
-                          <a-tag v-if="!shareholderType.is_active" color="default" size="small" style="margin-left: 8px;">
-                            Tidak Aktif
-                          </a-tag>
-                        </span>
-                      </a-select-option>
-                      <a-select-option
-                        v-if="shareholderTypeSearchValue && !filteredShareholderTypes.find((st: ShareholderType) => st.name.toLowerCase() === shareholderTypeSearchValue.toLowerCase()) && canManageShareholderTypes"
-                        :value="shareholderTypeSearchValue"
-                        style="color: #1890ff;"
-                      >
-                        <IconifyIcon icon="mdi:plus-circle" style="margin-right: 4px;" />
-                        Buat "{{ shareholderTypeSearchValue }}"
-                      </a-select-option>
-                    </a-select>
-                    <!-- <div v-if="canManageShareholderTypes" class="shareholder-type-hint">
-                      <IconifyIcon icon="mdi:information-outline" style="margin-right: 4px;" />
-                      <span>Ketik nama baru dan tekan Enter untuk membuat jenis pemegang saham baru. Klik icon hapus di dropdown untuk menghapus jenis pemegang saham.</span>
-                    </div> -->
+                  <div v-if="!record.isCompany">
+                    <a-tag v-for="(type, idx) in record.type" :key="idx" style="margin-right: 4px; margin-bottom: 4px;">
+                      {{ type }}
+                    </a-tag>
+                    <span v-if="!record.type || record.type.length === 0" style="color: #999;">-</span>
                   </div>
+                  <span v-else style="color: #999;">-</span>
                 </template>
                 <template v-if="column.key === 'name'">
-                  <!-- Always show dropdown first, if individual mode then show input below -->
-                  <a-select
-                    :value="record.shareholder_company_id || '__individual__'"
-                    style="width: 100%"
-                    placeholder="Pilih perusahaan atau individu/eksternal"
-                    show-search
-                    :filter-option="false"
-                    :search-value="shareholderCompanySearchValue[index] || ''"
-                    @search="(value: string) => handleShareholderCompanySearch(index, value)"
-                    @change="(value: string | null) => {
-                      handleShareholderCompanyChange(record, value)
-                      // Clear search after selection
-                      shareholderCompanySearchValue[index] = ''
-                    }"
-                  >
-                    <a-select-option value="__individual__" style="color: #1890ff; font-weight: 500;">
-                      <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
-                      Individu/Eksternal (Input Manual)
-                    </a-select-option>
-                    <a-select-option
-                      v-for="company in getFilteredShareholderCompanies(index)"
-                      :key="company.id"
-                      :value="company.id"
-                    >
-                      {{ company.name }} {{ company.code ? `(${company.code})` : '' }}
-                    </a-select-option>
-                  </a-select>
-                  <!-- Show input text if individual/external mode -->
-                  <a-input 
-                    v-if="!record.isCompany"
-                    v-model:value="record.name" 
-                    placeholder="Nama pemegang saham (Individu/Eksternal)"
-                    style="margin-top: 8px; width: 100%; min-width: 180px;"
-                  />
+                  {{ record.name || '-' }}
                 </template>
                 <template v-if="column.key === 'identity_number'">
-                  <a-popover
-                    v-if="record.isCompany && !record.identity_number"
-                    :title="null"
-                    trigger="hover"
-                    placement="top"
-                  >
-                    <template #content>
-                      <div style="font-size: 12px;">
-                        NPWP/NIB perusahaan belum tersedia. Isi manual jika diperlukan.
-                      </div>
-                    </template>
-                    <template #default>
-                      <a-input 
-                        v-model:value="record.identity_number" 
-                        :placeholder="record.isCompany ? 'Nomor Identitas (Otomatis dari NPWP/NIB)' : 'Nomor Identitas (KTP/NPWP)'"
-                        :disabled="record.isCompany && (record.shareholder_company_id ? true : false)"
-                        :status="record.isCompany && !record.identity_number ? 'error' : undefined"
-                        style="width: 100%; min-width: 180px;"
-                      />
-                    </template>
-                  </a-popover>
-                  <a-input 
-                    v-else
-                    v-model:value="record.identity_number" 
-                    :placeholder="record.isCompany ? 'Nomor Identitas (Otomatis dari NPWP/NIB)' : 'Nomor Identitas (KTP/NPWP)'"
-                    :disabled="record.isCompany && (record.shareholder_company_id ? true : false)"
-                    style="width: 100%; min-width: 180px;"
-                  />
+                  {{ record.identity_number || '-' }}
                 </template>
                 <template v-if="column.key === 'ownership_percent'">
                   <a-popover
-                    v-if="record.isCompany"
                     :title="null"
                     trigger="hover"
                     placement="top"
                   >
                     <template #content>
                       <div style="font-size: 12px; line-height: 1.6;">
-                        <div style="margin-bottom: 8px;">
-                          <strong>Persentase ini dihitung otomatis berdasarkan Modal Disetor:</strong>
+                        <div style="margin-bottom: 12px;">
+                          <strong>Persentase ini dihitung otomatis berdasarkan Modal Disetor</strong>
                         </div>
-                        <div style="margin-bottom: 4px;">
-                          Modal Disetor perusahaan pemegang saham: {{ getShareholderCapitalInfo(record) }}
+                        
+                        <!-- Informasi Pemegang Saham -->
+                        <div style="margin-bottom: 12px; padding: 8px; background-color: #f0f5ff; border-left: 3px solid #1890ff; border-radius: 4px;">
+                          <div style="margin-bottom: 6px;">
+                            <strong style="color: #1890ff;">
+                              <IconifyIcon icon="mdi:account" width="14" style="margin-right: 4px;" />
+                              {{ record.isCompany ? 'Pemegang Saham (Perusahaan)' : 'Pemegang Saham (Individu)' }}:
+                            </strong>
+                          </div>
+                          <div style="margin-left: 18px; margin-bottom: 4px;">
+                            <strong>Nama:</strong> {{ record.name || '-' }}
+                          </div>
+                          <template v-if="getShareholderDetailInfo(record)">
+                            <div style="margin-left: 18px; margin-bottom: 4px;">
+                              <strong>Modal Dasar:</strong> {{ getShareholderDetailInfo(record)?.authorizedCapital || '-' }}
+                            </div>
+                            <div style="margin-left: 18px; margin-bottom: 4px;">
+                              <strong>Modal Disetor:</strong> {{ getShareholderDetailInfo(record)?.paidUpCapital || '-' }}
+                            </div>
+                          </template>
                         </div>
-                        <div style="margin-bottom: 4px;">
-                          Modal Disetor perusahaan sendiri: {{ formData.currency || 'IDR' }} {{ (formData.paid_up_capital || 0).toLocaleString('id-ID') }}
+
+                        <!-- Informasi Perusahaan Sendiri -->
+                        <div style="margin-bottom: 12px; padding: 8px; background-color: #f6ffed; border-left: 3px solid #52c41a; border-radius: 4px;">
+                          <div style="margin-bottom: 6px;">
+                            <strong style="color: #52c41a;">
+                              <IconifyIcon icon="mdi:office-building" width="14" style="margin-right: 4px;" />
+                              Perusahaan Ini ({{ formData.name || 'Perusahaan yang sedang dibuat/diedit' }}):
+                            </strong>
+                          </div>
+                          <div style="margin-left: 18px; margin-bottom: 4px;">
+                            <strong>Modal Disetor:</strong> {{ formData.currency || 'IDR' }} {{ (formData.paid_up_capital || 0).toLocaleString('id-ID') }}
+                          </div>
                         </div>
-                        <div style="margin-bottom: 4px;">
-                          Total Modal Disetor semua pemegang saham: {{ formData.currency || 'IDR' }} {{ getTotalShareholderCapital().toLocaleString('id-ID') }}
+
+                        <!-- Ringkasan Total -->
+                        <div style="margin-bottom: 12px; padding: 8px; background-color: #fff7e6; border-left: 3px solid #faad14; border-radius: 4px;">
+                          <div style="margin-bottom: 6px;">
+                            <strong style="color: #faad14;">
+                              <IconifyIcon icon="mdi:calculator" width="14" style="margin-right: 4px;" />
+                              Ringkasan Perhitungan:
+                            </strong>
+                          </div>
+                          <div style="margin-left: 18px; margin-bottom: 4px;">
+                            Total Modal Disetor semua pemegang saham: {{ formData.currency || 'IDR' }} {{ getTotalShareholderCapital().toLocaleString('id-ID') }}
+                          </div>
+                          <div style="margin-left: 18px; margin-bottom: 4px;">
+                            <strong>Total Modal (Perusahaan Ini + Semua Pemegang Saham):</strong> {{ formData.currency || 'IDR' }} {{ ((formData.paid_up_capital || 0) + getTotalShareholderCapital()).toLocaleString('id-ID') }}
+                          </div>
                         </div>
-                        <div style="margin-bottom: 4px;">
-                          Total modal: {{ formData.currency || 'IDR' }} {{ ((formData.paid_up_capital || 0) + getTotalShareholderCapital()).toLocaleString('id-ID') }}
+
+                        <!-- Hasil Persentase -->
+                        <div style="margin-bottom: 12px; padding: 8px; background-color: #fff1f0; border-left: 3px solid #ff4d4f; border-radius: 4px;">
+                          <div style="margin-bottom: 4px;">
+                            <strong style="color: #ff4d4f; font-size: 13px;">
+                              <IconifyIcon icon="mdi:percent" width="14" style="margin-right: 4px;" />
+                              Persentase Kepemilikan: {{ formatOwnershipPercent(record.ownership_percent || 0) }}
+                            </strong>
+                          </div>
                         </div>
-                        <div style="margin-bottom: 4px;">
-                          <strong>Persentase Kepemilikan: {{ formatOwnershipPercent(record.ownership_percent || 0) }}</strong>
+
+                        <!-- Rumus -->
+                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e8e8e8;">
+                          <div style="margin-bottom: 6px;">
+                            <strong>Rumus Perhitungan:</strong>
+                          </div>
+                          <div style="margin-left: 8px; font-size: 11px; color: #666;">
+                            Total Modal = Modal Disetor Perusahaan Ini + Total Modal Disetor Semua Pemegang Saham<br/>
+                            Persentase = (Modal Disetor Pemegang Saham Ini ÷ Total Modal) × 100%
+                          </div>
                         </div>
-                        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e8e8e8;">
-                          <strong>Rumus perhitungan:</strong><br/>
-                          Total modal = Modal perusahaan sendiri + Total modal semua pemegang saham<br/>
-                          Persentase = (Modal Disetor perusahaan pemegang saham ÷ Total modal) × 100%
-                        </div>
-                        <div v-if="record.ownership_percent === 0" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #ffccc7; color: #ff4d4f;">
-                          <IconifyIcon icon="mdi:alert-circle" width="14" style="margin-right: 4px;" />
-                          <strong>Perusahaan belum memiliki Modal Disetor</strong>
+
+                        <!-- Warning jika modal 0 -->
+                        <div v-if="record.ownership_percent === 0" style="margin-top: 12px; padding: 8px; background-color: #fff1f0; border-left: 3px solid #ff4d4f; border-radius: 4px;">
+                          <IconifyIcon icon="mdi:alert-circle" width="14" style="margin-right: 4px; color: #ff4d4f;" />
+                          <strong style="color: #ff4d4f;">
+                            <span v-if="record.isCompany">Perusahaan pemegang saham belum memiliki Modal Disetor</span>
+                            <span v-else>Individu pemegang saham belum memiliki Modal Disetor</span>
+                          </strong>
                         </div>
                       </div>
                     </template>
@@ -467,47 +464,33 @@
                       </a-tag>
                     </template>
                   </a-popover>
-                  <a-input-number
-                    v-else
-                    v-model:value="record.ownership_percent"
-                    :min="0"
-                    :max="100"
-                    :precision="10"
-                    style="width: 100%; min-width: 160px;"
-                    placeholder="%"
-                  />
                 </template>
                 <template v-if="column.key === 'share_sheet_count'">
-                  <a-input-number
-                    v-model:value="record.share_sheet_count"
-                    :min="0"
-                    :precision="0"
-                    style="width: 100%; min-width: 160px;"
-                    placeholder="Jumlah lembar saham"
-                    :formatter="(value: number | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
-                    :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
-                  />
+                  {{ record.share_sheet_count ? record.share_sheet_count.toLocaleString('id-ID') : '-' }}
+                </template>
+                <template v-if="column.key === 'authorized_capital'">
+                  {{ getShareholderAuthorizedCapital(record) }}
+                </template>
+                <template v-if="column.key === 'paid_up_capital'">
+                  {{ getShareholderPaidUpCapital(record) }}
                 </template>
                 <template v-if="column.key === 'share_value_per_sheet'">
-                  <a-input-number
-                    v-model:value="record.share_value_per_sheet"
-                    :min="0"
-                    :precision="0"
-                    style="width: 100%; min-width: 180px;"
-                    placeholder="Nilai Rupiah per lembar"
-                    :formatter="(value: number | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
-                    :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
-                  />
+                  {{ record.share_value_per_sheet ? (formData.currency || 'IDR') + ' ' + record.share_value_per_sheet.toLocaleString('id-ID') : '-' }}
                 </template>
                 <template v-if="column.key === 'actions'">
-                  <a-button type="link" danger size="small" @click="removeShareholder(index)">
-                    <IconifyIcon icon="mdi:delete" width="16" />
-                  </a-button>
+                  <a-space>
+                    <a-button type="link" size="small" @click="openShareholderModal(index)">
+                      <IconifyIcon icon="mdi:pencil" width="16" />
+                    </a-button>
+                    <a-button type="link" danger size="small" @click="removeShareholder(index)">
+                      <IconifyIcon icon="mdi:delete" width="16" />
+                    </a-button>
+                  </a-space>
                 </template>
               </template>
               </a-table>
             </div>
-            <a-button type="dashed" style="width: 100%; margin-top: 16px;" @click="addShareholder">
+            <a-button type="dashed" style="width: 100%; margin-top: 16px;" @click="openShareholderModal()">
               <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
               Tambah Pemegang Saham
             </a-button>
@@ -799,6 +782,168 @@
           </div>
         </a-modal>
 
+        <!-- Modal Add/Edit Shareholder -->
+        <a-modal
+          v-model:open="shareholderModalVisible"
+          :title="editingShareholderIndex !== null ? 'Edit Pemegang Saham' : 'Tambah Pemegang Saham'"
+          :width="800"
+          @cancel="closeShareholderModal"
+          @ok="saveShareholder"
+        >
+          <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 18 }">
+            <a-form-item label="Jenis" required>
+              <a-select
+                v-model:value="shareholderModalForm.isCompany"
+                style="width: 100%"
+                @change="handleShareholderModalTypeSwitch"
+              >
+                <a-select-option :value="true">
+                  <IconifyIcon icon="mdi:office-building" width="16" style="margin-right: 8px;" />
+                  Perusahaan
+                </a-select-option>
+                <a-select-option :value="false">
+                  <IconifyIcon icon="mdi:account" width="16" style="margin-right: 8px;" />
+                  Individu
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+
+            <a-form-item v-if="shareholderModalForm.isCompany" label="Perusahaan" required>
+              <a-select
+                v-model:value="shareholderModalForm.shareholder_company_id"
+                style="width: 100%"
+                placeholder="Pilih perusahaan"
+                show-search
+                :filter-option="false"
+                :search-value="shareholderModalCompanySearchValue"
+                allow-clear
+                @search="(value: string) => shareholderModalCompanySearchValue = value"
+                @change="handleShareholderModalCompanyChange"
+              >
+                <a-select-option
+                  v-for="company in getFilteredShareholderModalCompanies()"
+                  :key="company.id"
+                  :value="company.id"
+                >
+                  {{ company.name }} {{ company.code ? `(${company.code})` : '' }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+
+            <a-form-item v-if="!shareholderModalForm.isCompany" label="Jenis Pemegang Saham">
+              <a-select
+                v-model:value="shareholderModalForm.type"
+                mode="multiple"
+                placeholder="Pilih atau ketik jenis pemegang saham baru"
+                show-search
+                allow-clear
+                :filter-option="false"
+                :loading="loadingShareholderTypes"
+                :search-value="shareholderTypeSearchValue"
+                :max-tag-count="1"
+                :max-tag-placeholder="(omittedValues: string[]) => `+${omittedValues.length} lainnya`"
+                style="width: 100%"
+                @search="handleShareholderTypeSearch"
+                @change="handleShareholderTypeChange(shareholderModalForm, $event)"
+                @select="handleShareholderTypeSelect(shareholderModalForm, $event)"
+              >
+                <a-select-option
+                  v-for="shareholderType in filteredShareholderTypes"
+                  :key="shareholderType.id"
+                  :value="shareholderType.name"
+                  :disabled="!shareholderType.is_active && !shareholderModalForm.type.includes(shareholderType.name)"
+                >
+                  <span :style="{ opacity: shareholderType.is_active ? 1 : 0.6 }">
+                    {{ shareholderType.name }}
+                    <a-tag v-if="!shareholderType.is_active" color="default" size="small" style="margin-left: 8px;">
+                      Tidak Aktif
+                    </a-tag>
+                  </span>
+                </a-select-option>
+                <a-select-option
+                  v-if="shareholderTypeSearchValue && !filteredShareholderTypes.find((st: ShareholderType) => st.name.toLowerCase() === shareholderTypeSearchValue.toLowerCase()) && canManageShareholderTypes"
+                  :value="shareholderTypeSearchValue"
+                  style="color: #1890ff;"
+                >
+                  <IconifyIcon icon="mdi:plus-circle" style="margin-right: 4px;" />
+                  Buat "{{ shareholderTypeSearchValue }}"
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+
+            <a-form-item label="Nama" required>
+              <a-input
+                v-model:value="shareholderModalForm.name"
+                :placeholder="shareholderModalForm.isCompany ? 'Nama perusahaan (otomatis terisi)' : 'Nama pemegang saham (Individu)'"
+                :disabled="shareholderModalForm.isCompany && shareholderModalForm.shareholder_company_id !== null"
+                style="width: 100%"
+              />
+            </a-form-item>
+
+            <a-form-item label="Nomor Identitas">
+              <a-input
+                v-model:value="shareholderModalForm.identity_number"
+                :placeholder="shareholderModalForm.isCompany ? 'Nomor Identitas (Otomatis dari NPWP/NIB)' : 'Nomor Identitas (KTP/NPWP)'"
+                :disabled="shareholderModalForm.isCompany && shareholderModalForm.shareholder_company_id !== null"
+                style="width: 100%"
+              />
+            </a-form-item>
+
+            <template v-if="!shareholderModalForm.isCompany">
+              <a-form-item label="Modal Dasar">
+                <a-input-number
+                  v-model:value="shareholderModalForm.authorized_capital"
+                  :min="0"
+                  :precision="0"
+                  style="width: 100%"
+                  placeholder="Modal Dasar"
+                  :formatter="(value: number | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
+                  :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
+                />
+              </a-form-item>
+
+              <a-form-item label="Modal Disetor">
+                <a-input-number
+                  v-model:value="shareholderModalForm.paid_up_capital"
+                  :min="0"
+                  :precision="0"
+                  style="width: 100%"
+                  placeholder="Modal Disetor"
+                  :formatter="(value: number | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
+                  :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
+                />
+                <div style="margin-top: 4px; font-size: 12px; color: #666;">
+                  Modal Disetor digunakan untuk menghitung persentase kepemilikan secara otomatis
+                </div>
+              </a-form-item>
+            </template>
+
+            <a-form-item label="Jumlah Lembar Saham">
+              <a-input-number
+                v-model:value="shareholderModalForm.share_sheet_count"
+                :min="0"
+                :precision="0"
+                style="width: 100%"
+                placeholder="Jumlah lembar saham"
+                :formatter="(value: number | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
+                :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
+              />
+            </a-form-item>
+
+            <a-form-item label="Nilai Rupiah per Lembar">
+              <a-input-number
+                v-model:value="shareholderModalForm.share_value_per_sheet"
+                :min="0"
+                :precision="0"
+                style="width: 100%"
+                placeholder="Nilai Rupiah per lembar"
+                :formatter="(value: number | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
+                :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
+              />
+            </a-form-item>
+          </a-form>
+        </a-modal>
+
         <!-- Navigation Buttons -->
         <div class="form-actions">
           <a-space>
@@ -854,6 +999,9 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
+// Feature flag untuk enable/disable activate/deactivate subsidiary feature
+const ENABLE_ACTIVATE_DEACTIVATE_FEATURE = false
+
 const currentStep = ref(0)
 const loading = ref(false)
 const availableCompanies = ref<Company[]>([])
@@ -866,8 +1014,31 @@ const shareholderTypes = ref<ShareholderType[]>([])
 const loadingShareholderTypes = ref(false)
 const shareholderTypeSearchValue = ref('')
 
-// Shareholder company search
-const shareholderCompanySearchValue = ref<Record<number, string>>({})
+// Shareholder modal state
+const shareholderModalVisible = ref(false)
+const editingShareholderIndex = ref<number | null>(null)
+const shareholderModalForm = ref<{
+  isCompany: boolean
+  shareholder_company_id: string | null
+  type: string[]
+  name: string
+  identity_number: string
+  authorized_capital?: number
+  paid_up_capital?: number
+  share_sheet_count?: number
+  share_value_per_sheet?: number
+}>({
+  isCompany: false,
+  shareholder_company_id: null,
+  type: [],
+  name: '',
+  identity_number: '',
+  authorized_capital: undefined,
+  paid_up_capital: undefined,
+  share_sheet_count: undefined,
+  share_value_per_sheet: undefined,
+})
+const shareholderModalCompanySearchValue = ref('')
 
 // Director positions (master data)
 const directorPositions = ref<DirectorPosition[]>([])
@@ -972,6 +1143,8 @@ const formData = ref({
     share_value_per_sheet?: number
     is_main_parent: boolean
     isCompany?: boolean // Flag untuk membedakan perusahaan dari sistem vs individu/eksternal
+    authorized_capital?: number // Modal Dasar untuk individu
+    paid_up_capital?: number // Modal Disetor untuk individu
   }>,
   
   // Step 3: Bidang Usaha
@@ -996,15 +1169,28 @@ const formData = ref({
   }>,
 })
 
-const shareholderColumns = [
-  { title: 'Jenis Pemegang Saham', key: 'type', width: 220 },
-  { title: 'Nama Pemegang Saham', key: 'name', width: 200 },
-  { title: 'Nomor Identitas', key: 'identity_number', width: 200 },
-  { title: 'Persentase Kepemilikan', key: 'ownership_percent', width: 180 },
-  { title: 'Jumlah Lembar Saham', key: 'share_sheet_count', width: 180 },
-  { title: 'Nilai Rupiah per Lembar', key: 'share_value_per_sheet', width: 200 },
-  { title: 'Aksi', key: 'actions', width: 100, fixed: 'right' },
-]
+const shareholderColumns = computed(() => {
+  const baseColumns = [
+    { title: 'Jenis', key: 'shareholder_type', width: 120 },
+    { title: 'Nama Pemegang Saham', key: 'name', width: 200 },
+    { title: 'Nomor Identitas', key: 'identity_number', width: 200 },
+    { title: 'Modal Dasar', key: 'authorized_capital', width: 150 },
+    { title: 'Modal Disetor', key: 'paid_up_capital', width: 150 },
+    { title: 'Persentase Kepemilikan', key: 'ownership_percent', width: 180 },
+    { title: 'Jumlah Lembar Saham', key: 'share_sheet_count', width: 180 },
+    { title: 'Nilai Rupiah per Lembar', key: 'share_value_per_sheet', width: 200 },
+    { title: 'Aksi', key: 'actions', width: 120, fixed: 'right' },
+  ]
+  
+  // Hanya tampilkan kolom "Jenis Pemegang Saham" jika ada shareholder yang bukan perusahaan
+  const hasIndividualShareholder = formData.value.shareholders.some(sh => !sh.isCompany)
+  if (hasIndividualShareholder) {
+    // Insert after "Jenis" column
+    baseColumns.splice(1, 0, { title: 'Jenis Pemegang Saham', key: 'type', width: 220 })
+  }
+  
+  return baseColumns
+})
 
 const directorColumns = [
   { title: 'Jabatan', key: 'position', width: 180 },
@@ -1017,122 +1203,157 @@ const directorColumns = [
   { title: 'Aksi', key: 'actions', width: 120, fixed: 'right' },
 ]
 
-const addShareholder = () => {
-  formData.value.shareholders.push({
-    type: [],
-    shareholder_company_id: null,
-    name: '',
-    identity_number: '',
-    ownership_percent: 0,
-    share_sheet_count: undefined,
-    share_value_per_sheet: undefined,
-    is_main_parent: false,
-    isCompany: false, // Default: individu/eksternal
-  })
-  // Recalculate ownership percentages after adding
-  calculateOwnershipPercentages()
-}
-
-const removeShareholder = (index: number) => {
-  formData.value.shareholders.splice(index, 1)
-  // Recalculate ownership percentages after removing
-  calculateOwnershipPercentages()
-}
-
-// Calculate ownership percentages automatically based on paid_up_capital
-// Only for shareholders that are companies (have shareholder_company_id)
-// Calculate ownership percentage based on paid_up_capital
-// Total capital = Modal perusahaan sendiri + Total modal semua pemegang saham
-// Persentase pemegang saham = (Modal Disetor pemegang saham ÷ Total modal) × 100%
-const calculateOwnershipPercentages = () => {
-  // Get all company shareholders (those with shareholder_company_id)
-  const companyShareholders = formData.value.shareholders.filter(sh => sh.shareholder_company_id)
-  
-  // Calculate total paid_up_capital from all company shareholders
-  let totalShareholderCapital = 0
-  const shareholderCapitals: Map<number, number> = new Map()
-  
-  companyShareholders.forEach((sh, index) => {
-    const company = availableCompanies.value.find(c => c.id === sh.shareholder_company_id)
-    const capital = company?.paid_up_capital || 0
-    shareholderCapitals.set(index, capital)
-    totalShareholderCapital += capital
-  })
-  
-  // Get current company's paid_up_capital
-  const currentCompanyCapital = formData.value.paid_up_capital || 0
-  
-  // Total capital = Modal perusahaan sendiri + Total modal semua pemegang saham
-  // Sesuai dengan rumus di currentCompanyOwnershipPercent
-  const totalCapital = currentCompanyCapital + totalShareholderCapital
-  
-  // Calculate percentage for each company shareholder (10 decimal places)
-  if (totalCapital > 0) {
-    companyShareholders.forEach((sh, index) => {
-      const capital = shareholderCapitals.get(index) || 0
-      const percentage = (capital / totalCapital) * 100
-      // Round to 10 decimal places
-      sh.ownership_percent = Math.round(percentage * 10000000000) / 10000000000
-    })
+const openShareholderModal = (index?: number) => {
+  if (index !== undefined && index !== null) {
+    // Edit mode
+    editingShareholderIndex.value = index
+    const shareholder = formData.value.shareholders[index]
+    if (!shareholder) {
+      message.error('Pemegang saham tidak ditemukan')
+      return
+    }
+    shareholderModalForm.value = {
+      isCompany: shareholder.isCompany ?? false,
+      shareholder_company_id: shareholder.shareholder_company_id || null,
+      type: [...(shareholder.type || [])],
+      name: shareholder.name || '',
+      identity_number: shareholder.identity_number || '',
+      authorized_capital: shareholder.authorized_capital,
+      paid_up_capital: shareholder.paid_up_capital,
+      share_sheet_count: shareholder.share_sheet_count,
+      share_value_per_sheet: shareholder.share_value_per_sheet,
+    }
   } else {
-    // If total capital is 0, set all to 0
-    companyShareholders.forEach(sh => {
-      sh.ownership_percent = 0
-    })
-  }
-  
-  // Update parent company based on highest percentage
-  updateParentCompanyBasedOnPercent()
-}
-
-// Handle change when user selects company or switches to individual/external
-const handleShareholderCompanyChange = (record: typeof formData.value.shareholders[number], value: string | null) => {
-  if (value === null || value === '') {
-    // Switch to individual/external mode
-    record.shareholder_company_id = null
-    record.isCompany = false
-    record.name = ''
-    record.identity_number = ''
-    record.ownership_percent = 0 // For individual/external, percentage is manual
-    
-    // Recalculate ownership percentages and update parent company
-    calculateOwnershipPercentages()
-  } else if (value === '__individual__') {
-    // User explicitly selected "Individu/Eksternal" option
-    record.shareholder_company_id = null
-    record.isCompany = false
-    record.name = ''
-    record.identity_number = ''
-    record.ownership_percent = 0
-    
-    // Recalculate ownership percentages and update parent company
-    calculateOwnershipPercentages()
-  } else {
-    // User selected a company from the list
-    const selectedCompany = availableCompanies.value.find(c => c.id === value)
-    if (selectedCompany) {
-      record.shareholder_company_id = value
-      record.isCompany = true
-      record.name = selectedCompany.name
-      // Auto-fill identity_number from NPWP or NIB
-      record.identity_number = selectedCompany.npwp || selectedCompany.nib || ''
-      
-      // Recalculate ownership percentages and update parent company
-      calculateOwnershipPercentages()
-      
-      // Show alert if company doesn't have paid_up_capital
-      if (!selectedCompany.paid_up_capital || selectedCompany.paid_up_capital === 0) {
-        message.warning(`Perusahaan "${selectedCompany.name}" belum memiliki data Modal Disetor. Persentase kepemilikan akan dihitung sebagai 0%.`)
-      }
+    // Add mode
+    editingShareholderIndex.value = null
+    shareholderModalForm.value = {
+      isCompany: false,
+      shareholder_company_id: null,
+      type: [],
+      name: '',
+      identity_number: '',
+      authorized_capital: undefined,
+      paid_up_capital: undefined,
+      share_sheet_count: undefined,
+      share_value_per_sheet: undefined,
     }
   }
+  shareholderModalCompanySearchValue.value = ''
+  shareholderModalVisible.value = true
 }
 
+const closeShareholderModal = () => {
+  shareholderModalVisible.value = false
+  editingShareholderIndex.value = null
+  shareholderModalForm.value = {
+    isCompany: false,
+    shareholder_company_id: null,
+    type: [],
+    name: '',
+    identity_number: '',
+    authorized_capital: undefined,
+    paid_up_capital: undefined,
+    share_sheet_count: undefined,
+    share_value_per_sheet: undefined,
+  }
+  shareholderModalCompanySearchValue.value = ''
+}
 
-// Get filtered companies for shareholder dropdown with search (exclude current company being edited)
-const getFilteredShareholderCompanies = (index: number) => {
+const saveShareholder = () => {
+  if (editingShareholderIndex.value !== null && editingShareholderIndex.value !== undefined) {
+    // Update existing
+    const shareholder = formData.value.shareholders[editingShareholderIndex.value]
+    if (!shareholder) {
+      message.error('Pemegang saham tidak ditemukan')
+      return
+    }
+    shareholder.isCompany = shareholderModalForm.value.isCompany
+    shareholder.shareholder_company_id = shareholderModalForm.value.shareholder_company_id
+    shareholder.type = [...shareholderModalForm.value.type]
+    shareholder.name = shareholderModalForm.value.name
+    shareholder.identity_number = shareholderModalForm.value.identity_number
+    shareholder.authorized_capital = shareholderModalForm.value.authorized_capital
+    shareholder.paid_up_capital = shareholderModalForm.value.paid_up_capital
+    shareholder.share_sheet_count = shareholderModalForm.value.share_sheet_count
+    shareholder.share_value_per_sheet = shareholderModalForm.value.share_value_per_sheet
+    
+    // If company, auto-fill name and identity_number
+    if (shareholder.isCompany && shareholder.shareholder_company_id) {
+      const selectedCompany = availableCompanies.value.find(c => c.id === shareholder.shareholder_company_id)
+      if (selectedCompany) {
+        shareholder.name = selectedCompany.name
+        shareholder.identity_number = selectedCompany.npwp || selectedCompany.nib || ''
+      }
+    }
+  } else {
+    // Add new
+    const newShareholder = {
+      type: [...shareholderModalForm.value.type],
+      shareholder_company_id: shareholderModalForm.value.shareholder_company_id,
+      name: shareholderModalForm.value.name,
+      identity_number: shareholderModalForm.value.identity_number,
+      ownership_percent: 0,
+      share_sheet_count: shareholderModalForm.value.share_sheet_count,
+      share_value_per_sheet: shareholderModalForm.value.share_value_per_sheet,
+      is_main_parent: false,
+      isCompany: shareholderModalForm.value.isCompany,
+      authorized_capital: shareholderModalForm.value.authorized_capital,
+      paid_up_capital: shareholderModalForm.value.paid_up_capital,
+    }
+    
+    // If company, auto-fill name and identity_number
+    if (newShareholder.isCompany && newShareholder.shareholder_company_id) {
+      const selectedCompany = availableCompanies.value.find(c => c.id === newShareholder.shareholder_company_id)
+      if (selectedCompany) {
+        newShareholder.name = selectedCompany.name
+        newShareholder.identity_number = selectedCompany.npwp || selectedCompany.nib || ''
+      }
+    }
+    
+    formData.value.shareholders.push(newShareholder)
+  }
+  
+  // Recalculate ownership percentages after adding/updating
+  calculateOwnershipPercentages()
+  closeShareholderModal()
+}
+
+const handleShareholderModalTypeSwitch = (isCompany: boolean) => {
+  shareholderModalForm.value.isCompany = isCompany
+  if (isCompany) {
+    // Switch to company mode - clear individual fields
+    shareholderModalForm.value.shareholder_company_id = null
+    shareholderModalForm.value.name = ''
+    shareholderModalForm.value.identity_number = ''
+    shareholderModalForm.value.authorized_capital = undefined
+    shareholderModalForm.value.paid_up_capital = undefined
+    shareholderModalForm.value.type = []
+  } else {
+    // Switch to individual mode - clear company fields
+    shareholderModalForm.value.shareholder_company_id = null
+    shareholderModalForm.value.name = ''
+    shareholderModalForm.value.identity_number = ''
+  }
+}
+
+const handleShareholderModalCompanyChange = (value: string | null) => {
+  shareholderModalForm.value.shareholder_company_id = value
+  if (value) {
+    const selectedCompany = availableCompanies.value.find(c => c.id === value)
+    if (selectedCompany) {
+      shareholderModalForm.value.name = selectedCompany.name
+      shareholderModalForm.value.identity_number = selectedCompany.npwp || selectedCompany.nib || ''
+    }
+  } else {
+    shareholderModalForm.value.name = ''
+    shareholderModalForm.value.identity_number = ''
+  }
+  shareholderModalCompanySearchValue.value = ''
+}
+
+const getFilteredShareholderModalCompanies = () => {
   const currentCompanyId = route.params.id as string
-  const searchQuery = shareholderCompanySearchValue.value[index] || ''
+  const searchQuery = shareholderModalCompanySearchValue.value || ''
   
   let filtered = availableCompanies.value.filter(c => c.id !== currentCompanyId)
   
@@ -1150,44 +1371,166 @@ const getFilteredShareholderCompanies = (index: number) => {
   return filtered
 }
 
-// Handle shareholder company search
-const handleShareholderCompanySearch = (index: number, value: string) => {
-  shareholderCompanySearchValue.value[index] = value
+const removeShareholder = (index: number) => {
+  formData.value.shareholders.splice(index, 1)
+  // Recalculate ownership percentages after removing
+  calculateOwnershipPercentages()
 }
 
-// Get shareholder capital info for popover
-const getShareholderCapitalInfo = (record: typeof formData.value.shareholders[number]) => {
-  if (!record.shareholder_company_id) {
-    return '-'
+// Calculate ownership percentages automatically based on paid_up_capital
+// For both company shareholders (have shareholder_company_id) and individual shareholders (have paid_up_capital)
+// Calculate ownership percentage based on paid_up_capital
+// Total capital = Modal perusahaan sendiri + Total modal semua pemegang saham (perusahaan + individu)
+// Persentase pemegang saham = (Modal Disetor pemegang saham ÷ Total modal) × 100%
+const calculateOwnershipPercentages = () => {
+  // Get all company shareholders (those with shareholder_company_id)
+  const companyShareholders = formData.value.shareholders.filter(sh => sh.shareholder_company_id && sh.isCompany)
+  
+  // Get all individual shareholders (those without shareholder_company_id and isCompany = false)
+  const individualShareholders = formData.value.shareholders.filter(sh => !sh.shareholder_company_id && !sh.isCompany)
+  
+  // Calculate total paid_up_capital from all company shareholders
+  let totalCompanyShareholderCapital = 0
+  const companyShareholderCapitals: Map<number, number> = new Map()
+  
+  companyShareholders.forEach((sh, index) => {
+    const company = availableCompanies.value.find(c => c.id === sh.shareholder_company_id)
+    const capital = company?.paid_up_capital || 0
+    companyShareholderCapitals.set(index, capital)
+    totalCompanyShareholderCapital += capital
+  })
+  
+  // Calculate total paid_up_capital from all individual shareholders
+  let totalIndividualShareholderCapital = 0
+  const individualShareholderCapitals: Map<number, number> = new Map()
+  
+  individualShareholders.forEach((sh, index) => {
+    const capital = sh.paid_up_capital || 0
+    individualShareholderCapitals.set(index, capital)
+    totalIndividualShareholderCapital += capital
+  })
+  
+  // Get current company's paid_up_capital
+  const currentCompanyCapital = formData.value.paid_up_capital || 0
+  
+  // Total capital = Modal perusahaan sendiri + Total modal semua pemegang saham (perusahaan + individu)
+  const totalCapital = currentCompanyCapital + totalCompanyShareholderCapital + totalIndividualShareholderCapital
+  
+  // Calculate percentage for each company shareholder (10 decimal places)
+  if (totalCapital > 0) {
+    companyShareholders.forEach((sh, index) => {
+      const capital = companyShareholderCapitals.get(index) || 0
+      const percentage = (capital / totalCapital) * 100
+      // Round to 10 decimal places
+      sh.ownership_percent = Math.round(percentage * 10000000000) / 10000000000
+    })
+    
+    // Calculate percentage for each individual shareholder (10 decimal places)
+    individualShareholders.forEach((sh, index) => {
+      const capital = individualShareholderCapitals.get(index) || 0
+      const percentage = (capital / totalCapital) * 100
+      // Round to 10 decimal places
+      sh.ownership_percent = Math.round(percentage * 10000000000) / 10000000000
+    })
+  } else {
+    // If total capital is 0, set all to 0
+    companyShareholders.forEach(sh => {
+      sh.ownership_percent = 0
+    })
+    individualShareholders.forEach(sh => {
+      sh.ownership_percent = 0
+    })
+  }
+  
+  // Update parent company based on highest percentage
+  updateParentCompanyBasedOnPercent()
+}
+
+// Get detailed shareholder info for popover (company name, authorized capital, paid up capital)
+const getShareholderDetailInfo = (record: typeof formData.value.shareholders[number]) => {
+  if (record.isCompany && record.shareholder_company_id) {
+    const shareholderCompany = availableCompanies.value.find(c => c.id === record.shareholder_company_id)
+    if (shareholderCompany) {
+      const currency = shareholderCompany.currency || formData.value.currency || 'IDR'
+      const companyName = shareholderCompany.name || record.name || '-'
+      const authorizedCapital = shareholderCompany.authorized_capital ? `${currency} ${shareholderCompany.authorized_capital.toLocaleString('id-ID')}` : '-'
+      const paidUpCapital = shareholderCompany.paid_up_capital ? `${currency} ${shareholderCompany.paid_up_capital.toLocaleString('id-ID')}` : '-'
+      return {
+        name: companyName,
+        authorizedCapital,
+        paidUpCapital,
+        currency
+      }
+    }
+  } else if (!record.isCompany) {
+    const currency = formData.value.currency || 'IDR'
+    const name = record.name || '-'
+    const authorizedCapital = record.authorized_capital ? `${currency} ${record.authorized_capital.toLocaleString('id-ID')}` : '-'
+    const paidUpCapital = record.paid_up_capital ? `${currency} ${record.paid_up_capital.toLocaleString('id-ID')}` : '-'
+    return {
+      name,
+      authorizedCapital,
+      paidUpCapital,
+      currency
+    }
+  }
+  return null
+}
+
+// Get shareholder authorized capital for display
+const getShareholderAuthorizedCapital = (record: typeof formData.value.shareholders[number]) => {
+  if (!record.isCompany || !record.shareholder_company_id) {
+    return record.authorized_capital ? (formData.value.currency || 'IDR') + ' ' + record.authorized_capital.toLocaleString('id-ID') : '-'
   }
   
   const shareholderCompany = availableCompanies.value.find(c => c.id === record.shareholder_company_id)
-  if (!shareholderCompany) {
+  if (!shareholderCompany || !shareholderCompany.authorized_capital) {
     return '-'
   }
   
-  const capital = shareholderCompany.paid_up_capital || 0
-  // Use currency from shareholder company if available, otherwise use form currency
   const currency = shareholderCompany.currency || formData.value.currency || 'IDR'
-  const formattedCapital = capital.toLocaleString('id-ID')
-  
-  return `${currency} ${formattedCapital}`
+  return `${currency} ${shareholderCompany.authorized_capital.toLocaleString('id-ID')}`
 }
 
-// Calculate total capital from all company shareholders
+// Get shareholder paid up capital for display
+const getShareholderPaidUpCapital = (record: typeof formData.value.shareholders[number]) => {
+  if (!record.isCompany || !record.shareholder_company_id) {
+    return record.paid_up_capital ? (formData.value.currency || 'IDR') + ' ' + record.paid_up_capital.toLocaleString('id-ID') : '-'
+  }
+  
+  const shareholderCompany = availableCompanies.value.find(c => c.id === record.shareholder_company_id)
+  if (!shareholderCompany || !shareholderCompany.paid_up_capital) {
+    return '-'
+  }
+  
+  const currency = shareholderCompany.currency || formData.value.currency || 'IDR'
+  return `${currency} ${shareholderCompany.paid_up_capital.toLocaleString('id-ID')}`
+}
+
+// Calculate total capital from all shareholders (both company and individual)
 const getTotalShareholderCapital = () => {
-  const companyShareholders = formData.value.shareholders.filter(sh => sh.shareholder_company_id)
-  let totalCapital = 0
+  // Get all company shareholders
+  const companyShareholders = formData.value.shareholders.filter(sh => sh.shareholder_company_id && sh.isCompany)
+  let totalCompanyCapital = 0
   
   companyShareholders.forEach((sh) => {
     const company = availableCompanies.value.find(c => c.id === sh.shareholder_company_id)
     if (company) {
       const capital = company.paid_up_capital || 0
-      totalCapital += capital
+      totalCompanyCapital += capital
     }
   })
   
-  return totalCapital
+  // Get all individual shareholders
+  const individualShareholders = formData.value.shareholders.filter(sh => !sh.shareholder_company_id && !sh.isCompany)
+  let totalIndividualCapital = 0
+  
+  individualShareholders.forEach((sh) => {
+    const capital = sh.paid_up_capital || 0
+    totalIndividualCapital += capital
+  })
+  
+  return totalCompanyCapital + totalIndividualCapital
 }
 
 // Check if current company's paid_up_capital is greater than total shareholder capital
@@ -1687,10 +2030,12 @@ const handleSubmit = async () => {
         type: Array.isArray(sh.type) ? sh.type.join(', ') : (sh.type || ''), // Convert array to comma-separated string for backend
         name: sh.name,
         identity_number: sh.identity_number || '',
-        ownership_percent: sh.ownership_percent || 0, // For companies, this is calculated automatically; for individuals, it's manual
+        ownership_percent: sh.ownership_percent || 0, // For companies and individuals, this is calculated automatically based on paid_up_capital
         share_sheet_count: sh.share_sheet_count !== undefined ? sh.share_sheet_count : null,
         share_value_per_sheet: sh.share_value_per_sheet !== undefined ? sh.share_value_per_sheet : null,
         is_main_parent: false,
+        authorized_capital: sh.authorized_capital !== undefined ? sh.authorized_capital : null, // Modal Dasar untuk individu
+        paid_up_capital: sh.paid_up_capital !== undefined ? sh.paid_up_capital : null, // Modal Disetor untuk individu
       })),
       main_business: (formData.value.main_business.industry_sector || formData.value.main_business.kbli) ? {
         industry_sector: formData.value.main_business.industry_sector,
@@ -2013,6 +2358,8 @@ const loadCompanyData = async () => {
         share_value_per_sheet: sh.share_value_per_sheet || undefined,
         is_main_parent: sh.is_main_parent ?? false,
         isCompany: !!sh.shareholder_company_id, // Set flag based on whether shareholder_company_id exists
+        authorized_capital: (sh as Shareholder & { authorized_capital?: number }).authorized_capital || undefined, // Modal Dasar untuk individu
+        paid_up_capital: (sh as Shareholder & { paid_up_capital?: number }).paid_up_capital || undefined, // Modal Disetor untuk individu
       }))
       
       // Recalculate ownership percentages after loading (this will also update parent company)
@@ -2548,7 +2895,7 @@ onMounted(async () => {
 } */
 
 .form-content {
-  width: 80vw;
+  width: 90vw;
   margin: 0 auto;
   padding: 24px;
 }

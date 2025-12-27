@@ -885,7 +885,7 @@ func (h *ReportHandler) DownloadTemplate(c *fiber.Ctx) error {
 	// Get accessible companies based on user role
 	if roleName == "superadmin" {
 		// Superadmin can access all companies
-		accessibleCompanies, err = h.companyUseCase.GetAllCompanies()
+		accessibleCompanies, err = h.companyUseCase.GetAllCompanies(false)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
 				Error:   "template_failed",
@@ -1140,13 +1140,12 @@ func (h *ReportHandler) ValidateExcelFile(c *fiber.Ctx) error {
 	// Get accessible companies
 	var accessibleCompanyCodes map[string]bool
 	if roleName == "superadmin" {
-		companies, err := h.companyUseCase.GetAllCompanies()
+		companies, err := h.companyUseCase.GetAllCompanies(false) // Only active companies for calculations
 		if err == nil {
 			accessibleCompanyCodes = make(map[string]bool)
 			for _, company := range companies {
-				if company.IsActive {
-					accessibleCompanyCodes[company.Code] = true
-				}
+				// Company is already filtered by repository to only include active
+				accessibleCompanyCodes[company.Code] = true
 			}
 		}
 	} else if companyID != nil {
@@ -1503,13 +1502,12 @@ func (h *ReportHandler) UploadReports(c *fiber.Ctx) error {
 	// Determine accessible company codes (same logic as validation)
 	var accessibleCompanyCodes map[string]bool
 	if roleName == "superadmin" {
-		companies, err := h.companyUseCase.GetAllCompanies()
+		companies, err := h.companyUseCase.GetAllCompanies(false) // Only active companies for calculations
 		if err == nil {
 			accessibleCompanyCodes = make(map[string]bool)
 			for _, company := range companies {
-				if company.IsActive {
-					accessibleCompanyCodes[company.Code] = true
-				}
+				// Company is already filtered by repository to only include active
+				accessibleCompanyCodes[company.Code] = true
 			}
 		}
 	} else if companyID != nil {

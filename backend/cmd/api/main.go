@@ -302,9 +302,12 @@ func main() {
 	protected.Get("/companies/:id/users", companyHandler.GetCompanyUsers)
 	protected.Get("/companies/:id/ancestors", companyHandler.GetCompanyAncestors)
 	protected.Get("/companies/:id/children", companyHandler.GetCompanyChildren)
-	protected.Get("/companies/:id", companyHandler.GetCompany)
-	protected.Put("/companies/:id", companyHandler.UpdateCompany)
-	protected.Put("/companies/:id/full", companyHandler.UpdateCompanyFull)
+	// CRITICAL: More specific routes with path segments MUST come before general routes with :id parameter
+	// Fiber matches routes in order, so /companies/:id/status and /companies/:id/full must be before /companies/:id
+	protected.Put("/companies/:id/status", companyHandler.UpdateCompanyStatus)   // Update company status (activate/deactivate)
+	protected.Put("/companies/:id/full", companyHandler.UpdateCompanyFull)       // Update company with full data
+	protected.Get("/companies/:id", companyHandler.GetCompany)                   // Get company by ID
+	protected.Put("/companies/:id", companyHandler.UpdateCompany)                // Update company
 	sensitiveOps.Delete("/companies/:id", companyHandler.DeleteCompany)
 
 	// Route User Management (dilindungi)

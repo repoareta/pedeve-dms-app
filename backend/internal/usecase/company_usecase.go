@@ -21,12 +21,13 @@ type CompanyUseCase interface {
 	CreateCompanyFull(data *domain.CompanyCreateRequest) (*domain.CompanyModel, error)
 	GetCompanyByID(id string) (*domain.CompanyModel, error)
 	GetCompanyByCode(code string) (*domain.CompanyModel, error)
-	GetAllCompanies() ([]domain.CompanyModel, error)
+	GetAllCompanies(includeInactive bool) ([]domain.CompanyModel, error)
 	GetCompanyChildren(id string) ([]domain.CompanyModel, error)
 	GetCompanyDescendants(id string) ([]domain.CompanyModel, error)
 	GetCompanyAncestors(id string) ([]domain.CompanyModel, error)
 	UpdateCompany(id, name, description string) (*domain.CompanyModel, error)
 	UpdateCompanyFull(id string, data *domain.CompanyUpdateRequest) (*domain.CompanyModel, error)
+	UpdateCompanyStatus(id string, isActive bool) (*domain.CompanyModel, error)
 	DeleteCompany(id string) error
 	ValidateCompanyAccess(userCompanyID, targetCompanyID string) (bool, error)
 	CountRootHoldings() (int64, error)
@@ -134,8 +135,8 @@ func (uc *companyUseCase) GetCompanyByCode(code string) (*domain.CompanyModel, e
 	return uc.companyRepo.GetByCode(code)
 }
 
-func (uc *companyUseCase) GetAllCompanies() ([]domain.CompanyModel, error) {
-	return uc.companyRepo.GetAll()
+func (uc *companyUseCase) GetAllCompanies(includeInactive bool) ([]domain.CompanyModel, error) {
+	return uc.companyRepo.GetAll(includeInactive)
 }
 
 func (uc *companyUseCase) GetCompanyChildren(id string) ([]domain.CompanyModel, error) {
@@ -161,6 +162,20 @@ func (uc *companyUseCase) UpdateCompany(id, name, description string) (*domain.C
 
 	if err := uc.companyRepo.Update(company); err != nil {
 		return nil, fmt.Errorf("failed to update company: %w", err)
+	}
+
+	return company, nil
+}
+
+func (uc *companyUseCase) UpdateCompanyStatus(id string, isActive bool) (*domain.CompanyModel, error) {
+	company, err := uc.companyRepo.GetByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("company not found: %w", err)
+	}
+
+	company.IsActive = isActive
+	if err := uc.companyRepo.Update(company); err != nil {
+		return nil, fmt.Errorf("failed to update company status: %w", err)
 	}
 
 	return company, nil
@@ -314,6 +329,8 @@ func (uc *companyUseCase) CreateCompanyFull(data *domain.CompanyCreateRequest) (
 			ShareCount:           sh.ShareCount,
 			ShareSheetCount:      sh.ShareSheetCount,
 			ShareValuePerSheet:   sh.ShareValuePerSheet,
+			AuthorizedCapital:    sh.AuthorizedCapital, // Modal Dasar untuk individu
+			PaidUpCapital:        sh.PaidUpCapital,     // Modal Disetor untuk individu
 			IsMainParent:         sh.IsMainParent,
 		}
 		if err := uc.shareholderRepo.Create(shareholder); err != nil {
@@ -586,6 +603,8 @@ func (uc *companyUseCase) UpdateCompanyFull(id string, data *domain.CompanyUpdat
 			ShareCount:           sh.ShareCount,
 			ShareSheetCount:      sh.ShareSheetCount,
 			ShareValuePerSheet:   sh.ShareValuePerSheet,
+			AuthorizedCapital:    sh.AuthorizedCapital, // Modal Dasar untuk individu
+			PaidUpCapital:        sh.PaidUpCapital,     // Modal Disetor untuk individu
 			IsMainParent:         sh.IsMainParent,
 		}
 		if err := uc.shareholderRepo.Create(shareholder); err != nil {

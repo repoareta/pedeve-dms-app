@@ -43,9 +43,33 @@ npm run build
 
 ### Run Unit Tests with [Vitest](https://vitest.dev/)
 
+#### Run tests once
+```sh
+npm run test
+```
+
+#### Run tests in watch mode
 ```sh
 npm run test:unit
+# atau
+npm run test:watch
 ```
+
+#### Run tests with UI (Recommended for development)
+```sh
+npm run test:ui
+```
+UI akan otomatis terbuka di browser. Akses manual: `http://localhost:51204/__vitest__/` (port bisa berbeda)
+
+#### Run tests with coverage report
+```sh
+npm run test:coverage
+```
+
+**Catatan:**
+- `test:ui` - Mode interaktif dengan UI untuk melihat hasil test secara real-time
+- `test:watch` - Auto re-run test saat file berubah
+- `test:coverage` - Generate coverage report
 
 ### Lint with [ESLint](https://eslint.org/)
 

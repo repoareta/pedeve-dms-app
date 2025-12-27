@@ -167,6 +167,8 @@ jobs:
           if [ -n "${{ secrets.SONARCLOUD_ORGANIZATION }}" ]; then
             ARGS="$ARGS -Dsonar.organization=${{ secrets.SONARCLOUD_ORGANIZATION }}"
           fi
+          # PENTING: Disable automatic analysis untuk mencegah konflik dengan CI analysis
+          ARGS="$ARGS -Dsonar.ci.autoscan.disabled=true"
           echo "args=$ARGS" >> $GITHUB_OUTPUT
           echo "SonarCloud args: $ARGS"
 
@@ -179,11 +181,21 @@ jobs:
           projectBaseDir: backend
           # Override project key dan organization jika ada di GitHub Secrets
           # Jika tidak di-set, akan menggunakan default dari sonar-project.properties
+          # PENTING: Flag -Dsonar.ci.autoscan.disabled=true sudah ditambahkan di Prepare SonarCloud args
           args: >
             ${{ steps.sonar-args.outputs.args }}
-            -Dsonar.ci.autoscan.disabled=true
         continue-on-error: true  # Don't fail pipeline on code quality issues, just report
         # Note: Step ini akan skip otomatis jika SONAR_TOKEN kosong oleh SonarCloud action
+        # 
+        # PENTING: Jika muncul error "You are running CI analysis while Automatic Analysis is enabled":
+        # 1. Buka SonarCloud dashboard: https://sonarcloud.io
+        # 2. Pilih project: repoareta_pedeve-dms-app
+        # 3. Pergi ke: Project Settings > Analysis Method
+        # 4. Disable "Automatic Analysis"
+        # 5. Atau gunakan "Manual Analysis" saja
+        #
+        # Error ini tidak critical karena continue-on-error: true, tapi lebih baik di-disable
+        # untuk menghindari konflik antara CI analysis dan Automatic Analysis
 
       - name: Compute image metadata
         id: meta

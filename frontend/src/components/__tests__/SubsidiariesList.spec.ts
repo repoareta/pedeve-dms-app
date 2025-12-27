@@ -179,7 +179,7 @@ describe('SubsidiariesList - Logic Tests', () => {
       // Test good score
       const score = 'A'
 
-      const isLowScore = score === 'D' || score === 'D+'
+      const isLowScore: boolean = ((score as string) === 'D' || (score as string) === 'D+')
 
       expect(isLowScore).toBe(false)
     })

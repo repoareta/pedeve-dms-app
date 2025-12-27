@@ -22,8 +22,8 @@ describe('DocumentManagementView - Logic Tests', () => {
       // Test role checking
       const userRole = 'administrator'
 
-      const isSuperAdminOrAdministrator = 
-        userRole === 'superadmin' || userRole === 'administrator'
+      const isSuperAdminOrAdministrator: boolean = 
+        ((userRole as string) === 'superadmin' || (userRole as string) === 'administrator')
 
       expect(isSuperAdminOrAdministrator).toBe(true)
     })
@@ -32,8 +32,8 @@ describe('DocumentManagementView - Logic Tests', () => {
       // Test non-admin role
       const userRole = 'staff'
 
-      const isSuperAdminOrAdministrator = 
-        userRole === 'superadmin' || userRole === 'administrator'
+      const isSuperAdminOrAdministrator: boolean = 
+        ((userRole as string) === 'superadmin' || (userRole as string) === 'administrator')
 
       expect(isSuperAdminOrAdministrator).toBe(false)
     })
@@ -117,8 +117,8 @@ describe('DocumentManagementView - Logic Tests', () => {
       const filtered = documents.filter(doc => doc.mime_type === typeFilter)
 
       expect(filtered.length).toBe(2)
-      expect(filtered[0].name).toBe('doc1.pdf')
-      expect(filtered[1].name).toBe('doc3.pdf')
+      expect(filtered[0]?.name).toBe('doc1.pdf')
+      expect(filtered[1]?.name).toBe('doc3.pdf')
     })
 
     it('should handle empty type filter', () => {
@@ -152,9 +152,9 @@ describe('DocumentManagementView - Logic Tests', () => {
         return dateB - dateA // Descending
       })
 
-      expect(sorted[0].id).toBe('2')
-      expect(sorted[1].id).toBe('3')
-      expect(sorted[2].id).toBe('1')
+      expect(sorted[0]?.id).toBe('2')
+      expect(sorted[1]?.id).toBe('3')
+      expect(sorted[2]?.id).toBe('1')
     })
 
     it('should sort documents by updated_at ascending', () => {
@@ -171,9 +171,9 @@ describe('DocumentManagementView - Logic Tests', () => {
         return dateA - dateB // Ascending
       })
 
-      expect(sorted[0].id).toBe('1')
-      expect(sorted[1].id).toBe('3')
-      expect(sorted[2].id).toBe('2')
+      expect(sorted[0]?.id).toBe('1')
+      expect(sorted[1]?.id).toBe('3')
+      expect(sorted[2]?.id).toBe('2')
     })
   })
 
@@ -224,8 +224,8 @@ describe('DocumentManagementView - Logic Tests', () => {
       )
 
       expect(filtered.length).toBe(2)
-      expect(filtered[0].name).toBe('Annual Report 2024.pdf')
-      expect(filtered[1].name).toBe('Budget Plan 2024.xlsx')
+      expect(filtered[0]?.name).toBe('Annual Report 2024.pdf')
+      expect(filtered[1]?.name).toBe('Budget Plan 2024.xlsx')
     })
 
     it('should handle empty search query', () => {
@@ -237,7 +237,7 @@ describe('DocumentManagementView - Logic Tests', () => {
       const searchQuery = ''
 
       const filtered = documents.filter(doc =>
-        searchQuery === '' || doc.name.toLowerCase().includes(searchQuery.toLowerCase())
+        searchQuery === '' || ((doc.name as string | undefined)?.toLowerCase() ?? '').includes((searchQuery as string).toLowerCase())
       )
 
       expect(filtered.length).toBe(2)

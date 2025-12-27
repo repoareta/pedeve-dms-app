@@ -40,7 +40,7 @@ describe('EditableFinancialTable - Logic Tests', () => {
       // Test required field validation
       const value = 1000
 
-      const isValid = value !== undefined && value !== null && value !== ''
+      const isValid = value !== undefined && value !== null && String(value) !== ''
 
       expect(isValid).toBe(true)
     })

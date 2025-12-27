@@ -97,7 +97,7 @@ describe('FinancialReportInputForm - Logic Tests', () => {
       // Test non-RKAP
       const reportType = 'realisasi'
 
-      const isRKAP = reportType === 'rkap'
+      const isRKAP: boolean = (reportType as string) === 'rkap'
 
       expect(isRKAP).toBe(false)
     })

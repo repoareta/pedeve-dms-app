@@ -50,7 +50,7 @@
                   <IconifyIcon icon="mdi:dots-vertical" width="20" />
                 </a-button>
                 <template #overlay>
-                  <a-menu @click="(e) => handleCardMenuClick(e.key, company)">
+                  <a-menu @click="(e: { key: string }) => handleCardMenuClick(e.key, company)">
                     <a-menu-item key="view">
                       <IconifyIcon icon="mdi:eye" width="16" style="margin-right: 8px;" />
                       Lihat Detail
@@ -455,6 +455,8 @@ const canDelete = computed(() => isAdmin.value || isSuperAdmin.value || isAdmini
 
 // RBAC: Edit untuk semua role (staff, manager, admin, superadmin, administrator)
 const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value || isAdministrator.value)
+
+const hasAnyMenuOption = computed(() => canEdit.value || canAssignRole.value || canDelete.value || (ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin.value || isAdministrator.value)))
 
 // Note: Actions dropdown always shown because "Lihat Detail" menu is always available
 

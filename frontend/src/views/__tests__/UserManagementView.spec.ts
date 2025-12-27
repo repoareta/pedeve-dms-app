@@ -27,8 +27,8 @@ describe('UserManagementView - Logic Tests', () => {
       ]
       const userRole = 'administrator'
 
-      const filtered = userRole === 'administrator'
-        ? users.filter(u => u.role.toLowerCase() !== 'superadmin')
+      const filtered = (userRole as string) === 'administrator'
+        ? users.filter(u => (u.role as string).toLowerCase() !== 'superadmin')
         : users
 
       expect(filtered.length).toBe(2)
@@ -43,8 +43,8 @@ describe('UserManagementView - Logic Tests', () => {
       ]
       const userRole = 'superadmin'
 
-      const filtered = userRole === 'administrator'
-        ? users.filter(u => u.role.toLowerCase() !== 'superadmin')
+      const filtered = (userRole as string) === 'administrator'
+        ? users.filter(u => (u.role as string).toLowerCase() !== 'superadmin')
         : users
 
       expect(filtered.length).toBe(2)
@@ -63,9 +63,10 @@ describe('UserManagementView - Logic Tests', () => {
       const currentRole = 'administrator'
 
       const availableRoles = roles.filter(r => {
-        const name = r.name.toLowerCase()
+        const name = (r.name as string).toLowerCase()
+        const currentRoleStr = currentRole as string
         if (name === 'superadmin') return false
-        if (name === 'administrator' && currentRole !== 'superadmin') return false
+        if (name === 'administrator' && currentRoleStr !== 'superadmin') return false
         return true
       })
 
@@ -106,13 +107,13 @@ describe('UserManagementView - Logic Tests', () => {
       const searchText = 'admin'
 
       const filtered = users.filter(u =>
-        u.username.toLowerCase().includes(searchText.toLowerCase()) ||
-        u.email.toLowerCase().includes(searchText.toLowerCase()) ||
-        u.role.toLowerCase().includes(searchText.toLowerCase())
+        (u.username as string).toLowerCase().includes(searchText.toLowerCase()) ||
+        (u.email as string).toLowerCase().includes(searchText.toLowerCase()) ||
+        (u.role as string).toLowerCase().includes(searchText.toLowerCase())
       )
 
       expect(filtered.length).toBe(1)
-      expect(filtered[0].username).toBe('admin')
+      expect(filtered[0]?.username).toBe('admin')
     })
 
     it('should filter companies by search text', () => {
@@ -124,12 +125,12 @@ describe('UserManagementView - Logic Tests', () => {
       const searchText = 'COMP-A'
 
       const filtered = companies.filter(c =>
-        c.name.toLowerCase().includes(searchText.toLowerCase()) ||
-        c.code.toLowerCase().includes(searchText.toLowerCase())
+        (c.name as string).toLowerCase().includes(searchText.toLowerCase()) ||
+        (c.code as string).toLowerCase().includes(searchText.toLowerCase())
       )
 
       expect(filtered.length).toBe(1)
-      expect(filtered[0].code).toBe('COMP-A')
+      expect(filtered[0]?.code).toBe('COMP-A')
     })
 
     it('should filter permissions by search text', () => {
@@ -141,13 +142,13 @@ describe('UserManagementView - Logic Tests', () => {
       const searchText = 'user'
 
       const filtered = permissions.filter(p =>
-        p.name.toLowerCase().includes(searchText.toLowerCase()) ||
-        p.resource.toLowerCase().includes(searchText.toLowerCase()) ||
-        p.action.toLowerCase().includes(searchText.toLowerCase())
+        (p.name as string).toLowerCase().includes(searchText.toLowerCase()) ||
+        (p.resource as string).toLowerCase().includes(searchText.toLowerCase()) ||
+        (p.action as string).toLowerCase().includes(searchText.toLowerCase())
       )
 
       expect(filtered.length).toBe(1)
-      expect(filtered[0].name).toBe('Create User')
+      expect(filtered[0]?.name).toBe('Create User')
     })
   })
 

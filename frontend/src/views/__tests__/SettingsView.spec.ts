@@ -67,10 +67,10 @@ describe('SettingsView - Logic Tests', () => {
     it('should handle 2FA setup steps', () => {
       // Test setup steps
       const steps = ['idle', 'generate', 'verify', 'success'] as const
-      let currentStep: typeof steps[number] = 'idle'
+      let currentStep: 'success' | 'idle' | 'generate' | 'verify' | undefined = 'idle'
 
       const nextStep = () => {
-        const currentIndex = steps.indexOf(currentStep)
+        const currentIndex = steps.indexOf(currentStep as 'success' | 'idle' | 'generate' | 'verify')
         if (currentIndex < steps.length - 1) {
           currentStep = steps[currentIndex + 1]
         }
@@ -234,7 +234,7 @@ describe('SettingsView - Logic Tests', () => {
       const searchText = ''
 
       const filtered = data.filter(item =>
-        searchText === '' || item.name.toLowerCase().includes(searchText.toLowerCase())
+        searchText === '' || ((item.name as string | undefined)?.toLowerCase() ?? '').includes((searchText as string).toLowerCase())
       )
 
       expect(filtered.length).toBe(2)

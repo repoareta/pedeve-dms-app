@@ -87,9 +87,9 @@ describe('DocumentFolderDetailView - Logic Tests', () => {
       const breadcrumb = buildBreadcrumb(currentFolderId)
 
       expect(breadcrumb.length).toBe(3)
-      expect(breadcrumb[0].name).toBe('Root')
-      expect(breadcrumb[1].name).toBe('Folder 1')
-      expect(breadcrumb[2].name).toBe('Folder 2')
+      expect(breadcrumb[0]?.name).toBe('Root')
+      expect(breadcrumb[1]?.name).toBe('Folder 1')
+      expect(breadcrumb[2]?.name).toBe('Folder 2')
     })
 
     it('should handle root folder breadcrumb', () => {
@@ -123,7 +123,7 @@ describe('DocumentFolderDetailView - Logic Tests', () => {
       const breadcrumb = buildBreadcrumb(currentFolderId)
 
       expect(breadcrumb.length).toBe(1)
-      expect(breadcrumb[0].name).toBe('Root')
+      expect(breadcrumb[0]?.name).toBe('Root')
     })
   })
 
@@ -253,8 +253,8 @@ describe('DocumentFolderDetailView - Logic Tests', () => {
       )
 
       expect(filtered.length).toBe(2)
-      expect(filtered[0].name).toBe('Document A.pdf')
-      expect(filtered[1].name).toBe('Document B.pdf')
+      expect(filtered[0]?.name).toBe('Document A.pdf')
+      expect(filtered[1]?.name).toBe('Document B.pdf')
     })
 
     it('should handle empty search text', () => {
@@ -266,7 +266,7 @@ describe('DocumentFolderDetailView - Logic Tests', () => {
       const searchText = ''
 
       const filtered = files.filter(file =>
-        searchText === '' || file.name.toLowerCase().includes(searchText.toLowerCase())
+        searchText === '' || ((file.name as string | undefined)?.toLowerCase() ?? '').includes((searchText as string).toLowerCase())
       )
 
       expect(filtered.length).toBe(2)

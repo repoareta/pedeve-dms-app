@@ -368,9 +368,9 @@ const convertExcelToHtml = (worksheet: ExcelJS.Worksheet): string => {
   // Track max column to ensure table structure
   let maxCol = 0
   worksheet.eachRow((row) => {
-    row.eachCell((cell) => {
-      if (cell.colNumber > maxCol) {
-        maxCol = cell.colNumber
+    row.eachCell((cell, colNumber) => {
+      if (colNumber > maxCol) {
+        maxCol = colNumber
       }
     })
   })

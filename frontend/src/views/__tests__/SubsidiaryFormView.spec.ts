@@ -231,8 +231,8 @@ describe('SubsidiaryFormView - Calculation Logic', () => {
 
       expect(submitData.shareholders[0]).toHaveProperty('authorized_capital')
       expect(submitData.shareholders[0]).toHaveProperty('paid_up_capital')
-      expect(submitData.shareholders[0].authorized_capital).toBe(authorizedCapital)
-      expect(submitData.shareholders[0].paid_up_capital).toBe(paidUpCapital)
+      expect(submitData.shareholders[0]?.authorized_capital).toBe(authorizedCapital)
+      expect(submitData.shareholders[0]?.paid_up_capital).toBe(paidUpCapital)
     })
 
     it('should calculate ownership percentage for individual shareholder based on paid_up_capital', () => {

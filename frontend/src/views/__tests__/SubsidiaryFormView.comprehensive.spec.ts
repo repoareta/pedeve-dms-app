@@ -121,8 +121,8 @@ describe('SubsidiaryFormView - Comprehensive Tests', () => {
       })
 
       expect(shareholders.length).toBe(1)
-      expect(shareholders[0].isCompany).toBe(true)
-      expect(shareholders[0].shareholder_company_id).toBe('2')
+      expect(shareholders[0]?.isCompany).toBe(true)
+      expect(shareholders[0]?.shareholder_company_id).toBe('2')
       expect(paidUpCapital).toBe(1000000000)
     })
 
@@ -145,10 +145,10 @@ describe('SubsidiaryFormView - Comprehensive Tests', () => {
       })
 
       expect(shareholders.length).toBe(1)
-      expect(shareholders[0].isCompany).toBe(false)
-      expect(shareholders[0].authorized_capital).toBe(authorizedCapital)
-      expect(shareholders[0].paid_up_capital).toBe(paidUpCapital)
-      expect(shareholders[0].type).toContain('Individu')
+      expect(shareholders[0]?.isCompany).toBe(false)
+      expect(shareholders[0]?.authorized_capital).toBe(authorizedCapital)
+      expect(shareholders[0]?.paid_up_capital).toBe(paidUpCapital)
+      expect(shareholders[0]?.type).toContain('Individu')
     })
 
     it('should calculate ownership percentage correctly for mixed shareholders', () => {
@@ -268,12 +268,14 @@ describe('SubsidiaryFormView - Comprehensive Tests', () => {
       ]
 
       // Modify shareholder
-      shareholders[0].name = 'Jane Doe Updated'
-      shareholders[0].paid_up_capital = 6000000000 // Updated capital
+      if (shareholders[0]) {
+        shareholders[0].name = 'Jane Doe Updated'
+        shareholders[0].paid_up_capital = 6000000000 // Updated capital
+      }
 
-      expect(shareholders[0].name).toBe('Jane Doe Updated')
-      expect(shareholders[0].paid_up_capital).toBe(6000000000)
-      expect(shareholders[0].authorized_capital).toBe(10000000000)
+      expect(shareholders[0]?.name).toBe('Jane Doe Updated')
+      expect(shareholders[0]?.paid_up_capital).toBe(6000000000)
+      expect(shareholders[0]?.authorized_capital).toBe(10000000000)
     })
   })
 
@@ -309,7 +311,7 @@ describe('SubsidiaryFormView - Comprehensive Tests', () => {
       shareholders.splice(0, 1)
 
       expect(shareholders.length).toBe(1)
-      expect(shareholders[0].name).toBe('Shareholder 2')
+      expect(shareholders[0]?.name).toBe('Shareholder 2')
     })
   })
 
@@ -357,10 +359,20 @@ describe('SubsidiaryFormView - Comprehensive Tests', () => {
 
       let modalVisible = false
       let editingIndex: number | null = null
-      const modalForm = {
+      const modalForm: {
+        isCompany: boolean
+        shareholder_company_id: string | null
+        type: string[]
+        name: string
+        identity_number: string
+        authorized_capital: number | undefined
+        paid_up_capital: number | undefined
+        share_sheet_count: number | undefined
+        share_value_per_sheet: number | undefined
+      } = {
         isCompany: false,
         shareholder_company_id: null,
-        type: [] as string[],
+        type: [],
         name: '',
         identity_number: '',
         authorized_capital: undefined,
@@ -372,12 +384,12 @@ describe('SubsidiaryFormView - Comprehensive Tests', () => {
       // Open modal for editing
       editingIndex = 0
       modalVisible = true
-      modalForm.isCompany = shareholders[0].isCompany ?? false
-      modalForm.type = [...shareholders[0].type]
-      modalForm.name = shareholders[0].name
-      modalForm.identity_number = shareholders[0].identity_number
-      modalForm.authorized_capital = shareholders[0].authorized_capital
-      modalForm.paid_up_capital = shareholders[0].paid_up_capital
+      modalForm.isCompany = shareholders[0]?.isCompany ?? false
+      modalForm.type = [...(shareholders[0]?.type ?? [])]
+      modalForm.name = shareholders[0]?.name ?? ''
+      modalForm.identity_number = shareholders[0]?.identity_number ?? ''
+      modalForm.authorized_capital = shareholders[0]?.authorized_capital
+      modalForm.paid_up_capital = shareholders[0]?.paid_up_capital
 
       expect(modalVisible).toBe(true)
       expect(editingIndex).toBe(0)
@@ -415,9 +427,9 @@ describe('SubsidiaryFormView - Comprehensive Tests', () => {
       })
 
       expect(shareholders.length).toBe(1)
-      expect(shareholders[0].name).toBe('New Shareholder')
-      expect(shareholders[0].authorized_capital).toBe(20000000000)
-      expect(shareholders[0].paid_up_capital).toBe(10000000000)
+      expect(shareholders[0]?.name).toBe('New Shareholder')
+      expect(shareholders[0]?.authorized_capital).toBe(20000000000)
+      expect(shareholders[0]?.paid_up_capital).toBe(10000000000)
     })
 
     it('should update existing shareholder from modal', () => {
@@ -440,11 +452,13 @@ describe('SubsidiaryFormView - Comprehensive Tests', () => {
       }
 
       // Update existing shareholder
-      shareholders[0].name = modalForm.name
-      shareholders[0].paid_up_capital = modalForm.paid_up_capital
+      if (shareholders[0]) {
+        shareholders[0].name = modalForm.name
+        shareholders[0].paid_up_capital = modalForm.paid_up_capital
+      }
 
-      expect(shareholders[0].name).toBe('Updated Name')
-      expect(shareholders[0].paid_up_capital).toBe(15000000000)
+      expect(shareholders[0]?.name).toBe('Updated Name')
+      expect(shareholders[0]?.paid_up_capital).toBe(15000000000)
     })
   })
 
@@ -483,14 +497,22 @@ describe('SubsidiaryFormView - Comprehensive Tests', () => {
   describe('Company vs Individual Shareholder Logic', () => {
     it('should switch between company and individual mode in modal', () => {
       // Test type switch logic
-      const modalForm = {
+      const modalForm: {
+        isCompany: boolean
+        shareholder_company_id: string | null
+        name: string
+        identity_number: string
+        authorized_capital: number | undefined
+        paid_up_capital: number | undefined
+        type: string[]
+      } = {
         isCompany: false,
-        shareholder_company_id: null as string | null,
+        shareholder_company_id: null,
         name: 'Individual Name',
         identity_number: '',
         authorized_capital: 10000000000,
         paid_up_capital: 5000000000,
-        type: [] as string[],
+        type: [],
       }
 
       // Start as individual

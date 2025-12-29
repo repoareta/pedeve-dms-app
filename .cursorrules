@@ -39,3 +39,8 @@
 - Buat commit dengan message yang jelas dalam Bahasa Indonesia
 - Group related changes dalam satu commit jika memungkinkan
 - Test changes secara lokal sebelum commit jika memungkinkan
+
+## Communication Rules
+- **Jangan jelaskan lagi apa yang sudah dikerjakan kecuali user minta**
+- Setelah selesai mengerjakan task, cukup bilang "Selesai" atau konfirmasi singkat
+- Hanya jelaskan detail jika user secara eksplisit meminta penjelasan

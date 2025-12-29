@@ -58,8 +58,16 @@ npm run test:watch
 #### Run tests with UI (Recommended for development)
 ```sh
 npm run test:ui
+# atau
+npx vitest --ui
 ```
 UI akan otomatis terbuka di browser. Akses manual: `http://localhost:51204/__vitest__/` (port bisa berbeda)
+
+**Untuk melihat User Journey Tests:**
+1. Jalankan `npm run test:ui` atau `npx vitest --ui`
+2. Di Vitest UI, cari test file `UserJourney.spec.ts`
+3. Klik untuk melihat detail test dari perspektif pengguna
+4. Test akan menampilkan alur lengkap: Login → Dashboard → Add Subsidiary → Submit → Success
 
 #### Run tests with coverage report
 ```sh

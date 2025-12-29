@@ -1112,7 +1112,7 @@ const periodRange = ref<[Dayjs, Dayjs] | null>([
 ])
 // State untuk mode compare
 // Feature flag untuk enable/disable comparison feature
-const ENABLE_COMPARISON_FEATURE = false
+const ENABLE_COMPARISON_FEATURE = true
 
 // Feature flag untuk enable/disable activate/deactivate subsidiary feature
 const ENABLE_ACTIVATE_DEACTIVATE_FEATURE = false

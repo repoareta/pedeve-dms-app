@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -18,6 +19,7 @@ import (
 type DevelopmentHandler struct {
 	devUseCase     usecase.DevelopmentUseCase
 	notificationUC usecase.NotificationUseCase
+	adminCapUC     usecase.AdminCapabilityUseCase
 	logger         *zap.Logger
 }
 
@@ -25,8 +27,73 @@ func NewDevelopmentHandler(devUseCase usecase.DevelopmentUseCase) *DevelopmentHa
 	return &DevelopmentHandler{
 		devUseCase:     devUseCase,
 		notificationUC: usecase.NewNotificationUseCase(),
+		adminCapUC:     usecase.NewAdminCapabilityUseCase(),
 		logger:         logger.GetLogger(),
 	}
+}
+
+// CheckAdminCapabilities melakukan pengecekan capability RBAC untuk user admin (hanya superadmin)
+// @Summary      Cek Capability Admin
+// @Description  Mengecek apakah user admin memiliki konfigurasi role/permission dan scope company yang konsisten untuk semua modul (hanya superadmin)
+// @Tags         Development
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        user_id  path      string  true  "User ID (admin)"
+// @Success      200  {object}  usecase.AdminCapabilityReport
+// @Failure      401  {object}  domain.ErrorResponse
+// @Failure      403  {object}  domain.ErrorResponse
+// @Failure      404  {object}  domain.ErrorResponse
+// @Router       /development/check-admin-capabilities/{user_id} [get]
+func (h *DevelopmentHandler) CheckAdminCapabilities(c *fiber.Ctx) error {
+	roleNameVal := c.Locals("roleName")
+	if roleNameVal == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+	}
+	roleName, ok := roleNameVal.(string)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
+			Error:   "unauthorized",
+			Message: "Invalid user context",
+		})
+	}
+	if roleName != "superadmin" {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Hanya superadmin yang dapat mengakses fitur ini",
+		})
+	}
+
+	userID := c.Params("user_id")
+	if userID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+			Error:   "invalid_request",
+			Message: "user_id is required",
+		})
+	}
+
+	uc := h.adminCapUC
+	if uc == nil {
+		uc = usecase.NewAdminCapabilityUseCase()
+	}
+
+	result, err := uc.CheckAdminCapabilities(userID)
+	if err != nil {
+		// Jika user tidak ditemukan / role bukan admin, treat as 404/400
+		status := fiber.StatusBadRequest
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			status = fiber.StatusNotFound
+		}
+		return c.Status(status).JSON(domain.ErrorResponse{
+			Error:   "check_failed",
+			Message: err.Error(),
+		})
+	}
+
+	return c.JSON(result)
 }
 
 // ResetSubsidiaryData handles resetting all subsidiary data

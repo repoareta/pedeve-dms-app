@@ -1,0 +1,2 @@
+./gcp_secret_manager.go
+./secrets.go

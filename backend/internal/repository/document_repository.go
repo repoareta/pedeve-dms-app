@@ -10,7 +10,7 @@ import (
 )
 
 type DocumentRepository interface {
-	ListFolders(companyID *string) ([]domain.DocumentFolderModel, error)
+	ListFolders(companyIDs []string) ([]domain.DocumentFolderModel, error)
 	CreateFolder(folder *domain.DocumentFolderModel) error
 	GetFolderByID(id string) (*domain.DocumentFolderModel, error)
 	GetChildFolders(parentID string) ([]domain.DocumentFolderModel, error)
@@ -25,13 +25,13 @@ type DocumentRepository interface {
 	DeleteDocument(id string) error
 	DeleteDocumentsByFolder(folderID string) error
 
-	GetFolderStats(companyID *string) ([]domain.DocumentFolderStat, error)
-	GetTotalSize(companyID *string) (int64, error)
+	GetFolderStats(companyIDs []string) ([]domain.DocumentFolderStat, error)
+	GetTotalSize(companyIDs []string) (int64, error)
 }
 
 type ListDocumentsQuery struct {
 	FolderID   *string
-	CompanyID  *string // Filter berdasarkan company_id dari folder
+	CompanyIDs []string // Filter berdasarkan company_id dari folder (multi-company)
 	DirectorID *string // Filter berdasarkan director_id (dokumen individu)
 	Search     string
 	SortBy     string
@@ -54,11 +54,11 @@ func NewDocumentRepositoryWithDB(db *gorm.DB) DocumentRepository {
 	return &documentRepository{db: db}
 }
 
-func (r *documentRepository) ListFolders(companyID *string) ([]domain.DocumentFolderModel, error) {
+func (r *documentRepository) ListFolders(companyIDs []string) ([]domain.DocumentFolderModel, error) {
 	var folders []domain.DocumentFolderModel
 	tx := r.db.Order("created_at DESC")
-	if companyID != nil {
-		tx = tx.Where("company_id = ?", *companyID)
+	if len(companyIDs) > 0 {
+		tx = tx.Where("company_id IN ?", companyIDs)
 	}
 	err := tx.Find(&folders).Error
 	return folders, err
@@ -107,15 +107,15 @@ func (r *documentRepository) ListDocumentsPaginated(q ListDocumentsQuery) ([]dom
 	tx := r.db.Model(&domain.DocumentModel{})
 
 	// Join dengan folder jika perlu filter berdasarkan company_id
-	if q.CompanyID != nil {
+	if len(q.CompanyIDs) > 0 {
 		tx = tx.Joins("JOIN document_folders ON documents.folder_id = document_folders.id")
 	}
 
 	if q.FolderID != nil {
 		tx = tx.Where("documents.folder_id = ?", *q.FolderID)
 	}
-	if q.CompanyID != nil {
-		tx = tx.Where("document_folders.company_id = ?", *q.CompanyID)
+	if len(q.CompanyIDs) > 0 {
+		tx = tx.Where("document_folders.company_id IN ?", q.CompanyIDs)
 	}
 	if q.DirectorID != nil {
 		tx = tx.Where("documents.director_id = ?", *q.DirectorID)
@@ -220,7 +220,7 @@ func (r *documentRepository) DeleteDocumentsByFolder(folderID string) error {
 	return r.db.Delete(&domain.DocumentModel{}, "folder_id = ?", folderID).Error
 }
 
-func (r *documentRepository) GetFolderStats(companyID *string) ([]domain.DocumentFolderStat, error) {
+func (r *documentRepository) GetFolderStats(companyIDs []string) ([]domain.DocumentFolderStat, error) {
 	var stats []domain.DocumentFolderStat
 
 	// Join dengan folder untuk filter berdasarkan company_id
@@ -228,15 +228,15 @@ func (r *documentRepository) GetFolderStats(companyID *string) ([]domain.Documen
 		Joins("JOIN document_folders ON documents.folder_id = document_folders.id").
 		Select("documents.folder_id, COUNT(*) as file_count, COALESCE(SUM(documents.size),0) as total_size")
 
-	if companyID != nil {
-		tx = tx.Where("document_folders.company_id = ?", *companyID)
+	if len(companyIDs) > 0 {
+		tx = tx.Where("document_folders.company_id IN ?", companyIDs)
 	}
 
 	err := tx.Group("documents.folder_id").Scan(&stats).Error
 	return stats, err
 }
 
-func (r *documentRepository) GetTotalSize(companyID *string) (int64, error) {
+func (r *documentRepository) GetTotalSize(companyIDs []string) (int64, error) {
 	var total int64
 
 	// Join dengan folder untuk filter berdasarkan company_id
@@ -244,8 +244,8 @@ func (r *documentRepository) GetTotalSize(companyID *string) (int64, error) {
 		Joins("JOIN document_folders ON documents.folder_id = document_folders.id").
 		Select("COALESCE(SUM(documents.size),0)")
 
-	if companyID != nil {
-		tx = tx.Where("document_folders.company_id = ?", *companyID)
+	if len(companyIDs) > 0 {
+		tx = tx.Where("document_folders.company_id IN ?", companyIDs)
 	}
 
 	err := tx.Scan(&total).Error

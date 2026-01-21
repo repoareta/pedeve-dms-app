@@ -101,6 +101,7 @@ export interface User {
   role: string
   role_id?: string
   company_id?: string
+  company_ids?: string[]
   is_active: boolean
   created_at: string
   updated_at: string
@@ -303,6 +304,8 @@ export const userApi = {
     email: string
     password: string
     company_id?: string
+    company_ids?: string[]
+    assign_all_companies?: boolean
     role_id?: string
   }): Promise<User> => {
     const response = await apiClient.post<User>('/users', data)
@@ -313,6 +316,8 @@ export const userApi = {
     username?: string
     email?: string
     company_id?: string | null
+    company_ids?: string[]
+    assign_all_companies?: boolean
     role_id?: string
   }): Promise<User> => {
     const response = await apiClient.put<User>(`/users/${id}`, data)

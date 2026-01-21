@@ -63,7 +63,7 @@ func RequireCompanyAccess() fiber.Handler {
 			return c.Next()
 		}
 
-		// Cek apakah target company adalah descendant dari company user
+		// Cek apakah target company adalah descendant dari company user (primary company)
 		companyRepo := repository.NewCompanyRepository()
 		isDescendant, err := companyRepo.IsDescendantOf(targetCompanyID, userCompanyID)
 		if err != nil {
@@ -75,6 +75,25 @@ func RequireCompanyAccess() fiber.Handler {
 		}
 
 		if !isDescendant {
+			// Fallback: support multiple company assignments (junction table)
+			assignmentRepo := repository.NewUserCompanyAssignmentRepository()
+			userID := userIDVal.(string)
+			assignments, aErr := assignmentRepo.GetByUserID(userID)
+			if aErr == nil && len(assignments) > 0 {
+				for _, a := range assignments {
+					if !a.IsActive {
+						continue
+					}
+					if a.CompanyID == targetCompanyID {
+						return c.Next()
+					}
+					ok, err := companyRepo.IsDescendantOf(targetCompanyID, a.CompanyID)
+					if err == nil && ok {
+						return c.Next()
+					}
+				}
+			}
+
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
 				Message: "You don't have access to this company",

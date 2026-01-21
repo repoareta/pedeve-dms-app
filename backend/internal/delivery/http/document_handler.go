@@ -9,6 +9,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/audit"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/utils"
 )
@@ -19,6 +20,83 @@ type DocumentHandler struct {
 
 func NewDocumentHandler(docUseCase usecase.DocumentUseCase) *DocumentHandler {
 	return &DocumentHandler{docUseCase: docUseCase}
+}
+
+func resolveCompanyIDFromLocals(companyIDVal interface{}) *string {
+	if companyIDVal == nil {
+		return nil
+	}
+	if companyIDPtr, ok := companyIDVal.(*string); ok && companyIDPtr != nil && *companyIDPtr != "" {
+		return companyIDPtr
+	}
+	if companyIDStr, ok := companyIDVal.(string); ok && companyIDStr != "" {
+		return &companyIDStr
+	}
+	return nil
+}
+
+// buildDocumentsCompanyScope:
+// - restricted=false: superadmin/administrator (akses semua company)
+// - restricted=true: companyIDs berisi semua company yang boleh diakses (primary + assignments + descendants)
+func buildDocumentsCompanyScope(c *fiber.Ctx, roleNameLower string) (restricted bool, companyIDs []string) {
+	// Admin diminta punya hak setara administrator untuk modul Documents
+	if utils.IsSuperAdminLike(roleNameLower) || roleNameLower == "admin" {
+		return false, nil
+	}
+
+	userIDVal := c.Locals("userID")
+	userID := fmt.Sprintf("%v", userIDVal)
+
+	ids := make(map[string]bool)
+	companyRepo := repository.NewCompanyRepository()
+
+	addWithDescendants := func(root string) {
+		if root == "" {
+			return
+		}
+		if !ids[root] {
+			ids[root] = true
+		}
+		if desc, err := companyRepo.GetDescendants(root); err == nil {
+			for _, d := range desc {
+				if d.ID != "" {
+					ids[d.ID] = true
+				}
+			}
+		}
+	}
+
+	// Primary company from JWT
+	if cidPtr := resolveCompanyIDFromLocals(c.Locals("companyID")); cidPtr != nil {
+		addWithDescendants(*cidPtr)
+	}
+
+	// Multi-company assignments from junction table
+	assignmentRepo := repository.NewUserCompanyAssignmentRepository()
+	if assignments, err := assignmentRepo.GetByUserID(userID); err == nil {
+		for _, a := range assignments {
+			if !a.IsActive {
+				continue
+			}
+			addWithDescendants(a.CompanyID)
+		}
+	}
+
+	out := make([]string, 0, len(ids))
+	for id := range ids {
+		out = append(out, id)
+	}
+	return true, out
+}
+
+func buildCompanyIDSet(companyIDs []string) map[string]bool {
+	set := make(map[string]bool, len(companyIDs))
+	for _, id := range companyIDs {
+		if id != "" {
+			set[id] = true
+		}
+	}
+	return set
 }
 
 // ListFolders handles getting all folders
@@ -35,7 +113,6 @@ func NewDocumentHandler(docUseCase usecase.DocumentUseCase) *DocumentHandler {
 func (h *DocumentHandler) ListFolders(c *fiber.Ctx) error {
 	userIDVal := c.Locals("userID")
 	roleVal := c.Locals("roleName")
-	companyIDVal := c.Locals("companyID")
 	if userIDVal == nil || roleVal == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
 			Error:   "unauthorized",
@@ -45,22 +122,13 @@ func (h *DocumentHandler) ListFolders(c *fiber.Ctx) error {
 	userIDStr := fmt.Sprintf("%v", userIDVal)
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
 
-	var companyFilter *string
-	if !utils.IsSuperAdminLike(roleName) {
-		// User reguler hanya melihat folder perusahaan mereka
-		if companyIDVal != nil {
-			var userCompanyID string
-			if companyIDPtr, ok := companyIDVal.(*string); ok && companyIDPtr != nil {
-				userCompanyID = *companyIDPtr
-				companyFilter = &userCompanyID
-			} else if companyIDStr, ok := companyIDVal.(string); ok && companyIDStr != "" {
-				companyFilter = &companyIDStr
-			}
-		}
-		// Jika user tidak punya company assignment, tidak akan melihat folder apa-apa
+	restricted, companyIDs := buildDocumentsCompanyScope(c, roleName)
+	if restricted && len(companyIDs) == 0 {
+		// User tanpa company assignment tidak melihat folder apapun
+		return c.JSON([]domain.DocumentFolderModel{})
 	}
 
-	folders, err := h.docUseCase.ListFolders(companyFilter)
+	folders, err := h.docUseCase.ListFolders(companyIDs)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
 			Error:   "internal_error",
@@ -112,17 +180,39 @@ func (h *DocumentHandler) CreateFolder(c *fiber.Ctx) error {
 	userIDStr := fmt.Sprintf("%v", userIDVal)
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
 
-	var userCompanyID *string
-	if companyIDVal != nil {
-		if companyIDPtr, ok := companyIDVal.(*string); ok && companyIDPtr != nil {
-			userCompanyID = companyIDPtr
-		} else if companyIDStr, ok := companyIDVal.(string); ok && companyIDStr != "" {
-			userCompanyID = &companyIDStr
+	restricted, allowedCompanyIDs := buildDocumentsCompanyScope(c, roleName)
+	allowedSet := buildCompanyIDSet(allowedCompanyIDs)
+
+	var chosenCompanyID *string
+	// Jika parent_id ada, company_id folder baru mengikuti company_id parent folder
+	if payload.ParentID != nil && *payload.ParentID != "" {
+		parent, err := h.docUseCase.GetFolderByID(*payload.ParentID)
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
+				Error:   "not_found",
+				Message: "Parent folder tidak ditemukan",
+			})
+		}
+		if restricted {
+			if parent.CompanyID == nil || !allowedSet[*parent.CompanyID] {
+				return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+					Error:   "forbidden",
+					Message: "Anda tidak memiliki akses ke parent folder ini",
+				})
+			}
+		}
+		chosenCompanyID = parent.CompanyID
+	} else {
+		// Root folder: gunakan primary company dari JWT (atau fallback pertama dari allowed list)
+		chosenCompanyID = resolveCompanyIDFromLocals(companyIDVal)
+		if chosenCompanyID == nil && restricted && len(allowedCompanyIDs) > 0 {
+			first := allowedCompanyIDs[0]
+			chosenCompanyID = &first
 		}
 	}
 
 	// Non-superadmin harus punya company assignment
-	if !utils.IsSuperAdminLike(roleName) && userCompanyID == nil {
+	if restricted && chosenCompanyID == nil {
 		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 			Error:   "forbidden",
 			Message: "User harus terasosiasi dengan perusahaan untuk membuat folder",
@@ -131,7 +221,7 @@ func (h *DocumentHandler) CreateFolder(c *fiber.Ctx) error {
 
 	// Superadmin/administrator bisa membuat folder tanpa company (opsional)
 	// User reguler otomatis menggunakan company mereka
-	folder, err := h.docUseCase.CreateFolder(payload.Name, userCompanyID, payload.ParentID, userIDStr)
+	folder, err := h.docUseCase.CreateFolder(payload.Name, chosenCompanyID, payload.ParentID, userIDStr)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
 			Error:   "creation_failed",
@@ -143,7 +233,7 @@ func (h *DocumentHandler) CreateFolder(c *fiber.Ctx) error {
 		"operation":  "create_folder",
 		"name":       payload.Name,
 		"parent_id":  payload.ParentID,
-		"company_id": userCompanyID,
+		"company_id": chosenCompanyID,
 	})
 	return c.Status(fiber.StatusCreated).JSON(folder)
 }
@@ -167,7 +257,6 @@ func (h *DocumentHandler) UpdateFolder(c *fiber.Ctx) error {
 
 	userIDVal := c.Locals("userID")
 	roleVal := c.Locals("roleName")
-	companyIDVal := c.Locals("companyID")
 	if userIDVal == nil || roleVal == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
 			Error:   "unauthorized",
@@ -176,15 +265,6 @@ func (h *DocumentHandler) UpdateFolder(c *fiber.Ctx) error {
 	}
 	userIDStr := fmt.Sprintf("%v", userIDVal)
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
-
-	var userCompanyID *string
-	if companyIDVal != nil {
-		if companyIDPtr, ok := companyIDVal.(*string); ok && companyIDPtr != nil {
-			userCompanyID = companyIDPtr
-		} else if companyIDStr, ok := companyIDVal.(string); ok && companyIDStr != "" {
-			userCompanyID = &companyIDStr
-		}
-	}
 
 	var payload struct {
 		Name string `json:"name"`
@@ -196,7 +276,15 @@ func (h *DocumentHandler) UpdateFolder(c *fiber.Ctx) error {
 		})
 	}
 
-	folder, err := h.docUseCase.UpdateFolderName(id, payload.Name, userCompanyID, roleName)
+	restricted, companyIDs := buildDocumentsCompanyScope(c, roleName)
+	if restricted && len(companyIDs) == 0 {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "User harus terasosiasi dengan perusahaan untuk mengubah folder",
+		})
+	}
+
+	folder, err := h.docUseCase.UpdateFolderName(id, payload.Name, companyIDs, roleName)
 	if err != nil {
 		status := fiber.StatusBadRequest
 		if strings.Contains(err.Error(), "forbidden") {
@@ -235,7 +323,6 @@ func (h *DocumentHandler) DeleteFolder(c *fiber.Ctx) error {
 
 	userIDVal := c.Locals("userID")
 	roleVal := c.Locals("roleName")
-	companyIDVal := c.Locals("companyID")
 	if userIDVal == nil || roleVal == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
 			Error:   "unauthorized",
@@ -245,23 +332,15 @@ func (h *DocumentHandler) DeleteFolder(c *fiber.Ctx) error {
 	userIDStr := fmt.Sprintf("%v", userIDVal)
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
 
-	// Superadmin/administrator dapat menghapus semua folder tanpa check access
-	isSuperAdmin := utils.IsSuperAdminLike(roleName)
-	var userCompanyID *string
-
-	if !isSuperAdmin {
-		// Non-superadmin perlu check access berdasarkan company_id
-		if companyIDVal != nil {
-			if companyIDPtr, ok := companyIDVal.(*string); ok && companyIDPtr != nil {
-				userCompanyID = companyIDPtr
-			} else if companyIDStr, ok := companyIDVal.(string); ok && companyIDStr != "" {
-				userCompanyID = &companyIDStr
-			}
-		}
+	restricted, companyIDs := buildDocumentsCompanyScope(c, roleName)
+	if restricted && len(companyIDs) == 0 {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "User harus terasosiasi dengan perusahaan untuk menghapus folder",
+		})
 	}
-	// Superadmin bisa pass nil untuk userCompanyID dan tetap bisa delete
 
-	if err := h.docUseCase.DeleteFolder(id, userCompanyID, roleName); err != nil {
+	if err := h.docUseCase.DeleteFolder(id, companyIDs, roleName); err != nil {
 		status := fiber.StatusBadRequest
 		if strings.Contains(err.Error(), "forbidden") {
 			status = fiber.StatusForbidden
@@ -314,6 +393,20 @@ func (h *DocumentHandler) ListDocuments(c *fiber.Ctx) error {
 	userIDStr := fmt.Sprintf("%v", userIDVal)
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
 
+	restricted, companyIDs := buildDocumentsCompanyScope(c, roleName)
+	allowedSet := buildCompanyIDSet(companyIDs)
+	if restricted && len(companyIDs) == 0 {
+		// User tanpa company tidak melihat dokumen apapun
+		if audit.ShouldLogView() {
+			username, _ := c.Locals("username").(string)
+			audit.LogAction(userIDStr, username, audit.ActionViewDoc, audit.ResourceDocument, "", getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, map[string]interface{}{
+				"operation": "list_documents",
+				"folder_id": c.Query("folder_id"),
+			})
+		}
+		return c.JSON([]domain.DocumentModel{})
+	}
+
 	folderID := c.Query("folder_id")
 	var folderPtr *string
 	if folderID != "" {
@@ -327,17 +420,7 @@ func (h *DocumentHandler) ListDocuments(c *fiber.Ctx) error {
 	}
 
 	// Jika filter folder diberikan, pastikan akses folder untuk non-superadmin
-	companyIDValForList := c.Locals("companyID")
-	var userCompanyID *string
-	if companyIDValForList != nil {
-		if companyIDPtr, ok := companyIDValForList.(*string); ok && companyIDPtr != nil {
-			userCompanyID = companyIDPtr
-		} else if companyIDStr, ok := companyIDValForList.(string); ok && companyIDStr != "" {
-			userCompanyID = &companyIDStr
-		}
-	}
-
-	if folderPtr != nil && !utils.IsSuperAdminLike(roleName) {
+	if folderPtr != nil && restricted {
 		folder, err := h.docUseCase.GetFolderByID(folderID)
 		if err != nil {
 			return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
@@ -345,8 +428,8 @@ func (h *DocumentHandler) ListDocuments(c *fiber.Ctx) error {
 				Message: "Folder tidak ditemukan",
 			})
 		}
-		// Cek apakah folder milik company user
-		if userCompanyID == nil || folder.CompanyID == nil || *userCompanyID != *folder.CompanyID {
+		// Cek apakah folder berada dalam scope company user
+		if folder.CompanyID == nil || !allowedSet[*folder.CompanyID] {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
 				Message: "Anda tidak memiliki akses ke folder ini",
@@ -363,12 +446,6 @@ func (h *DocumentHandler) ListDocuments(c *fiber.Ctx) error {
 
 	usePaginated := page > 0 || pageSize > 0 || search != "" || sortBy != "" || sortDir != "" || typeFilter != ""
 
-	// Filter berdasarkan company_id untuk non-superadmin
-	var companyFilter *string
-	if !utils.IsSuperAdminLike(roleName) {
-		companyFilter = userCompanyID
-	}
-
 	if usePaginated {
 		if page <= 0 {
 			page = 1
@@ -382,7 +459,7 @@ func (h *DocumentHandler) ListDocuments(c *fiber.Ctx) error {
 
 		docs, total, err := h.docUseCase.ListDocumentsPaginated(usecase.ListDocumentsParams{
 			FolderID:   folderPtr,
-			CompanyID:  companyFilter,
+			CompanyIDs: companyIDs,
 			DirectorID: directorPtr,
 			Search:     search,
 			SortBy:     sortBy,
@@ -424,25 +501,21 @@ func (h *DocumentHandler) ListDocuments(c *fiber.Ctx) error {
 		})
 	}
 
-	// RBAC: non-superadmin/administrator hanya melihat dokumen di folder company mereka
-	if !utils.IsSuperAdminLike(roleName) && userCompanyID != nil {
-		// Filter: hanya dokumen di folder yang memiliki company_id sesuai
+	// RBAC: non-superadmin hanya melihat dokumen di folder company dalam scope mereka
+	if restricted {
 		filtered := make([]domain.DocumentModel, 0, len(docs))
 		for _, d := range docs {
-			if d.Folder != nil && d.Folder.CompanyID != nil && *d.Folder.CompanyID == *userCompanyID {
+			if d.Folder != nil && d.Folder.CompanyID != nil && allowedSet[*d.Folder.CompanyID] {
 				filtered = append(filtered, d)
 			} else if d.FolderID != nil {
 				// Jika folder tidak di-load, cek folder secara terpisah
 				folder, err := h.docUseCase.GetFolderByID(*d.FolderID)
-				if err == nil && folder.CompanyID != nil && *folder.CompanyID == *userCompanyID {
+				if err == nil && folder.CompanyID != nil && allowedSet[*folder.CompanyID] {
 					filtered = append(filtered, d)
 				}
 			}
 		}
 		docs = filtered
-	} else if !utils.IsSuperAdminLike(roleName) {
-		// User tanpa company tidak melihat dokumen apapun
-		docs = []domain.DocumentModel{}
 	}
 
 	if audit.ShouldLogView() {
@@ -469,7 +542,6 @@ func (h *DocumentHandler) ListDocuments(c *fiber.Ctx) error {
 func (h *DocumentHandler) DocumentSummary(c *fiber.Ctx) error {
 	userIDVal := c.Locals("userID")
 	roleVal := c.Locals("roleName")
-	companyIDVal := c.Locals("companyID")
 	if userIDVal == nil || roleVal == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(domain.ErrorResponse{
 			Error:   "unauthorized",
@@ -478,20 +550,15 @@ func (h *DocumentHandler) DocumentSummary(c *fiber.Ctx) error {
 	}
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
 
-	var companyFilter *string
-	if !utils.IsSuperAdminLike(roleName) {
-		// User reguler hanya melihat statistik perusahaan mereka
-		if companyIDVal != nil {
-			if companyIDPtr, ok := companyIDVal.(*string); ok && companyIDPtr != nil {
-				companyFilter = companyIDPtr
-			} else if companyIDStr, ok := companyIDVal.(string); ok && companyIDStr != "" {
-				companyFilter = &companyIDStr
-			}
-		}
+	restricted, companyIDs := buildDocumentsCompanyScope(c, roleName)
+	if restricted && len(companyIDs) == 0 {
+		return c.JSON(fiber.Map{
+			"folder_stats": []domain.DocumentFolderStat{},
+			"total_size":   0,
+		})
 	}
-	// Superadmin/administrator melihat semua (companyFilter = nil)
 
-	stats, total, err := h.docUseCase.GetDocumentSummary(companyFilter)
+	stats, total, err := h.docUseCase.GetDocumentSummary(companyIDs)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
 			Error:   "internal_error",
@@ -540,18 +607,17 @@ func (h *DocumentHandler) GetDocument(c *fiber.Ctx) error {
 		})
 	}
 
-	// Cek akses berdasarkan company_id folder
-	companyIDVal := c.Locals("companyID")
-	var userCompanyID *string
-	if companyIDVal != nil {
-		if companyIDPtr, ok := companyIDVal.(*string); ok && companyIDPtr != nil {
-			userCompanyID = companyIDPtr
-		} else if companyIDStr, ok := companyIDVal.(string); ok && companyIDStr != "" {
-			userCompanyID = &companyIDStr
-		}
+	// Cek akses berdasarkan company_id folder (scope hierarchy + multi assignment)
+	restricted, companyIDs := buildDocumentsCompanyScope(c, roleName)
+	allowedSet := buildCompanyIDSet(companyIDs)
+	if restricted && len(companyIDs) == 0 {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Anda tidak memiliki akses ke dokumen ini",
+		})
 	}
 
-	if !utils.IsSuperAdminLike(roleName) {
+	if restricted {
 		// Non-superadmin harus akses folder melalui company_id
 		if doc.FolderID == nil {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
@@ -566,7 +632,7 @@ func (h *DocumentHandler) GetDocument(c *fiber.Ctx) error {
 				Message: "Folder dokumen tidak ditemukan",
 			})
 		}
-		if userCompanyID == nil || folder.CompanyID == nil || *userCompanyID != *folder.CompanyID {
+		if folder.CompanyID == nil || !allowedSet[*folder.CompanyID] {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
 				Message: "Anda tidak memiliki akses ke dokumen ini",
@@ -699,19 +765,18 @@ func (h *DocumentHandler) UploadDocument(c *fiber.Ctx) error {
 
 	// Jika folder ditentukan, pastikan akses folder untuk non-superadmin
 	roleVal := c.Locals("roleName")
-	companyIDVal := c.Locals("companyID")
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
 
-	var userCompanyID *string
-	if companyIDVal != nil {
-		if companyIDPtr, ok := companyIDVal.(*string); ok && companyIDPtr != nil {
-			userCompanyID = companyIDPtr
-		} else if companyIDStr, ok := companyIDVal.(string); ok && companyIDStr != "" {
-			userCompanyID = &companyIDStr
-		}
+	restricted, companyIDs := buildDocumentsCompanyScope(c, roleName)
+	allowedSet := buildCompanyIDSet(companyIDs)
+	if restricted && len(companyIDs) == 0 && folderPtr != nil {
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "Anda tidak memiliki akses ke folder ini",
+		})
 	}
 
-	if folderPtr != nil && !utils.IsSuperAdminLike(roleName) {
+	if folderPtr != nil && restricted {
 		folder, err := h.docUseCase.GetFolderByID(*folderPtr)
 		if err != nil {
 			return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
@@ -719,8 +784,8 @@ func (h *DocumentHandler) UploadDocument(c *fiber.Ctx) error {
 				Message: "Folder tidak ditemukan",
 			})
 		}
-		// Cek apakah folder milik company user
-		if userCompanyID == nil || folder.CompanyID == nil || *userCompanyID != *folder.CompanyID {
+		// Cek apakah folder berada dalam scope company user
+		if folder.CompanyID == nil || !allowedSet[*folder.CompanyID] {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
 				Message: "Anda tidak memiliki akses ke folder ini",
@@ -804,6 +869,9 @@ func (h *DocumentHandler) UpdateDocument(c *fiber.Ctx) error {
 	userIDStr := fmt.Sprintf("%v", userIDVal)
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
 
+	restricted, companyIDs := buildDocumentsCompanyScope(c, roleName)
+	allowedSet := buildCompanyIDSet(companyIDs)
+
 	// Ambil dokumen untuk cek kepemilikan
 	existingDoc, err := h.docUseCase.GetDocumentByID(id)
 	if err != nil {
@@ -812,19 +880,14 @@ func (h *DocumentHandler) UpdateDocument(c *fiber.Ctx) error {
 			Message: "Document tidak ditemukan",
 		})
 	}
-	// Cek akses berdasarkan company_id folder
-	companyIDValForUpdate := c.Locals("companyID")
-	var userCompanyIDForUpdate *string
-	if companyIDValForUpdate != nil {
-		if companyIDPtr, ok := companyIDValForUpdate.(*string); ok && companyIDPtr != nil {
-			userCompanyIDForUpdate = companyIDPtr
-		} else if companyIDStr, ok := companyIDValForUpdate.(string); ok && companyIDStr != "" {
-			userCompanyIDForUpdate = &companyIDStr
+	if restricted {
+		if len(companyIDs) == 0 {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Anda tidak memiliki akses mengubah dokumen ini",
+			})
 		}
-	}
-
-	if !utils.IsSuperAdminLike(roleName) {
-		// Non-superadmin harus akses folder melalui company_id
+		// Non-superadmin harus akses folder melalui company scope
 		if existingDoc.FolderID == nil {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
@@ -838,7 +901,7 @@ func (h *DocumentHandler) UpdateDocument(c *fiber.Ctx) error {
 				Message: "Folder dokumen tidak ditemukan",
 			})
 		}
-		if userCompanyIDForUpdate == nil || folder.CompanyID == nil || *userCompanyIDForUpdate != *folder.CompanyID {
+		if folder.CompanyID == nil || !allowedSet[*folder.CompanyID] {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
 				Message: "Anda tidak memiliki akses mengubah dokumen ini",
@@ -889,16 +952,8 @@ func (h *DocumentHandler) UpdateDocument(c *fiber.Ctx) error {
 		if v := c.FormValue("director_id"); v != "" {
 			directorIDPtr = &v
 		}
-		var userCompanyIDForMultipart *string
-		if companyIDValForUpdate != nil {
-			if companyIDPtr, ok := companyIDValForUpdate.(*string); ok && companyIDPtr != nil {
-				userCompanyIDForMultipart = companyIDPtr
-			} else if companyIDStr, ok := companyIDValForUpdate.(string); ok && companyIDStr != "" {
-				userCompanyIDForMultipart = &companyIDStr
-			}
-		}
 
-		if folderPtr != nil && !utils.IsSuperAdminLike(roleName) {
+		if folderPtr != nil && restricted {
 			folder, err := h.docUseCase.GetFolderByID(*folderPtr)
 			if err != nil {
 				return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
@@ -906,8 +961,8 @@ func (h *DocumentHandler) UpdateDocument(c *fiber.Ctx) error {
 					Message: "Folder tidak ditemukan",
 				})
 			}
-			// Cek apakah folder milik company user
-			if userCompanyIDForMultipart == nil || folder.CompanyID == nil || *userCompanyIDForMultipart != *folder.CompanyID {
+			// Cek apakah folder berada dalam scope company user
+			if folder.CompanyID == nil || !allowedSet[*folder.CompanyID] {
 				return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 					Error:   "forbidden",
 					Message: "Anda tidak memiliki akses ke folder ini",
@@ -971,17 +1026,7 @@ func (h *DocumentHandler) UpdateDocument(c *fiber.Ctx) error {
 		})
 	}
 
-	if payload.FolderID != nil && !utils.IsSuperAdminLike(roleName) {
-		// Get userCompanyID untuk JSON payload
-		var userCompanyIDForJSON *string
-		if companyIDValForUpdate != nil {
-			if companyIDPtr, ok := companyIDValForUpdate.(*string); ok && companyIDPtr != nil {
-				userCompanyIDForJSON = companyIDPtr
-			} else if companyIDStr, ok := companyIDValForUpdate.(string); ok && companyIDStr != "" {
-				userCompanyIDForJSON = &companyIDStr
-			}
-		}
-
+	if payload.FolderID != nil && restricted {
 		folder, err := h.docUseCase.GetFolderByID(*payload.FolderID)
 		if err != nil {
 			return c.Status(fiber.StatusNotFound).JSON(domain.ErrorResponse{
@@ -989,8 +1034,8 @@ func (h *DocumentHandler) UpdateDocument(c *fiber.Ctx) error {
 				Message: "Folder tidak ditemukan",
 			})
 		}
-		// Cek apakah folder milik company user
-		if userCompanyIDForJSON == nil || folder.CompanyID == nil || *userCompanyIDForJSON != *folder.CompanyID {
+		// Cek apakah folder berada dalam scope company user
+		if folder.CompanyID == nil || !allowedSet[*folder.CompanyID] {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
 				Message: "Anda tidak memiliki akses ke folder ini",
@@ -1051,6 +1096,9 @@ func (h *DocumentHandler) DeleteDocument(c *fiber.Ctx) error {
 	userIDStr := fmt.Sprintf("%v", userIDVal)
 	roleName := strings.ToLower(fmt.Sprintf("%v", roleVal))
 
+	restricted, companyIDs := buildDocumentsCompanyScope(c, roleName)
+	allowedSet := buildCompanyIDSet(companyIDs)
+
 	// Ambil dokumen dulu
 	existingDoc, err := h.docUseCase.GetDocumentByID(id)
 	if err != nil {
@@ -1060,23 +1108,16 @@ func (h *DocumentHandler) DeleteDocument(c *fiber.Ctx) error {
 		})
 	}
 
-	// Superadmin/administrator dapat menghapus semua dokumen tanpa check access
-	isSuperAdmin := utils.IsSuperAdminLike(roleName)
 	var folder *domain.DocumentFolderModel // Variable untuk menyimpan folder jika diperlukan untuk logging
 
-	if !isSuperAdmin {
-		// Non-superadmin harus check access berdasarkan company_id folder
-		companyIDValForDelete := c.Locals("companyID")
-		var userCompanyIDForDelete *string
-		if companyIDValForDelete != nil {
-			if companyIDPtr, ok := companyIDValForDelete.(*string); ok && companyIDPtr != nil {
-				userCompanyIDForDelete = companyIDPtr
-			} else if companyIDStr, ok := companyIDValForDelete.(string); ok && companyIDStr != "" {
-				userCompanyIDForDelete = &companyIDStr
-			}
+	if restricted {
+		if len(companyIDs) == 0 {
+			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+				Error:   "forbidden",
+				Message: "Anda tidak memiliki akses menghapus dokumen ini",
+			})
 		}
-
-		// Non-superadmin harus akses folder melalui company_id
+		// Non-superadmin harus check access berdasarkan company scope
 		if existingDoc.FolderID == nil {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
@@ -1091,14 +1132,14 @@ func (h *DocumentHandler) DeleteDocument(c *fiber.Ctx) error {
 				Message: "Folder dokumen tidak ditemukan",
 			})
 		}
-		if userCompanyIDForDelete == nil || folder.CompanyID == nil || *userCompanyIDForDelete != *folder.CompanyID {
+		if folder.CompanyID == nil || !allowedSet[*folder.CompanyID] {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
 				Message: "Anda tidak memiliki akses menghapus dokumen ini",
 			})
 		}
 	} else if existingDoc.FolderID != nil {
-		// Untuk superadmin, ambil folder hanya untuk logging (jika ada)
+		// Untuk unrestricted role, ambil folder hanya untuk logging (jika ada)
 		folder, _ = h.docUseCase.GetFolderByID(*existingDoc.FolderID)
 	}
 

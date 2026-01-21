@@ -16,14 +16,14 @@ import (
 )
 
 type DocumentUseCase interface {
-	ListFolders(companyID *string) ([]domain.DocumentFolderModel, error)
+	ListFolders(companyIDs []string) ([]domain.DocumentFolderModel, error)
 	CreateFolder(name string, companyID *string, parentID *string, createdBy string) (*domain.DocumentFolderModel, error)
 	GetFolderByID(id string) (*domain.DocumentFolderModel, error)
-	UpdateFolderName(id string, name string, requesterCompanyID *string, roleName string) (*domain.DocumentFolderModel, error)
-	DeleteFolder(id string, requesterCompanyID *string, roleName string) error
+	UpdateFolderName(id string, name string, requesterCompanyIDs []string, roleName string) (*domain.DocumentFolderModel, error)
+	DeleteFolder(id string, requesterCompanyIDs []string, roleName string) error
 	ListDocuments(folderID *string) ([]domain.DocumentModel, error)
 	ListDocumentsPaginated(params ListDocumentsParams) ([]domain.DocumentModel, int64, error)
-	GetDocumentSummary(companyID *string) ([]domain.DocumentFolderStat, int64, error)
+	GetDocumentSummary(companyIDs []string) ([]domain.DocumentFolderStat, int64, error)
 	GetDocumentByID(id string) (*domain.DocumentModel, error)
 	UploadDocument(input UploadDocumentInput) (*domain.DocumentModel, error)
 	UpdateDocument(id string, input UpdateDocumentInput) (*domain.DocumentModel, error)
@@ -57,7 +57,7 @@ type UpdateDocumentInput struct {
 
 type ListDocumentsParams struct {
 	FolderID   *string
-	CompanyID  *string // Filter berdasarkan company_id dari folder
+	CompanyIDs []string // Filter berdasarkan company_id dari folder (multi-company)
 	DirectorID *string // Filter berdasarkan director_id (dokumen individu)
 	Search     string
 	SortBy     string
@@ -95,8 +95,8 @@ func NewDocumentUseCaseWithDB(db *gorm.DB) DocumentUseCase {
 	}
 }
 
-func (uc *documentUseCase) ListFolders(companyID *string) ([]domain.DocumentFolderModel, error) {
-	return uc.docRepo.ListFolders(companyID)
+func (uc *documentUseCase) ListFolders(companyIDs []string) ([]domain.DocumentFolderModel, error) {
+	return uc.docRepo.ListFolders(companyIDs)
 }
 
 func (uc *documentUseCase) CreateFolder(name string, companyID *string, parentID *string, createdBy string) (*domain.DocumentFolderModel, error) {
@@ -125,7 +125,7 @@ func (uc *documentUseCase) GetFolderByID(id string) (*domain.DocumentFolderModel
 	return uc.docRepo.GetFolderByID(id)
 }
 
-func (uc *documentUseCase) UpdateFolderName(id, name string, requesterCompanyID *string, roleName string) (*domain.DocumentFolderModel, error) {
+func (uc *documentUseCase) UpdateFolderName(id, name string, requesterCompanyIDs []string, roleName string) (*domain.DocumentFolderModel, error) {
 	if name == "" {
 		return nil, fmt.Errorf("folder name required")
 	}
@@ -135,13 +135,26 @@ func (uc *documentUseCase) UpdateFolderName(id, name string, requesterCompanyID 
 		return nil, err
 	}
 
-	// Hanya company owner atau superadmin/administrator yang bisa rename
+	// Hanya company owner (dalam scope) atau superadmin/administrator/admin yang bisa rename
 	roleLower := strings.ToLower(roleName)
-	isSuperAdmin := roleLower == "superadmin" || roleLower == "administrator"
+	isSuperAdmin := roleLower == "superadmin" || roleLower == "administrator" || roleLower == "admin"
 
 	if !isSuperAdmin {
-		// Cek apakah company requester sama dengan company folder
-		if requesterCompanyID == nil || folder.CompanyID == nil || *requesterCompanyID != *folder.CompanyID {
+		// Cek apakah folder berada dalam company_ids yang diizinkan
+		if folder.CompanyID == nil {
+			return nil, fmt.Errorf("forbidden")
+		}
+		allowed := false
+		for _, cid := range requesterCompanyIDs {
+			if cid == "" {
+				continue
+			}
+			if cid == *folder.CompanyID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
 			return nil, fmt.Errorf("forbidden")
 		}
 	}
@@ -181,18 +194,18 @@ func (uc *documentUseCase) deleteFolderRecursive(folderID string) error {
 	return nil
 }
 
-func (uc *documentUseCase) DeleteFolder(id string, requesterCompanyID *string, roleName string) error {
+func (uc *documentUseCase) DeleteFolder(id string, requesterCompanyIDs []string, roleName string) error {
 	folder, err := uc.docRepo.GetFolderByID(id)
 	if err != nil {
 		return err
 	}
 
-	// HANYA superadmin/administrator yang boleh menghapus folder
+	// HANYA superadmin/administrator/admin yang boleh menghapus folder
 	roleLower := strings.ToLower(roleName)
-	isSuperAdmin := roleLower == "superadmin" || roleLower == "administrator"
+	isSuperAdmin := roleLower == "superadmin" || roleLower == "administrator" || roleLower == "admin"
 
 	if !isSuperAdmin {
-		return fmt.Errorf("forbidden: hanya superadmin dan administrator yang dapat menghapus folder")
+		return fmt.Errorf("forbidden: hanya superadmin, administrator, dan admin yang dapat menghapus folder")
 	}
 
 	// Simpan companyID dan nama folder sebelum dihapus (untuk auto-generate folder baru)
@@ -243,7 +256,7 @@ func (uc *documentUseCase) ListDocuments(folderID *string) ([]domain.DocumentMod
 func (uc *documentUseCase) ListDocumentsPaginated(params ListDocumentsParams) ([]domain.DocumentModel, int64, error) {
 	q := repository.ListDocumentsQuery{
 		FolderID:   params.FolderID,
-		CompanyID:  params.CompanyID,
+		CompanyIDs: params.CompanyIDs,
 		DirectorID: params.DirectorID,
 		Search:     params.Search,
 		SortBy:     params.SortBy,
@@ -256,12 +269,12 @@ func (uc *documentUseCase) ListDocumentsPaginated(params ListDocumentsParams) ([
 	return uc.docRepo.ListDocumentsPaginated(q)
 }
 
-func (uc *documentUseCase) GetDocumentSummary(companyID *string) ([]domain.DocumentFolderStat, int64, error) {
-	stats, err := uc.docRepo.GetFolderStats(companyID)
+func (uc *documentUseCase) GetDocumentSummary(companyIDs []string) ([]domain.DocumentFolderStat, int64, error) {
+	stats, err := uc.docRepo.GetFolderStats(companyIDs)
 	if err != nil {
 		return nil, 0, err
 	}
-	total, err := uc.docRepo.GetTotalSize(companyID)
+	total, err := uc.docRepo.GetTotalSize(companyIDs)
 	if err != nil {
 		return nil, 0, err
 	}

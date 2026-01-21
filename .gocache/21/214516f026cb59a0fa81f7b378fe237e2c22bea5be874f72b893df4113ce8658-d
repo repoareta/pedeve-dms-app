@@ -1,0 +1,3 @@
+./normalize.go
+./parsepath.go
+./parseutil.go

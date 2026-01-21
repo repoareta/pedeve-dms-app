@@ -164,6 +164,75 @@ func InitDB() {
 		zapLog.Warn("Failed to drop default for users.role (this may be expected on SQLite or if already dropped)", zap.Error(err))
 	}
 
+	// Migration: Pastikan FK inputter_id pada reports/financial_reports adalah ON DELETE SET NULL
+	// Tujuan: user bisa dihapus tanpa melanggar FK, dan report tetap tersimpan (inputter_id jadi NULL).
+	if dbURL != "" {
+		// PostgreSQL
+		if err := DB.Exec(`
+			DO $$
+			DECLARE
+				c_name text;
+			BEGIN
+				-- reports.inputter_id -> users.id
+				SELECT tc.constraint_name INTO c_name
+				FROM information_schema.table_constraints tc
+				JOIN information_schema.key_column_usage kcu
+				  ON tc.constraint_name = kcu.constraint_name
+				 AND tc.table_schema = kcu.table_schema
+				WHERE tc.table_schema = 'public'
+				  AND tc.table_name = 'reports'
+				  AND tc.constraint_type = 'FOREIGN KEY'
+				  AND kcu.column_name = 'inputter_id'
+				LIMIT 1;
+
+				IF c_name IS NOT NULL THEN
+					EXECUTE format('ALTER TABLE public.reports DROP CONSTRAINT %I', c_name);
+				END IF;
+
+				BEGIN
+					ALTER TABLE public.reports
+					  ADD CONSTRAINT fk_reports_inputter
+					  FOREIGN KEY (inputter_id) REFERENCES public.users(id)
+					  ON UPDATE CASCADE
+					  ON DELETE SET NULL;
+				EXCEPTION WHEN duplicate_object THEN
+					NULL;
+				END;
+
+				-- financial_reports.inputter_id -> users.id
+				c_name := NULL;
+				SELECT tc.constraint_name INTO c_name
+				FROM information_schema.table_constraints tc
+				JOIN information_schema.key_column_usage kcu
+				  ON tc.constraint_name = kcu.constraint_name
+				 AND tc.table_schema = kcu.table_schema
+				WHERE tc.table_schema = 'public'
+				  AND tc.table_name = 'financial_reports'
+				  AND tc.constraint_type = 'FOREIGN KEY'
+				  AND kcu.column_name = 'inputter_id'
+				LIMIT 1;
+
+				IF c_name IS NOT NULL THEN
+					EXECUTE format('ALTER TABLE public.financial_reports DROP CONSTRAINT %I', c_name);
+				END IF;
+
+				BEGIN
+					ALTER TABLE public.financial_reports
+					  ADD CONSTRAINT fk_financial_reports_inputter
+					  FOREIGN KEY (inputter_id) REFERENCES public.users(id)
+					  ON UPDATE CASCADE
+					  ON DELETE SET NULL;
+				EXCEPTION WHEN duplicate_object THEN
+					NULL;
+				END;
+			END $$;
+		`).Error; err != nil {
+			zapLog.Warn("Failed to ensure inputter foreign keys use ON DELETE SET NULL (PostgreSQL)", zap.Error(err))
+		} else {
+			zapLog.Info("Inputter foreign key migration completed (PostgreSQL)")
+		}
+	}
+
 	// Migration: Add shareholder_company_id field to shareholders table if not exists
 	if dbURL != "" {
 		// PostgreSQL

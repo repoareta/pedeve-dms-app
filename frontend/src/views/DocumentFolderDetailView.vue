@@ -36,7 +36,7 @@ const folderBeingEdited = ref<DocumentFolder | null>(null)
 const userRole = ref<string>('')
 const isSuperAdminOrAdministratorSync = computed(() => {
   const role = userRole.value
-  return role === 'superadmin' || role === 'administrator'
+  return role === 'superadmin' || role === 'administrator' || role === 'admin'
 })
 
 // State upload

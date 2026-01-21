@@ -36,11 +36,13 @@ func NewUserManagementHandler(userUseCase usecase.UserManagementUseCase) *UserMa
 // @Router       /api/v1/users [post]
 func (h *UserManagementHandler) CreateUser(c *fiber.Ctx) error {
 	var req struct {
-		Username  string  `json:"username" validate:"required"`
-		Email     string  `json:"email" validate:"required,email"`
-		Password  string  `json:"password" validate:"required,min=8"`
-		CompanyID *string `json:"company_id"`
-		RoleID    *string `json:"role_id"`
+		Username           string   `json:"username" validate:"required"`
+		Email              string   `json:"email" validate:"required,email"`
+		Password           string   `json:"password" validate:"required,min=8"`
+		CompanyID          *string  `json:"company_id"`
+		CompanyIDs         []string `json:"company_ids"`
+		AssignAllCompanies bool     `json:"assign_all_companies"`
+		RoleID             *string  `json:"role_id"`
 	}
 
 	if err := c.BodyParser(&req); err != nil {
@@ -81,6 +83,12 @@ func (h *UserManagementHandler) CreateUser(c *fiber.Ctx) error {
 	companyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
 
+	// Normalisasi input company selection:
+	// - assign_all_companies: assign ke semua company dalam scope akses pembuat user
+	// - company_ids: multi select company
+	// - company_id: backward compatibility (single select)
+	selectedCompanyIDs := make([]string, 0)
+
 	// Superadmin/administrator can create user di mana saja atau tanpa company (standby)
 	// Admin bisa buat user di company mereka/descendant (RBAC)
 	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
@@ -97,27 +105,111 @@ func (h *UserManagementHandler) CreateUser(c *fiber.Ctx) error {
 			})
 		}
 
-		// If company_id is provided, validate access
-		if req.CompanyID != nil {
+		// Build selected companies list within creator scope
+		if req.AssignAllCompanies {
 			companyUseCase := usecase.NewCompanyUseCase()
-			hasAccess, err := companyUseCase.ValidateCompanyAccess(userCompanyID, *req.CompanyID)
-			if err != nil || !hasAccess {
-				return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
-					Error:   "forbidden",
-					Message: "You can only create users in your company or its descendants",
+			desc, err := companyUseCase.GetCompanyDescendants(userCompanyID)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+					Error:   "internal_error",
+					Message: "Failed to get company descendants",
 				})
+			}
+			selectedCompanyIDs = append(selectedCompanyIDs, userCompanyID)
+			for _, d := range desc {
+				selectedCompanyIDs = append(selectedCompanyIDs, d.ID)
+			}
+		} else if len(req.CompanyIDs) > 0 {
+			selectedCompanyIDs = append(selectedCompanyIDs, req.CompanyIDs...)
+		} else if req.CompanyID != nil && *req.CompanyID != "" {
+			selectedCompanyIDs = append(selectedCompanyIDs, *req.CompanyID)
+		}
+
+		// Validate access for each selected company
+		if len(selectedCompanyIDs) > 0 {
+			companyUseCase := usecase.NewCompanyUseCase()
+			for _, targetCompanyID := range selectedCompanyIDs {
+				if targetCompanyID == "" {
+					continue
+				}
+				// creator can always assign within their company or descendants
+				hasAccess, err := companyUseCase.ValidateCompanyAccess(userCompanyID, targetCompanyID)
+				if err != nil || !hasAccess {
+					return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+						Error:   "forbidden",
+						Message: "You can only create users in your company or its descendants",
+					})
+				}
 			}
 		}
 		// Note: Non-superadmin can create user without company (standby mode)
 		// They just won't be auto-assigned to any company
 	}
 
-	user, err := h.userUseCase.CreateUser(req.Username, req.Email, req.Password, req.CompanyID, req.RoleID)
+	// Superadmin/administrator scope: interpret assign_all_companies as all active companies
+	if utils.IsSuperAdminLike(roleName) {
+		if req.AssignAllCompanies {
+			companyUseCase := usecase.NewCompanyUseCase()
+			all, err := companyUseCase.GetAllCompanies(false)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+					Error:   "internal_error",
+					Message: "Failed to get companies",
+				})
+			}
+			for _, comp := range all {
+				selectedCompanyIDs = append(selectedCompanyIDs, comp.ID)
+			}
+		} else if len(req.CompanyIDs) > 0 {
+			selectedCompanyIDs = append(selectedCompanyIDs, req.CompanyIDs...)
+		} else if req.CompanyID != nil && *req.CompanyID != "" {
+			selectedCompanyIDs = append(selectedCompanyIDs, *req.CompanyID)
+		}
+	}
+
+	// Tentukan primary company_id untuk legacy field UserModel.CompanyID agar RBAC lama tetap jalan
+	var primaryCompanyID *string
+	if len(selectedCompanyIDs) > 0 {
+		primary := selectedCompanyIDs[0]
+		primaryCompanyID = &primary
+	} else {
+		primaryCompanyID = req.CompanyID
+	}
+
+	user, err := h.userUseCase.CreateUser(req.Username, req.Email, req.Password, primaryCompanyID, req.RoleID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
 			Error:   "creation_failed",
 			Message: err.Error(),
 		})
+	}
+
+	// Jika multi-company dipilih, assign user ke semua company yang dipilih
+	// (Dengan role yang sama, jika role_id disediakan)
+	if len(selectedCompanyIDs) > 0 {
+		for _, compID := range selectedCompanyIDs {
+			if compID == "" {
+				continue
+			}
+			if req.RoleID != nil && *req.RoleID != "" {
+				if err := h.userUseCase.AssignUserToRoleInCompany(user.ID, compID, *req.RoleID); err != nil {
+					// Cleanup user jika assignment gagal agar tidak ada user "setengah jadi"
+					_ = h.userUseCase.DeleteUser(user.ID)
+					return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+						Error:   "creation_failed",
+						Message: "Failed to assign user to selected companies",
+					})
+				}
+			} else {
+				if err := h.userUseCase.AssignUserToCompany(user.ID, compID); err != nil {
+					_ = h.userUseCase.DeleteUser(user.ID)
+					return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+						Error:   "creation_failed",
+						Message: "Failed to assign user to selected companies",
+					})
+				}
+			}
+		}
 	}
 
 	audit.LogAction(userID, username, audit.ActionCreateUser, audit.ResourceUser, user.ID, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
@@ -161,6 +253,15 @@ func (h *UserManagementHandler) GetUser(c *fiber.Ctx) error {
 		})
 	}
 
+	// Enrich: company_ids dari junction table (untuk UI multi-company)
+	if companies, err := h.userUseCase.GetUserCompanies(id); err == nil {
+		ids := make([]string, 0, len(companies))
+		for _, comp := range companies {
+			ids = append(ids, comp.Company.ID)
+		}
+		user.CompanyIDs = ids
+	}
+
 	return c.Status(fiber.StatusOK).JSON(user)
 }
 
@@ -199,6 +300,14 @@ func (h *UserManagementHandler) GetAllUsers(c *fiber.Ctx) error {
 		filtered := []domain.UserModel{}
 		for _, user := range users {
 			if user.Role != "superadmin" {
+				// Enrich company_ids (best effort)
+				if comps, err := h.userUseCase.GetUserCompanies(user.ID); err == nil {
+					ids := make([]string, 0, len(comps))
+					for _, c := range comps {
+						ids = append(ids, c.Company.ID)
+					}
+					user.CompanyIDs = ids
+				}
 				filtered = append(filtered, user)
 			}
 		}
@@ -237,6 +346,14 @@ func (h *UserManagementHandler) GetAllUsers(c *fiber.Ctx) error {
 	filtered := []domain.UserModel{}
 	for _, user := range users {
 		if user.Role != "superadmin" {
+			// Enrich company_ids (best effort)
+			if comps, err := h.userUseCase.GetUserCompanies(user.ID); err == nil {
+				ids := make([]string, 0, len(comps))
+				for _, c := range comps {
+					ids = append(ids, c.Company.ID)
+				}
+				user.CompanyIDs = ids
+			}
 			filtered = append(filtered, user)
 		}
 	}
@@ -288,10 +405,12 @@ func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 	}
 
 	var req struct {
-		Username  string  `json:"username"`
-		Email     string  `json:"email"`
-		CompanyID *string `json:"company_id"` // nil = no change, empty string "" = unassign, non-empty = assign
-		RoleID    *string `json:"role_id"`
+		Username           string   `json:"username"`
+		Email              string   `json:"email"`
+		CompanyID          *string  `json:"company_id"` // nil = no change, empty string "" = unassign all, non-empty = assign (single)
+		CompanyIDs         []string `json:"company_ids"`
+		AssignAllCompanies bool     `json:"assign_all_companies"`
+		RoleID             *string  `json:"role_id"`
 	}
 
 	if err := c.BodyParser(&req); err != nil {
@@ -351,12 +470,139 @@ func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 		}
 	}
 
+	// Normalisasi input company selection untuk update:
+	// - assign_all_companies: set companies sesuai scope akses editor
+	// - company_ids: set companies spesifik (multi)
+	// - company_id: backward compatibility (single) / unassign all jika ""
+	selectionProvided := req.AssignAllCompanies || len(req.CompanyIDs) > 0 || req.CompanyID != nil
+	selectedCompanyIDs := make([]string, 0)
+
+	if req.AssignAllCompanies {
+		if utils.IsSuperAdminLike(roleName) {
+			companyUseCase := usecase.NewCompanyUseCase()
+			all, err := companyUseCase.GetAllCompanies(false)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+					Error:   "internal_error",
+					Message: "Failed to get companies",
+				})
+			}
+			for _, comp := range all {
+				selectedCompanyIDs = append(selectedCompanyIDs, comp.ID)
+			}
+		} else {
+			// Non-superadmin: scope = company sendiri + descendants
+			companyUseCase := usecase.NewCompanyUseCase()
+			desc, err := companyUseCase.GetCompanyDescendants(userCompanyID)
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+					Error:   "internal_error",
+					Message: "Failed to get company descendants",
+				})
+			}
+			selectedCompanyIDs = append(selectedCompanyIDs, userCompanyID)
+			for _, d := range desc {
+				selectedCompanyIDs = append(selectedCompanyIDs, d.ID)
+			}
+		}
+	} else if len(req.CompanyIDs) > 0 {
+		selectedCompanyIDs = append(selectedCompanyIDs, req.CompanyIDs...)
+	} else if req.CompanyID != nil && *req.CompanyID != "" {
+		selectedCompanyIDs = append(selectedCompanyIDs, *req.CompanyID)
+	}
+
+	// Validate access untuk setiap company yang dipilih (khusus non-superadmin)
+	if !utils.IsSuperAdminLike(roleName) && userCompanyID != "" && len(selectedCompanyIDs) > 0 {
+		companyUseCase := usecase.NewCompanyUseCase()
+		for _, targetCompanyID := range selectedCompanyIDs {
+			if targetCompanyID == "" {
+				continue
+			}
+			hasAccess, err := companyUseCase.ValidateCompanyAccess(userCompanyID, targetCompanyID)
+			if err != nil || !hasAccess {
+				return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+					Error:   "forbidden",
+					Message: "You can only assign users to your company or its descendants",
+				})
+			}
+		}
+	}
+
+	// Jika selectionProvided dan user ingin unassign semua (company_id = "" dan tidak ada company_ids)
+	// maka pakai behavior existing: deactivate semua assignment
+	if selectionProvided && !req.AssignAllCompanies && len(req.CompanyIDs) == 0 && req.CompanyID != nil && *req.CompanyID == "" {
+		user, err := h.userUseCase.UpdateUser(id, req.Username, req.Email, req.CompanyID, req.RoleID)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
+				Error:   "update_failed",
+				Message: err.Error(),
+			})
+		}
+
+		userID := c.Locals("userID").(string)
+		username := c.Locals("username").(string)
+		audit.LogAction(userID, username, audit.ActionUpdateUser, audit.ResourceUser, id, getClientIP(c), c.Get("User-Agent"), audit.StatusSuccess, nil)
+
+		return c.Status(fiber.StatusOK).JSON(user)
+	}
+
+	// Jika selectionProvided (multi / pilih semua / single) dan ada target companies,
+	// set company_id primary untuk legacy field agar konsisten.
+	if selectionProvided && len(selectedCompanyIDs) > 0 {
+		primary := selectedCompanyIDs[0]
+		req.CompanyID = &primary
+	}
+
 	user, err := h.userUseCase.UpdateUser(id, req.Username, req.Email, req.CompanyID, req.RoleID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(domain.ErrorResponse{
 			Error:   "update_failed",
 			Message: err.Error(),
 		})
+	}
+
+	// Jika selectionProvided (multi / pilih semua), sinkronkan assignment junction table
+	if selectionProvided && (req.AssignAllCompanies || len(req.CompanyIDs) > 0) {
+		// Ambil assignments aktif sekarang
+		currentCompanies, _ := h.userUseCase.GetUserCompanies(id)
+		currentSet := make(map[string]bool)
+		for _, c := range currentCompanies {
+			currentSet[c.Company.ID] = true
+		}
+
+		targetSet := make(map[string]bool)
+		for _, compID := range selectedCompanyIDs {
+			if compID == "" {
+				continue
+			}
+			targetSet[compID] = true
+		}
+
+		// Add missing
+		for compID := range targetSet {
+			if currentSet[compID] {
+				continue
+			}
+			if req.RoleID != nil && *req.RoleID != "" {
+				_ = h.userUseCase.AssignUserToRoleInCompany(id, compID, *req.RoleID)
+			} else {
+				_ = h.userUseCase.AssignUserToCompany(id, compID)
+			}
+		}
+
+		// Remove extra
+		for compID := range currentSet {
+			if targetSet[compID] {
+				continue
+			}
+			_ = h.userUseCase.UnassignUserFromCompany(id, compID)
+		}
+
+		// Refresh user
+		updated, uErr := h.userUseCase.GetUserByID(id)
+		if uErr == nil && updated != nil {
+			user = updated
+		}
 	}
 
 	userID := c.Locals("userID").(string)

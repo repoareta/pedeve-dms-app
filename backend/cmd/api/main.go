@@ -304,10 +304,10 @@ func main() {
 	protected.Get("/companies/:id/children", companyHandler.GetCompanyChildren)
 	// CRITICAL: More specific routes with path segments MUST come before general routes with :id parameter
 	// Fiber matches routes in order, so /companies/:id/status and /companies/:id/full must be before /companies/:id
-	protected.Put("/companies/:id/status", companyHandler.UpdateCompanyStatus)   // Update company status (activate/deactivate)
-	protected.Put("/companies/:id/full", companyHandler.UpdateCompanyFull)       // Update company with full data
-	protected.Get("/companies/:id", companyHandler.GetCompany)                   // Get company by ID
-	protected.Put("/companies/:id", companyHandler.UpdateCompany)                // Update company
+	protected.Put("/companies/:id/status", companyHandler.UpdateCompanyStatus) // Update company status (activate/deactivate)
+	protected.Put("/companies/:id/full", companyHandler.UpdateCompanyFull)     // Update company with full data
+	protected.Get("/companies/:id", companyHandler.GetCompany)                 // Get company by ID
+	protected.Put("/companies/:id", companyHandler.UpdateCompany)              // Update company
 	sensitiveOps.Delete("/companies/:id", companyHandler.DeleteCompany)
 
 	// Route User Management (dilindungi)
@@ -397,6 +397,7 @@ func main() {
 	protected.Post("/development/reset-all-seeded-data", developmentHandler.ResetAllSeededData)
 	protected.Get("/development/check-all-seeder-status", developmentHandler.CheckAllSeederStatus)
 	protected.Post("/development/reset-all-financial-reports", developmentHandler.ResetAllFinancialReports)
+	protected.Get("/development/check-admin-capabilities/:user_id", developmentHandler.CheckAdminCapabilities)
 	protected.Post("/development/create-test-notification", developmentHandler.CreateTestNotification)
 	protected.Post("/development/create-test-notifications", developmentHandler.CreateTestNotifications)
 	protected.Post("/development/check-expiring-documents", developmentHandler.CheckExpiringDocuments)

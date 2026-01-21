@@ -23,7 +23,7 @@ const userRole = computed(() => {
 })
 
 const isSuperAdminOrAdministrator = computed(() => {
-  return userRole.value === 'superadmin' || userRole.value === 'administrator'
+  return userRole.value === 'superadmin' || userRole.value === 'administrator' || userRole.value === 'admin'
 })
 
 const folders = ref<DocumentFolder[]>([])
@@ -60,7 +60,7 @@ const activityLoading = ref(false)
 
 // View and filter
 const viewMode = ref('grid')
-const timeFilter = ref('last-month')
+const timeFilter = ref('all')
 const foldersExpanded = ref(false)
 
 // Computed
@@ -517,7 +517,7 @@ const getSelectedFolderLastEdited = (): string => {
 }
 
 // Storage summary
-const STORAGE_CAPACITY_BYTES = 5 * 1024 * 1024 * 1024 // 5 GB default
+const STORAGE_CAPACITY_BYTES = 50 * 1024 * 1024 * 1024 // 50 GB
 const storageUsage = computed(() => {
   const used = totalStorageSize.value
   const capacity = STORAGE_CAPACITY_BYTES

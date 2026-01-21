@@ -62,6 +62,8 @@ type UserModel struct {
 	Role      string    `json:"role"` // Field legacy, akan deprecated (bisa kosong untuk user standby)
 	Password  string    `gorm:"not null" json:"-"`
 	CompanyID *string   `gorm:"index" json:"company_id"` // NULL untuk superadmin
+	// Multi-company assignments (diisi dari junction table, bukan kolom DB)
+	CompanyIDs []string `gorm:"-" json:"company_ids,omitempty"`
 	RoleID    *string   `gorm:"index" json:"role_id"`    // Reference ke Role table
 	IsActive  bool      `gorm:"default:true;index" json:"is_active"`
 	CreatedAt time.Time `json:"created_at"`
@@ -432,7 +434,8 @@ type ReportModel struct {
 
 	// Relationships
 	Company  *CompanyModel `gorm:"foreignKey:CompanyID" json:"company,omitempty"`
-	Inputter *UserModel    `gorm:"foreignKey:InputterID" json:"inputter,omitempty"`
+	// Saat user dihapus, tetap simpan report tapi set inputter_id = NULL
+	Inputter *UserModel `gorm:"foreignKey:InputterID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"inputter,omitempty"`
 }
 
 func (ReportModel) TableName() string {
@@ -488,7 +491,8 @@ type FinancialReportModel struct {
 
 	// Relationships
 	Company  *CompanyModel `gorm:"foreignKey:CompanyID" json:"company,omitempty"`
-	Inputter *UserModel    `gorm:"foreignKey:InputterID" json:"inputter,omitempty"`
+	// Saat user dihapus, tetap simpan financial_report tapi set inputter_id = NULL
+	Inputter *UserModel `gorm:"foreignKey:InputterID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"inputter,omitempty"`
 }
 
 func (FinancialReportModel) TableName() string {

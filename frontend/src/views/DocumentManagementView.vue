@@ -23,7 +23,7 @@ const userRole = computed(() => {
 })
 
 const isSuperAdminOrAdministrator = computed(() => {
-  return userRole.value === 'superadmin' || userRole.value === 'administrator'
+  return userRole.value === 'superadmin' || userRole.value === 'administrator' || userRole.value === 'admin'
 })
 
 const folders = ref<DocumentFolder[]>([])
@@ -60,7 +60,7 @@ const activityLoading = ref(false)
 
 // View and filter
 const viewMode = ref('grid')
-const timeFilter = ref('last-month')
+const timeFilter = ref('all')
 const foldersExpanded = ref(false)
 
 // Computed

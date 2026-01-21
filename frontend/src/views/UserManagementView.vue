@@ -26,6 +26,12 @@ const usersLoading = ref(false)
 const userModalVisible = ref(false)
 const userForm = ref<Partial<User & { password: string }>>({})
 const editingUser = ref<User | null>(null)
+// Company selection for create-user modal
+const newUserCompanyIds = ref<string[]>([])
+const newUserAssignAllCompanies = ref(false)
+// Company selection for edit-user modal
+const editUserCompanyIds = ref<string[]>([])
+const editUserAssignAllCompanies = ref(false)
 const resetPasswordModalVisible = ref(false)
 const resetPasswordForm = ref<{ user_id: string; username: string; new_password: string; confirm_password: string }>({
   user_id: '',
@@ -425,6 +431,8 @@ const handleSaveCompany = async () => {
 const handleCreateUser = () => {
   editingUser.value = null
   userForm.value = {}
+  newUserCompanyIds.value = []
+  newUserAssignAllCompanies.value = false
   userModalVisible.value = true
 }
 
@@ -438,6 +446,12 @@ const handleEditUser = (user: User) => {
     if (match) resolvedRoleId = match.id
   }
   userForm.value = { ...user, role_id: resolvedRoleId }
+  // Prefill company selection from multi-assignments (fallback to single company_id)
+  editUserCompanyIds.value =
+    (user.company_ids && user.company_ids.length > 0)
+      ? [...user.company_ids]
+      : (user.company_id ? [user.company_id] : [])
+  editUserAssignAllCompanies.value = false
   userModalVisible.value = true
 }
 
@@ -447,7 +461,14 @@ const handleSaveUser = async () => {
       await userApi.update(editingUser.value.id, {
         username: userForm.value.username,
         email: userForm.value.email,
-        company_id: userForm.value.company_id,
+        // Multi-company assignment saat edit user
+        company_ids: editUserAssignAllCompanies.value ? undefined : (editUserCompanyIds.value.length > 0 ? editUserCompanyIds.value : []),
+        assign_all_companies: editUserAssignAllCompanies.value ? true : undefined,
+        // Legacy primary company_id: pakai yang pertama (atau kosong untuk unassign all)
+        company_id:
+          editUserAssignAllCompanies.value
+            ? undefined
+            : (editUserCompanyIds.value.length > 0 ? editUserCompanyIds.value[0] : ''),
         role_id: userForm.value.role_id,
       })
       message.success('User berhasil diupdate')
@@ -460,7 +481,14 @@ const handleSaveUser = async () => {
         username: userForm.value.username!,
         email: userForm.value.email!,
         password: userForm.value.password!,
-        company_id: userForm.value.company_id,
+        // Multi-company assignment saat create user
+        company_ids: newUserAssignAllCompanies.value ? undefined : (newUserCompanyIds.value.length > 0 ? newUserCompanyIds.value : undefined),
+        assign_all_companies: newUserAssignAllCompanies.value ? true : undefined,
+        // Backward compatibility: masih kirim company_id kalau hanya 1 company dipilih
+        company_id:
+          !newUserAssignAllCompanies.value && newUserCompanyIds.value.length === 1
+            ? newUserCompanyIds.value[0]
+            : undefined,
         role_id: userForm.value.role_id,
       })
       message.success('User berhasil dibuat')
@@ -471,6 +499,72 @@ const handleSaveUser = async () => {
     const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
     message.error('Gagal menyimpan user: ' + (axiosError.response?.data?.message || axiosError.message))
   }
+}
+
+const handleNewUserCompanyChange = (value: string[]) => {
+  const ALL_VALUE = '__ALL__'
+  if (value.includes(ALL_VALUE)) {
+    newUserAssignAllCompanies.value = true
+    newUserCompanyIds.value = [ALL_VALUE]
+    return
+  }
+  newUserAssignAllCompanies.value = false
+  newUserCompanyIds.value = value
+}
+
+const handleEditUserCompanyChange = (value: string[]) => {
+  const ALL_VALUE = '__ALL__'
+  if (value.includes(ALL_VALUE)) {
+    editUserAssignAllCompanies.value = true
+    editUserCompanyIds.value = [ALL_VALUE]
+    return
+  }
+  editUserAssignAllCompanies.value = false
+  editUserCompanyIds.value = value
+}
+
+const getUserCompanyValue = (record: User): string[] => {
+  if ((record as User & { company_ids?: string[] }).company_ids?.length) {
+    return (record as User & { company_ids?: string[] }).company_ids || []
+  }
+  return record.company_id ? [record.company_id] : []
+}
+
+const handleUserCompaniesInlineChange = async (record: User, value: string[]) => {
+  // Disable changes for superadmin/administrator accounts (consistent with existing)
+  if (isUserSuperadmin(record)) return
+
+  const ALL_VALUE = '__ALL__'
+  const assignAll = value.includes(ALL_VALUE)
+  const selectedIds = assignAll ? [] : value
+
+  // Confirm (keep behavior similar to single-assign)
+  Modal.confirm({
+    title: 'Konfirmasi Assign User ke Perusahaan',
+    content: assignAll
+      ? `Apakah Anda yakin ingin mengassign user "${record.username}" ke semua perusahaan?`
+      : `Apakah Anda yakin ingin mengassign user "${record.username}" ke ${selectedIds.length} perusahaan?`,
+    okText: 'Ya, Simpan',
+    cancelText: 'Batal',
+    onOk: async () => {
+      try {
+        await userApi.update(record.id, {
+          assign_all_companies: assignAll ? true : undefined,
+          company_ids: assignAll ? undefined : selectedIds,
+          company_id: assignAll ? undefined : (selectedIds.length > 0 ? selectedIds[0] : ''),
+        })
+        message.success(`Perusahaan user "${record.username}" berhasil diperbarui`)
+        await loadUsers()
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
+        message.error('Gagal mengassign user: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
+        await loadUsers()
+      }
+    },
+    onCancel: () => {
+      loadUsers()
+    }
+  })
 }
 
 const handleDeleteUser = async (id: string) => {
@@ -574,66 +668,10 @@ const getLevelColor = (level: number): string => {
   }
 }
 
-// Helper untuk mendapatkan nama company dari ID
-const getCompanyName = (companyId: string): string => {
-  const company = companies.value.find(c => c.id === companyId)
-  return company?.name || ''
-}
+// Helper getCompanyName tidak diperlukan lagi (single-assign sudah diganti multi-assign)
 
-// Handler untuk perubahan company assignment
-const handleCompanyChange = async (user: User, newCompanyId: string | null | undefined) => {
-  // Simpan nilai lama untuk revert jika dibatalkan
-  const oldCompanyId = user.company_id
-  
-  // Normalize nilai (convert undefined ke null)
-  const normalizedNewCompanyId = newCompanyId || null
-  
-  const newCompanyName = normalizedNewCompanyId ? getCompanyName(normalizedNewCompanyId) : 'tidak ada perusahaan'
-  
-  // Jika tidak ada perubahan, return
-  if (oldCompanyId === normalizedNewCompanyId) {
-    return
-  }
-  
-  // Tampilkan konfirmasi
-  Modal.confirm({
-    title: 'Konfirmasi Assign User ke Perusahaan',
-    content: `Apakah Anda yakin ingin mengassign user "${user.username}" ${normalizedNewCompanyId ? `ke perusahaan "${newCompanyName}"` : 'dari perusahaan (unassign)'}?`,
-    okText: normalizedNewCompanyId ? 'Ya, Assign' : 'Ya, Unassign',
-    cancelText: 'Batal',
-    onOk: async () => {
-      try {
-        if (normalizedNewCompanyId) {
-          // Assign ke company baru
-          await userApi.update(user.id, {
-            company_id: normalizedNewCompanyId,
-          })
-          message.success(`User "${user.username}" berhasil di-assign ke perusahaan "${newCompanyName}"`)
-        } else {
-          // Unassign dari company - kirim empty string untuk unassign
-          // Backend akan menangani empty string sebagai unassign
-          await userApi.update(user.id, {
-            company_id: '',
-          })
-          message.success(`User "${user.username}" berhasil di-unassign dari perusahaan`)
-        }
-        
-        // Reload users untuk refresh data
-        await loadUsers()
-      } catch (error: unknown) {
-        const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
-        message.error('Gagal mengassign user: ' + (axiosError.response?.data?.message || axiosError.message || 'Unknown error'))
-        
-        // Reload users untuk revert perubahan di UI jika gagal
-        await loadUsers()
-      }
-    },
-    onCancel: () => {
-      // Reload users untuk revert perubahan di UI jika user membatalkan
-      loadUsers()
-    }
-  })
-}
+// NOTE: handleCompanyChange (single-company) sudah digantikan oleh multi-company handler:
+// handleUserCompaniesInlineChange + company_ids/assign_all_companies.
 
 // Helper untuk scope label
 const getScopeLabel = (scope: string): string => {
@@ -725,24 +763,29 @@ const getScopeColor = (scope: string): string => {
               <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'company_id'">
                 <a-select
-                  :value="record.company_id"
-                  :placeholder="record.company_id ? 'Pilih perusahaan' : 'Belum di-assign'"
-                  style="width: 200px;"
+                  :value="getUserCompanyValue(record)"
+                  mode="multiple"
+                  :placeholder="getUserCompanyValue(record).length ? 'Pilih perusahaan' : 'Belum di-assign'"
+                  style="width: 260px;"
                   :disabled="isUserSuperadmin(record)"
-                  @change="(value: string | null | undefined) => handleCompanyChange(record, value)"
                   allow-clear
                   show-search
-                  :filter-option="(input: string, option: any) => 
+                  :max-tag-count="1"
+                  :filter-option="(input: string, option: any) =>
                     (option?.label || '').toLowerCase().includes(input.toLowerCase())"
+                  @change="(value: string[]) => handleUserCompaniesInlineChange(record, value)"
                 >
-                <a-select-option 
-                  v-for="company in companies" 
-                  :key="company.id" 
-                  :value="company.id"
-                  :label="company.name"
-                >
-                  {{ company.name }}
-                </a-select-option>
+                  <a-select-option :value="'__ALL__'" :label="'Pilih semua'">
+                    Pilih semua
+                  </a-select-option>
+                  <a-select-option
+                    v-for="company in companies"
+                    :key="company.id"
+                    :value="company.id"
+                    :label="company.name"
+                  >
+                    {{ company.name }}
+                  </a-select-option>
                 </a-select>
                 <a-tag v-if="isUserSuperadmin(record)" color="purple" style="margin-left: 8px;">Admin Global</a-tag>
               </template>
@@ -991,19 +1034,64 @@ const getScopeColor = (scope: string): string => {
             <a-input-password v-model:value="userForm.password" placeholder="Password" />
           </a-form-item>
           <a-form-item label="Perusahaan">
-            <a-select
-              v-model:value="userForm.company_id"
-              placeholder="Select company (optional)"
-              allow-clear
-            >
-              <a-select-option
-                v-for="company in companies"
-                :key="company.id"
-                :value="company.id"
+            <!-- Create user: support multi select + pilih semua -->
+            <template v-if="!editingUser">
+              <a-select
+                v-model:value="newUserCompanyIds"
+                mode="multiple"
+                placeholder="Pilih perusahaan (opsional)"
+                allow-clear
+                show-search
+                :max-tag-count="2"
+                :filter-option="(input: string, option: any) =>
+                  (option?.label || '').toLowerCase().includes(input.toLowerCase())"
+                @change="(value: string[]) => handleNewUserCompanyChange(value)"
               >
-                {{ company.name }}
-              </a-select-option>
-            </a-select>
+                <a-select-option :value="'__ALL__'" :label="'Pilih semua'">
+                  Pilih semua
+                </a-select-option>
+                <a-select-option
+                  v-for="company in companies"
+                  :key="company.id"
+                  :value="company.id"
+                  :label="company.name"
+                >
+                  {{ company.name }}
+                </a-select-option>
+              </a-select>
+              <div v-if="newUserAssignAllCompanies" class="form-help-text">
+                User akan di-assign ke semua perusahaan dalam scope akses Anda.
+              </div>
+            </template>
+            <!-- Edit user: multi select + pilih semua -->
+            <template v-else>
+              <a-select
+                v-model:value="editUserCompanyIds"
+                mode="multiple"
+                placeholder="Pilih perusahaan (opsional)"
+                allow-clear
+                show-search
+                :max-tag-count="2"
+                :filter-option="(input: string, option: any) =>
+                  (option?.label || '').toLowerCase().includes(input.toLowerCase())"
+                @change="(value: string[]) => handleEditUserCompanyChange(value)"
+              >
+                <a-select-option :value="'__ALL__'" :label="'Pilih semua'">
+                  Pilih semua
+                </a-select-option>
+                <a-select-option
+                  v-for="company in companies"
+                  :key="company.id"
+                  :value="company.id"
+                  :label="company.name"
+                >
+                  {{ company.name }}
+                </a-select-option>
+              </a-select>
+              <div v-if="editUserAssignAllCompanies" class="form-help-text">
+                User akan di-assign ke semua perusahaan dalam scope akses Anda.
+              </div>
+            </template>
           </a-form-item>
           <a-form-item label="Peran">
             <a-select

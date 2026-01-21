@@ -2,11 +2,13 @@ package http
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/audit"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/logger"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/utils"
 	"go.uber.org/zap"
@@ -14,13 +16,23 @@ import (
 
 // CompanyHandler handles company-related HTTP requests
 type CompanyHandler struct {
-	companyUseCase usecase.CompanyUseCase
+	companyUseCase             usecase.CompanyUseCase
+	userCompanyAssignmentRepo  repository.UserCompanyAssignmentRepository
 }
 
 // NewCompanyHandler creates a new company handler
 func NewCompanyHandler(companyUseCase usecase.CompanyUseCase) *CompanyHandler {
 	return &CompanyHandler{
-		companyUseCase: companyUseCase,
+		companyUseCase:            companyUseCase,
+		userCompanyAssignmentRepo: repository.NewUserCompanyAssignmentRepository(),
+	}
+}
+
+// NewCompanyHandlerWithRepos creates a new company handler with injected repos (untuk testing)
+func NewCompanyHandlerWithRepos(companyUseCase usecase.CompanyUseCase, assignmentRepo repository.UserCompanyAssignmentRepository) *CompanyHandler {
+	return &CompanyHandler{
+		companyUseCase:            companyUseCase,
+		userCompanyAssignmentRepo: assignmentRepo,
 	}
 }
 
@@ -713,6 +725,8 @@ func (h *CompanyHandler) GetCompany(c *fiber.Ctx) error {
 func (h *CompanyHandler) GetAllCompanies(c *fiber.Ctx) error {
 	roleName := c.Locals("roleName").(string)
 	companyID := c.Locals("companyID")
+	userIDVal := c.Locals("userID")
+	userID := strings.TrimSpace(fmt.Sprintf("%v", userIDVal))
 
 	// Always include inactive companies in listing (default: true)
 	// Inactive companies will be excluded in calculations/aggregations by repository filters
@@ -731,65 +745,72 @@ func (h *CompanyHandler) GetAllCompanies(c *fiber.Ctx) error {
 			})
 		}
 	} else {
-		// Non-superadmin: get their company and all descendants
-		if companyID == nil {
+		// Non-superadmin: get all companies within scope:
+		// - primary company dari JWT + descendants
+		// - semua company dari junction table assignments (is_active=true) + descendants
+
+		rootsSet := make(map[string]bool)
+
+		// Primary company from JWT (optional)
+		if companyID != nil {
+			if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil && *companyIDPtr != "" {
+				rootsSet[*companyIDPtr] = true
+			} else if companyIDStr, ok := companyID.(string); ok && companyIDStr != "" {
+				rootsSet[companyIDStr] = true
+			}
+		}
+
+		// Multi-company assignments (optional)
+		if userID != "" && h.userCompanyAssignmentRepo != nil {
+			if assignments, aErr := h.userCompanyAssignmentRepo.GetByUserID(userID); aErr == nil {
+				for _, a := range assignments {
+					if !a.IsActive {
+						continue
+					}
+					if a.CompanyID != "" {
+						rootsSet[a.CompanyID] = true
+					}
+				}
+			}
+		}
+
+		if len(rootsSet) == 0 {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
 				Message: "User company not found",
 			})
 		}
 
-		// Handle *string type
-		var userCompanyID string
-		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
-			userCompanyID = *companyIDPtr
-		} else if companyIDStr, ok := companyID.(string); ok {
-			userCompanyID = companyIDStr
-		} else {
-			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
-				Error:   "forbidden",
-				Message: "Invalid company ID format",
-			})
-		}
-
-		// Get user's company
-		userCompany, err := h.companyUseCase.GetCompanyByID(userCompanyID)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
-				Error:   "internal_error",
-				Message: "Failed to get user company: " + err.Error(),
-			})
-		}
-
-		// Only include user's company if it's active
-		if !userCompany.IsActive {
-			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
-				Error:   "forbidden",
-				Message: "User company is not active",
-			})
-		}
-
-		// Get all descendants (includes direct children and all nested descendants)
-		descendants, err := h.companyUseCase.GetCompanyDescendants(userCompanyID)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
-				Error:   "internal_error",
-				Message: "Failed to get company descendants: " + err.Error(),
-			})
-		}
-
 		// CRITICAL: Remove duplicates by ID to prevent duplicate entries in response
-		// This is a safety measure in case GetDescendants returns duplicates
 		companyMap := make(map[string]domain.CompanyModel)
-		companyMap[userCompany.ID] = *userCompany
-		for _, desc := range descendants {
-			// Skip if already exists (prevent duplicate)
-			if _, exists := companyMap[desc.ID]; !exists {
-				companyMap[desc.ID] = desc
+
+		for rootID := range rootsSet {
+			// Root company
+			rootCompany, gErr := h.companyUseCase.GetCompanyByID(rootID)
+			if gErr == nil && rootCompany != nil {
+				if includeInactive || rootCompany.IsActive {
+					companyMap[rootCompany.ID] = *rootCompany
+				}
+			}
+
+			// Descendants (repository saat ini return hanya yang active)
+			descendants, dErr := h.companyUseCase.GetCompanyDescendants(rootID)
+			if dErr != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+					Error:   "internal_error",
+					Message: "Failed to get company descendants: " + dErr.Error(),
+				})
+			}
+			for _, desc := range descendants {
+				if _, exists := companyMap[desc.ID]; exists {
+					continue
+				}
+				if includeInactive || desc.IsActive {
+					companyMap[desc.ID] = desc
+				}
 			}
 		}
 
-		// Convert map back to slice
 		companies = make([]domain.CompanyModel, 0, len(companyMap))
 		for _, comp := range companyMap {
 			companies = append(companies, comp)

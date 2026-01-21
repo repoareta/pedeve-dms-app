@@ -517,7 +517,7 @@ const getSelectedFolderLastEdited = (): string => {
 }
 
 // Storage summary
-const STORAGE_CAPACITY_BYTES = 5 * 1024 * 1024 * 1024 // 5 GB default
+const STORAGE_CAPACITY_BYTES = 50 * 1024 * 1024 * 1024 // 50 GB
 const storageUsage = computed(() => {
   const used = totalStorageSize.value
   const capacity = STORAGE_CAPACITY_BYTES

@@ -86,6 +86,9 @@ backend/*_test.go
 coverage/
 *.out
 
+# Go build cache (local)
+.gocache/
+
 # Air (hot reload)
 tmp/
 .air.toml

@@ -32,8 +32,8 @@ func RequireCompanyAccess() fiber.Handler {
 			roleName = roleNameVal.(string)
 		}
 
-		// Superadmin/administrator bisa akses semua company
-		if utils.IsSuperAdminLike(roleName) {
+		// Superadmin/administrator/admin bisa akses semua company (admin setara administrator)
+		if utils.IsSuperAdminLike(roleName) || roleName == "admin" {
 			return c.Next()
 		}
 
@@ -57,6 +57,7 @@ func RequireCompanyAccess() fiber.Handler {
 		}
 
 		userCompanyID := companyIDVal.(string)
+		companyRepo := repository.NewCompanyRepository()
 
 		// Jika target company sama dengan user's company, allow
 		if targetCompanyID == userCompanyID {
@@ -64,7 +65,6 @@ func RequireCompanyAccess() fiber.Handler {
 		}
 
 		// Cek apakah target company adalah descendant dari company user (primary company)
-		companyRepo := repository.NewCompanyRepository()
 		isDescendant, err := companyRepo.IsDescendantOf(targetCompanyID, userCompanyID)
 		if err != nil {
 			zapLog.Error("Failed to check company hierarchy", zap.Error(err))
@@ -74,34 +74,36 @@ func RequireCompanyAccess() fiber.Handler {
 			})
 		}
 
-		if !isDescendant {
-			// Fallback: support multiple company assignments (junction table)
-			assignmentRepo := repository.NewUserCompanyAssignmentRepository()
-			userID := userIDVal.(string)
-			assignments, aErr := assignmentRepo.GetByUserID(userID)
-			if aErr == nil && len(assignments) > 0 {
-				for _, a := range assignments {
-					if !a.IsActive {
-						continue
-					}
-					if a.CompanyID == targetCompanyID {
-						return c.Next()
-					}
-					ok, err := companyRepo.IsDescendantOf(targetCompanyID, a.CompanyID)
-					if err == nil && ok {
-						return c.Next()
-					}
-				}
-			}
-
-			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
-				Error:   "forbidden",
-				Message: "You don't have access to this company",
-			})
+		if isDescendant {
+			return c.Next()
 		}
 
-		// User punya akses, lanjutkan
-		return c.Next()
+		// Fallback: support multiple company assignments (junction table)
+		// Untuk admin: ini adalah cara utama untuk akses multi-company
+		assignmentRepo := repository.NewUserCompanyAssignmentRepository()
+		userID := userIDVal.(string)
+		assignments, aErr := assignmentRepo.GetByUserID(userID)
+		if aErr == nil && len(assignments) > 0 {
+			for _, a := range assignments {
+				if !a.IsActive {
+					continue
+				}
+				// Direct match
+				if a.CompanyID == targetCompanyID {
+					return c.Next()
+				}
+				// Check if target is descendant of assigned company
+				ok, err := companyRepo.IsDescendantOf(targetCompanyID, a.CompanyID)
+				if err == nil && ok {
+					return c.Next()
+				}
+			}
+		}
+
+		return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
+			Error:   "forbidden",
+			Message: "You don't have access to this company",
+		})
 	}
 }
 

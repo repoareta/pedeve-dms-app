@@ -70,9 +70,8 @@ func (h *CompanyHandler) CreateCompany(c *fiber.Ctx) error {
 	companyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
 
-	// Superadmin/administrator can create company at any level
-	// Admin hanya bisa create sub-company di bawah company mereka
-	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
+	// Superadmin/administrator/admin can create company at any level
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr
@@ -148,9 +147,8 @@ func (h *CompanyHandler) CreateCompanyFull(c *fiber.Ctx) error {
 	companyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
 
-	// Superadmin bisa create company di level apapun
-	// Admin hanya bisa create sub-company di bawah company mereka
-	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
+	// Superadmin/administrator/admin bisa create company di level apapun
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr
@@ -234,7 +232,7 @@ func (h *CompanyHandler) UpdateCompanyFull(c *fiber.Ctx) error {
 	)
 
 	// Check access
-	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr
@@ -679,8 +677,8 @@ func (h *CompanyHandler) GetCompany(c *fiber.Ctx) error {
 	companyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
 
-	// Superadmin/administrator can access any company
-	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
+	// Superadmin/administrator/admin can access any company
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr
@@ -735,8 +733,8 @@ func (h *CompanyHandler) GetAllCompanies(c *fiber.Ctx) error {
 	var companies []domain.CompanyModel
 	var err error
 
-	// Superadmin/administrator sees all companies
-	if utils.IsSuperAdminLike(roleName) {
+	// Superadmin/administrator/admin sees all companies
+	if utils.IsSuperAdminLike(roleName) || roleName == "admin" {
 		companies, err = h.companyUseCase.GetAllCompanies(includeInactive)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -838,8 +836,8 @@ func (h *CompanyHandler) GetCompanyUsers(c *fiber.Ctx) error {
 	userCompanyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
 
-	// Superadmin/administrator can access any company users
-	if !utils.IsSuperAdminLike(roleName) && userCompanyID != nil {
+	// Superadmin/administrator/admin can access any company users
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" && userCompanyID != nil {
 		var currentUserCompanyID string
 		if companyIDPtr, ok := userCompanyID.(*string); ok && companyIDPtr != nil {
 			currentUserCompanyID = *companyIDPtr
@@ -916,8 +914,8 @@ func (h *CompanyHandler) GetCompanyAncestors(c *fiber.Ctx) error {
 		})
 	}
 
-	// Access control: Superadmin/administrator can see all companies
-	if !utils.IsSuperAdminLike(roleName) {
+	// Access control: Superadmin/administrator/admin can see all companies
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" {
 		if companyID == nil {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
@@ -983,7 +981,7 @@ func (h *CompanyHandler) GetCompanyChildren(c *fiber.Ctx) error {
 	roleName := c.Locals("roleName").(string)
 
 	// Check access
-	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr
@@ -1046,7 +1044,7 @@ func (h *CompanyHandler) UpdateCompany(c *fiber.Ctx) error {
 	roleName := c.Locals("roleName").(string)
 
 	// Check access
-	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr
@@ -1183,7 +1181,7 @@ func (h *CompanyHandler) DeleteCompany(c *fiber.Ctx) error {
 	roleName := c.Locals("roleName").(string)
 
 	// Check access
-	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr

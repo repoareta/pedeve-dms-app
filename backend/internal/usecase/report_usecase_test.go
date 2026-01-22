@@ -330,7 +330,7 @@ func TestReportUseCase_GetReportsByCompanyID(t *testing.T) {
 		assert.GreaterOrEqual(t, len(reports), 1)
 	})
 
-	t.Run("Admin cannot get reports for other company", func(t *testing.T) {
+	t.Run("Admin can get reports for any company", func(t *testing.T) {
 		// Setup
 		company1 := createTestCompanyForReport(t, db)
 		company2 := createTestCompanyForReport(t, db)
@@ -349,11 +349,10 @@ func TestReportUseCase_GetReportsByCompanyID(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// Test - admin from company2 trying to access company1 reports
-		// Should return error (access denied) for security
-		_, err = uc.GetReportsByCompanyID(company1.ID, "admin", &company2.ID)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "access denied")
+		// Test - admin from company2 can access company1 reports (admin has access to all companies)
+		reports, err := uc.GetReportsByCompanyID(company1.ID, "admin", &company2.ID)
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, len(reports), 1)
 	})
 }
 
@@ -376,12 +375,13 @@ func TestReportUseCase_ValidateReportAccess(t *testing.T) {
 		assert.True(t, hasAccess)
 	})
 
-	t.Run("Admin cannot access other company reports", func(t *testing.T) {
+	t.Run("Admin can access any company reports", func(t *testing.T) {
 		company1 := createTestCompanyForReport(t, db)
 		company2 := createTestCompanyForReport(t, db)
+		// Admin has access to all companies (same as superadmin)
 		hasAccess, err := uc.ValidateReportAccess("admin", &company1.ID, company2.ID)
 		require.NoError(t, err)
-		assert.False(t, hasAccess)
+		assert.True(t, hasAccess)
 	})
 }
 
@@ -390,7 +390,7 @@ func TestReportUseCase_GetAllReports_RBAC(t *testing.T) {
 	uc, db := setupTestReportUseCase(t)
 	defer helpers.CleanupTestDB(t, db)
 
-	t.Run("Admin only sees their company reports", func(t *testing.T) {
+	t.Run("Admin can see all company reports", func(t *testing.T) {
 		// Setup
 		company1 := createTestCompanyForReport(t, db)
 		company2 := createTestCompanyForReport(t, db)
@@ -422,12 +422,16 @@ func TestReportUseCase_GetAllReports_RBAC(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// Test - admin from company1 should only see company1 reports
+		// Test - admin can see all reports (same as superadmin)
 		reports, err := uc.GetAllReports("admin", &company1.ID)
 		require.NoError(t, err)
+		// Admin should see reports from both companies
+		companyIDs := make(map[string]bool)
 		for _, report := range reports {
-			assert.Equal(t, company1.ID, report.CompanyID)
+			companyIDs[report.CompanyID] = true
 		}
+		assert.True(t, companyIDs[company1.ID])
+		assert.True(t, companyIDs[company2.ID])
 	})
 
 	t.Run("Regular user only sees their company reports", func(t *testing.T) {

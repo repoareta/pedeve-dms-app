@@ -60,8 +60,8 @@ func (h *ReportHandler) CreateReport(c *fiber.Ctx) error {
 	companyID := c.Locals("companyID")
 	roleName := c.Locals("roleName").(string)
 
-	// Validate access: non-superadmin/administrator can only create reports for their own company
-	if !utils.IsSuperAdminLike(roleName) && companyID != nil {
+	// Validate access: non-superadmin/administrator/admin can only create reports for their own company
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" && companyID != nil {
 		var userCompanyID string
 		if companyIDPtr, ok := companyID.(*string); ok && companyIDPtr != nil {
 			userCompanyID = *companyIDPtr
@@ -883,8 +883,8 @@ func (h *ReportHandler) DownloadTemplate(c *fiber.Ctx) error {
 	var err error
 
 	// Get accessible companies based on user role
-	if roleName == "superadmin" {
-		// Superadmin can access all companies
+	// Superadmin/administrator/admin can access all companies
+	if utils.IsSuperAdminLike(roleName) || roleName == "admin" {
 		accessibleCompanies, err = h.companyUseCase.GetAllCompanies(false)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -1501,7 +1501,8 @@ func (h *ReportHandler) UploadReports(c *fiber.Ctx) error {
 
 	// Determine accessible company codes (same logic as validation)
 	var accessibleCompanyCodes map[string]bool
-	if roleName == "superadmin" {
+	// Superadmin/administrator/admin can access all companies
+	if utils.IsSuperAdminLike(roleName) || roleName == "admin" {
 		companies, err := h.companyUseCase.GetAllCompanies(false) // Only active companies for calculations
 		if err == nil {
 			accessibleCompanyCodes = make(map[string]bool)

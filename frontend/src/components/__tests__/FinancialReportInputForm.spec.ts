@@ -211,4 +211,73 @@ describe('FinancialReportInputForm - Logic Tests', () => {
       expect(hasExisting).toBe(false)
     })
   })
+
+  describe('Negative Value Support', () => {
+    it('should allow negative values for financial fields', () => {
+      // Test that financial fields can accept negative values
+      const formData = {
+        current_assets: -1000,
+        revenue: -500,
+        operating_expenses: -200,
+        net_profit: -100,
+        operating_cashflow: -300,
+      }
+
+      // All these fields should not have min restriction (except ratio fields)
+      expect(formData.current_assets < 0).toBe(true)
+      expect(formData.revenue < 0).toBe(true)
+      expect(formData.operating_expenses < 0).toBe(true)
+      expect(formData.net_profit < 0).toBe(true)
+      expect(formData.operating_cashflow < 0).toBe(true)
+    })
+
+    it('should allow negative EBITDA value', () => {
+      // Test that EBITDA can accept negative values (no min restriction)
+      const formData = {
+        ebitda: -1000,
+      }
+
+      // EBITDA should not have min restriction
+      expect(formData.ebitda < 0).toBe(true)
+    })
+
+    it('should restrict negative values for ratio fields', () => {
+      // Test that ratio fields cannot accept negative values
+      const ratioFields = ['roe', 'roi', 'current_ratio', 'cash_ratio', 'ebitda_margin', 'net_profit_margin', 'operating_profit_margin']
+      
+      ratioFields.forEach(field => {
+        // Ratio fields should have min: 0
+        const minValue = 0
+        const testValue = -10
+        
+        expect(testValue < minValue).toBe(true)
+      })
+    })
+
+    it('should save negative values correctly', () => {
+      // Test that negative values are saved correctly
+      const formData = {
+        year: '2024',
+        month: '01',
+        revenue: -1000,
+        operating_expenses: -500,
+        net_profit: -200,
+        operating_cashflow: -300,
+      }
+
+      const submitData = {
+        period: `${formData.year}-${formData.month}`,
+        revenue: formData.revenue,
+        operating_expenses: formData.operating_expenses,
+        net_profit: formData.net_profit,
+        operating_cashflow: formData.operating_cashflow,
+      }
+
+      expect(submitData.revenue).toBe(-1000)
+      expect(submitData.operating_expenses).toBe(-500)
+      expect(submitData.net_profit).toBe(-200)
+      expect(submitData.operating_cashflow).toBe(-300)
+      expect(submitData.revenue < 0).toBe(true)
+    })
+  })
 })

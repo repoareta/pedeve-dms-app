@@ -67,7 +67,8 @@ func (h *FinancialReportHandler) CreateFinancialReport(c *fiber.Ctx) error {
 	userAgent := c.Get("User-Agent", "")
 
 	// Authorization: Check if user can create report for this company
-	if !utils.IsSuperAdminLike(roleName) {
+	// Superadmin/administrator/admin can create report for any company
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" {
 		if companyID == nil {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
@@ -156,7 +157,8 @@ func (h *FinancialReportHandler) UpdateFinancialReport(c *fiber.Ctx) error {
 	}
 
 	// Authorization: Check if user can update this report
-	if !utils.IsSuperAdminLike(roleName) {
+	// Superadmin/administrator/admin can update report for any company
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" {
 		if companyID == nil {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
@@ -308,7 +310,8 @@ func (h *FinancialReportHandler) GetRKAPYearsByCompanyID(c *fiber.Ctx) error {
 	companyIDFromJWT := c.Locals("companyID")
 
 	// Authorization: Check if user can access this company's data
-	if !utils.IsSuperAdminLike(roleName) {
+	// Superadmin/administrator/admin can access any company's data
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" {
 		if companyIDFromJWT == nil {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
@@ -387,7 +390,8 @@ func (h *FinancialReportHandler) DeleteFinancialReport(c *fiber.Ctx) error {
 	}
 
 	// Authorization: Check if user can delete this report
-	if !utils.IsSuperAdminLike(roleName) {
+	// Superadmin/administrator/admin can delete report for any company
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" {
 		if companyID == nil {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
@@ -470,7 +474,8 @@ func (h *FinancialReportHandler) ExportPerformanceExcel(c *fiber.Ctx) error {
 	userCompanyID := c.Locals("companyID")
 
 	// Authorization check
-	if !utils.IsSuperAdminLike(roleName) {
+	// Superadmin/administrator/admin can export performance data for any company
+	if !utils.IsSuperAdminLike(roleName) && roleName != "admin" {
 		if userCompanyID == nil {
 			return c.Status(fiber.StatusForbidden).JSON(domain.ErrorResponse{
 				Error:   "forbidden",
@@ -548,8 +553,9 @@ func (h *FinancialReportHandler) GenerateBulkUploadTemplate(c *fiber.Ctx) error 
 	var err error
 
 	// Ambil companies yang bisa diakses berdasarkan role user
-	if roleName == "superadmin" || roleName == "administrator" {
-		// Superadmin/Administrator can access all companies
+	// Superadmin/administrator/admin can access all companies
+	if utils.IsSuperAdminLike(roleName) || roleName == "admin" {
+		// Superadmin/Administrator/Admin can access all companies
 		accessibleCompanies, err = h.companyUseCase.GetAllCompanies(false)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -936,8 +942,9 @@ func (h *FinancialReportHandler) ValidateBulkExcelFile(c *fiber.Ctx) error {
 	roleName := c.Locals("roleName").(string)
 
 	// Get accessible company codes
+	// Superadmin/administrator/admin can access all companies
 	var accessibleCompanyCodes map[string]bool
-	if roleName == "superadmin" || roleName == "administrator" {
+	if utils.IsSuperAdminLike(roleName) || roleName == "admin" {
 		companies, err := h.companyUseCase.GetAllCompanies(false) // Only active companies for calculations
 		if err == nil {
 			accessibleCompanyCodes = make(map[string]bool)
@@ -1515,8 +1522,9 @@ func (h *FinancialReportHandler) UploadBulkFinancialReports(c *fiber.Ctx) error 
 	companyID := c.Locals("companyID")
 
 	// Determine accessible company codes
+	// Superadmin/administrator/admin can access all companies
 	var accessibleCompanyCodes map[string]bool
-	if roleName == "superadmin" || roleName == "administrator" {
+	if utils.IsSuperAdminLike(roleName) || roleName == "admin" {
 		companies, err := h.companyUseCase.GetAllCompanies(false) // Only active companies for calculations
 		if err == nil {
 			accessibleCompanyCodes = make(map[string]bool)

@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/audit"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/repository"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/utils"
 )
@@ -108,16 +109,61 @@ func (h *UserManagementHandler) CreateUser(c *fiber.Ctx) error {
 		// Build selected companies list within creator scope
 		if req.AssignAllCompanies {
 			companyUseCase := usecase.NewCompanyUseCase()
-			desc, err := companyUseCase.GetCompanyDescendants(userCompanyID)
-			if err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
-					Error:   "internal_error",
-					Message: "Failed to get company descendants",
-				})
-			}
-			selectedCompanyIDs = append(selectedCompanyIDs, userCompanyID)
-			for _, d := range desc {
-				selectedCompanyIDs = append(selectedCompanyIDs, d.ID)
+			assignmentRepo := repository.NewUserCompanyAssignmentRepository()
+			
+			// Untuk admin: ambil semua companies yang bisa diakses (primary + junction table + descendants)
+			// Untuk role lain: hanya primary company + descendants
+			if roleName == "admin" {
+				// Ambil semua root companies yang di-assign ke admin (primary + junction table)
+				rootCompanyIDs := make(map[string]bool)
+				
+				// Primary company
+				rootCompanyIDs[userCompanyID] = true
+				
+				// Junction table assignments
+				assignments, aErr := assignmentRepo.GetByUserID(userID)
+				if aErr == nil {
+					for _, a := range assignments {
+						if a.IsActive && a.CompanyID != "" {
+							rootCompanyIDs[a.CompanyID] = true
+						}
+					}
+				}
+				
+				// Ambil semua descendants dari setiap root company
+				for rootID := range rootCompanyIDs {
+					desc, err := companyUseCase.GetCompanyDescendants(rootID)
+					if err == nil {
+						for _, d := range desc {
+							selectedCompanyIDs = append(selectedCompanyIDs, d.ID)
+						}
+					}
+					selectedCompanyIDs = append(selectedCompanyIDs, rootID)
+				}
+				
+				// Remove duplicates
+				seen := make(map[string]bool)
+				unique := make([]string, 0)
+				for _, id := range selectedCompanyIDs {
+					if !seen[id] {
+						seen[id] = true
+						unique = append(unique, id)
+					}
+				}
+				selectedCompanyIDs = unique
+			} else {
+				// Non-admin: hanya primary company + descendants
+				desc, err := companyUseCase.GetCompanyDescendants(userCompanyID)
+				if err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+						Error:   "internal_error",
+						Message: "Failed to get company descendants",
+					})
+				}
+				selectedCompanyIDs = append(selectedCompanyIDs, userCompanyID)
+				for _, d := range desc {
+					selectedCompanyIDs = append(selectedCompanyIDs, d.ID)
+				}
 			}
 		} else if len(req.CompanyIDs) > 0 {
 			selectedCompanyIDs = append(selectedCompanyIDs, req.CompanyIDs...)
@@ -146,8 +192,8 @@ func (h *UserManagementHandler) CreateUser(c *fiber.Ctx) error {
 		// They just won't be auto-assigned to any company
 	}
 
-	// Superadmin/administrator scope: interpret assign_all_companies as all active companies
-	if utils.IsSuperAdminLike(roleName) {
+	// Superadmin/administrator/admin scope: interpret assign_all_companies as all active companies
+	if utils.IsSuperAdminLike(roleName) || roleName == "admin" {
 		if req.AssignAllCompanies {
 			companyUseCase := usecase.NewCompanyUseCase()
 			all, err := companyUseCase.GetAllCompanies(false)
@@ -286,8 +332,8 @@ func (h *UserManagementHandler) GetAllUsers(c *fiber.Ctx) error {
 		}
 	}
 
-	// Superadmin/administrator sees all users (except other superadmins for security)
-	if utils.IsSuperAdminLike(roleName) {
+	// Superadmin/administrator/admin sees all users (except other superadmins for security)
+	if utils.IsSuperAdminLike(roleName) || roleName == "admin" {
 		users, err := h.userUseCase.GetAllUsers()
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
@@ -333,13 +379,58 @@ func (h *UserManagementHandler) GetAllUsers(c *fiber.Ctx) error {
 		})
 	}
 
-	// Ambil users dari company user dan semua descendants (RBAC)
-	users, err := h.userUseCase.GetUsersByCompanyHierarchy(userCompanyID)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
-			Error:   "internal_error",
-			Message: "Failed to get users: " + err.Error(),
-		})
+	// Untuk admin: ambil users dari semua companies yang di-assign (primary + junction table + descendants)
+	// Untuk role lain: hanya primary company + descendants
+	var users []domain.UserModel
+	var err error
+	
+	if roleName == "admin" {
+		// Ambil semua root companies yang di-assign ke admin (primary + junction table)
+		userID := c.Locals("userID").(string)
+		assignmentRepo := repository.NewUserCompanyAssignmentRepository()
+		assignments, aErr := assignmentRepo.GetByUserID(userID)
+		
+		rootCompanyIDs := make(map[string]bool)
+		rootCompanyIDs[userCompanyID] = true // Primary company
+		
+		if aErr == nil {
+			for _, a := range assignments {
+				if a.IsActive && a.CompanyID != "" {
+					rootCompanyIDs[a.CompanyID] = true
+				}
+			}
+		}
+		
+		// Ambil users dari semua root companies + descendants mereka
+		allUserIDs := make(map[string]bool)
+		allUsersMap := make(map[string]*domain.UserModel)
+		
+		for rootID := range rootCompanyIDs {
+			hierarchyUsers, hErr := h.userUseCase.GetUsersByCompanyHierarchy(rootID)
+			if hErr == nil {
+				for _, u := range hierarchyUsers {
+					if !allUserIDs[u.ID] {
+						allUserIDs[u.ID] = true
+						allUsersMap[u.ID] = &u
+					}
+				}
+			}
+		}
+		
+		// Convert map to slice
+		users = make([]domain.UserModel, 0, len(allUsersMap))
+		for _, u := range allUsersMap {
+			users = append(users, *u)
+		}
+	} else {
+		// Non-admin: hanya primary company + descendants
+		users, err = h.userUseCase.GetUsersByCompanyHierarchy(userCompanyID)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+				Error:   "internal_error",
+				Message: "Failed to get users: " + err.Error(),
+			})
+		}
 	}
 
 	// Filter out superadmin users for security
@@ -478,7 +569,7 @@ func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 	selectedCompanyIDs := make([]string, 0)
 
 	if req.AssignAllCompanies {
-		if utils.IsSuperAdminLike(roleName) {
+		if utils.IsSuperAdminLike(roleName) || roleName == "admin" {
 			companyUseCase := usecase.NewCompanyUseCase()
 			all, err := companyUseCase.GetAllCompanies(false)
 			if err != nil {
@@ -492,17 +583,60 @@ func (h *UserManagementHandler) UpdateUser(c *fiber.Ctx) error {
 			}
 		} else {
 			// Non-superadmin: scope = company sendiri + descendants
+			// Untuk admin: juga include junction table assignments + descendants mereka
 			companyUseCase := usecase.NewCompanyUseCase()
-			desc, err := companyUseCase.GetCompanyDescendants(userCompanyID)
-			if err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
-					Error:   "internal_error",
-					Message: "Failed to get company descendants",
-				})
-			}
-			selectedCompanyIDs = append(selectedCompanyIDs, userCompanyID)
-			for _, d := range desc {
-				selectedCompanyIDs = append(selectedCompanyIDs, d.ID)
+			if roleName == "admin" {
+				assignmentRepo := repository.NewUserCompanyAssignmentRepository()
+				currentUserID := c.Locals("userID").(string)
+				
+				// Ambil semua root companies yang di-assign ke admin (primary + junction table)
+				rootCompanyIDs := make(map[string]bool)
+				rootCompanyIDs[userCompanyID] = true
+				
+				// Junction table assignments
+				assignments, aErr := assignmentRepo.GetByUserID(currentUserID)
+				if aErr == nil {
+					for _, a := range assignments {
+						if a.IsActive && a.CompanyID != "" {
+							rootCompanyIDs[a.CompanyID] = true
+						}
+					}
+				}
+				
+				// Ambil semua descendants dari setiap root company
+				for rootID := range rootCompanyIDs {
+					desc, err := companyUseCase.GetCompanyDescendants(rootID)
+					if err == nil {
+						for _, d := range desc {
+							selectedCompanyIDs = append(selectedCompanyIDs, d.ID)
+						}
+					}
+					selectedCompanyIDs = append(selectedCompanyIDs, rootID)
+				}
+				
+				// Remove duplicates
+				seen := make(map[string]bool)
+				unique := make([]string, 0)
+				for _, id := range selectedCompanyIDs {
+					if !seen[id] {
+						seen[id] = true
+						unique = append(unique, id)
+					}
+				}
+				selectedCompanyIDs = unique
+			} else {
+				// Non-admin: hanya primary company + descendants
+				desc, err := companyUseCase.GetCompanyDescendants(userCompanyID)
+				if err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(domain.ErrorResponse{
+						Error:   "internal_error",
+						Message: "Failed to get company descendants",
+					})
+				}
+				selectedCompanyIDs = append(selectedCompanyIDs, userCompanyID)
+				for _, d := range desc {
+					selectedCompanyIDs = append(selectedCompanyIDs, d.ID)
+				}
 			}
 		}
 	} else if len(req.CompanyIDs) > 0 {

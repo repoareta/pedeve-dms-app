@@ -17,6 +17,7 @@ export interface User {
   email: string
   role: string
   company_id?: string
+  company_ids?: string[] // Multi-company assignments (from junction table)
   created_at: string
   updated_at: string
 }

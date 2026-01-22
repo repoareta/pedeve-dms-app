@@ -314,7 +314,6 @@
                   v-model:value="formData.ebitda"
                   style="width: 100%;"
                   :precision="0"
-                  :min="0"
                   :formatter="(value: number | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
                   :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
                 />

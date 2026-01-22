@@ -209,7 +209,9 @@ describe('FinancialCategoryInput - Logic Tests', () => {
 
       expect(canAcceptNegative).toBe(false)
       expect(minValue).toBe(0)
-      expect(testValue < minValue).toBe(true)
+      if (minValue !== undefined) {
+        expect(testValue < minValue).toBe(true)
+      }
     })
 
     it('should save negative values correctly', () => {
@@ -245,12 +247,13 @@ describe('FinancialCategoryInput - Logic Tests', () => {
 
       const fieldKey = 'revenue_realisasi'
       if (fieldKey in record) {
-        const value = record[fieldKey] ?? 0
+        const value = (record[fieldKey] as number) ?? 0
         updateData['revenue'] = value
       }
 
-      expect(updateData['revenue']).toBe(-1000)
-      expect(updateData['revenue'] < 0).toBe(true)
+      const revenueValue = updateData['revenue'] as number
+      expect(revenueValue).toBe(-1000)
+      expect(revenueValue < 0).toBe(true)
     })
   })
 })

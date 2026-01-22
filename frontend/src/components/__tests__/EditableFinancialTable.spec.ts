@@ -207,7 +207,9 @@ describe('EditableFinancialTable - Logic Tests', () => {
       const testValue = -10
 
       expect(minValue).toBe(0)
-      expect(testValue < minValue).toBe(true)
+      if (minValue !== undefined) {
+        expect(testValue < minValue).toBe(true)
+      }
     })
 
     it('should format negative values without suffix', () => {

@@ -245,7 +245,7 @@ describe('FinancialCategoryInput - Logic Tests', () => {
 
       const fieldKey = 'revenue_realisasi'
       if (fieldKey in record) {
-        let value = record[fieldKey] ?? 0
+        const value = record[fieldKey] ?? 0
         updateData['revenue'] = value
       }
 

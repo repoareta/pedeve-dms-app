@@ -20,7 +20,7 @@ describe('SubsidiaryDetailView - Negative Value Formatting', () => {
   describe('formatCurrencyValue - Negative Values', () => {
     it('should format negative values without suffix (IDR)', () => {
       // Test format for negative values in IDR
-      const formatCurrencyValue = (value: number, currency: string = 'IDR'): string => {
+      const formatCurrencyValue = (value: number): string => {
         if (value < 0) {
           return `Rp ${value.toLocaleString('id-ID')}`
         }
@@ -32,7 +32,7 @@ describe('SubsidiaryDetailView - Negative Value Formatting', () => {
       }
 
       const negativeValue = -1000
-      const formatted = formatCurrencyValue(negativeValue, 'IDR')
+      const formatted = formatCurrencyValue(negativeValue)
 
       expect(formatted).toBe('Rp -1.000')
       expect(formatted).not.toContain('Rb')
@@ -75,7 +75,7 @@ describe('SubsidiaryDetailView - Negative Value Formatting', () => {
 
     it('should format positive values >= 1000 with suffix', () => {
       // Test format for positive values >= 1000
-      const formatCurrencyValue = (value: number, currency: string = 'IDR'): string => {
+      const formatCurrencyValue = (value: number): string => {
         if (value < 0) {
           return `Rp ${value.toLocaleString('id-ID')}`
         }
@@ -87,14 +87,14 @@ describe('SubsidiaryDetailView - Negative Value Formatting', () => {
       }
 
       const positiveValue = 1000
-      const formatted = formatCurrencyValue(positiveValue, 'IDR')
+      const formatted = formatCurrencyValue(positiveValue)
 
       expect(formatted).toContain('Rb')
     })
 
     it('should format negative large values without suffix', () => {
       // Test format for negative large values
-      const formatCurrencyValue = (value: number, currency: string = 'IDR'): string => {
+      const formatCurrencyValue = (value: number): string => {
         if (value < 0) {
           return `Rp ${value.toLocaleString('id-ID')}`
         }
@@ -110,7 +110,7 @@ describe('SubsidiaryDetailView - Negative Value Formatting', () => {
       }
 
       const negativeLargeValue = -1000000
-      const formatted = formatCurrencyValue(negativeLargeValue, 'IDR')
+      const formatted = formatCurrencyValue(negativeLargeValue)
 
       expect(formatted).toBe('Rp -1.000.000')
       expect(formatted).not.toContain('Rb')

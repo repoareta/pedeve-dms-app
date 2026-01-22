@@ -245,7 +245,7 @@ describe('FinancialReportInputForm - Logic Tests', () => {
       // Test that ratio fields cannot accept negative values
       const ratioFields = ['roe', 'roi', 'current_ratio', 'cash_ratio', 'ebitda_margin', 'net_profit_margin', 'operating_profit_margin']
       
-      ratioFields.forEach(field => {
+      ratioFields.forEach(() => {
         // Ratio fields should have min: 0
         const minValue = 0
         const testValue = -10

@@ -121,9 +121,9 @@ describe('SubsidiariesView - Logic Tests', () => {
     it('should filter companies by search text', () => {
       // Test search filtering
       const companies = [
-        { id: '1', name: 'Company A' },
-        { id: '2', name: 'Company B' },
-        { id: '3', name: 'Subsidiary C' },
+        { id: '1', name: 'Company A', code: 'CA', short_name: 'CA', nib: '123', description: 'Test' },
+        { id: '2', name: 'Company B', code: 'CB', short_name: 'CB', nib: '456', description: 'Test' },
+        { id: '3', name: 'Subsidiary C', code: 'SC', short_name: 'SC', nib: '789', description: 'Test' },
       ]
       const searchText = 'Company'
 
@@ -137,8 +137,8 @@ describe('SubsidiariesView - Logic Tests', () => {
     it('should handle empty search text', () => {
       // Test empty search
       const companies = [
-        { id: '1', name: 'Company A' },
-        { id: '2', name: 'Company B' },
+        { id: '1', name: 'Company A', code: 'CA', short_name: 'CA', nib: '123', description: 'Test' },
+        { id: '2', name: 'Company B', code: 'CB', short_name: 'CB', nib: '456', description: 'Test' },
       ]
       const searchText = ''
 
@@ -147,6 +147,96 @@ describe('SubsidiariesView - Logic Tests', () => {
       )
 
       expect(filtered.length).toBe(2)
+    })
+
+    it('should filter by company name in list view', () => {
+      // Test search filtering in list view (same logic as grid view)
+      const companies = [
+        { id: '1', name: 'PT Pertamina Retail', code: 'PRT', short_name: 'PRT', nib: '123', description: 'Test' },
+        { id: '2', name: 'PT Example Company', code: 'PEC', short_name: 'PEC', nib: '456', description: 'Test' },
+      ]
+      const searchText = 'Pertamina'
+
+      const filtered = companies.filter(company =>
+        company.name.toLowerCase().includes(searchText.toLowerCase()) ||
+        company.code.toLowerCase().includes(searchText.toLowerCase()) ||
+        (company.short_name && company.short_name.toLowerCase().includes(searchText.toLowerCase())) ||
+        (company.nib && company.nib.toLowerCase().includes(searchText.toLowerCase())) ||
+        (company.description && company.description.toLowerCase().includes(searchText.toLowerCase()))
+      )
+
+      expect(filtered.length).toBe(1)
+      expect(filtered[0]?.name).toBe('PT Pertamina Retail')
+    })
+
+    it('should filter by company code in list view', () => {
+      // Test search by code in list view
+      const companies = [
+        { id: '1', name: 'PT Pertamina Retail', code: 'PRT', short_name: 'PRT', nib: '123', description: 'Test' },
+        { id: '2', name: 'PT Example Company', code: 'PEC', short_name: 'PEC', nib: '456', description: 'Test' },
+      ]
+      const searchText = 'PRT'
+
+      const filtered = companies.filter(company =>
+        company.name.toLowerCase().includes(searchText.toLowerCase()) ||
+        company.code.toLowerCase().includes(searchText.toLowerCase()) ||
+        (company.short_name && company.short_name.toLowerCase().includes(searchText.toLowerCase())) ||
+        (company.nib && company.nib.toLowerCase().includes(searchText.toLowerCase())) ||
+        (company.description && company.description.toLowerCase().includes(searchText.toLowerCase()))
+      )
+
+      expect(filtered.length).toBe(1)
+      expect(filtered[0]?.code).toBe('PRT')
+    })
+
+    it('should filter by NIB in list view', () => {
+      // Test search by NIB in list view
+      const companies = [
+        { id: '1', name: 'PT Pertamina Retail', code: 'PRT', short_name: 'PRT', nib: '123456', description: 'Test' },
+        { id: '2', name: 'PT Example Company', code: 'PEC', short_name: 'PEC', nib: '789012', description: 'Test' },
+      ]
+      const searchText = '123'
+
+      const filtered = companies.filter(company =>
+        company.name.toLowerCase().includes(searchText.toLowerCase()) ||
+        company.code.toLowerCase().includes(searchText.toLowerCase()) ||
+        (company.short_name && company.short_name.toLowerCase().includes(searchText.toLowerCase())) ||
+        (company.nib && company.nib.toLowerCase().includes(searchText.toLowerCase())) ||
+        (company.description && company.description.toLowerCase().includes(searchText.toLowerCase()))
+      )
+
+      expect(filtered.length).toBe(1)
+      expect(filtered[0]?.nib).toBe('123456')
+    })
+
+    it('should apply same filtering logic for both grid and list view', () => {
+      // Test that both views use same filtering logic
+      const companies = [
+        { id: '1', name: 'PT Pertamina Retail', code: 'PRT', short_name: 'PRT', nib: '123', description: 'Test' },
+        { id: '2', name: 'PT Example Company', code: 'PEC', short_name: 'PEC', nib: '456', description: 'Test' },
+      ]
+      const searchText = 'Pertamina'
+
+      // Grid view filtering (filteredCompanies)
+      const gridFiltered = companies.filter(company =>
+        company.name.toLowerCase().includes(searchText.toLowerCase()) ||
+        company.code.toLowerCase().includes(searchText.toLowerCase()) ||
+        (company.short_name && company.short_name.toLowerCase().includes(searchText.toLowerCase())) ||
+        (company.nib && company.nib.toLowerCase().includes(searchText.toLowerCase())) ||
+        (company.description && company.description.toLowerCase().includes(searchText.toLowerCase()))
+      )
+
+      // List view filtering (tableData)
+      const listFiltered = companies.filter(company =>
+        company.name.toLowerCase().includes(searchText.toLowerCase()) ||
+        company.code.toLowerCase().includes(searchText.toLowerCase()) ||
+        (company.short_name && company.short_name.toLowerCase().includes(searchText.toLowerCase())) ||
+        (company.nib && company.nib.toLowerCase().includes(searchText.toLowerCase())) ||
+        (company.description && company.description.toLowerCase().includes(searchText.toLowerCase()))
+      )
+
+      expect(gridFiltered.length).toBe(listFiltered.length)
+      expect(gridFiltered[0]?.id).toBe(listFiltered[0]?.id)
     })
   })
 

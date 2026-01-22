@@ -63,9 +63,9 @@
                       <IconifyIcon icon="mdi:account-plus" width="16" style="margin-right: 8px;" />
                       Assign Role
                     </a-menu-item>
-                    <a-menu-divider v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator) && (canEdit || canAssignRole)" />
+                    <a-menu-divider v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator || isAdmin) && (canEdit || canAssignRole)" />
                     <a-menu-item 
-                      v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator)" 
+                      v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator || isAdmin)" 
                       :key="company.is_active ? 'deactivate' : 'activate'"
                       :danger="company.is_active"
                       @click.stop="() => handleToggleCompanyStatusFromMenu(company.id, company.name, company.is_active)"
@@ -73,7 +73,7 @@
                       <IconifyIcon :icon="company.is_active ? 'mdi:power-off' : 'mdi:power-on'" width="16" style="margin-right: 8px;" />
                       {{ company.is_active ? 'Nonaktifkan' : 'Aktifkan' }}
                     </a-menu-item>
-                    <a-menu-divider v-if="canDelete && (canEdit || canAssignRole || (ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator)))" />
+                    <a-menu-divider v-if="canDelete && (canEdit || canAssignRole || (ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator || isAdmin)))" />
                     <a-menu-item v-if="canDelete" key="delete" danger>
                       <IconifyIcon icon="mdi:delete" width="16" style="margin-right: 8px;" />
                       Hapus
@@ -183,9 +183,9 @@
               <template #emptyText>
                 <div class="empty-state" style="padding: 40px 20px;">
                   <IconifyIcon icon="mdi:office-building-outline" width="64" style="color: #ccc; margin-bottom: 16px;" />
-                  <p v-if="isSuperAdmin || isAdministrator">Belum ada data subsidiary</p>
+                  <p v-if="isSuperAdmin || isAdministrator || isAdmin">Belum ada data subsidiary</p>
                   <p v-else>Anda belum di-assign ke perusahaan manapun. Silakan hubungi administrator untuk mendapatkan akses.</p>
-                  <a-button v-if="isSuperAdmin || isAdministrator" type="primary" @click="handleCreateCompany" style="margin-top: 16px;">
+                  <a-button v-if="isSuperAdmin || isAdministrator || isAdmin" type="primary" @click="handleCreateCompany" style="margin-top: 16px;">
                     <IconifyIcon icon="mdi:plus" width="16" style="margin-right: 8px;" />
                     Tambah Subsidiary Pertama
                   </a-button>
@@ -208,7 +208,7 @@
                 </template>
                 <template v-if="column.key === 'status'">
                   <a-switch
-                    v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator)"
+                    v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator || isAdmin)"
                     :checked="record.is_active"
                     :loading="statusUpdatingIds.has(record.id)"
                     @change="(checked: boolean) => handleToggleCompanyStatus(record.id, record.name, checked)"
@@ -368,7 +368,7 @@
                 </template>
                 <template v-if="column.key === 'status'">
                   <a-switch
-                    v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator)"
+                    v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin || isAdministrator || isAdmin)"
                     :checked="record.is_active"
                     :loading="statusUpdatingIds.has(record.id)"
                     @change="(checked: boolean) => handleToggleCompanyStatus(record.id, record.name, checked)"
@@ -456,7 +456,7 @@ const canDelete = computed(() => isAdmin.value || isSuperAdmin.value || isAdmini
 // RBAC: Edit untuk semua role (staff, manager, admin, superadmin, administrator)
 const canEdit = computed(() => isAdmin.value || isManager.value || isStaff.value || isSuperAdmin.value || isAdministrator.value)
 
-const hasAnyMenuOption = computed(() => canEdit.value || canAssignRole.value || canDelete.value || (ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin.value || isAdministrator.value)))
+const hasAnyMenuOption = computed(() => canEdit.value || canAssignRole.value || canDelete.value || (ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (isSuperAdmin.value || isAdministrator.value || isAdmin.value)))
 
 // Note: Actions dropdown always shown because "Lihat Detail" menu is always available
 
@@ -1210,11 +1210,11 @@ const getIconColor = (name: string): string => {
 const loadCompanies = async () => {
   companiesLoading.value = true
   try {
-    // Superadmin/Administrator melihat semua companies (termasuk yang nonaktif)
+    // Superadmin/Administrator/Admin melihat semua companies (termasuk yang nonaktif)
     // User lain hanya melihat companies yang di-assign ke mereka
     // Backend akan selalu include inactive companies in listing
     // But calculations/aggregations tetap exclude inactive companies
-    if (isSuperAdmin.value || isAdministrator.value) {
+    if (isSuperAdmin.value || isAdministrator.value || isAdmin.value) {
       companies.value = await companyApi.getAll(true) // Always include inactive for listing
     } else {
       // Get companies assigned to current user
@@ -1314,7 +1314,32 @@ const handleViewModeChange = async (mode: 'grid' | 'list') => {
 // filteredCompanies hanya untuk search text filter di grid view
 // Ant Design Table akan handle pagination secara internal setelah filtering
 const tableData = computed(() => {
-  return companies.value
+  // Apply same filtering as filteredCompanies for grid view
+  let filtered = companies.value
+
+  // Apply search filter
+  if (searchText.value.trim()) {
+    const search = searchText.value.toLowerCase().trim()
+    filtered = companies.value.filter(company =>
+      company.name.toLowerCase().includes(search) ||
+      company.code.toLowerCase().includes(search) ||
+      (company.short_name && company.short_name.toLowerCase().includes(search)) ||
+      (company.nib && company.nib.toLowerCase().includes(search)) ||
+      (company.description && company.description.toLowerCase().includes(search))
+    )
+  }
+
+  // Sort: active companies first, then by updated_at (most recent first), fallback to created_at
+  return filtered.sort((a, b) => {
+    // Active companies come first
+    if (a.is_active && !b.is_active) return -1
+    if (!a.is_active && b.is_active) return 1
+    
+    // Then sort by date (newest first)
+    const dateA = new Date(a.updated_at || a.created_at || 0).getTime()
+    const dateB = new Date(b.updated_at || b.created_at || 0).getTime()
+    return dateB - dateA // Descending order (newest first)
+  })
 })
 
 // Load table data (lazy loading) - hanya set loading state

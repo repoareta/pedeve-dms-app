@@ -78,6 +78,7 @@
                 style="width: 100%;"
                 :formatter="(value: number | string | undefined) => value ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
                 :parser="(value: string) => value.replace(/\$\s?|(,*)/g, '')"
+                :min="undefined"
               />
             </a-form-item>
           </a-col>

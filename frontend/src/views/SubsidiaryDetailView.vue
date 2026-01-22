@@ -552,7 +552,7 @@
                         </a-tag>
                       </span>
                     </div>
-                    <div v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (canEdit || isSuperAdmin)" class="info-item full-width">
+                    <div v-if="ENABLE_ACTIVATE_DEACTIVATE_FEATURE && (canEdit || isSuperAdmin || isAdministrator || isAdmin)" class="info-item full-width">
                       <span class="info-label">Aktivasi Subsidiary</span>
                       <span class="info-value">
                         <a-button 
@@ -1348,16 +1348,42 @@ const isStaff = computed(() => userRole.value === 'staff')
 const canAssignRole = computed(() => isAdmin.value || isSuperAdmin.value || isAdministrator.value)
 
 // RBAC: Edit Financial Data
-// Superadmin & Administrator: bisa edit semua data
-// Admin: hanya bisa edit data perusahaan sendiri
+// Superadmin & Administrator & Admin: bisa edit semua data
 const canEditFinancialData = computed(() => {
-  if (isSuperAdmin.value || isAdministrator.value) {
+  if (isSuperAdmin.value || isAdministrator.value || isAdmin.value) {
     return true // Bisa edit semua
   }
-  if (isAdmin.value) {
-    // Admin hanya bisa edit data perusahaan sendiri
-    // Check jika company yang sedang dilihat adalah milik user
-    return authStore.user?.company_id === company.value?.id
+  if (isAdmin.value && company.value) {
+    const userCompanyID = authStore.user?.company_id
+    const userCompanyIDs = authStore.user?.company_ids || []
+    const targetCompanyID = company.value.id
+    
+    // Check primary company_id (backward compatibility)
+    if (userCompanyID === targetCompanyID) {
+      return true
+    }
+    
+    // Check multi-company assignments
+    if (userCompanyIDs.includes(targetCompanyID)) {
+      return true
+    }
+    
+    // Check descendants: jika target company adalah child dari salah satu assigned company
+    // Helper function untuk cek apakah company adalah descendant dari root company
+    const isDescendantOf = (childID: string, rootID: string, companies: Company[]): boolean => {
+      const child = companies.find(c => c.id === childID)
+      if (!child || !child.parent_id) return false
+      if (child.parent_id === rootID) return true
+      return isDescendantOf(child.parent_id, rootID, companies)
+    }
+    
+    // Cek semua assigned companies (primary + multi-assignments)
+    const allAssignedIDs = userCompanyID ? [userCompanyID, ...userCompanyIDs] : userCompanyIDs
+    for (const assignedID of allAssignedIDs) {
+      if (isDescendantOf(targetCompanyID, assignedID, allCompanies.value)) {
+        return true
+      }
+    }
   }
   return false
 })
@@ -2884,29 +2910,37 @@ const formatCurrencyValue = (value: number | string | undefined): string => {
   // Get currency from company, default to IDR (Rupiah)
   const currency = company.value?.currency || 'IDR'
   const absValue = Math.abs(numValue)
-  const sign = numValue < 0 ? '-' : ''
   
-  // Format based on currency
+  // Untuk nilai negatif, selalu format dengan locale tanpa suffix (tidak pakai Rb/Jt/M)
+  if (numValue < 0) {
+    if (currency === 'USD') {
+      return `$${numValue.toLocaleString('en-US')}`
+    } else {
+      return `Rp ${numValue.toLocaleString('id-ID')}`
+    }
+  }
+  
+  // Untuk nilai positif, format dengan suffix untuk angka besar
   if (currency === 'USD') {
     // USD format: $32B, $129M, $5K
     if (absValue >= 1000000000) {
-      return `${sign}$${(absValue / 1000000000).toFixed(2)}B`
+      return `$${(absValue / 1000000000).toFixed(2)}B`
     } else if (absValue >= 1000000) {
-      return `${sign}$${(absValue / 1000000).toFixed(2)}M`
+      return `$${(absValue / 1000000).toFixed(2)}M`
     } else if (absValue >= 1000) {
-      return `${sign}$${(absValue / 1000).toFixed(2)}K`
+      return `$${(absValue / 1000).toFixed(2)}K`
     }
-    return `${sign}$${absValue.toLocaleString('en-US')}`
+    return `$${absValue.toLocaleString('en-US')}`
   } else {
     // IDR format: Rp 129M, Rp 32B, Rp 5K
     if (absValue >= 1000000000) {
-      return `${sign}Rp ${(absValue / 1000000000).toFixed(2)}B`
+      return `Rp ${(absValue / 1000000000).toFixed(2)}B`
     } else if (absValue >= 1000000) {
-      return `${sign}Rp ${(absValue / 1000000).toFixed(2)}Jt`
+      return `Rp ${(absValue / 1000000).toFixed(2)}Jt`
     } else if (absValue >= 1000) {
-      return `${sign}Rp ${(absValue / 1000).toFixed(2)}Rb`
+      return `Rp ${(absValue / 1000).toFixed(2)}Rb`
     }
-    return `${sign}Rp ${absValue.toLocaleString('id-ID')}`
+    return `Rp ${absValue.toLocaleString('id-ID')}`
   }
 }
 
@@ -3212,8 +3246,11 @@ const generateMonthlyDataWithAllItems = (items: Array<{ key: string; label: stri
         
         items.forEach((item) => {
           if (periodType === 'p1') {
-            const rkapAnnualValue = rkapRecord ? ((rkapRecord[item.field] as number | undefined) ?? 0) : 0
-            const realisasiValue = realisasiRecord ? ((realisasiRecord[item.field] as number | undefined) ?? 0) : 0
+            // Pastikan nilai negatif tetap negatif, hanya null/undefined yang menjadi 0
+            const rkapFieldValue = rkapRecord ? (rkapRecord[item.field] as number | undefined | null) : null
+            const rkapAnnualValue = rkapFieldValue !== null && rkapFieldValue !== undefined ? rkapFieldValue : 0
+            const realisasiFieldValue = realisasiRecord ? (realisasiRecord[item.field] as number | undefined | null) : null
+            const realisasiValue = realisasiFieldValue !== null && realisasiFieldValue !== undefined ? realisasiFieldValue : 0
             rowData[`${item.key}_rkap`] = rkapAnnualValue
             rowData[`${item.key}_realisasi`] = realisasiValue
             // P2 columns will be empty for P1 rows
@@ -3222,8 +3259,11 @@ const generateMonthlyDataWithAllItems = (items: Array<{ key: string; label: stri
             rowData[`${item.key}_difference`] = 0
             rowData[`${item.key}_difference_direction`] = 'equal'
           } else {
-            const rkapAnnualValueP2 = rkapRecordP2 ? ((rkapRecordP2[item.field] as number | undefined) ?? 0) : 0
-            const realisasiValueP2 = realisasiRecord ? ((realisasiRecord[item.field] as number | undefined) ?? 0) : 0
+            // Pastikan nilai negatif tetap negatif, hanya null/undefined yang menjadi 0
+            const rkapFieldValueP2 = rkapRecordP2 ? (rkapRecordP2[item.field] as number | undefined | null) : null
+            const rkapAnnualValueP2 = rkapFieldValueP2 !== null && rkapFieldValueP2 !== undefined ? rkapFieldValueP2 : 0
+            const realisasiFieldValueP2 = realisasiRecord ? (realisasiRecord[item.field] as number | undefined | null) : null
+            const realisasiValueP2 = realisasiFieldValueP2 !== null && realisasiFieldValueP2 !== undefined ? realisasiFieldValueP2 : 0
             // P1 columns will be empty for P2 rows
             rowData[`${item.key}_rkap`] = 0
             rowData[`${item.key}_realisasi`] = 0
@@ -3266,10 +3306,14 @@ const generateMonthlyDataWithAllItems = (items: Array<{ key: string; label: stri
     // Add data for each item - tampilkan data apa adanya tanpa perhitungan
     items.forEach((item) => {
       // Period 1: RKAP - tampilkan nilai tahunan langsung (tidak dibagi 12)
-      const rkapAnnualValue = rkapRecord ? ((rkapRecord[item.field] as number | undefined) ?? 0) : 0
+      // Pastikan nilai negatif tetap negatif, hanya null/undefined yang menjadi 0
+      const rkapFieldValue = rkapRecord ? (rkapRecord[item.field] as number | undefined | null) : null
+      const rkapAnnualValue = rkapFieldValue !== null && rkapFieldValue !== undefined ? rkapFieldValue : 0
       
       // Period 1: Realisasi - tampilkan nilai bulanan apa adanya
-      const realisasiValue = realisasiRecord ? ((realisasiRecord[item.field] as number | undefined) ?? 0) : 0
+      // Pastikan nilai negatif tetap negatif, hanya null/undefined yang menjadi 0
+      const realisasiFieldValue = realisasiRecord ? (realisasiRecord[item.field] as number | undefined | null) : null
+      const realisasiValue = realisasiFieldValue !== null && realisasiFieldValue !== undefined ? realisasiFieldValue : 0
       
       // Tampilkan data apa adanya - tidak ada perhitungan otomatis
       rowData[`${item.key}_rkap`] = rkapAnnualValue
@@ -3278,11 +3322,15 @@ const generateMonthlyDataWithAllItems = (items: Array<{ key: string; label: stri
       // Period 2 data if compare mode is active
       if (ENABLE_COMPARISON_FEATURE && compareMode.value && periodRange2.value && periodRange2.value[0] && periodRange2.value[1] && realisasiRecordP2 !== undefined) {
         // Period 2: RKAP
-        const rkapAnnualValueP2 = rkapRecordP2 ? ((rkapRecordP2[item.field] as number | undefined) ?? 0) : 0
+        // Pastikan nilai negatif tetap negatif, hanya null/undefined yang menjadi 0
+        const rkapFieldValueP2 = rkapRecordP2 ? (rkapRecordP2[item.field] as number | undefined | null) : null
+        const rkapAnnualValueP2 = rkapFieldValueP2 !== null && rkapFieldValueP2 !== undefined ? rkapFieldValueP2 : 0
         rowData[`${item.key}_rkap_p2`] = rkapAnnualValueP2
         
         // Period 2: Realisasi
-        const realisasiValueP2 = realisasiRecordP2 ? ((realisasiRecordP2[item.field] as number | undefined) ?? 0) : 0
+        // Pastikan nilai negatif tetap negatif, hanya null/undefined yang menjadi 0
+        const realisasiFieldValueP2 = realisasiRecordP2 ? (realisasiRecordP2[item.field] as number | undefined | null) : null
+        const realisasiValueP2 = realisasiFieldValueP2 !== null && realisasiFieldValueP2 !== undefined ? realisasiFieldValueP2 : 0
         rowData[`${item.key}_realisasi_p2`] = realisasiValueP2
         
         // Calculate difference (P1 Realisasi - P2 Realisasi)

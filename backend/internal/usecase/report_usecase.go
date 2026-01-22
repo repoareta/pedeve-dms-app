@@ -98,26 +98,9 @@ func (uc *reportUseCase) GetReportByID(id string) (*domain.ReportModel, error) {
 }
 
 func (uc *reportUseCase) GetAllReports(userRole string, userCompanyID *string) ([]domain.ReportModel, error) {
-	// Superadmin bisa lihat semua reports
-	if utils.IsSuperAdminLike(userRole) {
+	// Superadmin/administrator/admin bisa lihat semua reports (setara)
+	if utils.IsSuperAdminLike(userRole) || userRole == "admin" {
 		return uc.reportRepo.GetAll()
-	}
-
-	// Admin bisa lihat reports dari company mereka dan semua children companies
-	if userRole == "admin" && userCompanyID != nil {
-		// Ambil semua descendants (children, grandchildren, dll)
-		descendants, err := uc.companyRepo.GetDescendants(*userCompanyID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get company descendants: %w", err)
-		}
-
-		// Kumpulkan semua company IDs (company sendiri + descendants)
-		companyIDs := []string{*userCompanyID}
-		for _, desc := range descendants {
-			companyIDs = append(companyIDs, desc.ID)
-		}
-
-		return uc.reportRepo.GetByCompanyIDs(companyIDs)
 	}
 
 	// User reguler hanya bisa lihat reports dari company mereka sendiri
@@ -231,16 +214,15 @@ func (uc *reportUseCase) DeleteReport(id string) error {
 
 // ValidateReportAccess validates if user has access to report for a company
 // Returns true if:
-// - User is superadmin (can access all)
-// - User is admin and companyID is their company or one of their descendants
+// - User is superadmin/administrator/admin (can access all)
 // - User is regular user and companyID is their company
 func (uc *reportUseCase) ValidateReportAccess(userRole string, userCompanyID *string, reportCompanyID string) (bool, error) {
-	// Superadmin bisa akses semua
-	if utils.IsSuperAdminLike(userRole) {
+	// Superadmin/administrator/admin bisa akses semua (setara)
+	if utils.IsSuperAdminLike(userRole) || userRole == "admin" {
 		return true, nil
 	}
 
-	// Kalau user tidak punya company, mereka tidak bisa akses reports apapun (kecuali superadmin)
+	// Kalau user tidak punya company, mereka tidak bisa akses reports apapun (kecuali superadmin/admin)
 	if userCompanyID == nil {
 		return false, nil
 	}
@@ -248,15 +230,6 @@ func (uc *reportUseCase) ValidateReportAccess(userRole string, userCompanyID *st
 	// Kalau report untuk company user sendiri, izinkan akses
 	if *userCompanyID == reportCompanyID {
 		return true, nil
-	}
-
-	// Admin bisa akses reports dari company mereka dan semua descendants
-	if userRole == "admin" {
-		isDescendant, err := uc.companyRepo.IsDescendantOf(reportCompanyID, *userCompanyID)
-		if err != nil {
-			return false, fmt.Errorf("failed to check company relationship: %w", err)
-		}
-		return isDescendant, nil
 	}
 
 	// User reguler hanya bisa akses reports dari company mereka sendiri

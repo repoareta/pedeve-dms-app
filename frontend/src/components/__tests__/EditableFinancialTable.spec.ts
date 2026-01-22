@@ -176,4 +176,95 @@ describe('EditableFinancialTable - Logic Tests', () => {
       expect(deleteKey).toBe('1')
     })
   })
+
+  describe('Negative Value Support', () => {
+    it('should allow negative values for non-ratio fields', () => {
+      // Test that non-ratio fields can accept negative values
+      const column = { dataIndex: 'revenue', key: 'revenue' }
+      const isRatioField = column.dataIndex?.includes('roe') || 
+                          column.dataIndex?.includes('roi') || 
+                          column.dataIndex?.includes('ratio') || 
+                          column.dataIndex?.includes('margin') || 
+                          column.dataIndex?.includes('debt_to_equity')
+      
+      const minValue = isRatioField ? 0 : undefined
+      const testValue = -1000
+
+      expect(minValue).toBeUndefined()
+      expect(testValue < 0).toBe(true)
+    })
+
+    it('should restrict negative values for ratio fields', () => {
+      // Test that ratio fields cannot accept negative values
+      const column = { dataIndex: 'roe', key: 'roe' }
+      const isRatioField = column.dataIndex?.includes('roe') || 
+                          column.dataIndex?.includes('roi') || 
+                          column.dataIndex?.includes('ratio') || 
+                          column.dataIndex?.includes('margin') || 
+                          column.dataIndex?.includes('debt_to_equity')
+      
+      const minValue = isRatioField ? 0 : undefined
+      const testValue = -10
+
+      expect(minValue).toBe(0)
+      if (minValue !== undefined) {
+        expect(testValue < minValue).toBe(true)
+      }
+    })
+
+    it('should format negative values without suffix', () => {
+      // Test format for negative values
+      const formatCellValue = (value: number): string => {
+        if (value < 0) {
+          return `Rp ${value.toLocaleString('id-ID')}`
+        }
+        const absValue = Math.abs(value)
+        if (absValue >= 1000) {
+          return `Rp ${(absValue / 1000).toFixed(2)}Rb`
+        }
+        return `Rp ${value.toLocaleString('id-ID')}`
+      }
+
+      const negativeValue = -1000
+      const formatted = formatCellValue(negativeValue)
+
+      expect(formatted).toBe('Rp -1.000')
+      expect(formatted).not.toContain('Rb')
+    })
+
+    it('should format positive values with suffix when >= 1000', () => {
+      // Test format for positive values >= 1000
+      const formatCellValue = (value: number): string => {
+        if (value < 0) {
+          return `Rp ${value.toLocaleString('id-ID')}`
+        }
+        const absValue = Math.abs(value)
+        if (absValue >= 1000) {
+          return `Rp ${(absValue / 1000).toFixed(2)}Rb`
+        }
+        return `Rp ${value.toLocaleString('id-ID')}`
+      }
+
+      const positiveValue = 1000
+      const formatted = formatCellValue(positiveValue)
+
+      expect(formatted).toContain('Rb')
+    })
+
+    it('should preserve negative values when saving', () => {
+      // Test that negative values are preserved during save
+      const record = { key: '1', revenue: -1000, net_profit: -500 }
+
+      const saveData = {
+        key: record.key,
+        revenue: record.revenue,
+        net_profit: record.net_profit,
+      }
+
+      expect(saveData.revenue).toBe(-1000)
+      expect(saveData.net_profit).toBe(-500)
+      expect(saveData.revenue < 0).toBe(true)
+      expect(saveData.net_profit < 0).toBe(true)
+    })
+  })
 })

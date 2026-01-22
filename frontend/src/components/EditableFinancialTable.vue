@@ -92,7 +92,7 @@
                 :style="{ width: '100%' }"
                 :precision="getColumnPrecision(column)"
                 :max="getColumnMax(column)"
-                :min="0"
+                :min="getColumnMin(column)"
                 v-model:value="record[column.dataIndex]"
               />
               <a-input
@@ -290,6 +290,21 @@ const getColumnPrecision = (column: ColumnType): number | undefined => {
   return undefined
 }
 
+const getColumnMin = (column: ColumnType): number | undefined => {
+  // Untuk field ratio (berbasis persentase), min tetap 0 (tidak bisa negatif)
+  const isRatioField = column.dataIndex?.includes('roe') || 
+                      column.dataIndex?.includes('roi') || 
+                      column.dataIndex?.includes('ratio') || 
+                      column.dataIndex?.includes('margin') || 
+                      column.dataIndex?.includes('debt_to_equity')
+  if (isRatioField) {
+    return 0 // Ratio tidak bisa negatif
+  }
+  // Untuk field financial lainnya (neraca, laba rugi, cashflow), izinkan nilai negatif
+  // Tidak set min, sehingga bisa negatif
+  return undefined
+}
+
 const getColumnMax = (column: ColumnType): number | undefined => {
   // Untuk field ratio (berbasis persentase), limit ke 100
   const isRatioField = column.dataIndex?.includes('roe') || 
@@ -469,18 +484,26 @@ const formatCellValue = (value: unknown, inputType?: 'number' | 'text'): string 
   if (inputType === 'number') {
     const numValue = typeof value === 'string' ? parseFloat(value) : value
     if (typeof numValue === 'number' && !isNaN(numValue)) {
-      // Format sebagai currency untuk angka besar, atau sebagai ratio untuk angka kecil
-      if (numValue >= 1000000000) {
-        return `Rp ${(numValue / 1000000000).toFixed(2)}M`
-      } else if (numValue >= 1000000) {
-        return `Rp ${(numValue / 1000000).toFixed(2)}Jt`
-      } else if (numValue >= 1000) {
-        return `Rp ${(numValue / 1000).toFixed(2)}Rb`
-      } else if (numValue < 100 && numValue > 0) {
-        // Kemungkinan ratio/persentase
-        return `${numValue.toFixed(2)}%`
+      const absValue = Math.abs(numValue)
+      
+      // Untuk nilai negatif, selalu format dengan locale tanpa suffix (tidak pakai Rb/Jt/M)
+      if (numValue < 0) {
+        return `Rp ${numValue.toLocaleString('id-ID')}`
       }
-      return numValue.toLocaleString('id-ID')
+      
+      // Untuk nilai positif, format dengan suffix untuk angka besar
+      if (absValue >= 1000000000) {
+        return `Rp ${(absValue / 1000000000).toFixed(2)}M`
+      } else if (absValue >= 1000000) {
+        return `Rp ${(absValue / 1000000).toFixed(2)}Jt`
+      } else if (absValue >= 1000) {
+        return `Rp ${(absValue / 1000).toFixed(2)}Rb`
+      } else if (absValue < 100 && absValue > 0) {
+        // Kemungkinan ratio/persentase
+        return `${absValue.toFixed(2)}%`
+      }
+      // Untuk nilai kecil (< 1000), format dengan locale
+      return `Rp ${numValue.toLocaleString('id-ID')}`
     }
   }
   

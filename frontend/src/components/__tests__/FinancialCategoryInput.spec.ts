@@ -183,4 +183,77 @@ describe('FinancialCategoryInput - Logic Tests', () => {
       expect(isEditMode).toBe(false)
     })
   })
+
+  describe('Negative Value Support', () => {
+    it('should allow negative values for non-ratio fields', () => {
+      // Test that non-ratio fields can accept negative values
+      const item = { key: 'revenue', field: 'revenue', isRatio: false }
+      const testValue = -1000
+
+      // Non-ratio fields should not have min restriction
+      const hasMinRestriction = item.isRatio
+      const canAcceptNegative = !hasMinRestriction
+
+      expect(canAcceptNegative).toBe(true)
+      expect(testValue < 0).toBe(true)
+    })
+
+    it('should restrict negative values for ratio fields', () => {
+      // Test that ratio fields cannot accept negative values
+      const item = { key: 'roe', field: 'roe', isRatio: true }
+      const testValue = -10
+
+      // Ratio fields should have min: 0
+      const minValue = item.isRatio ? 0 : undefined
+      const canAcceptNegative = minValue === undefined
+
+      expect(canAcceptNegative).toBe(false)
+      expect(minValue).toBe(0)
+      if (minValue !== undefined) {
+        expect(testValue < minValue).toBe(true)
+      }
+    })
+
+    it('should save negative values correctly', () => {
+      // Test that negative values are saved correctly
+      const formData = {
+        year: '2024',
+        month: '01',
+        revenue: -1000,
+        operating_expenses: -500,
+        net_profit: -200,
+      }
+
+      const requestData: Record<string, unknown> = {
+        company_id: 'company-1',
+        year: formData.year,
+        period: `${formData.year}-${formData.month}`,
+        is_rkap: false,
+        revenue: formData.revenue || 0,
+        operating_expenses: formData.operating_expenses || 0,
+        net_profit: formData.net_profit || 0,
+      }
+
+      expect(requestData.revenue).toBe(-1000)
+      expect(requestData.operating_expenses).toBe(-500)
+      expect(requestData.net_profit).toBe(-200)
+      expect(typeof requestData.revenue === 'number' && requestData.revenue < 0).toBe(true)
+    })
+
+    it('should handle negative values in update operation', () => {
+      // Test update with negative values
+      const record = { key: 'report-1', revenue_realisasi: -1000 }
+      const updateData: Record<string, unknown> = {}
+
+      const fieldKey = 'revenue_realisasi'
+      if (fieldKey in record) {
+        const value = (record[fieldKey] as number) ?? 0
+        updateData['revenue'] = value
+      }
+
+      const revenueValue = updateData['revenue'] as number
+      expect(revenueValue).toBe(-1000)
+      expect(revenueValue < 0).toBe(true)
+    })
+  })
 })

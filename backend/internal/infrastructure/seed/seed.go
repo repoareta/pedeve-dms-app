@@ -93,7 +93,16 @@ func SeedAdministrator() {
 
 	// Check if administrator user already exists
 	var existingUser domain.UserModel
+	desiredEmail := "pedeve@pertamina-pedeve.co.id"
 	if err := database.GetDB().Where("username = ?", "administrator").First(&existingUser).Error; err == nil {
+		if existingUser.Email != desiredEmail {
+			existingUser.Email = desiredEmail
+			if err := database.GetDB().Save(&existingUser).Error; err != nil {
+				zapLog.Warn("Failed to update administrator email", zap.Error(err))
+			} else {
+				zapLog.Info("Administrator email updated", zap.String("email", desiredEmail))
+			}
+		}
 		zapLog.Info("Administrator user already exists")
 		return
 	}
@@ -122,7 +131,7 @@ func SeedAdministrator() {
 	adminUser := &domain.UserModel{
 		ID:        uuid.GenerateUUID(),
 		Username:  "administrator",
-		Email:     "administrator@pertamina.com",
+		Email:     desiredEmail,
 		Password:  hashedPassword,
 		Role:      "administrator",
 		RoleID:    &adminRole.ID,

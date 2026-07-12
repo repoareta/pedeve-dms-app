@@ -1,8 +1,10 @@
-package error
+package apperror
 
 import (
 	"os"
 	"strings"
+
+	"github.com/repoareta/pedeve-dms-app/backend/internal/utils"
 )
 
 // SanitizeErrorMessage mengembalikan error message yang aman untuk production
@@ -76,8 +78,8 @@ func GetGenericErrorMessage(err error) string {
 	}
 }
 
-// IsProduction checks if the application is running in production environment
+// IsProduction checks if the application is running in production environment.
+// Deprecated: use utils.IsProduction instead.
 func IsProduction() bool {
-	env := os.Getenv("ENV")
-	return env == "production" || env == "prod"
+	return utils.IsProduction()
 }

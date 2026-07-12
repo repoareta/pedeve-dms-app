@@ -912,7 +912,7 @@
         :wrap-style="{ top: 0, paddingBottom: 0 }"
         :style="{ top: 0, paddingBottom: 0 }"
         :body-style="{ padding: 0, height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: previewModalType === 'image' ? '#000' : previewModalType === 'pdf' ? '#525252' : '#fff' }"
-        @cancel="previewModalVisible = false"
+        @cancel="closePreviewModal"
       >
         <div v-if="previewModalType === 'image'" style="width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background: #000; position: relative;">
           <img :src="previewModalUrl" :alt="previewModalTitle" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
@@ -1064,6 +1064,8 @@ import { Icon as IconifyIcon } from '@iconify/vue'
 import dayjs, { type Dayjs } from 'dayjs'
 import { auditApi, type UserActivityLog } from '../api/audit'
 import documentsApi, { type DocumentItem } from '../api/documents'
+import { logger } from '../utils/logger'
+import { resolveFileUrl, fetchAuthenticatedFileObjectURL } from '../utils/fileUrl'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
@@ -1693,11 +1695,7 @@ const getDocumentCategoryLabel = (doc: DocumentItem): string => {
 
 // Get document download URL
 const getDocumentDownloadUrl = (filePath: string): string => {
-  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-    return filePath
-  }
-  const apiURL = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:8080'
-  return `${apiURL}${filePath}`
+  return resolveFileUrl(filePath)
 }
 
 // Delete director document
@@ -1730,25 +1728,49 @@ const previewModalTitle = ref('')
 const previewModalUrl = ref('')
 const previewModalType = ref<'image' | 'pdf' | 'file'>('image')
 
+const previewModalBlobUrl = ref<string | null>(null)
+
+const revokePreviewBlobUrl = () => {
+  if (previewModalBlobUrl.value) {
+    URL.revokeObjectURL(previewModalBlobUrl.value)
+    previewModalBlobUrl.value = null
+  }
+}
+
+const closePreviewModal = () => {
+  previewModalVisible.value = false
+  revokePreviewBlobUrl()
+  previewModalUrl.value = ''
+}
+
 // Handle document preview
-const handlePreviewDocument = (doc: DocumentItem, event?: MouseEvent) => {
+const handlePreviewDocument = async (doc: DocumentItem, event?: MouseEvent) => {
   if (event) {
     event.stopPropagation()
     event.preventDefault()
     event.stopImmediatePropagation()
   }
-  
-  const url = getDocumentDownloadUrl(doc.file_path)
+
   const fileName = doc.name || doc.file_name || 'Document'
   const fileExt = fileName.split('.').pop()?.toLowerCase() || ''
   const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg']
   const previewableExtensions = [...imageExtensions, 'pdf']
-  
-  if (previewableExtensions.includes(fileExt)) {
+
+  if (!previewableExtensions.includes(fileExt)) {
+    return
+  }
+
+  try {
+    revokePreviewBlobUrl()
+    const blobUrl = await fetchAuthenticatedFileObjectURL(doc.file_path)
+    previewModalBlobUrl.value = blobUrl
     previewModalType.value = imageExtensions.includes(fileExt) ? 'image' : 'pdf'
     previewModalTitle.value = fileName
-    previewModalUrl.value = url
+    previewModalUrl.value = blobUrl
     previewModalVisible.value = true
+  } catch (error) {
+    logger.error('Failed to load document preview:', error)
+    message.error('Gagal memuat preview dokumen')
   }
 }
 

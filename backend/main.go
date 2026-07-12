@@ -138,11 +138,6 @@ func main() {
 	// Endpoint token CSRF (public, tidak perlu auth)
 	api.Get("/csrf-token", GetCSRFTokenHandler)
 
-	// Route files (public - untuk serve files dari storage, bisa diakses via iframe)
-	// Catatan: Route ini public karena iframe tidak bisa mengirim cookie dengan mudah
-	// Security: File tetap aman karena path file menggunakan UUID yang tidak bisa ditebak
-	api.Get("/files/*", http.ServeFile)
-
 	// Route autentikasi (public) - dengan rate limiting
 	// Catatan Teknis:
 	// - Endpoint register dihapus karena akan dihandle oleh modul management user
@@ -157,6 +152,9 @@ func main() {
 	// - CSRF protection diterapkan untuk state-changing methods (POST, PUT, DELETE, PATCH)
 	// - GET methods tidak memerlukan CSRF token karena read-only
 	protected := api.Group("", JWTAuthMiddleware, CSRFMiddleware)
+
+	// Route files (DILINDUNGI - memerlukan authentication)
+	protected.Get("/files/*", http.ServeFile)
 
 	// Endpoint profil dan logout user
 	protected.Get("/auth/profile", GetProfile)
@@ -220,16 +218,23 @@ func main() {
 	protected.Put("/companies/:id", companyHandler.UpdateCompany)                // Update company
 	protected.Delete("/companies/:id", companyHandler.DeleteCompany)             // Delete company (soft delete)
 
-	// Swagger
-	app.Get("/swagger/*", swagger.HandlerDefault)
-
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
+	// Swagger (disabled di production)
+	env := os.Getenv("ENV")
+	isProduction := env == "production" || env == "prod"
+	enableSwagger := !isProduction || os.Getenv("ENABLE_SWAGGER") == "true"
+	if enableSwagger {
+		app.Get("/swagger/*", swagger.HandlerDefault)
+		log.Printf("Swagger UI available at http://localhost:%s/swagger/index.html", port)
+	} else {
+		log.Printf("Swagger UI disabled in production")
+	}
+
 	log.Printf("Server starting on port :%s", port)
-	log.Printf("Swagger UI available at http://localhost:%s/swagger/index.html", port)
 	log.Printf("API Base URL: http://localhost:%s/api/v1", port)
 
 	if err := app.Listen(":" + port); err != nil {
@@ -246,11 +251,15 @@ func main() {
 // @Success      200  {object}  map[string]string
 // @Router       / [get]
 func indexHandler(c *fiber.Ctx) error {
-	return c.JSON(fiber.Map{
+	resp := fiber.Map{
 		"message": "Pedeve App Backend API",
 		"version": "1.0.0",
-		"swagger": "/swagger/index.html",
-	})
+	}
+	env := os.Getenv("ENV")
+	if env != "production" && env != "prod" || os.Getenv("ENABLE_SWAGGER") == "true" {
+		resp["swagger"] = "/swagger/index.html"
+	}
+	return c.JSON(resp)
 }
 
 // healthHandler handles health check (untuk Fiber)
@@ -277,12 +286,16 @@ func healthHandler(c *fiber.Ctx) error {
 // @Success      200  {object}  map[string]interface{}
 // @Router       /api/v1 [get]
 func apiInfoHandler(c *fiber.Ctx) error {
+	endpoints := fiber.Map{
+		"documents": "/api/v1/documents",
+	}
+	env := os.Getenv("ENV")
+	if env != "production" && env != "prod" || os.Getenv("ENABLE_SWAGGER") == "true" {
+		endpoints["swagger"] = "/swagger/index.html"
+	}
 	return c.JSON(fiber.Map{
-		"api":     "Pedeve App Backend API",
-		"version": "1.0.0",
-		"endpoints": fiber.Map{
-			"documents": "/api/v1/documents",
-			"swagger":   "/swagger/index.html",
-		},
+		"api":       "Pedeve App Backend API",
+		"version":   "1.0.0",
+		"endpoints": endpoints,
 	})
 }

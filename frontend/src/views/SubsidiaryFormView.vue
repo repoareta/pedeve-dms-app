@@ -991,6 +991,7 @@ import { useAuthStore } from '../stores/auth'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import apiClient from '../api/client'
 import documentsApi, { type DocumentFolder, type DocumentItem } from '../api/documents'
+import { resolveFileUrl } from '../utils/fileUrl'
 import dayjs from 'dayjs'
 import 'dayjs/locale/id'
 import type { UploadFile } from 'ant-design-vue'
@@ -1819,11 +1820,7 @@ const formatFileSize = (size: number): string => {
 }
 
 const getDocumentDownloadUrl = (filePath: string): string => {
-  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-    return filePath
-  }
-  const apiURL = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:8080'
-  return `${apiURL}${filePath}`
+  return resolveFileUrl(filePath)
 }
 
 // Helper untuk mendapatkan jumlah pending files untuk director index

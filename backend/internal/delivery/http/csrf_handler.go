@@ -50,7 +50,7 @@ func GetCSRFTokenHandler(c *fiber.Ctx) error {
 	}
 	
 	c.Cookie(&fiber.Cookie{
-		Name:     "csrf_token",
+		Name:     middleware.CSRFTokenCookieName,
 		Value:    token,
 		Path:     "/",
 		MaxAge:   int(24 * 60 * 60), // 24 jam

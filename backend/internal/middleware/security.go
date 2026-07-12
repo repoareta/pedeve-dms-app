@@ -12,6 +12,9 @@ func SecurityHeadersMiddleware(c *fiber.Ctx) error {
 	c.Set("X-Content-Type-Options", "nosniff")
 	c.Set("X-XSS-Protection", "1; mode=block")
 	c.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+	c.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+	c.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+	c.Set("X-Permitted-Cross-Domain-Policies", "none")
 
 	// Cek apakah ini route Swagger
 	if strings.HasPrefix(c.Path(), "/swagger") {

@@ -17,10 +17,10 @@ var csrfTokens = make(map[string]time.Time)
 var csrfMutex sync.RWMutex
 
 const (
-	csrfTokenHeader    = "X-CSRF-Token"
-	csrfTokenCookie    = "csrf_token"
-	csrfTokenExpiry    = 24 * time.Hour
-	csrfTokenCleanupInterval = 1 * time.Hour
+	csrfTokenHeader            = "X-CSRF-Token"
+	CSRFTokenCookieName        = "csrf_token"
+	csrfTokenExpiry            = 24 * time.Hour
+	csrfTokenCleanupInterval   = 1 * time.Hour
 )
 
 // GenerateCSRFToken menghasilkan token CSRF baru

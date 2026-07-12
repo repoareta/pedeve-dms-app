@@ -18,6 +18,7 @@ import (
 	"github.com/repoareta/pedeve-dms-app/backend/internal/infrastructure/seed"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/middleware"
 	"github.com/repoareta/pedeve-dms-app/backend/internal/usecase"
+	"github.com/repoareta/pedeve-dms-app/backend/internal/utils"
 	"go.uber.org/zap"
 )
 
@@ -190,8 +191,13 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	// Static file server untuk uploads
-	app.Static("/uploads", "./uploads")
+	// Static file server untuk uploads (hanya development/local)
+	if !utils.IsProduction() {
+		app.Static("/uploads", "./uploads")
+		zapLog.Info("Static /uploads enabled (non-production only)")
+	} else {
+		zapLog.Info("Static /uploads disabled in production")
+	}
 
 	// Routes
 	app.Get("/", indexHandler)
@@ -383,27 +389,30 @@ func main() {
 	protected.Put("/permissions/:id", permissionManagementHandler.UpdatePermission)
 	sensitiveOps.Delete("/permissions/:id", permissionManagementHandler.DeletePermission)
 
-	// Route Development (hanya superadmin)
-	developmentHandler := http.NewDevelopmentHandler(usecase.NewDevelopmentUseCase())
-	// Individual endpoints (kept for backward compatibility)
-	protected.Post("/development/reset-subsidiary", developmentHandler.ResetSubsidiaryData)
-	protected.Post("/development/run-subsidiary-seeder", developmentHandler.RunSubsidiarySeeder)
-	protected.Get("/development/check-seeder-status", developmentHandler.CheckSeederDataExists)
-	protected.Post("/development/reset-reports", developmentHandler.ResetReportData)
-	protected.Post("/development/run-report-seeder", developmentHandler.RunReportSeeder)
-	protected.Get("/development/check-report-status", developmentHandler.CheckReportDataExists)
-	// Combined endpoints (recommended)
-	protected.Post("/development/run-all-seeders", developmentHandler.RunAllSeeders)
-	protected.Post("/development/reset-all-seeded-data", developmentHandler.ResetAllSeededData)
-	protected.Get("/development/check-all-seeder-status", developmentHandler.CheckAllSeederStatus)
-	protected.Post("/development/reset-all-financial-reports", developmentHandler.ResetAllFinancialReports)
-	protected.Get("/development/check-admin-capabilities/:user_id", developmentHandler.CheckAdminCapabilities)
-	protected.Post("/development/create-test-notification", developmentHandler.CreateTestNotification)
-	protected.Post("/development/create-test-notifications", developmentHandler.CreateTestNotifications)
-	protected.Post("/development/check-expiring-documents", developmentHandler.CheckExpiringDocuments)
-	protected.Post("/development/check-expiring-director-terms", developmentHandler.CheckExpiringDirectorTerms)
-	protected.Post("/development/check-all-expiring-notifications", developmentHandler.CheckAllExpiringNotifications)
-	protected.Post("/development/create-notification-for-document", developmentHandler.CreateNotificationForDocument)
+	// Route Development (hanya non-production; disabled di production untuk keamanan pentest)
+	if !utils.IsProduction() {
+		developmentHandler := http.NewDevelopmentHandler(usecase.NewDevelopmentUseCase())
+		protected.Post("/development/reset-subsidiary", developmentHandler.ResetSubsidiaryData)
+		protected.Post("/development/run-subsidiary-seeder", developmentHandler.RunSubsidiarySeeder)
+		protected.Get("/development/check-seeder-status", developmentHandler.CheckSeederDataExists)
+		protected.Post("/development/reset-reports", developmentHandler.ResetReportData)
+		protected.Post("/development/run-report-seeder", developmentHandler.RunReportSeeder)
+		protected.Get("/development/check-report-status", developmentHandler.CheckReportDataExists)
+		protected.Post("/development/run-all-seeders", developmentHandler.RunAllSeeders)
+		protected.Post("/development/reset-all-seeded-data", developmentHandler.ResetAllSeededData)
+		protected.Get("/development/check-all-seeder-status", developmentHandler.CheckAllSeederStatus)
+		protected.Post("/development/reset-all-financial-reports", developmentHandler.ResetAllFinancialReports)
+		protected.Get("/development/check-admin-capabilities/:user_id", developmentHandler.CheckAdminCapabilities)
+		protected.Post("/development/create-test-notification", developmentHandler.CreateTestNotification)
+		protected.Post("/development/create-test-notifications", developmentHandler.CreateTestNotifications)
+		protected.Post("/development/check-expiring-documents", developmentHandler.CheckExpiringDocuments)
+		protected.Post("/development/check-expiring-director-terms", developmentHandler.CheckExpiringDirectorTerms)
+		protected.Post("/development/check-all-expiring-notifications", developmentHandler.CheckAllExpiringNotifications)
+		protected.Post("/development/create-notification-for-document", developmentHandler.CreateNotificationForDocument)
+		zapLog.Info("Development routes enabled (non-production only)")
+	} else {
+		zapLog.Info("Development routes disabled in production")
+	}
 
 	// Route SonarQube (hanya superadmin/admin)
 	// Feature flag: ENABLE_SONARQUBE_MONITOR (default: true untuk local, false untuk production/development server)
@@ -421,8 +430,12 @@ func main() {
 	// SonarQube handler (dibuat terlepas dari enable/disable untuk status endpoint)
 	sonarqubeHandler := http.NewSonarQubeHandler()
 
-	// Status endpoint (public untuk frontend check, tidak perlu auth)
-	api.Get("/sonarqube/status", sonarqubeHandler.GetStatus)
+	// Status endpoint: public di development, protected di production
+	if utils.IsProduction() {
+		protected.Get("/sonarqube/status", sonarqubeHandler.GetStatus)
+	} else {
+		api.Get("/sonarqube/status", sonarqubeHandler.GetStatus)
+	}
 
 	if shouldEnableSonarQube {
 		protected.Get("/sonarqube/issues", sonarqubeHandler.GetIssues)
@@ -440,15 +453,17 @@ func main() {
 		)
 	}
 
-	// Swagger documentation dengan auto-reload
-	app.Get("/swagger/*", swagger.HandlerDefault)
-
-	// Swagger regeneration endpoint (untuk development)
-	protected.Post("/swagger/regenerate", http.RegenerateSwagger)
-
-	// Swagger JSON/YAML dengan no-cache headers untuk auto-reload
-	app.Get("/swagger.json", http.GetSwaggerJSON)
-	app.Get("/swagger.yaml", http.GetSwaggerYAML)
+	// Swagger documentation (disabled di production kecuali ENABLE_SWAGGER=true)
+	enableSwagger := !utils.IsProduction() || os.Getenv("ENABLE_SWAGGER") == "true"
+	if enableSwagger {
+		app.Get("/swagger/*", swagger.HandlerDefault)
+		protected.Post("/swagger/regenerate", http.RegenerateSwagger)
+		app.Get("/swagger.json", http.GetSwaggerJSON)
+		app.Get("/swagger.yaml", http.GetSwaggerYAML)
+		zapLog.Info("Swagger documentation enabled")
+	} else {
+		zapLog.Info("Swagger documentation disabled in production")
+	}
 
 	// Start server
 	// Listen on 0.0.0.0 to accept connections from all interfaces (not just localhost)
@@ -469,11 +484,14 @@ func main() {
 
 // indexHandler returns basic API information
 func indexHandler(c *fiber.Ctx) error {
-	return c.JSON(fiber.Map{
+	resp := fiber.Map{
 		"message": "Pedeve App Backend API",
 		"version": "1.0.0",
-		"docs":    "/swagger/index.html",
-	})
+	}
+	if !utils.IsProduction() || os.Getenv("ENABLE_SWAGGER") == "true" {
+		resp["docs"] = "/swagger/index.html"
+	}
+	return c.JSON(resp)
 }
 
 // healthHandler returns health status
@@ -508,12 +526,15 @@ func healthHandler(c *fiber.Ctx) error {
 // @note         2. API Version: Mengembalikan versi API saat ini
 // @note         3. Endpoints: Mengembalikan daftar endpoint yang tersedia
 func apiInfoHandler(c *fiber.Ctx) error {
+	endpoints := fiber.Map{
+		"documents": "/api/v1/documents",
+	}
+	if !utils.IsProduction() || os.Getenv("ENABLE_SWAGGER") == "true" {
+		endpoints["swagger"] = "/swagger/index.html"
+	}
 	return c.JSON(fiber.Map{
-		"api":     "Pedeve App Backend API",
-		"version": "1.0.0",
-		"endpoints": fiber.Map{
-			"documents": "/api/v1/documents",
-			"swagger":   "/swagger/index.html",
-		},
+		"api":       "Pedeve App Backend API",
+		"version":   "1.0.0",
+		"endpoints": endpoints,
 	})
 }

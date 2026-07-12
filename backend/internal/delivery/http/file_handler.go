@@ -158,7 +158,11 @@ func ServeFile(c *fiber.Ctx) error {
 		})
 	}
 
-	zapLog.Info("Processing file serve request",
+	if err := authorizeFileAccess(c, bucketPath, filename); err != nil {
+		return err
+	}
+
+	zapLog.Debug("Processing file serve request",
 		zap.String("bucket_path", bucketPath),
 		zap.String("filename", filename),
 		zap.String("full_path", decodedPath),

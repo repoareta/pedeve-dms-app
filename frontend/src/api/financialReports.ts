@@ -259,7 +259,7 @@ export const financialReportsApi = {
       }
       
       // Cek content type - kalau JSON, berarti ada error
-      const contentType = response.headers['content-type'] || ''
+      const contentType = String(response.headers['content-type'] ?? '')
       if (contentType.includes('application/json')) {
         // Response is JSON error, parse it
         const text = await (response.data as Blob).text()

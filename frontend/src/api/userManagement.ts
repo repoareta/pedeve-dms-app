@@ -468,7 +468,7 @@ export const uploadApi = {
     const csrfToken = await getCSRFToken()
     
     // Pakai axios langsung untuk multipart/form-data
-    const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-pedeve-dev.aretaamany.com')
+    const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-reports.pertamina-pedeve.co.id')
     const baseURL = API_BASE_URL.endsWith('/api/v1') 
       ? API_BASE_URL 
       : `${API_BASE_URL}/api/v1`

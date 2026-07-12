@@ -876,6 +876,7 @@ jobs:
             scripts/setup-backend-ssl.sh \
             scripts/verify-backend-deployment.sh \
             scripts/ensure-services-running.sh \
+            scripts/lib/resolve-domain.sh \
             backend-prod-1:~/
 
           gcloud compute ssh backend-prod-1 \
@@ -883,6 +884,9 @@ jobs:
             --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
             --command="
               chmod +x ~/deploy-backend-vm.sh ~/setup-backend-nginx.sh ~/setup-backend-ssl.sh ~/verify-backend-deployment.sh ~/ensure-services-running.sh
+              
+              mkdir -p ~/lib
+              mv ~/resolve-domain.sh ~/lib/
               
               # Set environment variables untuk production
               export DB_SECRET_SUFFIX='_prod'
@@ -897,13 +901,14 @@ jobs:
                 exit 1
               fi
               
-              echo '🔒 Checking SSL certificate...'
+              export DEPLOY_TARGET=prod
               export DOMAIN='api-reports.pertamina-pedeve.co.id'
-              if ! bash ~/setup-backend-ssl.sh ${DOMAIN}; then
+              echo '🔒 Checking SSL certificate...'
+              if ! bash ~/setup-backend-ssl.sh \$DOMAIN; then
                 echo '⚠️  WARNING: SSL setup may have failed, but continuing...'
               fi
               
-              if ! bash ~/setup-backend-nginx.sh ${DOMAIN}; then
+              if ! bash ~/setup-backend-nginx.sh \$DOMAIN; then
                 echo '❌ ERROR: setup-backend-nginx.sh failed!'
                 exit 1
               fi
@@ -964,6 +969,7 @@ jobs:
             scripts/setup-frontend-ssl.sh \
             scripts/verify-frontend-deployment.sh \
             scripts/ensure-services-running.sh \
+            scripts/lib/resolve-domain.sh \
             frontend-prod-2:~/
 
           gcloud compute ssh frontend-prod-2 \
@@ -982,10 +988,14 @@ jobs:
               sudo chown -R www-data:www-data /var/www/html
               sudo chmod -R 755 /var/www/html
 
+              mkdir -p ~/lib
+              mv ~/resolve-domain.sh ~/lib/
               chmod +x ~/setup-nginx-frontend.sh ~/setup-frontend-ssl.sh ~/verify-frontend-deployment.sh ~/ensure-services-running.sh
+              export DEPLOY_TARGET=prod
               export DOMAIN='dms.pertamina-pedeve.co.id'
-              bash ~/setup-frontend-ssl.sh ${DOMAIN} || true
-              bash ~/setup-nginx-frontend.sh ${DOMAIN}
+              bash ~/setup-nginx-frontend.sh \$DOMAIN
+              bash ~/setup-frontend-ssl.sh \$DOMAIN || true
+              bash ~/setup-nginx-frontend.sh \$DOMAIN
               bash ~/ensure-services-running.sh frontend
               bash ~/verify-frontend-deployment.sh
 
@@ -1084,19 +1094,20 @@ jobs:
                 fi
                 
                 HTTP_CODE=\$(curl -s -o /dev/null -w '%{http_code}' -m 10 http://127.0.0.1/health 2>/dev/null || echo '000')
+                HTTPS_CODE=\$(curl -sk -o /dev/null -w '%{http_code}' -m 10 https://127.0.0.1/health 2>/dev/null || echo '000')
                 
-                if [ \"\$HTTP_CODE\" = '200' ]; then
-                  echo \"SUCCESS:\$HTTP_CODE\"
+                if [ \"\$HTTP_CODE\" = '200' ] && [ \"\$HTTPS_CODE\" = '200' ]; then
+                  echo \"SUCCESS:\$HTTP_CODE:\$HTTPS_CODE\"
                   exit 0
                 else
-                  echo \"FAILED:\$HTTP_CODE\"
+                  echo \"FAILED:\$HTTP_CODE:\$HTTPS_CODE\"
                   exit 1
                 fi
               " 2>&1 || echo "SSH_FAILED")
             
             if echo "$HEALTH_RESULT" | grep -q "SUCCESS:"; then
-              HTTP_CODE=$(echo "$HEALTH_RESULT" | grep "SUCCESS:" | cut -d: -f2)
-              echo "✅ Frontend health check passed! (HTTP $HTTP_CODE)"
+              CODES=$(echo "$HEALTH_RESULT" | grep "SUCCESS:" | cut -d: -f2-)
+              echo "✅ Frontend health check passed! (HTTP/HTTPS $CODES)"
               exit 0
             elif echo "$HEALTH_RESULT" | grep -q "NGINX_NOT_RUNNING"; then
               echo "❌ Nginx is not running on frontend VM!"

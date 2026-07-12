@@ -23,7 +23,12 @@ validate_domain() {
   fi
 }
 
-DOMAIN=${1:-${DOMAIN:-"pedeve-dev.aretaamany.com"}}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/resolve-domain.sh
+source "${SCRIPT_DIR}/lib/resolve-domain.sh"
+
+export DEV_DOMAIN_DEFAULT="pedeve-dev.aretaamany.com"
+DOMAIN=$(resolve_deploy_domain "${1:-}")
 
 # Security: Validate domain
 validate_domain "${DOMAIN}"
@@ -41,11 +46,15 @@ CONFIG_EXISTS=false
 CONFIG_CORRECT=false
 SSL_CERT_EXISTS=false
 
+ssl_cert_exists_for_domain() {
+  sudo test -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" \
+    && sudo test -f "/etc/letsencrypt/live/${DOMAIN}/privkey.pem"
+}
+
 # Check if SSL certificate exists
 # IMPORTANT: Preserve existing SSL certificate - DO NOT OVERWRITE
 # Also check if port 443 is listening - if cert exists but port not listening, we need to fix config
-if [ -f /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ] && \
-   [ -f /etc/letsencrypt/live/${DOMAIN}/privkey.pem ]; then
+if ssl_cert_exists_for_domain "${DOMAIN}"; then
   SSL_CERT_EXISTS=true
   echo "✅ SSL certificate found (preserving existing certificate)"
   
@@ -122,8 +131,11 @@ if [ -f /etc/nginx/sites-available/default ]; then
         CONFIG_CORRECT=false  # Force update
       fi
     else
-      # No SSL, check if config is HTTP-only (correct)
-      if ! sudo grep -q "ssl_certificate" /etc/nginx/sites-available/default; then
+      # No SSL detected in cert path — but double-check before keeping HTTP-only
+      if ssl_cert_exists_for_domain "${DOMAIN}"; then
+        echo "⚠️  SSL certificate found via sudo check, will configure HTTPS..."
+        CONFIG_CORRECT=false
+      elif ! sudo grep -q "ssl_certificate" /etc/nginx/sites-available/default; then
         echo "✅ HTTP-only config is correct (no SSL)"
         
         # CRITICAL: Validate config syntax before skipping
@@ -180,8 +192,7 @@ if [ "$SSL_CERT_EXISTS" = false ]; then
     fi
     
     # Always re-check if certificate exists (Certbot might have created it)
-    if [ -f /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ] && \
-       [ -f /etc/letsencrypt/live/${DOMAIN}/privkey.pem ]; then
+    if ssl_cert_exists_for_domain "${DOMAIN}"; then
       SSL_CERT_EXISTS=true
       echo "✅ SSL certificate found after SSL setup"
     else

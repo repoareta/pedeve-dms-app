@@ -5,7 +5,7 @@
 
 export function getApiOrigin(): string {
   const envURL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL
-  const fallback = import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-pedeve-dev.aretaamany.com'
+  const fallback = import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-reports.pertamina-pedeve.co.id'
   const raw = (envURL || fallback).replace(/\/$/, '')
 
   try {

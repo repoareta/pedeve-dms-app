@@ -49,6 +49,12 @@ if ! sudo ss -tlnp | grep -q ':80 '; then
   exit 1
 fi
 if ! sudo ss -tlnp | grep -q ':443 '; then
+  if sudo certbot certificates 2>/dev/null | grep -q "Certificate Name:"; then
+    echo '❌ ERROR: SSL certificate exists but port 443 is not listening!'
+    echo '   Run: bash ~/setup-nginx-frontend.sh dms.pertamina-pedeve.co.id'
+    sudo certbot certificates 2>/dev/null | head -20 || true
+    exit 1
+  fi
   echo '⚠️  WARNING: Port 443 is not listening (HTTPS may not be configured)'
   echo 'Checking SSL certificate...'
   sudo certbot certificates 2>/dev/null | head -10 || true

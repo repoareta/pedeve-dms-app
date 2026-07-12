@@ -4,7 +4,7 @@ import { logger } from '../utils/logger'
 // Pastikan baseURL selalu diakhiri dengan /api/v1
 const getBaseURL = () => {
   const envURL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL
-  const fallbackHost = import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-pedeve-dev.aretaamany.com'
+  const fallbackHost = import.meta.env.DEV ? 'http://localhost:8080' : 'https://api-reports.pertamina-pedeve.co.id'
 
   const base = (envURL || fallbackHost).replace(/\/$/, '')
   return base.endsWith('/api/v1') ? base : `${base}/api/v1`

@@ -23,7 +23,12 @@ validate_domain() {
   fi
 }
 
-DOMAIN=${1:-${DOMAIN:-"api-pedeve-dev.aretaamany.com"}}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/resolve-domain.sh
+source "${SCRIPT_DIR}/lib/resolve-domain.sh"
+
+export DEV_DOMAIN_DEFAULT="api-pedeve-dev.aretaamany.com"
+DOMAIN=$(resolve_deploy_domain "${1:-}")
 
 # Security: Validate domain
 validate_domain "${DOMAIN}"
@@ -52,8 +57,7 @@ SSL_CERT_EXISTS=false
 # Check if SSL certificate exists
 # IMPORTANT: Preserve existing SSL certificate - DO NOT OVERWRITE
 # Also check if port 443 is listening - if cert exists but port not listening, we need to fix config
-if [ -f /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ] && \
-   [ -f /etc/letsencrypt/live/${DOMAIN}/privkey.pem ]; then
+if ssl_cert_exists_for_domain "${DOMAIN}"; then
   SSL_CERT_EXISTS=true
   echo "✅ SSL certificate found (preserving existing certificate)"
   
@@ -187,8 +191,7 @@ if [ "$SSL_CERT_EXISTS" = false ]; then
     fi
     
     # Always re-check if certificate exists (Certbot might have created it)
-    if [ -f /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ] && \
-       [ -f /etc/letsencrypt/live/${DOMAIN}/privkey.pem ]; then
+    if ssl_cert_exists_for_domain "${DOMAIN}"; then
       SSL_CERT_EXISTS=true
       echo "✅ SSL certificate found after SSL setup"
     else

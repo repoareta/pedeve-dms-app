@@ -1,0 +1,61 @@
+name: Repair Frontend HTTPS (PROD)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  repair-frontend-https:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.1.1
+
+      - name: Authenticate to Google Cloud using WIF (PROD)
+        uses: google-github-actions/auth@v2.1.0
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_PROD }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2.0.1
+
+      - name: Repair frontend HTTPS on VM
+        run: |
+          gcloud compute scp \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
+            scripts/setup-nginx-frontend.sh \
+            scripts/setup-frontend-ssl.sh \
+            scripts/verify-frontend-deployment.sh \
+            scripts/repair-prod-frontend-https.sh \
+            scripts/lib/resolve-domain.sh \
+            frontend-prod-2:~/
+
+          gcloud compute ssh frontend-prod-2 \
+            --zone=asia-southeast2-a \
+            --project=${{ secrets.GCP_PROJECT_ID_PROD }} \
+            --command="
+              set -euo pipefail
+              mkdir -p ~/lib
+              mv ~/resolve-domain.sh ~/lib/
+              chmod +x ~/repair-prod-frontend-https.sh ~/setup-nginx-frontend.sh \
+                ~/setup-frontend-ssl.sh ~/verify-frontend-deployment.sh
+              bash ~/repair-prod-frontend-https.sh
+              rm -f ~/repair-prod-frontend-https.sh ~/setup-nginx-frontend.sh \
+                ~/setup-frontend-ssl.sh ~/verify-frontend-deployment.sh
+            "
+
+      - name: Verify HTTPS from outside
+        run: |
+          sleep 5
+          HTTP_CODE=$(curl -sk -o /dev/null -w '%{http_code}' -m 20 https://dms.pertamina-pedeve.co.id/login || echo "000")
+          if [ "${HTTP_CODE}" = "200" ]; then
+            echo "✅ https://dms.pertamina-pedeve.co.id/login → ${HTTP_CODE}"
+          else
+            echo "❌ HTTPS check failed: ${HTTP_CODE}"
+            exit 1
+          fi

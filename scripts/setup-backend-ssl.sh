@@ -23,17 +23,21 @@ validate_domain() {
   fi
 }
 
-DOMAIN=${1:-"api-pedeve-dev.aretaamany.com"}
-EMAIL="info@aretaamany.com"  # Email untuk Let's Encrypt
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/resolve-domain.sh
+source "${SCRIPT_DIR}/lib/resolve-domain.sh"
+
+export DEV_DOMAIN_DEFAULT="api-pedeve-dev.aretaamany.com"
+DOMAIN=$(resolve_deploy_domain "${1:-}")
+EMAIL="info@aretaamany.com"  # Email untuk Let's Encrypt (dev legacy)
 
 # Security: Validate domain
 validate_domain "${DOMAIN}"
 
 echo "🔒 Setting up SSL certificate for ${DOMAIN}..."
 
-# Check if SSL certificate already exists
-if [ -f /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ] && \
-   [ -f /etc/letsencrypt/live/${DOMAIN}/privkey.pem ]; then
+# Check if SSL certificate already exists (requires sudo — live/ is root-only)
+if ssl_cert_exists_for_domain "${DOMAIN}"; then
   echo "✅ SSL certificate already exists for ${DOMAIN}"
   echo "   - Certificate: /etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
   echo "   - Private key: /etc/letsencrypt/live/${DOMAIN}/privkey.pem"

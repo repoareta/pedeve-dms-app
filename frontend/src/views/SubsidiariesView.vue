@@ -427,6 +427,7 @@ import { companyApi, userApi, roleApi, type Company, type User, type Role } from
 // NOTE: reportsApi (old Reports module) is NOT used anymore - only use financialReportsApi (Input Laporan)
 import { financialReportsApi, type FinancialReport } from '../api/financialReports'
 import { useAuthStore } from '../stores/auth'
+import { escapeHtml } from '../utils/sanitizeHtml'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 
@@ -976,31 +977,36 @@ const getPopoverContent = (companyId: string): string => {
   const netProfit = getNetProfitData(companyId)
   const netProfitPeriod = getNetProfitPeriod(companyId)
   const netProfitChange = getNetProfitChange(companyId)
+  const e = escapeHtml
   
   if (!breakdown) {
     return `
       <div style="font-size: 12px; color: #666;">
-        <p>Data belum tersedia. Silakan input data di tab <strong>Input Laporan > Realisasi (Bulanan)</strong>.</p>
+        <p>Data belum tersedia. Silakan input data di tab <strong>Input Laporan &gt; Realisasi (Bulanan)</strong>.</p>
       </div>
     `
   }
+  
+  const gradeRange = breakdown.score >= 80 ? '80-100' : breakdown.score >= 65 ? '65-79' : breakdown.score >= 50 ? '50-64' : breakdown.score >= 35 ? '35-49' : '0-34'
+  const changeColor = netProfitChange >= 0 ? '#52c41a' : '#ff4d4f'
+  const changeSign = netProfitChange >= 0 ? '+' : ''
   
   let html = `
     <div style="font-size: 12px; color: #666; line-height: 1.6;">
       <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #eee;">
         <strong style="color: #1890ff; display: block; margin-bottom: 4px;">Net Profit (NPAT)</strong>
         <div style="font-size: 11px;">
-          <div>Nilai: <strong>${formatCurrency(netProfit, companyId)}</strong></div>
-          <div>Periode: ${netProfitPeriod}</div>
-          <div>Perubahan: <span style="color: ${netProfitChange >= 0 ? '#52c41a' : '#ff4d4f'}">${netProfitChange >= 0 ? '+' : ''}${netProfitChange}%</span></div>
+          <div>Nilai: <strong>${e(formatCurrency(netProfit, companyId))}</strong></div>
+          <div>Periode: ${e(netProfitPeriod)}</div>
+          <div>Perubahan: <span style="color: ${changeColor};">${changeSign}${e(netProfitChange)}%</span></div>
         </div>
       </div>
       
       <div style="margin-bottom: 8px;">
-        <strong style="color: #52c41a; display: block; margin-bottom: 6px;">Financial Health Score: ${breakdown.grade}</strong>
+        <strong style="color: #52c41a; display: block; margin-bottom: 6px;">Financial Health Score: ${e(breakdown.grade)}</strong>
         <div style="font-size: 11px; margin-bottom: 8px;">
-          <div>Total Skor: <strong>${breakdown.score}/100</strong></div>
-          <div style="margin-top: 4px; color: #999;">Grade ${breakdown.grade} = Skor ${breakdown.score >= 80 ? '80-100' : breakdown.score >= 65 ? '65-79' : breakdown.score >= 50 ? '50-64' : breakdown.score >= 35 ? '35-49' : '0-34'}</div>
+          <div>Total Skor: <strong>${e(breakdown.score)}/100</strong></div>
+          <div style="margin-top: 4px; color: #999;">Grade ${e(breakdown.grade)} = Skor ${e(gradeRange)}</div>
         </div>
       </div>
       
@@ -1014,10 +1020,10 @@ const getPopoverContent = (companyId: string): string => {
     html += `
         <div style="margin-bottom: 8px; padding: 6px; background: #f5f5f5; border-radius: 4px;">
           <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-            <span><strong>${item.factor}</strong></span>
-            <span style="color: ${color}; font-weight: 600;">${item.points}/${item.maxPoints}</span>
+            <span><strong>${e(item.factor)}</strong></span>
+            <span style="color: ${color}; font-weight: 600;">${e(item.points)}/${e(item.maxPoints)}</span>
           </div>
-          <div style="font-size: 10px; color: #666; margin-top: 2px;">${item.details}</div>
+          <div style="font-size: 10px; color: #666; margin-top: 2px;">${e(item.details)}</div>
         </div>
     `
   })

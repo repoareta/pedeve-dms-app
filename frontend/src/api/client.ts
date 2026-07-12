@@ -1,5 +1,4 @@
 import axios from 'axios'
-import { useAuthStore } from '../stores/auth'
 import { logger } from '../utils/logger'
 
 // Pastikan baseURL selalu diakhiri dengan /api/v1
@@ -56,13 +55,8 @@ const apiClient = axios.create({
 // Request interceptor untuk menambahkan token JWT dan token CSRF
 apiClient.interceptors.request.use(
   async (config) => {
-    // Tambahkan Authorization header kalau token tersedia di store/localStorage (fallback kalau cookie tidak terkirim)
-    const authStore = useAuthStore()
-    const bearerToken = authStore?.token || localStorage.getItem('auth_token')
-    if (bearerToken) {
-      config.headers.Authorization = `Bearer ${bearerToken}`
-    }
-    
+    // Auth via httpOnly cookie (withCredentials: true) — tidak simpan JWT di localStorage
+
     // Tambahkan token CSRF untuk method yang mengubah state (POST, PUT, DELETE, PATCH)
     const stateChangingMethods = ['POST', 'PUT', 'DELETE', 'PATCH']
     if (config.method && stateChangingMethods.includes(config.method.toUpperCase())) {

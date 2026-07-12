@@ -66,6 +66,10 @@ STORAGE_BUCKET=${STORAGE_BUCKET:-"pedeve-dev-bucket"}
 CORS_ORIGIN=${CORS_ORIGIN:-"https://pedeve-dev.aretaamany.com,http://34.128.123.1,http://pedeve-dev.aretaamany.com"}
 DISABLE_RATE_LIMIT=${DISABLE_RATE_LIMIT:-"false"}
 
+DOCKER_MEMORY_LIMIT=${DOCKER_MEMORY_LIMIT:-"1g"}
+DOCKER_CPUS=${DOCKER_CPUS:-"1.5"}
+DOCKER_PIDS_LIMIT=${DOCKER_PIDS_LIMIT:-"200"}
+
 echo "🚀 Starting backend deployment on VM..."
 
 # Install Docker if not exists
@@ -505,6 +509,9 @@ if ! sudo docker run -d \
   --name dms-backend-prod \
   --restart unless-stopped \
   --network host \
+  --memory="${DOCKER_MEMORY_LIMIT}" \
+  --cpus="${DOCKER_CPUS}" \
+  --pids-limit="${DOCKER_PIDS_LIMIT}" \
   -e GCP_PROJECT_ID=${PROJECT_ID} \
   -e GCP_SECRET_MANAGER_ENABLED=false \
   -e GCP_STORAGE_ENABLED=true \
@@ -533,6 +540,9 @@ if ! sudo docker run -d \
       --name dms-backend-prod \
       --restart unless-stopped \
       --network host \
+      --memory="${DOCKER_MEMORY_LIMIT}" \
+      --cpus="${DOCKER_CPUS}" \
+      --pids-limit="${DOCKER_PIDS_LIMIT}" \
       -e GCP_PROJECT_ID=${PROJECT_ID} \
       -e GCP_SECRET_MANAGER_ENABLED=false \
       -e GCP_STORAGE_ENABLED=true \

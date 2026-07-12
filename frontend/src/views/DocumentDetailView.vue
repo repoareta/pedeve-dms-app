@@ -13,6 +13,7 @@ import relativeTime from 'dayjs/plugin/relativeTime'
 import mammoth from 'mammoth'
 import ExcelJS from 'exceljs'
 import { logger } from '../utils/logger'
+import { sanitizeHtml } from '../utils/sanitizeHtml'
 
 dayjs.extend(relativeTime)
 
@@ -207,6 +208,9 @@ const handleDelete = () => {
 const documentBlobUrl = ref<string | null>(null)
 // HTML content for Office documents preview
 const officeHtmlContent = ref<string | null>(null)
+const sanitizedOfficeHtml = computed(() =>
+  officeHtmlContent.value ? sanitizeHtml(officeHtmlContent.value) : null
+)
 const officePreviewLoading = ref(false)
 const renameModalVisible = ref(false)
 const renameInput = ref('')
@@ -756,8 +760,8 @@ onBeforeUnmount(() => {
                   <a-spin size="large" />
                   <p style="margin-top: 16px; color: #666;">Mengkonversi file Office...</p>
                 </div>
-                <div v-else-if="officeHtmlContent" class="office-html-wrapper">
-                  <div class="office-html-preview" v-html="officeHtmlContent"></div>
+                <div v-else-if="sanitizedOfficeHtml" class="office-html-wrapper">
+                  <div class="office-html-preview" v-html="sanitizedOfficeHtml"></div>
                 </div>
                 <div v-else class="office-fallback">
                   <IconifyIcon icon="mdi:file-document-outline" width="64" style="color: #999; margin-bottom: 16px;" />

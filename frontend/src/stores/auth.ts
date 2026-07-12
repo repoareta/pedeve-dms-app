@@ -2,9 +2,12 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi, type User } from '../api/auth'
 
+// Hapus legacy token dari localStorage (XSS risk — auth sekarang httpOnly cookie saja)
+localStorage.removeItem('auth_token')
+
 export const useAuthStore = defineStore('auth', () => {
-  // Token disimpan di httpOnly cookie + fallback di localStorage (untuk Authorization header)
-  const token = ref<string | null>(localStorage.getItem('auth_token'))
+  // Token hanya di httpOnly cookie; ref ini untuk UI state in-memory saja
+  const token = ref<string | null>(null)
   
   // Initialize user dari localStorage
   const getInitialUser = (): User | null => {
@@ -35,12 +38,11 @@ export const useAuthStore = defineStore('auth', () => {
         return response
       }
       
-      // Hanya simpan info user untuk UI state (token sekarang di httpOnly cookie)
+      // Token di httpOnly cookie; frontend hanya simpan info user untuk UI state
       if (response.token && response.user) {
         token.value = response.token
         user.value = response.user
         localStorage.setItem('auth_user', JSON.stringify(response.user))
-        localStorage.setItem('auth_token', response.token)
       }
       
       return response
@@ -63,7 +65,6 @@ export const useAuthStore = defineStore('auth', () => {
       token.value = response.token
       user.value = response.user
       localStorage.setItem('auth_user', JSON.stringify(response.user))
-      localStorage.setItem('auth_token', response.token)
       return response
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { message?: string } } }

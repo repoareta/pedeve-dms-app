@@ -3,7 +3,6 @@ package usecase
 import (
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/repoareta/pedeve-dms-app/backend/internal/domain"

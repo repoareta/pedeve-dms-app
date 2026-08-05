@@ -39,6 +39,9 @@ backend/dms.db
 # Compiled binaries
 backend/api
 backend/backend
+backend/main
+backend/seed-reports
+backend/generate-company-folders
 backend/seed-companies
 backend/update-superadmin-password
 backend/tmp/

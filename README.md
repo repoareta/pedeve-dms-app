@@ -319,22 +319,22 @@ Setelah deployment selesai, layanan langsung siap tanpa langkah manual tambahan.
 - **Secrets:** GCP Secret Manager (`db_password_prod`, `jwt_secret`, `encryption_key`, dll.)
 - **Region/Zone:** `asia-southeast2-a`
 
-### Handover Operasional (untuk tim penerima)
+### Referensi Operasional Production
 
-Serahkan secara terpisah (di luar repo / channel aman), jangan commit nilai rahasia:
+Nilai rahasia (password, key, token) disimpan di GCP Secret Manager / GitHub Actions secrets — **jangan** ditulis di repo.
 
 | Item | Keterangan |
 |---|---|
 | GCP project ID (prod & dev) | Project tempat VM, Cloud SQL, Secret Manager, GCS |
-| IAM / akun admin GCP | Siapa yang punya akses Compute, Secret Manager, Cloud SQL |
-| GitHub repo + Actions secrets | `GCP_PROJECT_ID_PROD`, WIF, service account, Sonar, dll. |
+| IAM / akun admin GCP | Akses Compute, Secret Manager, Cloud SQL |
+| GitHub Actions secrets | `GCP_PROJECT_ID_PROD`, WIF, service account, Sonar, dll. |
 | VM | `backend-prod-1`, `frontend-prod-2` (zone `asia-southeast2-a`) |
 | Domain / DNS | `dms.pertamina-pedeve.co.id`, `api-reports.pertamina-pedeve.co.id` |
 | DB | Nama DB `db_prod_pedeve`, user `pedeve_user_db_prod` (password di Secret Manager) |
-| Akun aplikasi | Administrator production (email di seed: `pedeve@pertamina-pedeve.co.id`) |
+| Akun aplikasi | Administrator production (`pedeve@pertamina-pedeve.co.id`) |
 | Checklist keamanan | `docs/PENTEST_SECURITY_CHECKLIST.md` |
 
-Database **tidak punya URL publik**. Akses data eksternal (mis. Data Lake) lewat export / pipeline terkontrol, bukan buka port 5432 ke internet.
+Database **tidak punya URL publik**. Integrasi data eksternal (mis. Data Lake) dilakukan via export / pipeline terkontrol, bukan membuka port 5432 ke internet.
 
 ### Release Process
 

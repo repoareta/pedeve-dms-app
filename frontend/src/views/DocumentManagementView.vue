@@ -9,6 +9,7 @@ import documentsApi, { type DocumentFolder, type DocumentItem, type DocumentFold
 import { auditApi, type UserActivityLog } from '../api/audit'
 import { userApi, type User } from '../api/userManagement'
 import { useAuthStore } from '../stores/auth'
+import { logger } from '../utils/logger'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 
@@ -92,7 +93,7 @@ const loadUsers = async () => {
     })
     userMap.value = map
   } catch (error) {
-    console.warn('Gagal memuat data pengguna untuk uploader name:', error)
+    logger.warn('Gagal memuat data pengguna untuk uploader name:', error)
     userMap.value = {}
   }
 }
@@ -102,7 +103,8 @@ const loadDocumentSummary = async () => {
   try {
     const res = await documentsApi.getDocumentSummary()
     const map: Record<string, { count: number; size: number }> = {}
-    res.folder_stats.forEach((item: DocumentFolderStat) => {
+    // Guard: folder_stats bisa null dari backend (nil slice di Go serialize jadi null)
+    ;(res.folder_stats || []).forEach((item: DocumentFolderStat) => {
       const key = item.folder_id || 'unassigned'
       map[key] = {
         count: Number(item.file_count) || 0,
@@ -115,7 +117,7 @@ const loadDocumentSummary = async () => {
     storageBreakdownSource.value = [] // gunakan data dari summary; legend akan fallback ke pagedFiles
 
   } catch (error) {
-    console.error('Failed to load document summary', error)
+    logger.error('Failed to load document summary', error)
   }
 
   // Hitung manual untuk breakdown; jangan timpa total jika summary sudah punya nilai >0
@@ -160,7 +162,7 @@ const computeStatsFromAllDocuments = async (summaryTotal = 0) => {
     }
     storageBreakdownSource.value = docs
   } catch (error) {
-    console.error('Fallback summary calculation failed', error)
+    logger.error('Fallback summary calculation failed', error)
   }
 }
 
@@ -325,7 +327,7 @@ watch(searchQuery, (val) => {
       })
       searchResults.value = res.data
     } catch (error) {
-      console.error('Search error', error)
+      logger.error('Search error', error)
       searchResults.value = []
     }
   }, 300)
@@ -365,7 +367,7 @@ const loadActivities = async () => {
     const response = await auditApi.getUserActivityLogs(params)
     activities.value = response.data
   } catch (error: unknown) {
-    console.error('Failed to load activities:', error)
+    logger.error('Failed to load activities:', error)
     activities.value = []
   } finally {
     activityLoading.value = false
@@ -725,7 +727,7 @@ const handleLogout = async () => {
     await authStore.logout()
     router.push('/login')
   } catch (error) {
-    console.error('Logout error:', error)
+    logger.error('Logout error:', error)
     // Force redirect even if logout fails
     router.push('/login')
   }

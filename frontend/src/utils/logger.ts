@@ -1,10 +1,21 @@
 /**
  * Logger utility untuk frontend
- * Di production, hanya error dan warn yang akan di-log
- * Di development, semua log level akan di-log
+ * Di production: error/warn hanya log pesan aman (tanpa object sensitif)
+ * Di development: semua log level dengan data lengkap
  */
 
 const isDev = import.meta.env.DEV
+
+/** Sanitasi argumen untuk production - hindari expose data sensitif ke console */
+function sanitizeForProduction(args: unknown[]): unknown[] {
+  return args.map((arg) => {
+    if (arg === null || arg === undefined) return arg
+    if (typeof arg === 'string' || typeof arg === 'number' || typeof arg === 'boolean') return arg
+    if (arg instanceof Error) return arg.message
+    // Object/Array - jangan log isi di production
+    return '[redacted]'
+  })
+}
 
 export const logger = {
   /**
@@ -26,17 +37,25 @@ export const logger = {
   },
 
   /**
-   * Log untuk warning - muncul di semua environment
+   * Log untuk warning - di production hanya pesan aman
    */
   warn: (...args: unknown[]): void => {
-    console.warn('[WARN]', ...args)
+    if (isDev) {
+      console.warn('[WARN]', ...args)
+    } else {
+      console.warn('[WARN]', ...sanitizeForProduction(args))
+    }
   },
 
   /**
-   * Log untuk error - muncul di semua environment
+   * Log untuk error - di production hanya pesan aman (tanpa stack/response)
    */
   error: (...args: unknown[]): void => {
-    console.error('[ERROR]', ...args)
+    if (isDev) {
+      console.error('[ERROR]', ...args)
+    } else {
+      console.error('[ERROR]', ...sanitizeForProduction(args))
+    }
   },
 
   /**
@@ -48,4 +67,3 @@ export const logger = {
     }
   },
 }
-

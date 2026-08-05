@@ -6,6 +6,22 @@ Document Management System untuk manajemen dokumen dan perusahaan dengan hierark
 
 Pedeve DMS App adalah aplikasi manajemen dokumen yang dirancang untuk mengelola dokumen dan data perusahaan dalam struktur hierarki multi-level. Aplikasi ini menyediakan fitur lengkap untuk manajemen perusahaan, dokumen, laporan keuangan, pengguna, dan sistem notifikasi.
 
+## Environment Production
+
+| Layanan | URL |
+|---|---|
+| Frontend | https://dms.pertamina-pedeve.co.id |
+| Backend API | https://api-reports.pertamina-pedeve.co.id |
+| Health Check | https://api-reports.pertamina-pedeve.co.id/health |
+
+**Catatan production:**
+- Swagger UI **dinonaktifkan** (`/swagger/*` → 404)
+- Route `/development/*` **tidak diregister**
+- Static `/uploads` **dinonaktifkan**
+- File serving (`/api/v1/files/*`) memerlukan JWT (httpOnly cookie) + RBAC
+- Database: Google Cloud SQL (PostgreSQL) via Cloud SQL Auth Proxy — **tidak dibuka ke publik**
+- Auth: JWT di httpOnly cookie (`Secure`, `SameSite=None`); frontend tidak menyimpan JWT di `localStorage`
+
 ## Persyaratan Sistem
 
 ### Prerequisites
@@ -39,12 +55,14 @@ docker-compose -f docker-compose.dev.yml up --build
 - Frontend: Auto-reload saat file Vue/TS berubah (Vite HMR)
 - Tidak perlu down/up manual - cukup save file dan refresh browser
 
-**Akses:**
-- Frontend: http://localhost:5173 (development) atau http://localhost:3000 (production)
+**Akses lokal (development):**
+- Frontend: http://localhost:5173
 - Backend API: http://localhost:8080
-- Swagger UI: http://localhost:8080/swagger/index.html
+- Swagger UI: http://localhost:8080/swagger/index.html *(hanya non-production)*
 - Health Check: http://localhost:8080/health
 - API Base: http://localhost:8080/api/v1
+
+**Akses production:** lihat tabel [Environment Production](#environment-production) di atas.
 
 ### Development Lokal (tanpa Docker)
 
@@ -90,8 +108,12 @@ pedeve-dms-app/
 │   ├── package.json
 │   └── Dockerfile
 ├── .github/
-│   └── workflows/             # CI/CD pipelines
-├── scripts/                   # Deployment scripts
+│   └── workflows/             # CI/CD pipelines (ci-cd.yml, repair-frontend-prod.yml)
+├── scripts/                   # Deployment & SSL/Nginx scripts
+│   ├── deploy-prod-fast.sh    # Deploy production cepat via terminal (opsional)
+│   ├── deploy-backend-vm.sh   # Deploy container backend di VM
+│   └── lib/resolve-domain.sh  # Resolver DOMAIN (wajib untuk production)
+├── docs/                      # User guideline + checklist keamanan
 └── docker-compose.dev.yml     # Local development setup
 ```
 
@@ -224,53 +246,95 @@ go test ./... -cover      # With coverage report
 
 ## CI/CD & Deployment
 
+### Branch & Target Environment
+
+| Branch | Environment | Frontend | Backend |
+|---|---|---|---|
+| `main` | **Production** | `dms.pertamina-pedeve.co.id` | `api-reports.pertamina-pedeve.co.id` |
+| `development` | Development | `pedeve-dev.aretaamany.com` | `api-pedeve-dev.aretaamany.com` |
+
 ### CI/CD Pipeline
 
 Pipeline otomatis berjalan saat:
-- Push ke branch `main` atau `development`
+- Push ke branch `main` (deploy production) atau `development` (deploy development)
 - Push tag versi (v1.0.0, v2.1.3, dll)
 - Manual trigger via `workflow_dispatch`
 
 **Fitur CI/CD:**
-- Lint & Test: Frontend (ESLint + Vitest) & Backend (golangci-lint + Go test)
+- Lint & Test: Frontend (ESLint + Vitest + type-check) & Backend (golangci-lint + Go test)
 - Security Scan: Trivy vulnerability scanner untuk Docker images
-- Build: Docker images untuk backend, static files untuk frontend
-- Deploy: Otomatis deploy ke GCP VM saat push ke `development`
-- Registry: Push images ke GitHub Container Registry
-- Versioning: Automatic version tagging
-- Changelog: Generate changelog otomatis
-- Release: Create GitHub Release (saat push tag)
+- Build: Docker image backend + static files frontend
+- Deploy: Otomatis ke GCP VM sesuai branch
+- Registry: GitHub Container Registry (`ghcr.io`)
+- Versioning / Changelog / GitHub Release (saat push tag)
+- Health check HTTPS (frontend & backend) setelah deploy production
+
+### Deploy Cepat via Terminal (Opsional)
+
+Selain CI/CD (~25 menit), production bisa di-deploy langsung dari mesin lokal:
+
+```bash
+export GCP_PROJECT_ID_PROD=<gcp-project-id-prod>
+./scripts/deploy-prod-fast.sh              # backend + frontend
+./scripts/deploy-prod-fast.sh backend      # backend saja
+./scripts/deploy-prod-fast.sh frontend     # frontend saja
+```
+
+Prasyarat: `gcloud` terautentikasi dengan akses ke VM `backend-prod-1` / `frontend-prod-2`, Docker, dan Node.js 20+.
 
 ### Deployment Automation
 
-Setelah deployment selesai, server langsung bisa diakses tanpa perlu menjalankan script manual. Semua proses otomatis:
+Setelah deployment selesai, layanan langsung siap tanpa langkah manual tambahan.
 
 **SSL Certificate Management:**
-- Otomatis detect apakah SSL certificate sudah ada
-- Jika belum ada, otomatis membuat via Certbot (Let's Encrypt)
-- Idempotent: aman dipanggil berkali-kali, tidak akan error jika certificate sudah ada
-- Auto-renewal: Certbot timer otomatis setup untuk renewal
+- Deteksi sertifikat yang sudah ada; generate via Certbot (Let's Encrypt) jika belum
+- Idempotent; auto-renewal via Certbot timer
+- Production domain wajib di-set (`DOMAIN` / `DEPLOY_TARGET=prod`) — tidak boleh silent-fallback ke domain development
 
 **Nginx Configuration:**
-- Otomatis setup Nginx config dengan HTTPS (jika SSL certificate ada)
-- Fallback ke HTTP config jika SSL belum tersedia
-- Preserve existing config yang sudah benar (tidak di-overwrite)
-- Otomatis reload Nginx setelah config update
+- Setup HTTPS bila sertifikat ada; fallback HTTP jika belum
+- Preserve config yang sudah benar; reload setelah update
+- Frontend health check memverifikasi HTTP **dan** HTTPS
 
 **Service Management:**
-- Otomatis ensure Docker container running (backend)
-- Otomatis ensure Nginx service running (frontend & backend)
-- Health check otomatis setelah deployment
-- Retry mechanism jika service belum ready
+- Backend: Docker container `dms-backend-prod` (non-root user, resource limits memory/CPU/pids)
+- Frontend: Nginx static files di `/var/www/html`
+- Health check + retry setelah deploy
 
 **Deployment Flow:**
 1. Build & Test
-2. Deploy Files/Images
-3. Setup SSL (if needed)
+2. Deploy image backend / static frontend ke VM
+3. Setup SSL (jika perlu)
 4. Setup Nginx
-5. Ensure Services Running
-6. Health Check
+5. Ensure services running
+6. Health check
 7. Ready
+
+### Infrastruktur Production (GCP)
+
+- **Frontend VM:** `frontend-prod-2` (Nginx + static build)
+- **Backend VM:** `backend-prod-1` (Docker + Nginx reverse proxy)
+- **Database:** Cloud SQL PostgreSQL (`db_prod_pedeve`) via Cloud SQL Proxy di `127.0.0.1:5432`
+- **Storage:** GCS bucket `pedeve-prod-bucket`
+- **Secrets:** GCP Secret Manager (`db_password_prod`, `jwt_secret`, `encryption_key`, dll.)
+- **Region/Zone:** `asia-southeast2-a`
+
+### Handover Operasional (untuk tim penerima)
+
+Serahkan secara terpisah (di luar repo / channel aman), jangan commit nilai rahasia:
+
+| Item | Keterangan |
+|---|---|
+| GCP project ID (prod & dev) | Project tempat VM, Cloud SQL, Secret Manager, GCS |
+| IAM / akun admin GCP | Siapa yang punya akses Compute, Secret Manager, Cloud SQL |
+| GitHub repo + Actions secrets | `GCP_PROJECT_ID_PROD`, WIF, service account, Sonar, dll. |
+| VM | `backend-prod-1`, `frontend-prod-2` (zone `asia-southeast2-a`) |
+| Domain / DNS | `dms.pertamina-pedeve.co.id`, `api-reports.pertamina-pedeve.co.id` |
+| DB | Nama DB `db_prod_pedeve`, user `pedeve_user_db_prod` (password di Secret Manager) |
+| Akun aplikasi | Administrator production (email di seed: `pedeve@pertamina-pedeve.co.id`) |
+| Checklist keamanan | `docs/PENTEST_SECURITY_CHECKLIST.md` |
+
+Database **tidak punya URL publik**. Akses data eksternal (mis. Data Lake) lewat export / pipeline terkontrol, bukan buka port 5432 ke internet.
 
 ### Release Process
 
@@ -347,12 +411,12 @@ Swagger UI menyediakan:
 
 **File Upload:**
 - `POST /api/v1/upload/logo` - Upload company logo
-- `GET /api/v1/files/*` - Serve files (proxy dari GCP Storage atau local)
+- `GET /api/v1/files/*` - Serve files (GCP Storage / local) — **wajib autentikasi JWT + RBAC** (bucket whitelist: `logos`, `documents`)
 
 **Audit Logs:**
-- `GET /api/v1/audit-logs` - Get audit logs (dengan retention policy: 90 hari user actions, 30 hari technical errors)
+- `GET /api/v1/audit-logs` - Get audit logs (retention: 90 hari user actions, 30 hari technical errors)
 - `GET /api/v1/audit-logs/stats` - Get audit log statistics
-- `GET /api/v1/user-activity-logs` - Get user activity logs (permanent storage untuk data penting: report, document, company, user)
+- `GET /api/v1/user-activity-logs` - Get user activity logs (permanent: report, document, company, user)
 
 **Notifications:**
 - `GET /api/v1/notifications` - Get all notifications
@@ -360,7 +424,7 @@ Swagger UI menyediakan:
 - `PUT /api/v1/notifications/{id}/read` - Mark notification as read
 - `PUT /api/v1/notifications/read-all` - Mark all notifications as read
 
-**Development (Superadmin Only):**
+**Development tools (Superadmin Only — hanya non-production):**
 - `POST /api/v1/development/reset-subsidiary` - Reset subsidiary data
 - `POST /api/v1/development/reset-all-financial-reports` - Reset all financial reports
 - `POST /api/v1/development/run-subsidiary-seeder` - Run company seeder
@@ -404,41 +468,42 @@ Swagger UI menyediakan:
 
 ### Security Features
 - CSRF Protection: Double-submit cookie pattern
-- Rate Limiting: 100 req/s (general), 5 req/min (auth endpoints)
-- Security Headers: X-Content-Type-Options, X-XSS-Protection, CSP, HSTS
-- 2FA Support: TOTP-based dengan backup codes
+- Rate Limiting: ~100 req/s (general), ~5 req/min (auth endpoints); aktif di production
+- Security Headers: HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy
+- 2FA Support: TOTP-based dengan backup codes (secret terenkripsi AES-256-GCM)
+- JWT Security: httpOnly cookie saja (tidak disimpan di `localStorage`)
+- XSS mitigasi frontend: DOMPurify / `escapeHtml` pada render `v-html` sensitif
+- File access RBAC + bucket whitelist
+- Docker production: non-root user (`appuser`) + resource limits (`--memory`, `--cpus`, `--pids-limit`)
 - Transparent Data Encryption (TDE):
-  - SQLite: SQLCipher untuk encryption at rest (development)
-  - PostgreSQL: Automatic encryption at rest (GCP Cloud SQL) atau filesystem encryption (self-hosted)
-  - Key management via GCP Secret Manager / HashiCorp Vault / Environment variables
+  - SQLite: SQLCipher (development)
+  - PostgreSQL: enkripsi at-rest Cloud SQL (GCP managed)
+  - Key management via GCP Secret Manager / environment variables
 - Audit Logging:
-  - Comprehensive audit logging untuk semua aksi user dan error teknis
-  - Retention policy: 90 hari untuk user actions, 30 hari untuk technical errors
-  - Permanent Audit Log: Data penting (Report, Document, Company, User Management) disimpan permanen tanpa retention policy untuk compliance
-- JWT Security: httpOnly cookies untuk mencegah XSS
-- Input Validation: Comprehensive validation dengan sanitization
-- Password Security: bcrypt hashing
-- Production-Safe Logging: Frontend menggunakan logger utility yang hanya menampilkan debug/info di development, error/warn tetap muncul di production
+  - User actions (retention 90 hari) + technical errors (30 hari)
+  - Permanent User Activity Logs untuk data penting (Report, Document, Company, User)
+- Input Validation & sanitization; password bcrypt
+- Production-Safe Logging di frontend
 
 ### Infrastructure
 - Container: Docker, Docker Compose
-- CI/CD: GitHub Actions dengan automated testing
-- Deployment: Google Cloud Platform (GCP) dengan automated SSL & Nginx setup
-- Web Server: Nginx dengan automatic HTTPS/HTTP configuration
-- SSL: Let's Encrypt dengan automatic certificate management
+- CI/CD: GitHub Actions (lint, test, Trivy, build, deploy)
+- Deployment: GCP Compute Engine VM + automated SSL & Nginx
+- Database: Cloud SQL PostgreSQL + Cloud SQL Auth Proxy (private)
+- Web Server: Nginx (HTTPS via Let's Encrypt)
 - Storage: Google Cloud Storage
 - Secrets: GCP Secret Manager
-- Security Scan: Trivy Scanner
-- API Docs: Swagger UI dengan auto-reload
+- Security Scan: Trivy
+- API Docs: Swagger UI **hanya non-production**
 
 ## Fitur Utama
 
 ### Authentication & Authorization
-- Autentikasi berbasis JWT dengan httpOnly cookies untuk meningkatkan keamanan
-- Two-Factor Authentication (2FA) menggunakan TOTP sebagai perlindungan tambahan
-- Role-Based Access Control (RBAC) untuk mengatur akses berdasarkan peran pengguna
-- Kontrol akses berbasis hierarki perusahaan untuk membatasi akses data sesuai level perusahaan
-- Proteksi CSRF untuk mencegah serangan pada request yang mengubah state
+- Autentikasi JWT via httpOnly cookie (`withCredentials`); UI state user di `localStorage` (bukan token)
+- Two-Factor Authentication (2FA) TOTP + backup codes
+- Role-Based Access Control (RBAC): superadmin, administrator, admin, manager, staff
+- Kontrol akses berbasis hierarki perusahaan
+- Proteksi CSRF untuk request yang mengubah state (POST/PUT/DELETE/PATCH)
 
 ### Company Management
 - Hierarki perusahaan multi-level (Holding → Level 1 → Level 2 → Level 3)
@@ -457,13 +522,12 @@ Swagger UI menyediakan:
 
 ### Document Management
 - Operasi CRUD dokumen untuk mengelola dokumen secara lengkap
-- Kategorisasi dokumen menggunakan struktur folder untuk organisasi yang lebih baik
-- Upload dan penyimpanan file dengan dukungan GCP Storage atau sistem lokal
-- **Dukungan batch upload** - Memungkinkan upload beberapa file sekaligus (PDF, gambar, dokumen)
-- **Validasi ukuran file** - File dokumen (.docx, .xlsx, .xls, .pptx, .ppt, .pdf) tanpa batasan ukuran, file gambar (.jpg, .jpeg, .png) maksimal 10MB
-- Pelacakan tanggal kedaluwarsa dokumen untuk manajemen siklus hidup dokumen
-- Manajemen status dokumen untuk mengontrol visibilitas dan akses
-- Preview dokumen untuk gambar dan PDF dengan modal fullscreen
+- Kategorisasi dokumen menggunakan struktur folder
+- Upload/penyimpanan via GCP Storage atau lokal; preview via authenticated blob URL
+- Batch upload (PDF, gambar, dokumen Office)
+- Validasi ukuran: gambar maksimal 10MB; dokumen Office/PDF mengikuti kebijakan upload
+- Pelacakan tanggal kedaluwarsa + status dokumen
+- Preview gambar/PDF; preview Office (docx/xlsx) dengan sanitasi HTML
 
 ### Financial Reports Management
 - Operasi CRUD laporan keuangan untuk mengelola data finansial
@@ -486,12 +550,10 @@ Swagger UI menyediakan:
 - Scheduler otomatis untuk memeriksa item yang akan kedaluwarsa (setiap 24 jam)
 - Konfigurasi threshold hari melalui environment variable untuk fleksibilitas
 
-### Development Tools
-- Reset data anak perusahaan (hanya untuk superadmin)
-- Reset semua laporan keuangan (hanya untuk superadmin)
-- Menjalankan company seeder melalui UI (hanya untuk superadmin)
-- Pengecekan status seeder untuk memantau proses seeding
-- Trigger notifikasi manual untuk keperluan testing (hanya untuk superadmin/administrator)
+### Development Tools *(tidak tersedia di production)*
+- Reset data anak perusahaan / laporan keuangan (superadmin)
+- Menjalankan company seeder melalui UI + cek status seeder
+- Trigger notifikasi manual untuk testing (superadmin/administrator)
 
 ### Security & Monitoring
 - Audit logging komprehensif dengan retention policy untuk pelacakan aktivitas
@@ -532,11 +594,9 @@ Swagger UI menyediakan:
    ```
 
 5. **Push dan buat PR** ke branch `development`
-6. Setelah merge, CI/CD akan otomatis:
-   - Run tests (frontend & backend)
-   - Build dan deploy ke GCP
-   - Setup SSL & Nginx otomatis
-   - Verify services running
+6. Setelah merge ke `development`, CI/CD deploy ke environment **development**
+7. Untuk production: merge/cherry-pick ke `main` (setelah review) — CI/CD deploy ke **production**
+8. Jangan push langsung ke `main` tanpa konfirmasi / review tim
 
 ### Mengapa Wajib Menjalankan Lint dan Test?
 
@@ -559,4 +619,8 @@ Swagger UI menyediakan:
 
 ## Dokumentasi Tambahan
 
-- **API Documentation:** http://localhost:8080/swagger/index.html (hanya tersedia di development)
+- **API Documentation (local/dev):** http://localhost:8080/swagger/index.html *(tidak tersedia di production)*
+- **User Guideline:** `docs/` (VitePress) — di-build ke `frontend/public/user-guideline/`
+- **Pentest Security Checklist:** `docs/PENTEST_SECURITY_CHECKLIST.md`
+- **UAT Document:** `UAT_DOCUMENT.md`
+- **Production:** https://dms.pertamina-pedeve.co.id · https://api-reports.pertamina-pedeve.co.id

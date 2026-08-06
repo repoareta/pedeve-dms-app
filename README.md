@@ -622,5 +622,6 @@ Swagger UI menyediakan:
 - **API Documentation (local/dev):** http://localhost:8080/swagger/index.html *(tidak tersedia di production)*
 - **User Guideline:** `docs/` (VitePress) — di-build ke `frontend/public/user-guideline/`
 - **Pentest Security Checklist:** `docs/PENTEST_SECURITY_CHECKLIST.md`
-- **UAT Document:** `UAT_DOCUMENT.md`
+- **UAT Document:** `docs/UAT_DOCUMENT.md`
+- **UAT Coverage Analysis:** `docs/UAT_COVERAGE_ANALYSIS.md`
 - **Production:** https://dms.pertamina-pedeve.co.id · https://api-reports.pertamina-pedeve.co.id
